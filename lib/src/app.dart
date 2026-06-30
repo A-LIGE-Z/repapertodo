@@ -574,6 +574,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Checkbox(
                   value: item.done,
@@ -583,27 +584,50 @@ class _TodoEditorState extends State<_TodoEditor> {
                   },
                 ),
                 Expanded(
-                  child: TextFormField(
-                    key: ValueKey('${widget.paper.id}-${item.id}-text'),
-                    initialValue: item.text,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      hintText: 'New item',
-                      isDense: true,
-                    ),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: item.done
-                          ? colorScheme.outline
-                          : colorScheme.onSurface,
-                      decoration: item.done ? TextDecoration.lineThrough : null,
-                    ),
-                    onChanged: (value) {
-                      item.text = value;
-                      unawaited(widget.onChanged());
-                    },
-                    onFieldSubmitted: (_) => _addItem(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        key: ValueKey('${widget.paper.id}-${item.id}-text'),
+                        initialValue: item.text,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          hintText: 'New item',
+                          isDense: true,
+                        ),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: item.done
+                              ? colorScheme.outline
+                              : colorScheme.onSurface,
+                          decoration:
+                              item.done ? TextDecoration.lineThrough : null,
+                        ),
+                        onChanged: (value) {
+                          item.text = value;
+                          unawaited(widget.onChanged());
+                        },
+                        onFieldSubmitted: (_) => _addItem(),
+                      ),
+                      if (_formatDueDate(item.dueAtLocal) case final dueDate?)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: InputChip(
+                            avatar: const Icon(Icons.event_outlined, size: 18),
+                            label: Text('Due $dueDate'),
+                            onDeleted: () => _clearDueDate(item),
+                            deleteIcon:
+                                const Icon(Icons.close_outlined, size: 18),
+                            deleteButtonTooltipMessage: 'Clear due date',
+                          ),
+                        ),
+                    ],
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Set due date',
+                  onPressed: () => unawaited(_pickDueDate(context, item)),
+                  icon: const Icon(Icons.event_outlined),
                 ),
                 IconButton(
                   tooltip: 'Delete item',
@@ -676,8 +700,43 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
   }
 
+  Future<void> _pickDueDate(BuildContext context, PaperItem item) async {
+    final initialDate =
+        DateTime.tryParse(item.dueAtLocal ?? '')?.toLocal() ?? DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (pickedDate == null) {
+      return;
+    }
+    setState(() {
+      item.dueAtLocal =
+          DateTime(pickedDate.year, pickedDate.month, pickedDate.day)
+              .toIso8601String();
+    });
+    unawaited(widget.onChanged());
+  }
+
+  void _clearDueDate(PaperItem item) {
+    setState(() => item.dueAtLocal = null);
+    unawaited(widget.onChanged());
+  }
+
   String _displayItemText(PaperItem item) {
     final text = item.text.trim();
     return text.isEmpty ? 'Todo item' : text;
+  }
+
+  String? _formatDueDate(String? value) {
+    final date = DateTime.tryParse(value ?? '')?.toLocal();
+    if (date == null) {
+      return null;
+    }
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
   }
 }

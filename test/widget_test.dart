@@ -25,6 +25,12 @@ void main() {
             title: 'Windows parity',
             items: [
               PaperItem(id: 'todo-1', text: 'Build compatible data core'),
+              PaperItem(
+                id: 'todo-2',
+                text: 'Check due date',
+                dueAtLocal: '2026-06-30T00:00:00',
+                order: 1,
+              ),
             ],
           ),
         ],
@@ -43,6 +49,13 @@ void main() {
     expect(find.text('RePaperTodo'), findsWidgets);
     expect(find.text('Windows parity'), findsOneWidget);
     expect(find.text('Build compatible data core'), findsOneWidget);
+    expect(find.text('Due 2026-06-30'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.close_outlined));
+    await tester.pump();
+
+    expect(controller.state.papers.single.items[1].dueAtLocal, isNull);
+    expect(find.text('Due 2026-06-30'), findsNothing);
 
     await tester.enterText(
         find.byKey(const ValueKey('welcome-todo-title')), 'Edited title');
@@ -61,12 +74,12 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.next);
     await tester.pump();
 
-    expect(controller.state.papers.single.items, hasLength(2));
+    expect(controller.state.papers.single.items, hasLength(3));
 
     await tester.tap(find.byTooltip('Delete item').first);
     await tester.pump();
 
-    expect(controller.state.papers.single.items, hasLength(1));
+    expect(controller.state.papers.single.items, hasLength(2));
 
     final itemUndoAction = tester.widget<SnackBarAction>(
       find.byWidgetPredicate(
@@ -79,7 +92,7 @@ void main() {
         .hideCurrentSnackBar();
     await tester.pumpAndSettle();
 
-    expect(controller.state.papers.single.items, hasLength(2));
+    expect(controller.state.papers.single.items, hasLength(3));
 
     await tester.tap(find.byIcon(Icons.expand_less));
     await tester.pumpAndSettle();
