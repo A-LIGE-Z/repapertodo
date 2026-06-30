@@ -106,6 +106,11 @@ class RePaperTodoController {
         .setFullscreenTopmostMode(state.fullscreenTopmostMode);
   }
 
+  Future<void> registerGlobalHotkeys() async {
+    state.normalize();
+    await _platform.systemIntegration.registerGlobalHotkeys(state);
+  }
+
   Future<void> openExternalFile(String path) async {
     await _platform.externalFiles.openFile(path);
   }

@@ -42,6 +42,8 @@ class SyncSettingsDialogResult {
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
+    required this.pinnedTodoHotKey,
+    required this.pinnedNoteHotKey,
     required this.runLinkedScriptCapsulesOnClick,
     required this.usePersistentPowerShellProcess,
     required this.preferPowerShell7,
@@ -89,6 +91,8 @@ class SyncSettingsDialogResult {
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
+  final String pinnedTodoHotKey;
+  final String pinnedNoteHotKey;
   final bool runLinkedScriptCapsulesOnClick;
   final bool usePersistentPowerShellProcess;
   final bool preferPowerShell7;
@@ -138,6 +142,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
+  required String initialPinnedTodoHotKey,
+  required String initialPinnedNoteHotKey,
   required bool initialRunLinkedScriptCapsulesOnClick,
   required bool initialUsePersistentPowerShellProcess,
   required bool initialPreferPowerShell7,
@@ -189,6 +195,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
+      initialPinnedTodoHotKey: initialPinnedTodoHotKey,
+      initialPinnedNoteHotKey: initialPinnedNoteHotKey,
       initialRunLinkedScriptCapsulesOnClick:
           initialRunLinkedScriptCapsulesOnClick,
       initialUsePersistentPowerShellProcess:
@@ -242,6 +250,8 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
+    required this.initialPinnedTodoHotKey,
+    required this.initialPinnedNoteHotKey,
     required this.initialRunLinkedScriptCapsulesOnClick,
     required this.initialUsePersistentPowerShellProcess,
     required this.initialPreferPowerShell7,
@@ -290,6 +300,8 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
+  final String initialPinnedTodoHotKey;
+  final String initialPinnedNoteHotKey;
   final bool initialRunLinkedScriptCapsulesOnClick;
   final bool initialUsePersistentPowerShellProcess;
   final bool initialPreferPowerShell7;
@@ -355,6 +367,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _externalMarkdownExtensionController;
   late final TextEditingController _deepCapsuleTopMarginController;
   late final TextEditingController _deepCapsuleMonitorController;
+  late final TextEditingController _pinnedTodoHotKeyController;
+  late final TextEditingController _pinnedNoteHotKeyController;
   late final TextEditingController _reminderIntervalController;
   late final TextEditingController _reminderDurationController;
   String? _errorText;
@@ -434,6 +448,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _deepCapsuleMonitorController = TextEditingController(
       text: widget.initialDeepCapsuleMonitorDeviceName.trim(),
     );
+    _pinnedTodoHotKeyController = TextEditingController(
+      text: widget.initialPinnedTodoHotKey.trim(),
+    );
+    _pinnedNoteHotKeyController = TextEditingController(
+      text: widget.initialPinnedNoteHotKey.trim(),
+    );
     _reminderIntervalController = TextEditingController(
       text: widget.initialTodoReminderIntervalValue.clamp(1, 240).toString(),
     );
@@ -455,6 +475,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _externalMarkdownExtensionController.dispose();
     _deepCapsuleTopMarginController.dispose();
     _deepCapsuleMonitorController.dispose();
+    _pinnedTodoHotKeyController.dispose();
+    _pinnedNoteHotKeyController.dispose();
     _reminderIntervalController.dispose();
     _reminderDurationController.dispose();
     super.dispose();
@@ -901,6 +923,32 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   () => _fullscreenTopmostMode = selection.single,
                 ),
               ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _pinnedTodoHotKeyController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Pinned todo hotkey',
+                        prefixIcon: Icon(Icons.keyboard_outlined),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _pinnedNoteHotKeyController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Pinned note hotkey',
+                        prefixIcon: Icon(Icons.keyboard_command_key_outlined),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const Divider(height: 24),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -1281,6 +1329,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,
+        pinnedTodoHotKey: _pinnedTodoHotKeyController.text.trim(),
+        pinnedNoteHotKey: _pinnedNoteHotKeyController.text.trim(),
         runLinkedScriptCapsulesOnClick: _runLinkedScriptCapsulesOnClick,
         usePersistentPowerShellProcess: _usePersistentPowerShellProcess,
         preferPowerShell7: _preferPowerShell7,

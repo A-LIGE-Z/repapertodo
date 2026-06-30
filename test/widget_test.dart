@@ -220,6 +220,8 @@ void main() {
     expect(find.text('Hide from task switcher'), findsOneWidget);
     expect(find.text('Avoid fullscreen'), findsOneWidget);
     expect(find.text('Stay on top'), findsOneWidget);
+    expect(find.text('Pinned todo hotkey'), findsOneWidget);
+    expect(find.text('Pinned note hotkey'), findsOneWidget);
     expect(find.text('Run linked script capsules on click'), findsOneWidget);
     expect(find.text('Persistent PowerShell process'), findsOneWidget);
     expect(find.text('Prefer PowerShell 7'), findsOneWidget);
@@ -830,6 +832,66 @@ void main() {
     expect(controller.state.hideScriptRunWindow, false);
   });
 
+  testWidgets('saves pinned hotkeys and re-registers global hotkeys',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        pinnedTodoHotKey: '',
+        pinnedNoteHotKey: '',
+        papers: [
+          PaperData(
+            id: 'hotkey-settings-paper',
+            type: PaperTypes.todo,
+            title: 'Hotkey settings',
+            items: [
+              PaperItem(id: 'hotkey-settings-item', text: 'Tune hotkeys'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store = StateStore(filePath: 'build/test-widget-hotkeys.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Pinned todo hotkey'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pinned todo hotkey'),
+      '  Ctrl+Alt+T  ',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pinned note hotkey'),
+      '  Ctrl+Alt+N  ',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.pinnedTodoHotKey, 'Ctrl+Alt+T');
+    expect(controller.state.pinnedNoteHotKey, 'Ctrl+Alt+N');
+    expect(platform.systemIntegration.registeredHotkeys, hasLength(1));
+    expect(
+      platform.systemIntegration.registeredHotkeys.single,
+      ('Ctrl+Alt+T', 'Ctrl+Alt+N'),
+    );
+  });
+
   testWidgets('links todo items to note papers', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1022,7 +1084,9 @@ class _RecordingPlatformServices implements PlatformServices {
   final StartupHost startup = NoopStartupHost();
 
   @override
-  final SystemIntegrationHost systemIntegration = NoopSystemIntegrationHost();
+  @override
+  final _RecordingSystemIntegrationHost systemIntegration =
+      _RecordingSystemIntegrationHost();
 
   @override
   final _RecordingExternalFileHost externalFiles = _RecordingExternalFileHost();
@@ -1049,5 +1113,14 @@ class _RecordingExternalFileHost implements ExternalFileHost {
   @override
   Future<void> openFile(String path) async {
     openedPaths.add(path);
+  }
+}
+
+class _RecordingSystemIntegrationHost extends NoopSystemIntegrationHost {
+  final registeredHotkeys = <(String todo, String note)>[];
+
+  @override
+  Future<void> registerGlobalHotkeys(AppState state) async {
+    registeredHotkeys.add((state.pinnedTodoHotKey, state.pinnedNoteHotKey));
   }
 }

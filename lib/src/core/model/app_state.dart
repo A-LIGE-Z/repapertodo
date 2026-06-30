@@ -280,6 +280,8 @@ class AppState {
     todoReminderBubbleDurationSeconds =
         todoReminderBubbleDurationSeconds.clamp(1, 600).toInt();
     maxTitleLength = maxTitleLength.clamp(4, 80).toInt();
+    pinnedTodoHotKey = pinnedTodoHotKey.trim();
+    pinnedNoteHotKey = pinnedNoteHotKey.trim();
     fullscreenTopmostMode =
         FullscreenTopmostModes.normalize(fullscreenTopmostMode);
     deepCapsuleStartTopMargin =

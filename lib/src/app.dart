@@ -629,6 +629,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
       initialFullscreenTopmostMode: controller.state.fullscreenTopmostMode,
+      initialPinnedTodoHotKey: controller.state.pinnedTodoHotKey,
+      initialPinnedNoteHotKey: controller.state.pinnedNoteHotKey,
       initialRunLinkedScriptCapsulesOnClick:
           controller.state.runLinkedScriptCapsulesOnClick,
       initialUsePersistentPowerShellProcess:
@@ -695,6 +697,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
       controller.state.fullscreenTopmostMode = result.fullscreenTopmostMode;
+      controller.state.pinnedTodoHotKey = result.pinnedTodoHotKey;
+      controller.state.pinnedNoteHotKey = result.pinnedNoteHotKey;
       controller.state.runLinkedScriptCapsulesOnClick =
           result.runLinkedScriptCapsulesOnClick;
       controller.state.usePersistentPowerShellProcess =
@@ -711,6 +715,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     await controller.setStartupAtLogin(result.startAtLogin);
     await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
     await controller.setFullscreenTopmostMode(result.fullscreenTopmostMode);
+    await controller.registerGlobalHotkeys();
     widget.onAppThemeChanged?.call();
     _restartTodoReminderTimer();
     await _saveState();
