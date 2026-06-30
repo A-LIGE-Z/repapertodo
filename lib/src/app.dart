@@ -552,15 +552,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                   tooltip: 'Delete item',
                   onPressed: widget.paper.items.length <= 1
                       ? null
-                      : () {
-                          setState(() {
-                            widget.paper.items.removeWhere(
-                              (candidate) => candidate.id == item.id,
-                            );
-                            widget.paper.normalize();
-                          });
-                          unawaited(widget.onChanged());
-                        },
+                      : () => _deleteItem(context, item),
                   icon: const Icon(Icons.delete_outline),
                 ),
               ],
@@ -589,5 +581,46 @@ class _TodoEditorState extends State<_TodoEditor> {
       widget.paper.normalize();
     });
     unawaited(widget.onChanged());
+  }
+
+  void _deleteItem(BuildContext context, PaperItem item) {
+    final removedIndex = widget.paper.items.indexWhere(
+      (candidate) => candidate.id == item.id,
+    );
+    if (removedIndex < 0 || widget.paper.items.length <= 1) {
+      return;
+    }
+    setState(() {
+      widget.paper.items.removeAt(removedIndex);
+      widget.paper.normalize();
+    });
+    unawaited(widget.onChanged());
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${_displayItemText(item)} deleted.'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            setState(() {
+              final targetIndex = removedIndex
+                  .clamp(
+                    0,
+                    widget.paper.items.length,
+                  )
+                  .toInt();
+              widget.paper.items.insert(targetIndex, item);
+              widget.paper.normalize();
+            });
+            unawaited(widget.onChanged());
+          },
+        ),
+      ),
+    );
+  }
+
+  String _displayItemText(PaperItem item) {
+    final text = item.text.trim();
+    return text.isEmpty ? 'Todo item' : text;
   }
 }

@@ -58,6 +58,24 @@ void main() {
 
     expect(controller.state.papers.single.items, hasLength(2));
 
+    await tester.tap(find.byTooltip('Delete item').first);
+    await tester.pump();
+
+    expect(controller.state.papers.single.items, hasLength(1));
+
+    final itemUndoAction = tester.widget<SnackBarAction>(
+      find.byWidgetPredicate(
+        (widget) => widget is SnackBarAction && widget.label == 'Undo',
+      ),
+    );
+    itemUndoAction.onPressed();
+    tester
+        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+        .hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items, hasLength(2));
+
     await tester.tap(find.byIcon(Icons.expand_less));
     await tester.pumpAndSettle();
 
