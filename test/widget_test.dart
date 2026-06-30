@@ -49,13 +49,13 @@ void main() {
     expect(find.text('RePaperTodo'), findsWidgets);
     expect(find.text('Windows parity'), findsOneWidget);
     expect(find.text('Build compatible data core'), findsOneWidget);
-    expect(find.text('Due 2026-06-30'), findsOneWidget);
+    expect(find.text('Due 06-30'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.close_outlined));
     await tester.pump();
 
     expect(controller.state.papers.single.items[1].dueAtLocal, isNull);
-    expect(find.text('Due 2026-06-30'), findsNothing);
+    expect(find.text('Due 06-30'), findsNothing);
 
     await tester.enterText(
         find.byKey(const ValueKey('welcome-todo-title')), 'Edited title');
@@ -182,6 +182,10 @@ void main() {
     expect(find.text('Zoom'), findsOneWidget);
     expect(find.text('Todo spacing'), findsOneWidget);
     expect(find.text('Note spacing'), findsOneWidget);
+    expect(find.text('Relative due dates'), findsOneWidget);
+    expect(find.text('No year'), findsOneWidget);
+    expect(find.text('YY'), findsOneWidget);
+    expect(find.text('YYYY'), findsOneWidget);
     expect(find.text('Todo reminders'), findsOneWidget);
     expect(find.text('Reminder interval'), findsOneWidget);
     expect(find.text('Minutes'), findsOneWidget);
@@ -289,6 +293,45 @@ void main() {
 
     expect(platform.paperWindows.shownTitles, contains('Reminder paper'));
     expect(find.byTooltip('Back to board'), findsOneWidget);
+  });
+
+  testWidgets('renders relative todo due dates', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final today = DateTime.now();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        showTodoDueRelativeTime: true,
+        papers: [
+          PaperData(
+            id: 'relative-paper',
+            type: PaperTypes.todo,
+            title: 'Relative dates',
+            items: [
+              PaperItem(
+                id: 'relative-item',
+                text: 'Due today',
+                dueAtLocal: DateTime(today.year, today.month, today.day)
+                    .toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-relative-date-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Due Today'), findsOneWidget);
   });
 
   testWidgets('links todo items to note papers', (tester) async {

@@ -247,6 +247,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       allowLongLinkedNoteTitles: controller.state.allowLongLinkedNoteTitles,
       markdownRenderMode: controller.state.markdownRenderMode,
       todoLineSpacing: controller.state.todoLineSpacing,
+      showTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
+      todoDueYearDisplayMode: controller.state.todoDueYearDisplayMode,
       noteLineSpacing: controller.state.noteLineSpacing,
       onChanged: _refreshAndSaveState,
       onTitleChanged: _updatePaperTitle,
@@ -471,6 +473,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialZoom: controller.state.zoom,
       initialTodoLineSpacing: controller.state.todoLineSpacing,
       initialNoteLineSpacing: controller.state.noteLineSpacing,
+      initialShowTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
+      initialTodoDueYearDisplayMode: controller.state.todoDueYearDisplayMode,
       initialUseTodoReminderInterval: controller.state.useTodoReminderInterval,
       initialTodoReminderIntervalValue:
           controller.state.todoReminderIntervalValue,
@@ -501,6 +505,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.zoom = result.zoom;
       controller.state.todoLineSpacing = result.todoLineSpacing;
       controller.state.noteLineSpacing = result.noteLineSpacing;
+      controller.state.showTodoDueRelativeTime = result.showTodoDueRelativeTime;
+      controller.state.todoDueYearDisplayMode = result.todoDueYearDisplayMode;
       controller.state.useTodoReminderInterval = result.useTodoReminderInterval;
       controller.state.todoReminderIntervalValue =
           result.todoReminderIntervalValue;
@@ -724,6 +730,8 @@ class PaperPreview extends StatelessWidget {
     required this.allowLongLinkedNoteTitles,
     required this.markdownRenderMode,
     required this.todoLineSpacing,
+    required this.showTodoDueRelativeTime,
+    required this.todoDueYearDisplayMode,
     required this.noteLineSpacing,
     required this.onChanged,
     required this.onTitleChanged,
@@ -742,6 +750,8 @@ class PaperPreview extends StatelessWidget {
   final bool allowLongLinkedNoteTitles;
   final String markdownRenderMode;
   final double todoLineSpacing;
+  final bool showTodoDueRelativeTime;
+  final String todoDueYearDisplayMode;
   final double noteLineSpacing;
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
@@ -867,6 +877,8 @@ class PaperPreview extends StatelessWidget {
                     showLinkedNoteName: showLinkedNoteName,
                     allowLongLinkedNoteTitles: allowLongLinkedNoteTitles,
                     lineSpacing: todoLineSpacing,
+                    showDueRelativeTime: showTodoDueRelativeTime,
+                    dueYearDisplayMode: todoDueYearDisplayMode,
                     onOpen: onOpen,
                     onChanged: onChanged,
                   )
@@ -1051,6 +1063,8 @@ class _TodoEditor extends StatefulWidget {
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
     required this.lineSpacing,
+    required this.showDueRelativeTime,
+    required this.dueYearDisplayMode,
     required this.onOpen,
     required this.onChanged,
   });
@@ -1061,6 +1075,8 @@ class _TodoEditor extends StatefulWidget {
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
   final double lineSpacing;
+  final bool showDueRelativeTime;
+  final String dueYearDisplayMode;
   final Future<void> Function(PaperData paper) onOpen;
   final Future<void> Function() onChanged;
 
@@ -1316,8 +1332,32 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (date == null) {
       return null;
     }
+    if (widget.showDueRelativeTime) {
+      return _relativeDueDate(date);
+    }
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
-    return '${date.year}-$month-$day';
+    return switch (TodoDueYearDisplayModes.normalize(
+      widget.dueYearDisplayMode,
+    )) {
+      TodoDueYearDisplayModes.short =>
+        '${(date.year % 100).toString().padLeft(2, '0')}-$month-$day',
+      TodoDueYearDisplayModes.full => '${date.year}-$month-$day',
+      _ => '$month-$day',
+    };
+  }
+
+  String _relativeDueDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dueDay = DateTime(date.year, date.month, date.day);
+    final days = dueDay.difference(today).inDays;
+    return switch (days) {
+      0 => 'Today',
+      1 => 'Tomorrow',
+      -1 => 'Yesterday',
+      > 1 => 'In $days days',
+      _ => '${-days} days overdue',
+    };
   }
 }

@@ -14,6 +14,8 @@ class SyncSettingsDialogResult {
     required this.zoom,
     required this.todoLineSpacing,
     required this.noteLineSpacing,
+    required this.showTodoDueRelativeTime,
+    required this.todoDueYearDisplayMode,
     required this.useTodoReminderInterval,
     required this.todoReminderIntervalValue,
     required this.todoReminderIntervalUnit,
@@ -36,6 +38,8 @@ class SyncSettingsDialogResult {
   final double zoom;
   final double todoLineSpacing;
   final double noteLineSpacing;
+  final bool showTodoDueRelativeTime;
+  final String todoDueYearDisplayMode;
   final bool useTodoReminderInterval;
   final int todoReminderIntervalValue;
   final String todoReminderIntervalUnit;
@@ -60,6 +64,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required double initialZoom,
   required double initialTodoLineSpacing,
   required double initialNoteLineSpacing,
+  required bool initialShowTodoDueRelativeTime,
+  required String initialTodoDueYearDisplayMode,
   required bool initialUseTodoReminderInterval,
   required int initialTodoReminderIntervalValue,
   required String initialTodoReminderIntervalUnit,
@@ -84,6 +90,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialZoom: initialZoom,
       initialTodoLineSpacing: initialTodoLineSpacing,
       initialNoteLineSpacing: initialNoteLineSpacing,
+      initialShowTodoDueRelativeTime: initialShowTodoDueRelativeTime,
+      initialTodoDueYearDisplayMode: initialTodoDueYearDisplayMode,
       initialUseTodoReminderInterval: initialUseTodoReminderInterval,
       initialTodoReminderIntervalValue: initialTodoReminderIntervalValue,
       initialTodoReminderIntervalUnit: initialTodoReminderIntervalUnit,
@@ -111,6 +119,8 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialZoom,
     required this.initialTodoLineSpacing,
     required this.initialNoteLineSpacing,
+    required this.initialShowTodoDueRelativeTime,
+    required this.initialTodoDueYearDisplayMode,
     required this.initialUseTodoReminderInterval,
     required this.initialTodoReminderIntervalValue,
     required this.initialTodoReminderIntervalUnit,
@@ -134,6 +144,8 @@ class SyncSettingsDialog extends StatefulWidget {
   final double initialZoom;
   final double initialTodoLineSpacing;
   final double initialNoteLineSpacing;
+  final bool initialShowTodoDueRelativeTime;
+  final String initialTodoDueYearDisplayMode;
   final bool initialUseTodoReminderInterval;
   final int initialTodoReminderIntervalValue;
   final String initialTodoReminderIntervalUnit;
@@ -160,6 +172,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late double _zoom;
   late double _todoLineSpacing;
   late double _noteLineSpacing;
+  late bool _showTodoDueRelativeTime;
+  late String _todoDueYearDisplayMode;
   late bool _useTodoReminderInterval;
   late String _todoReminderIntervalUnit;
   late String _todoReminderScope;
@@ -196,6 +210,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _zoom = widget.initialZoom.clamp(0.6, 1.8).toDouble();
     _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 2.4).toDouble();
     _noteLineSpacing = widget.initialNoteLineSpacing.clamp(0.8, 2.4).toDouble();
+    _showTodoDueRelativeTime = widget.initialShowTodoDueRelativeTime;
+    _todoDueYearDisplayMode =
+        TodoDueYearDisplayModes.normalize(widget.initialTodoDueYearDisplayMode);
     _useTodoReminderInterval = widget.initialUseTodoReminderInterval;
     _todoReminderIntervalUnit = TodoReminderIntervalUnits.normalize(
       widget.initialTodoReminderIntervalUnit,
@@ -405,6 +422,36 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 max: 2.4,
                 divisions: 16,
                 onChanged: (value) => setState(() => _noteLineSpacing = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.event_repeat_outlined),
+                title: const Text('Relative due dates'),
+                value: _showTodoDueRelativeTime,
+                onChanged: (value) =>
+                    setState(() => _showTodoDueRelativeTime = value),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: TodoDueYearDisplayModes.none,
+                    label: Text('No year'),
+                  ),
+                  ButtonSegment(
+                    value: TodoDueYearDisplayModes.short,
+                    label: Text('YY'),
+                  ),
+                  ButtonSegment(
+                    value: TodoDueYearDisplayModes.full,
+                    label: Text('YYYY'),
+                  ),
+                ],
+                selected: {_todoDueYearDisplayMode},
+                onSelectionChanged: _showTodoDueRelativeTime
+                    ? null
+                    : (selection) => setState(
+                        () => _todoDueYearDisplayMode = selection.single),
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -722,6 +769,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         zoom: _zoom,
         todoLineSpacing: _todoLineSpacing,
         noteLineSpacing: _noteLineSpacing,
+        showTodoDueRelativeTime: _showTodoDueRelativeTime,
+        todoDueYearDisplayMode: _todoDueYearDisplayMode,
         useTodoReminderInterval: _useTodoReminderInterval,
         todoReminderIntervalValue: reminderInterval.clamp(1, 240).toInt(),
         todoReminderIntervalUnit: _todoReminderIntervalUnit,
