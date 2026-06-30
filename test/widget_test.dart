@@ -305,6 +305,56 @@ void main() {
     expect(find.byTooltip('Back to board'), findsOneWidget);
   });
 
+  testWidgets('sets item reminder intervals', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'item-reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Item reminders',
+            items: [
+              PaperItem(id: 'item-reminder', text: 'Tune reminders'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-item-reminder-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Set reminder interval'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Interval'), '2');
+    await tester.tap(find.text('Hours'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final item = controller.state.papers.single.items.single;
+    expect(item.reminderIntervalValue, 2);
+    expect(item.reminderIntervalUnit, TodoReminderIntervalUnits.hours);
+    expect(find.text('Every 2 hr'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Clear reminder interval'));
+    await tester.pumpAndSettle();
+
+    expect(item.reminderIntervalValue, isNull);
+    expect(item.reminderIntervalUnit, isNull);
+    expect(find.text('Every 2 hr'), findsNothing);
+  });
+
   testWidgets('renders relative todo due dates', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -782,6 +782,126 @@ class _TodoReminderCandidate {
   String get key => '${paper.id}:${item.id}';
 }
 
+class _ReminderIntervalSelection {
+  const _ReminderIntervalSelection.set(this.value, this.unit) : clear = false;
+
+  const _ReminderIntervalSelection.clear()
+      : value = null,
+        unit = null,
+        clear = true;
+
+  final int? value;
+  final String? unit;
+  final bool clear;
+}
+
+class _ReminderIntervalDialog extends StatefulWidget {
+  const _ReminderIntervalDialog({
+    required this.initialValue,
+    required this.initialUnit,
+  });
+
+  final int? initialValue;
+  final String? initialUnit;
+
+  @override
+  State<_ReminderIntervalDialog> createState() =>
+      _ReminderIntervalDialogState();
+}
+
+class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
+  late final TextEditingController _intervalController;
+  late String _unit;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _intervalController = TextEditingController(
+      text: (widget.initialValue ?? 10).clamp(1, 240).toString(),
+    );
+    _unit = TodoReminderIntervalUnits.normalize(widget.initialUnit);
+  }
+
+  @override
+  void dispose() {
+    _intervalController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Reminder interval'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _intervalController,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                labelText: 'Interval',
+                prefixIcon: const Icon(Icons.notifications_active_outlined),
+                errorText: _errorText,
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: TodoReminderIntervalUnits.minutes,
+                  icon: Icon(Icons.timer_outlined),
+                  label: Text('Minutes'),
+                ),
+                ButtonSegment(
+                  value: TodoReminderIntervalUnits.hours,
+                  icon: Icon(Icons.schedule_outlined),
+                  label: Text('Hours'),
+                ),
+              ],
+              selected: {_unit},
+              onSelectionChanged: (selection) {
+                setState(() => _unit = selection.single);
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(
+            const _ReminderIntervalSelection.clear(),
+          ),
+          child: const Text('Clear'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _save,
+          icon: const Icon(Icons.check),
+          label: const Text('Save'),
+        ),
+      ],
+    );
+  }
+
+  void _save() {
+    final value = int.tryParse(_intervalController.text.trim());
+    if (value == null || value < 1 || value > 240) {
+      setState(() => _errorText = 'Enter a number from 1 to 240.');
+      return;
+    }
+    Navigator.of(context).pop(
+      _ReminderIntervalSelection.set(value, _unit),
+    );
+  }
+}
+
 class _LinkedNoteRestore {
   const _LinkedNoteRestore({
     required this.paperId,
@@ -1242,6 +1362,18 @@ class _TodoEditorState extends State<_TodoEditor> {
                                   size: visualSpec.chipIconSize),
                               deleteButtonTooltipMessage: 'Clear due date',
                             ),
+                          if (_formatReminderInterval(item)
+                              case final reminderInterval?)
+                            InputChip(
+                              avatar: Icon(Icons.notifications_active_outlined,
+                                  size: visualSpec.chipIconSize),
+                              label: Text(reminderInterval),
+                              onDeleted: () => _clearReminderInterval(item),
+                              deleteIcon: Icon(Icons.close_outlined,
+                                  size: visualSpec.chipIconSize),
+                              deleteButtonTooltipMessage:
+                                  'Clear reminder interval',
+                            ),
                           if (widget.enableTodoNoteLinks)
                             if (_linkedNoteFor(item) case final linkedNote?)
                               InputChip(
@@ -1269,6 +1401,17 @@ class _TodoEditorState extends State<_TodoEditor> {
                     height: visualSpec.controlExtent,
                   ),
                   icon: const Icon(Icons.event_outlined),
+                ),
+                IconButton(
+                  tooltip: 'Set reminder interval',
+                  onPressed: () =>
+                      unawaited(_pickReminderInterval(context, item)),
+                  iconSize: visualSpec.iconSize,
+                  constraints: BoxConstraints.tightFor(
+                    width: visualSpec.controlExtent,
+                    height: visualSpec.controlExtent,
+                  ),
+                  icon: const Icon(Icons.notifications_none_outlined),
                 ),
                 PopupMenuButton<String>(
                   tooltip: 'Link note',
@@ -1390,6 +1533,40 @@ class _TodoEditorState extends State<_TodoEditor> {
     unawaited(widget.onChanged());
   }
 
+  Future<void> _pickReminderInterval(
+    BuildContext context,
+    PaperItem item,
+  ) async {
+    final result = await showDialog<_ReminderIntervalSelection>(
+      context: context,
+      builder: (context) => _ReminderIntervalDialog(
+        initialValue: item.reminderIntervalValue,
+        initialUnit: item.reminderIntervalUnit,
+      ),
+    );
+    if (result == null) {
+      return;
+    }
+    setState(() {
+      if (result.clear) {
+        item.reminderIntervalValue = null;
+        item.reminderIntervalUnit = null;
+      } else {
+        item.reminderIntervalValue = result.value;
+        item.reminderIntervalUnit = result.unit;
+      }
+    });
+    unawaited(widget.onChanged());
+  }
+
+  void _clearReminderInterval(PaperItem item) {
+    setState(() {
+      item.reminderIntervalValue = null;
+      item.reminderIntervalUnit = null;
+    });
+    unawaited(widget.onChanged());
+  }
+
   void _linkNote(PaperItem item, String noteId) {
     setState(() => item.linkedNoteId = noteId);
     unawaited(widget.onChanged());
@@ -1452,6 +1629,16 @@ class _TodoEditorState extends State<_TodoEditor> {
       TodoDueYearDisplayModes.full => '${date.year}-$month-$day',
       _ => '$month-$day',
     };
+  }
+
+  String? _formatReminderInterval(PaperItem item) {
+    final value = item.reminderIntervalValue;
+    if (value == null || value < 1) {
+      return null;
+    }
+    final unit = TodoReminderIntervalUnits.normalize(item.reminderIntervalUnit);
+    final suffix = unit == TodoReminderIntervalUnits.hours ? 'hr' : 'min';
+    return 'Every $value $suffix';
   }
 
   String _relativeDueDate(DateTime date) {
