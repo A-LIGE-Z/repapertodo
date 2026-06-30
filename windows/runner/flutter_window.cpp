@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
@@ -29,6 +30,60 @@ double GetNumberArgument(const flutter::EncodableMap& map,
   return fallback;
 }
 
+std::string GetStringArgument(const flutter::EncodableMap& map,
+                              const std::string& key,
+                              const std::string& fallback) {
+  auto iterator = map.find(flutter::EncodableValue(key));
+  if (iterator == map.end()) {
+    return fallback;
+  }
+  if (const auto* value = std::get_if<std::string>(&iterator->second)) {
+    return *value;
+  }
+  return fallback;
+}
+
+bool GetBoolArgument(const flutter::EncodableMap& map,
+                     const std::string& key,
+                     bool fallback) {
+  auto iterator = map.find(flutter::EncodableValue(key));
+  if (iterator == map.end()) {
+    return fallback;
+  }
+  if (const auto* value = std::get_if<bool>(&iterator->second)) {
+    return *value;
+  }
+  return fallback;
+}
+
+std::wstring Utf8ToWide(const std::string& value) {
+  if (value.empty()) {
+    return std::wstring();
+  }
+  const int size = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
+  if (size <= 0) {
+    return std::wstring(value.begin(), value.end());
+  }
+  std::wstring wide_value(size - 1, L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, wide_value.data(), size);
+  return wide_value;
+}
+
+std::wstring TrayPaperLabel(const flutter::EncodableMap& map) {
+  const std::string type = GetStringArgument(map, "type", "todo");
+  const bool is_visible = GetBoolArgument(map, "isVisible", false);
+  std::wstring title = Utf8ToWide(GetStringArgument(map, "title", "Untitled"));
+  if (title.empty()) {
+    title = L"Untitled";
+  }
+  std::wstring label = type == "note" ? L"Note - " : L"Todo - ";
+  label += title;
+  if (!is_visible) {
+    label += L" (hidden)";
+  }
+  return label;
+}
+
 flutter::EncodableValue WindowBoundsValue(HWND window) {
   RECT bounds;
   GetWindowRect(window, &bounds);
@@ -51,6 +106,7 @@ constexpr UINT kTrayIconMessage = WM_APP + 1;
 constexpr UINT kTrayShowCommand = 40001;
 constexpr UINT kTrayHideCommand = 40002;
 constexpr UINT kTrayExitCommand = 40003;
+constexpr UINT kTrayPaperCommandBase = 41000;
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -120,7 +176,28 @@ bool FlutterWindow::OnCreate() {
               title = *value;
             }
           }
-          SetWindowTextA(window, title.c_str());
+          SetWindowTextW(window, Utf8ToWide(title).c_str());
+          result->Success();
+          return;
+        }
+        if (method == "setTrayMenu") {
+          tray_papers_.clear();
+          if (call.arguments()) {
+            if (const auto* papers =
+                    std::get_if<flutter::EncodableList>(call.arguments())) {
+              for (const auto& paper : *papers) {
+                if (const auto* paper_map =
+                        std::get_if<flutter::EncodableMap>(&paper)) {
+                  const std::string id =
+                      GetStringArgument(*paper_map, "id", "");
+                  if (!id.empty()) {
+                    tray_papers_.push_back(
+                        std::make_pair(id, TrayPaperLabel(*paper_map)));
+                  }
+                }
+              }
+            }
+          }
           result->Success();
           return;
         }
@@ -209,6 +286,15 @@ void FlutterWindow::ShowTrayMenu() {
   HMENU menu = CreatePopupMenu();
   AppendMenu(menu, MF_STRING, kTrayShowCommand, L"Show");
   AppendMenu(menu, MF_STRING, kTrayHideCommand, L"Hide");
+  if (!tray_papers_.empty()) {
+    AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenu(menu, MF_STRING | MF_DISABLED, 0, L"Papers");
+    for (size_t index = 0; index < tray_papers_.size(); index++) {
+      AppendMenu(menu, MF_STRING,
+                 kTrayPaperCommandBase + static_cast<UINT>(index),
+                 tray_papers_[index].second.c_str());
+    }
+  }
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenu(menu, MF_STRING, kTrayExitCommand, L"Exit");
 
@@ -233,6 +319,12 @@ void FlutterWindow::ShowTrayMenu() {
       RemoveTrayIcon();
       DestroyWindow(window);
       break;
+    default:
+      if (command >= kTrayPaperCommandBase &&
+          command < kTrayPaperCommandBase + tray_papers_.size()) {
+        SendPaperRequested(tray_papers_[command - kTrayPaperCommandBase].first);
+      }
+      break;
   }
 }
 
@@ -248,6 +340,14 @@ void FlutterWindow::SendBoundsChanged() {
 
 void FlutterWindow::SendCloseRequested() {
   SendWindowEvent("closeRequested");
+}
+
+void FlutterWindow::SendPaperRequested(const std::string& paper_id) {
+  if (!window_channel_) {
+    return;
+  }
+  window_channel_->InvokeMethod(
+      "paperRequested", std::make_unique<flutter::EncodableValue>(paper_id));
 }
 
 void FlutterWindow::SendWindowEvent(const char* method) {

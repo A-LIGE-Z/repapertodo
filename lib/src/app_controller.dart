@@ -22,6 +22,9 @@ class RePaperTodoController {
   Stream<PaperData> get paperSurfaceUpdates =>
       _platform.paperWindows.surfaceUpdates;
 
+  Stream<String> get paperOpenRequests =>
+      _platform.paperWindows.paperOpenRequests;
+
   Future<void> start(
       {StartupCommand startupCommand =
           const StartupCommand(StartupCommandKind.none)}) async {
@@ -73,6 +76,10 @@ class RePaperTodoController {
 
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {
     await _platform.paperWindows.capturePaperSurfaceBounds(paper);
+  }
+
+  Future<void> rebuildTrayMenu() async {
+    await _platform.tray.rebuildMenu(state);
   }
 
   Future<void> showPaper(PaperData paper) async {

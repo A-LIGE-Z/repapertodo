@@ -75,6 +75,16 @@ void main() {
     );
     await showUpdate;
     expect(paper.isVisible, true);
+    final openRequest = services.paperWindows.paperOpenRequests.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('paperRequested', 'paper-1'),
+      ),
+      (_) {},
+    );
+    expect(await openRequest, 'paper-1');
     final hideUpdate = services.paperWindows.surfaceUpdates.first;
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
@@ -86,10 +96,19 @@ void main() {
     );
     await hideUpdate;
     await services.paperWindows.hidePaper(paper);
+    await services.tray.rebuildMenu(AppState(papers: [paper]));
 
     expect(
       calls.map((call) => call.method),
-      ['setBounds', 'show', 'setTitle', 'setAlwaysOnTop', 'getBounds', 'hide'],
+      [
+        'setBounds',
+        'show',
+        'setTitle',
+        'setAlwaysOnTop',
+        'getBounds',
+        'hide',
+        'setTrayMenu',
+      ],
     );
     expect(calls[0].arguments, {
       'x': 10.0,
@@ -104,5 +123,13 @@ void main() {
     expect(paper.width, 520);
     expect(paper.height, 460);
     expect(paper.isVisible, false);
+    expect(calls.last.arguments, [
+      {
+        'id': 'paper-1',
+        'title': 'Inbox',
+        'type': PaperTypes.todo,
+        'isVisible': false,
+      },
+    ]);
   });
 }

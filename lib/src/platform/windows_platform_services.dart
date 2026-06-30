@@ -11,7 +11,7 @@ class WindowsPlatformServices implements PlatformServices {
   WindowsPlatformServices({
     MethodChannel channel = const MethodChannel('repapertodo/window'),
   })  : paperWindows = WindowsPaperWindowHost(channel),
-        tray = WindowsTrayHost(),
+        tray = WindowsTrayHost(channel),
         startup = WindowsStartupHost(),
         systemIntegration = WindowsSystemIntegrationHost(channel);
 
@@ -36,30 +36,49 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   final MethodChannel _channel;
   final StreamController<PaperData> _surfaceUpdates =
       StreamController<PaperData>.broadcast();
+  final StreamController<String> _paperOpenRequests =
+      StreamController<String>.broadcast();
   PaperData? _activePaper;
 
   @override
   Stream<PaperData> get surfaceUpdates => _surfaceUpdates.stream;
 
+  @override
+  Stream<String> get paperOpenRequests => _paperOpenRequests.stream;
+
   Future<void> _handleWindowEvent(MethodCall call) async {
     final paper = _activePaper;
-    if (paper == null) {
-      return;
-    }
     switch (call.method) {
+      case 'paperRequested':
+        final paperId = call.arguments;
+        if (paperId is String && paperId.trim().isNotEmpty) {
+          _paperOpenRequests.add(paperId);
+        }
       case 'boundsChanged':
+        if (paper == null) {
+          return;
+        }
         final arguments = call.arguments;
         if (arguments is Map) {
           _applyBoundsToPaper(paper, arguments);
           _surfaceUpdates.add(paper);
         }
       case 'closeRequested':
+        if (paper == null) {
+          return;
+        }
         paper.isVisible = false;
         _surfaceUpdates.add(paper);
       case 'showRequested':
+        if (paper == null) {
+          return;
+        }
         paper.isVisible = true;
         _surfaceUpdates.add(paper);
       case 'hideRequested':
+        if (paper == null) {
+          return;
+        }
         paper.isVisible = false;
         _surfaceUpdates.add(paper);
     }
@@ -157,14 +176,33 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 }
 
 class WindowsTrayHost implements TrayHost {
+  WindowsTrayHost(this._channel);
+
+  final MethodChannel _channel;
+
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    await _channel.invokeMethod<void>('setTrayMenu', const <Object?>[]);
+  }
 
   @override
   Future<void> initialize() async {}
 
   @override
-  Future<void> rebuildMenu(AppState state) async {}
+  Future<void> rebuildMenu(AppState state) async {
+    await _channel.invokeMethod<void>(
+      'setTrayMenu',
+      state.papers.map((paper) {
+        final title = paper.title.trim();
+        return <String, Object?>{
+          'id': paper.id,
+          'title': title.isEmpty ? 'Untitled' : title,
+          'type': paper.type,
+          'isVisible': paper.isVisible,
+        };
+      }).toList(),
+    );
+  }
 }
 
 class WindowsStartupHost implements StartupHost {

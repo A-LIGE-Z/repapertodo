@@ -60,6 +60,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   bool _isSyncing = false;
   Future<void> _saveQueue = Future<void>.value();
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
+  StreamSubscription<String>? _paperOpenSubscription;
   Timer? _surfaceSaveDebounce;
   Timer? _titleSurfaceDebounce;
 
@@ -70,6 +71,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     super.initState();
     _surfaceUpdateSubscription =
         controller.paperSurfaceUpdates.listen(_handleSurfaceUpdate);
+    _paperOpenSubscription = controller.paperOpenRequests.listen((paperId) {
+      unawaited(_handlePaperOpenRequest(paperId));
+    });
   }
 
   @override
@@ -77,6 +81,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     _surfaceSaveDebounce?.cancel();
     _titleSurfaceDebounce?.cancel();
     unawaited(_surfaceUpdateSubscription?.cancel());
+    unawaited(_paperOpenSubscription?.cancel());
     super.dispose();
   }
 
@@ -149,12 +154,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     setState(() {
       controller.createPaper(type);
     });
-    await widget.store.save(controller.state);
+    await _saveState();
   }
 
   Future<void> _saveState() async {
     _saveQueue = _saveQueue.catchError((_) {}).then((_) {
-      return widget.store.save(controller.state);
+      return widget.store.save(controller.state).then((_) {
+        return controller.rebuildTrayMenu();
+      });
     });
     await _saveQueue;
   }
@@ -236,6 +243,23 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     for (final paper in hiddenPapers) {
       await controller.showPaper(paper);
     }
+    await _saveState();
+  }
+
+  Future<void> _handlePaperOpenRequest(String paperId) async {
+    final paperIndex = controller.state.papers.indexWhere(
+      (paper) => paper.id == paperId,
+    );
+    if (paperIndex < 0) {
+      return;
+    }
+    final paper = controller.state.papers[paperIndex];
+    if (mounted) {
+      setState(() {
+        paper.isVisible = true;
+      });
+    }
+    await controller.showPaper(paper);
     await _saveState();
   }
 

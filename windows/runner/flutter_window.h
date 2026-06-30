@@ -8,6 +8,9 @@
 
 #include <memory>
 #include <shellapi.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "win32_window.h"
 
@@ -31,6 +34,7 @@ class FlutterWindow : public Win32Window {
   void ShowTrayMenu();
   void SendBoundsChanged();
   void SendCloseRequested();
+  void SendPaperRequested(const std::string& paper_id);
   void SendWindowEvent(const char* method);
 
   // The project to run.
@@ -44,6 +48,7 @@ class FlutterWindow : public Win32Window {
 
   NOTIFYICONDATA tray_icon_data_ = {};
   bool tray_icon_added_ = false;
+  std::vector<std::pair<std::string, std::wstring>> tray_papers_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
