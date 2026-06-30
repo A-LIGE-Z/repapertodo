@@ -204,6 +204,7 @@ void main() {
     expect(find.text('Collapse all control'), findsOneWidget);
     expect(find.text('Collapse all active'), findsOneWidget);
     expect(find.text('Deep capsule top margin'), findsOneWidget);
+    expect(find.text('Deep capsule monitor'), findsOneWidget);
     expect(find.text('Todo reminders'), findsOneWidget);
     expect(find.text('Reminder interval'), findsOneWidget);
     expect(find.text('Minutes'), findsOneWidget);

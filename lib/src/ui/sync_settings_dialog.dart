@@ -35,6 +35,7 @@ class SyncSettingsDialogResult {
     required this.capsuleCollapseAllActive,
     required this.deepCapsuleSide,
     required this.deepCapsuleStartTopMargin,
+    required this.deepCapsuleMonitorDeviceName,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
@@ -74,6 +75,7 @@ class SyncSettingsDialogResult {
   final bool capsuleCollapseAllActive;
   final String deepCapsuleSide;
   final double deepCapsuleStartTopMargin;
+  final String deepCapsuleMonitorDeviceName;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
@@ -115,6 +117,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialCapsuleCollapseAllActive,
   required String initialDeepCapsuleSide,
   required double initialDeepCapsuleStartTopMargin,
+  required String initialDeepCapsuleMonitorDeviceName,
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
@@ -157,6 +160,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialCapsuleCollapseAllActive: initialCapsuleCollapseAllActive,
       initialDeepCapsuleSide: initialDeepCapsuleSide,
       initialDeepCapsuleStartTopMargin: initialDeepCapsuleStartTopMargin,
+      initialDeepCapsuleMonitorDeviceName: initialDeepCapsuleMonitorDeviceName,
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
@@ -200,6 +204,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialCapsuleCollapseAllActive,
     required this.initialDeepCapsuleSide,
     required this.initialDeepCapsuleStartTopMargin,
+    required this.initialDeepCapsuleMonitorDeviceName,
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
@@ -240,6 +245,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialCapsuleCollapseAllActive;
   final String initialDeepCapsuleSide;
   final double initialDeepCapsuleStartTopMargin;
+  final String initialDeepCapsuleMonitorDeviceName;
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
@@ -296,6 +302,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _fontFamilyController;
   late final TextEditingController _externalMarkdownExtensionController;
   late final TextEditingController _deepCapsuleTopMarginController;
+  late final TextEditingController _deepCapsuleMonitorController;
   late final TextEditingController _reminderIntervalController;
   late final TextEditingController _reminderDurationController;
   String? _errorText;
@@ -362,6 +369,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
           .clamp(8, 10000)
           .toStringAsFixed(0),
     );
+    _deepCapsuleMonitorController = TextEditingController(
+      text: widget.initialDeepCapsuleMonitorDeviceName.trim(),
+    );
     _reminderIntervalController = TextEditingController(
       text: widget.initialTodoReminderIntervalValue.clamp(1, 240).toString(),
     );
@@ -382,6 +392,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _fontFamilyController.dispose();
     _externalMarkdownExtensionController.dispose();
     _deepCapsuleTopMarginController.dispose();
+    _deepCapsuleMonitorController.dispose();
     _reminderIntervalController.dispose();
     _reminderDurationController.dispose();
     super.dispose();
@@ -741,6 +752,16 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   prefixIcon: Icon(Icons.vertical_align_top_outlined),
                 ),
                 keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _deepCapsuleMonitorController,
+                enabled: _useCapsuleMode && _useDeepCapsuleMode,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Deep capsule monitor',
+                  prefixIcon: Icon(Icons.monitor_outlined),
+                ),
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -1103,6 +1124,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         deepCapsuleSide: DeepCapsuleSides.normalize(_deepCapsuleSide),
         deepCapsuleStartTopMargin:
             deepCapsuleTopMargin.clamp(8, 10000).toDouble(),
+        deepCapsuleMonitorDeviceName: _useCapsuleMode && _useDeepCapsuleMode
+            ? _deepCapsuleMonitorController.text.trim()
+            : '',
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,
