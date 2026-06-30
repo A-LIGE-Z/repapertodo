@@ -121,7 +121,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   StreamSubscription<String>? _paperOpenSubscription;
   Timer? _surfaceSaveDebounce;
   Timer? _titleSurfaceDebounce;
+  Timer? _todoReminderTimer;
   String? _surfacePaperId;
+  final Map<String, DateTime> _lastTodoReminderAt = <String, DateTime>{};
 
   RePaperTodoController get controller => widget.controller;
 
@@ -133,12 +135,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     _paperOpenSubscription = controller.paperOpenRequests.listen((paperId) {
       unawaited(_handlePaperOpenRequest(paperId));
     });
+    _restartTodoReminderTimer();
   }
 
   @override
   void dispose() {
     _surfaceSaveDebounce?.cancel();
     _titleSurfaceDebounce?.cancel();
+    _todoReminderTimer?.cancel();
     unawaited(_surfaceUpdateSubscription?.cancel());
     unawaited(_paperOpenSubscription?.cancel());
     super.dispose();
@@ -467,6 +471,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialZoom: controller.state.zoom,
       initialTodoLineSpacing: controller.state.todoLineSpacing,
       initialNoteLineSpacing: controller.state.noteLineSpacing,
+      initialUseTodoReminderInterval: controller.state.useTodoReminderInterval,
+      initialTodoReminderIntervalValue:
+          controller.state.todoReminderIntervalValue,
+      initialTodoReminderIntervalUnit:
+          controller.state.todoReminderIntervalUnit,
+      initialTodoReminderScope: controller.state.todoReminderScope,
+      initialTodoReminderBubbleDurationSeconds:
+          controller.state.todoReminderBubbleDurationSeconds,
       initialStartAtLogin: controller.state.startAtLogin,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
@@ -489,6 +501,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.zoom = result.zoom;
       controller.state.todoLineSpacing = result.todoLineSpacing;
       controller.state.noteLineSpacing = result.noteLineSpacing;
+      controller.state.useTodoReminderInterval = result.useTodoReminderInterval;
+      controller.state.todoReminderIntervalValue =
+          result.todoReminderIntervalValue;
+      controller.state.todoReminderIntervalUnit =
+          result.todoReminderIntervalUnit;
+      controller.state.todoReminderScope = result.todoReminderScope;
+      controller.state.todoReminderBubbleDurationSeconds =
+          result.todoReminderBubbleDurationSeconds;
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
@@ -502,6 +522,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
     await controller.setFullscreenTopmostMode(result.fullscreenTopmostMode);
     widget.onAppThemeChanged?.call();
+    _restartTodoReminderTimer();
     await _saveState();
   }
 
@@ -560,6 +581,126 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       }
     }
   }
+
+  void _restartTodoReminderTimer() {
+    _todoReminderTimer?.cancel();
+    _todoReminderTimer = null;
+    if (!controller.state.useTodoReminderInterval) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _checkTodoReminders();
+      }
+    });
+    _todoReminderTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _checkTodoReminders(),
+    );
+  }
+
+  void _checkTodoReminders() {
+    if (!mounted || !controller.state.useTodoReminderInterval) {
+      return;
+    }
+    final now = DateTime.now();
+    final dueItems = _dueReminderCandidates(now);
+    if (dueItems.isEmpty) {
+      return;
+    }
+    final candidates =
+        controller.state.todoReminderScope == TodoReminderScopes.nearest
+            ? [dueItems.first]
+            : dueItems;
+    final readyCandidates = candidates
+        .where((candidate) => _shouldShowReminder(candidate, now))
+        .toList();
+    if (readyCandidates.isEmpty) {
+      return;
+    }
+    for (final candidate in readyCandidates) {
+      _lastTodoReminderAt[candidate.key] = now;
+    }
+    _showTodoReminder(readyCandidates);
+  }
+
+  List<_TodoReminderCandidate> _dueReminderCandidates(DateTime now) {
+    final candidates = <_TodoReminderCandidate>[];
+    for (final paper in controller.state.papers) {
+      if (!paper.isTodo) {
+        continue;
+      }
+      for (final item in paper.items) {
+        if (item.done) {
+          continue;
+        }
+        final dueAt = DateTime.tryParse(item.dueAtLocal ?? '')?.toLocal();
+        if (dueAt == null || dueAt.isAfter(now)) {
+          continue;
+        }
+        candidates.add(_TodoReminderCandidate(paper, item, dueAt));
+      }
+    }
+    candidates.sort((a, b) => a.dueAt.compareTo(b.dueAt));
+    return candidates;
+  }
+
+  bool _shouldShowReminder(_TodoReminderCandidate candidate, DateTime now) {
+    final lastReminderAt = _lastTodoReminderAt[candidate.key];
+    if (lastReminderAt == null) {
+      return true;
+    }
+    return now.difference(lastReminderAt) >= _reminderInterval(candidate.item);
+  }
+
+  Duration _reminderInterval(PaperItem item) {
+    final value = (item.reminderIntervalValue ??
+            controller.state.todoReminderIntervalValue)
+        .clamp(1, 240)
+        .toInt();
+    final unit = TodoReminderIntervalUnits.normalize(
+      item.reminderIntervalUnit ?? controller.state.todoReminderIntervalUnit,
+    );
+    return unit == TodoReminderIntervalUnits.hours
+        ? Duration(hours: value)
+        : Duration(minutes: value);
+  }
+
+  void _showTodoReminder(List<_TodoReminderCandidate> candidates) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final first = candidates.first;
+    final message = candidates.length == 1
+        ? 'Reminder: ${_displayTitle(first.paper)} - ${_displayItemText(first.item)}'
+        : 'Reminder: ${candidates.length} todo items are due.';
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: Duration(
+          seconds: controller.state.todoReminderBubbleDurationSeconds,
+        ),
+        action: SnackBarAction(
+          label: 'Open',
+          onPressed: () => unawaited(_openPaper(first.paper)),
+        ),
+      ),
+    );
+  }
+
+  String _displayItemText(PaperItem item) {
+    final text = item.text.trim();
+    return text.isEmpty ? 'Todo item' : text;
+  }
+}
+
+class _TodoReminderCandidate {
+  const _TodoReminderCandidate(this.paper, this.item, this.dueAt);
+
+  final PaperData paper;
+  final PaperItem item;
+  final DateTime dueAt;
+
+  String get key => '${paper.id}:${item.id}';
 }
 
 class _LinkedNoteRestore {

@@ -14,6 +14,11 @@ class SyncSettingsDialogResult {
     required this.zoom,
     required this.todoLineSpacing,
     required this.noteLineSpacing,
+    required this.useTodoReminderInterval,
+    required this.todoReminderIntervalValue,
+    required this.todoReminderIntervalUnit,
+    required this.todoReminderScope,
+    required this.todoReminderBubbleDurationSeconds,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
@@ -31,6 +36,11 @@ class SyncSettingsDialogResult {
   final double zoom;
   final double todoLineSpacing;
   final double noteLineSpacing;
+  final bool useTodoReminderInterval;
+  final int todoReminderIntervalValue;
+  final String todoReminderIntervalUnit;
+  final String todoReminderScope;
+  final int todoReminderBubbleDurationSeconds;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
@@ -50,6 +60,11 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required double initialZoom,
   required double initialTodoLineSpacing,
   required double initialNoteLineSpacing,
+  required bool initialUseTodoReminderInterval,
+  required int initialTodoReminderIntervalValue,
+  required String initialTodoReminderIntervalUnit,
+  required String initialTodoReminderScope,
+  required int initialTodoReminderBubbleDurationSeconds,
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
@@ -69,6 +84,12 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialZoom: initialZoom,
       initialTodoLineSpacing: initialTodoLineSpacing,
       initialNoteLineSpacing: initialNoteLineSpacing,
+      initialUseTodoReminderInterval: initialUseTodoReminderInterval,
+      initialTodoReminderIntervalValue: initialTodoReminderIntervalValue,
+      initialTodoReminderIntervalUnit: initialTodoReminderIntervalUnit,
+      initialTodoReminderScope: initialTodoReminderScope,
+      initialTodoReminderBubbleDurationSeconds:
+          initialTodoReminderBubbleDurationSeconds,
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
@@ -90,6 +111,11 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialZoom,
     required this.initialTodoLineSpacing,
     required this.initialNoteLineSpacing,
+    required this.initialUseTodoReminderInterval,
+    required this.initialTodoReminderIntervalValue,
+    required this.initialTodoReminderIntervalUnit,
+    required this.initialTodoReminderScope,
+    required this.initialTodoReminderBubbleDurationSeconds,
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
@@ -108,6 +134,11 @@ class SyncSettingsDialog extends StatefulWidget {
   final double initialZoom;
   final double initialTodoLineSpacing;
   final double initialNoteLineSpacing;
+  final bool initialUseTodoReminderInterval;
+  final int initialTodoReminderIntervalValue;
+  final String initialTodoReminderIntervalUnit;
+  final String initialTodoReminderScope;
+  final int initialTodoReminderBubbleDurationSeconds;
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
@@ -129,6 +160,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late double _zoom;
   late double _todoLineSpacing;
   late double _noteLineSpacing;
+  late bool _useTodoReminderInterval;
+  late String _todoReminderIntervalUnit;
+  late String _todoReminderScope;
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
@@ -143,6 +177,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _rootPathController;
   late final TextEditingController _intervalController;
   late final TextEditingController _fontFamilyController;
+  late final TextEditingController _reminderIntervalController;
+  late final TextEditingController _reminderDurationController;
   String? _errorText;
 
   @override
@@ -160,6 +196,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _zoom = widget.initialZoom.clamp(0.6, 1.8).toDouble();
     _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 2.4).toDouble();
     _noteLineSpacing = widget.initialNoteLineSpacing.clamp(0.8, 2.4).toDouble();
+    _useTodoReminderInterval = widget.initialUseTodoReminderInterval;
+    _todoReminderIntervalUnit = TodoReminderIntervalUnits.normalize(
+      widget.initialTodoReminderIntervalUnit,
+    );
+    _todoReminderScope =
+        TodoReminderScopes.normalize(widget.initialTodoReminderScope);
     _startAtLogin = widget.initialStartAtLogin;
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
@@ -176,6 +218,14 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         TextEditingController(text: webDav.autoSyncIntervalMinutes.toString());
     _fontFamilyController =
         TextEditingController(text: widget.initialSystemFontFamilyName);
+    _reminderIntervalController = TextEditingController(
+      text: widget.initialTodoReminderIntervalValue.clamp(1, 240).toString(),
+    );
+    _reminderDurationController = TextEditingController(
+      text: widget.initialTodoReminderBubbleDurationSeconds
+          .clamp(1, 600)
+          .toString(),
+    );
   }
 
   @override
@@ -186,6 +236,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _rootPathController.dispose();
     _intervalController.dispose();
     _fontFamilyController.dispose();
+    _reminderIntervalController.dispose();
+    _reminderDurationController.dispose();
     super.dispose();
   }
 
@@ -392,6 +444,85 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const Divider(height: 24),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.notifications_active_outlined),
+                title: const Text('Todo reminders'),
+                value: _useTodoReminderInterval,
+                onChanged: (value) =>
+                    setState(() => _useTodoReminderInterval = value),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _reminderIntervalController,
+                      enabled: _useTodoReminderInterval,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Reminder interval',
+                        prefixIcon: Icon(Icons.timer_outlined),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: TodoReminderIntervalUnits.minutes,
+                          label: Text('Minutes'),
+                        ),
+                        ButtonSegment(
+                          value: TodoReminderIntervalUnits.hours,
+                          label: Text('Hours'),
+                        ),
+                      ],
+                      selected: {_todoReminderIntervalUnit},
+                      onSelectionChanged: _useTodoReminderInterval
+                          ? (selection) => setState(
+                                () => _todoReminderIntervalUnit =
+                                    selection.single,
+                              )
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: TodoReminderScopes.all,
+                    icon: Icon(Icons.format_list_bulleted_outlined),
+                    label: Text('All due'),
+                  ),
+                  ButtonSegment(
+                    value: TodoReminderScopes.nearest,
+                    icon: Icon(Icons.near_me_outlined),
+                    label: Text('Nearest'),
+                  ),
+                ],
+                selected: {_todoReminderScope},
+                onSelectionChanged: _useTodoReminderInterval
+                    ? (selection) =>
+                        setState(() => _todoReminderScope = selection.single)
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _reminderDurationController,
+                enabled: _useTodoReminderInterval,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Reminder display seconds',
+                  prefixIcon: Icon(Icons.hourglass_bottom_outlined),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const Divider(height: 24),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.account_tree_outlined),
                 title: const Text('Todo-note links'),
                 value: _enableTodoNoteLinks,
@@ -556,6 +687,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
 
   void _save() {
     final interval = int.tryParse(_intervalController.text.trim());
+    final reminderInterval =
+        int.tryParse(_reminderIntervalController.text.trim()) ?? 10;
+    final reminderDuration =
+        int.tryParse(_reminderDurationController.text.trim()) ?? 5;
     final settings = SyncSettings(
       enabled: _enabled,
       provider: _enabled ? SyncProviderIds.webDav : SyncProviderIds.none,
@@ -587,6 +722,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         zoom: _zoom,
         todoLineSpacing: _todoLineSpacing,
         noteLineSpacing: _noteLineSpacing,
+        useTodoReminderInterval: _useTodoReminderInterval,
+        todoReminderIntervalValue: reminderInterval.clamp(1, 240).toInt(),
+        todoReminderIntervalUnit: _todoReminderIntervalUnit,
+        todoReminderScope: _todoReminderScope,
+        todoReminderBubbleDurationSeconds:
+            reminderDuration.clamp(1, 600).toInt(),
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,

@@ -182,6 +182,13 @@ void main() {
     expect(find.text('Zoom'), findsOneWidget);
     expect(find.text('Todo spacing'), findsOneWidget);
     expect(find.text('Note spacing'), findsOneWidget);
+    expect(find.text('Todo reminders'), findsOneWidget);
+    expect(find.text('Reminder interval'), findsOneWidget);
+    expect(find.text('Minutes'), findsOneWidget);
+    expect(find.text('Hours'), findsOneWidget);
+    expect(find.text('All due'), findsOneWidget);
+    expect(find.text('Nearest'), findsOneWidget);
+    expect(find.text('Reminder display seconds'), findsOneWidget);
     expect(find.text('Start at login'), findsOneWidget);
     expect(find.text('Hide from task switcher'), findsOneWidget);
     expect(find.text('Avoid fullscreen'), findsOneWidget);
@@ -226,6 +233,62 @@ void main() {
     expect(find.text('Split'), findsOneWidget);
     expect(find.text('Research note'), findsOneWidget);
     expect(find.text('Extract claims'), findsOneWidget);
+  });
+
+  testWidgets('shows due todo reminders', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        todoReminderIntervalValue: 1,
+        todoReminderBubbleDurationSeconds: 5,
+        papers: [
+          PaperData(
+            id: 'reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Reminder paper',
+            items: [
+              PaperItem(
+                id: 'reminder-item',
+                text: 'Review deadline',
+                dueAtLocal: DateTime.now()
+                    .subtract(const Duration(minutes: 5))
+                    .toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store = StateStore(filePath: 'build/test-widget-reminder-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.text('Reminder: Reminder paper - Review deadline'),
+      findsOneWidget,
+    );
+
+    final openAction = tester.widget<SnackBarAction>(
+      find.byWidgetPredicate(
+        (widget) => widget is SnackBarAction && widget.label == 'Open',
+      ),
+    );
+    openAction.onPressed();
+    await tester.pump();
+
+    expect(platform.paperWindows.shownTitles, contains('Reminder paper'));
+    expect(find.byTooltip('Back to board'), findsOneWidget);
   });
 
   testWidgets('links todo items to note papers', (tester) async {
