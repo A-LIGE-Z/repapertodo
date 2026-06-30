@@ -92,6 +92,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
         controller.state.papers.where((paper) => paper.isVisible).toList();
     final hiddenPapers =
         controller.state.papers.where((paper) => !paper.isVisible).toList();
+    final notePapers =
+        controller.state.papers.where((paper) => paper.isNote).toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('RePaperTodo'),
@@ -137,6 +139,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
           itemBuilder: (context, index) {
             return PaperPreview(
               paper: visiblePapers[index],
+              notePapers: notePapers,
               onChanged: _refreshAndSaveState,
               onTitleChanged: _updatePaperTitle,
               onOpen: _openPaper,
@@ -393,6 +396,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
 class PaperPreview extends StatelessWidget {
   const PaperPreview({
     required this.paper,
+    required this.notePapers,
     required this.onChanged,
     required this.onTitleChanged,
     required this.onOpen,
@@ -404,6 +408,7 @@ class PaperPreview extends StatelessWidget {
   });
 
   final PaperData paper;
+  final List<PaperData> notePapers;
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
   final Future<void> Function(PaperData paper) onOpen;
@@ -523,6 +528,8 @@ class PaperPreview extends StatelessWidget {
                 if (paper.isTodo)
                   _TodoEditor(
                     paper: paper,
+                    notePapers: notePapers,
+                    onOpen: onOpen,
                     onChanged: onChanged,
                   )
                 else
@@ -553,10 +560,14 @@ class PaperPreview extends StatelessWidget {
 class _TodoEditor extends StatefulWidget {
   const _TodoEditor({
     required this.paper,
+    required this.notePapers,
+    required this.onOpen,
     required this.onChanged,
   });
 
   final PaperData paper;
+  final List<PaperData> notePapers;
+  final Future<void> Function(PaperData paper) onOpen;
   final Future<void> Function() onChanged;
 
   @override
@@ -609,18 +620,35 @@ class _TodoEditorState extends State<_TodoEditor> {
                         },
                         onFieldSubmitted: (_) => _addItem(),
                       ),
-                      if (_formatDueDate(item.dueAtLocal) case final dueDate?)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: InputChip(
-                            avatar: const Icon(Icons.event_outlined, size: 18),
-                            label: Text('Due $dueDate'),
-                            onDeleted: () => _clearDueDate(item),
-                            deleteIcon:
-                                const Icon(Icons.close_outlined, size: 18),
-                            deleteButtonTooltipMessage: 'Clear due date',
-                          ),
-                        ),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (_formatDueDate(item.dueAtLocal)
+                              case final dueDate?)
+                            InputChip(
+                              avatar:
+                                  const Icon(Icons.event_outlined, size: 18),
+                              label: Text('Due $dueDate'),
+                              onDeleted: () => _clearDueDate(item),
+                              deleteIcon:
+                                  const Icon(Icons.close_outlined, size: 18),
+                              deleteButtonTooltipMessage: 'Clear due date',
+                            ),
+                          if (_linkedNoteFor(item) case final linkedNote?)
+                            InputChip(
+                              avatar:
+                                  const Icon(Icons.notes_outlined, size: 18),
+                              label: Text(_noteChipLabel(linkedNote)),
+                              onPressed: () =>
+                                  unawaited(widget.onOpen(linkedNote)),
+                              onDeleted: () => _clearLinkedNote(item),
+                              deleteIcon:
+                                  const Icon(Icons.close_outlined, size: 18),
+                              deleteButtonTooltipMessage: 'Unlink note',
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -628,6 +656,23 @@ class _TodoEditorState extends State<_TodoEditor> {
                   tooltip: 'Set due date',
                   onPressed: () => unawaited(_pickDueDate(context, item)),
                   icon: const Icon(Icons.event_outlined),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Link note',
+                  enabled: widget.notePapers.isNotEmpty,
+                  icon: Icon(item.linkedNoteId == null
+                      ? Icons.note_add_outlined
+                      : Icons.link_outlined),
+                  onSelected: (noteId) => _linkNote(item, noteId),
+                  itemBuilder: (context) {
+                    return [
+                      for (final note in widget.notePapers)
+                        PopupMenuItem(
+                          value: note.id,
+                          child: Text(_displayPaperTitle(note)),
+                        ),
+                    ];
+                  },
                 ),
                 IconButton(
                   tooltip: 'Delete item',
@@ -723,6 +768,38 @@ class _TodoEditorState extends State<_TodoEditor> {
   void _clearDueDate(PaperItem item) {
     setState(() => item.dueAtLocal = null);
     unawaited(widget.onChanged());
+  }
+
+  void _linkNote(PaperItem item, String noteId) {
+    setState(() => item.linkedNoteId = noteId);
+    unawaited(widget.onChanged());
+  }
+
+  void _clearLinkedNote(PaperItem item) {
+    setState(() => item.linkedNoteId = null);
+    unawaited(widget.onChanged());
+  }
+
+  PaperData? _linkedNoteFor(PaperItem item) {
+    final noteId = item.linkedNoteId;
+    if (noteId == null) {
+      return null;
+    }
+    for (final note in widget.notePapers) {
+      if (note.id == noteId) {
+        return note;
+      }
+    }
+    return null;
+  }
+
+  String _noteChipLabel(PaperData note) {
+    return 'Note ${_displayPaperTitle(note)}';
+  }
+
+  String _displayPaperTitle(PaperData paper) {
+    final title = paper.title.trim();
+    return title.isEmpty ? 'Untitled' : title;
   }
 
   String _displayItemText(PaperItem item) {

@@ -172,6 +172,62 @@ void main() {
     expect(find.text('Jianguoyun'), findsOneWidget);
     expect(find.text('Generic'), findsOneWidget);
   });
+
+  testWidgets('links todo items to note papers', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'todo-paper',
+            type: PaperTypes.todo,
+            title: 'Reading',
+            items: [
+              PaperItem(id: 'todo-1', text: 'Summarize paper'),
+            ],
+          ),
+          PaperData(
+            id: 'note-paper',
+            type: PaperTypes.note,
+            title: 'Research note',
+            content: 'Notes live here.',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store = StateStore(filePath: 'build/test-widget-link-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Link note'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Research note').last);
+    await tester.pumpAndSettle();
+
+    expect(
+        controller.state.papers.first.items.single.linkedNoteId, 'note-paper');
+    expect(find.text('Note Research note'), findsOneWidget);
+
+    await tester.tap(find.text('Note Research note'));
+    await tester.pump();
+
+    expect(platform.paperWindows.shownTitles, contains('Research note'));
+
+    await tester.tap(find.byIcon(Icons.close_outlined));
+    await tester.pump();
+
+    expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
+    expect(find.text('Note Research note'), findsNothing);
+  });
 }
 
 class _RecordingPlatformServices implements PlatformServices {
