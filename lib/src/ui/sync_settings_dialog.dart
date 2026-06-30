@@ -14,6 +14,7 @@ class SyncSettingsDialogResult {
     required this.systemFontFamilyName,
     required this.zoom,
     required this.maxTitleLength,
+    required this.enableToolTips,
     required this.todoLineSpacing,
     required this.noteLineSpacing,
     required this.showTodoDueRelativeTime,
@@ -46,6 +47,7 @@ class SyncSettingsDialogResult {
   final String systemFontFamilyName;
   final double zoom;
   final int maxTitleLength;
+  final bool enableToolTips;
   final double todoLineSpacing;
   final double noteLineSpacing;
   final bool showTodoDueRelativeTime;
@@ -80,6 +82,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required String initialSystemFontFamilyName,
   required double initialZoom,
   required int initialMaxTitleLength,
+  required bool initialEnableToolTips,
   required double initialTodoLineSpacing,
   required double initialNoteLineSpacing,
   required bool initialShowTodoDueRelativeTime,
@@ -114,6 +117,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialSystemFontFamilyName: initialSystemFontFamilyName,
       initialZoom: initialZoom,
       initialMaxTitleLength: initialMaxTitleLength,
+      initialEnableToolTips: initialEnableToolTips,
       initialTodoLineSpacing: initialTodoLineSpacing,
       initialNoteLineSpacing: initialNoteLineSpacing,
       initialShowTodoDueRelativeTime: initialShowTodoDueRelativeTime,
@@ -151,6 +155,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialSystemFontFamilyName,
     required this.initialZoom,
     required this.initialMaxTitleLength,
+    required this.initialEnableToolTips,
     required this.initialTodoLineSpacing,
     required this.initialNoteLineSpacing,
     required this.initialShowTodoDueRelativeTime,
@@ -184,6 +189,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final String initialSystemFontFamilyName;
   final double initialZoom;
   final int initialMaxTitleLength;
+  final bool initialEnableToolTips;
   final double initialTodoLineSpacing;
   final double initialNoteLineSpacing;
   final bool initialShowTodoDueRelativeTime;
@@ -220,6 +226,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late String _uiFontPreset;
   late double _zoom;
   late double _maxTitleLength;
+  late bool _enableToolTips;
   late double _todoLineSpacing;
   late double _noteLineSpacing;
   late bool _showTodoDueRelativeTime;
@@ -266,6 +273,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _uiFontPreset = UiFontPresets.normalize(widget.initialUiFontPreset);
     _zoom = widget.initialZoom.clamp(0.6, 1.8).toDouble();
     _maxTitleLength = widget.initialMaxTitleLength.clamp(4, 80).toDouble();
+    _enableToolTips = widget.initialEnableToolTips;
     _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 2.4).toDouble();
     _noteLineSpacing = widget.initialNoteLineSpacing.clamp(0.8, 2.4).toDouble();
     _showTodoDueRelativeTime = widget.initialShowTodoDueRelativeTime;
@@ -500,6 +508,13 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 max: 80,
                 divisions: 76,
                 onChanged: (value) => setState(() => _maxTitleLength = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.info_outline),
+                title: const Text('Tooltips'),
+                value: _enableToolTips,
+                onChanged: (value) => setState(() => _enableToolTips = value),
               ),
               _SettingsSlider(
                 icon: Icons.checklist_outlined,
@@ -822,8 +837,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   labelText: 'Password',
                   prefixIcon: const Icon(Icons.key_outlined),
                   suffixIcon: IconButton(
-                    tooltip:
-                        _obscurePassword ? 'Show password' : 'Hide password',
+                    tooltip: _enableToolTips
+                        ? _obscurePassword
+                            ? 'Show password'
+                            : 'Hide password'
+                        : null,
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                     icon: Icon(_obscurePassword
@@ -928,6 +946,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         systemFontFamilyName: _fontFamilyController.text.trim(),
         zoom: _zoom,
         maxTitleLength: _maxTitleLength.round().clamp(4, 80).toInt(),
+        enableToolTips: _enableToolTips,
         todoLineSpacing: _todoLineSpacing,
         noteLineSpacing: _noteLineSpacing,
         showTodoDueRelativeTime: _showTodoDueRelativeTime,

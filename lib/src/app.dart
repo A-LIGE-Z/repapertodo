@@ -104,6 +104,8 @@ String _shortenTitle(String title, int maxLength) {
   return '${title.substring(0, normalizedMaxLength - 3)}...';
 }
 
+String? _tooltipLabel(bool enabled, String label) => enabled ? label : null;
+
 class PaperBoardScreen extends StatefulWidget {
   const PaperBoardScreen({
     required this.controller,
@@ -159,6 +161,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final enableToolTips = controller.state.enableToolTips;
     final linkedNoteIds = _linkedNoteIds();
     final visiblePapers = controller.state.papers.where((paper) {
       if (!paper.isVisible) {
@@ -178,7 +181,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
         leading: surfacePaper == null
             ? null
             : IconButton(
-                tooltip: 'Back to board',
+                tooltip: _tooltipLabel(enableToolTips, 'Back to board'),
                 onPressed: () => setState(() => _surfacePaperId = null),
                 icon: const Icon(Icons.arrow_back),
               ),
@@ -189,34 +192,38 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
           if (surfacePaper != null &&
               controller.state.showTopBarExternalOpenButton)
             IconButton(
-              tooltip: 'Open current paper surface',
+              tooltip:
+                  _tooltipLabel(enableToolTips, 'Open current paper surface'),
               onPressed: () => _openPaper(surfacePaper),
               icon: const Icon(Icons.open_in_new),
             ),
           if (controller.state.showTopBarNewTodoButton)
             IconButton(
-              tooltip: 'New todo paper',
+              tooltip: _tooltipLabel(enableToolTips, 'New todo paper'),
               onPressed: () => _createPaper(PaperTypes.todo),
               icon: const Icon(Icons.add_task),
             ),
           if (controller.state.showTopBarNewNoteButton)
             IconButton(
-              tooltip: 'New note paper',
+              tooltip: _tooltipLabel(enableToolTips, 'New note paper'),
               onPressed: () => _createPaper(PaperTypes.note),
               icon: const Icon(Icons.note_add_outlined),
             ),
           if (controller.state.useCapsuleCollapseAll)
             IconButton(
-              tooltip: controller.state.capsuleCollapseAllActive
-                  ? 'Expand all papers'
-                  : 'Collapse all papers',
+              tooltip: _tooltipLabel(
+                enableToolTips,
+                controller.state.capsuleCollapseAllActive
+                    ? 'Expand all papers'
+                    : 'Collapse all papers',
+              ),
               onPressed: _toggleCollapseAll,
               icon: Icon(controller.state.capsuleCollapseAllActive
                   ? Icons.unfold_more
                   : Icons.unfold_less),
             ),
           IconButton(
-            tooltip: 'Sync now',
+            tooltip: _tooltipLabel(enableToolTips, 'Sync now'),
             onPressed: _isSyncing ? null : _syncNow,
             icon: _isSyncing
                 ? const SizedBox.square(
@@ -226,12 +233,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
                 : const Icon(Icons.sync_outlined),
           ),
           IconButton(
-            tooltip: 'Show hidden papers',
+            tooltip: _tooltipLabel(enableToolTips, 'Show hidden papers'),
             onPressed: hiddenPapers.isEmpty ? null : _showHiddenPapers,
             icon: const Icon(Icons.visibility_outlined),
           ),
           IconButton(
-            tooltip: 'Settings',
+            tooltip: _tooltipLabel(enableToolTips, 'Settings'),
             onPressed: _openSettings,
             icon: const Icon(Icons.settings_outlined),
           ),
@@ -296,6 +303,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       showLinkedNoteName: controller.state.showLinkedNoteName,
       allowLongLinkedNoteTitles: controller.state.allowLongLinkedNoteTitles,
       maxTitleLength: controller.state.maxTitleLength,
+      enableToolTips: controller.state.enableToolTips,
       markdownRenderMode: controller.state.markdownRenderMode,
       todoVisualSize: controller.state.todoVisualSize,
       todoLineSpacing: controller.state.todoLineSpacing,
@@ -535,6 +543,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialSystemFontFamilyName: controller.state.systemFontFamilyName,
       initialZoom: controller.state.zoom,
       initialMaxTitleLength: controller.state.maxTitleLength,
+      initialEnableToolTips: controller.state.enableToolTips,
       initialTodoLineSpacing: controller.state.todoLineSpacing,
       initialNoteLineSpacing: controller.state.noteLineSpacing,
       initialShowTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
@@ -578,6 +587,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.systemFontFamilyName = result.systemFontFamilyName;
       controller.state.zoom = result.zoom;
       controller.state.maxTitleLength = result.maxTitleLength;
+      controller.state.enableToolTips = result.enableToolTips;
       controller.state.todoLineSpacing = result.todoLineSpacing;
       controller.state.noteLineSpacing = result.noteLineSpacing;
       controller.state.showTodoDueRelativeTime = result.showTodoDueRelativeTime;
@@ -936,6 +946,7 @@ class PaperPreview extends StatelessWidget {
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
     required this.maxTitleLength,
+    required this.enableToolTips,
     required this.markdownRenderMode,
     required this.todoVisualSize,
     required this.todoLineSpacing,
@@ -959,6 +970,7 @@ class PaperPreview extends StatelessWidget {
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
   final int maxTitleLength;
+  final bool enableToolTips;
   final String markdownRenderMode;
   final String todoVisualSize;
   final double todoLineSpacing;
@@ -1035,16 +1047,20 @@ class PaperPreview extends StatelessWidget {
                   runSpacing: 4,
                   children: [
                     IconButton(
-                      tooltip: 'Open paper surface',
+                      tooltip:
+                          _tooltipLabel(enableToolTips, 'Open paper surface'),
                       onPressed: () => unawaited(onOpen(paper)),
                       icon: const Icon(Icons.open_in_new),
                     ),
                     IconButton(
-                      tooltip: collapseAllActive
-                          ? 'Collapse all is active'
-                          : paper.isCollapsed
-                              ? 'Expand paper'
-                              : 'Collapse paper',
+                      tooltip: _tooltipLabel(
+                        enableToolTips,
+                        collapseAllActive
+                            ? 'Collapse all is active'
+                            : paper.isCollapsed
+                                ? 'Expand paper'
+                                : 'Collapse paper',
+                      ),
                       onPressed: collapseAllActive
                           ? null
                           : () {
@@ -1055,9 +1071,12 @@ class PaperPreview extends StatelessWidget {
                           isCollapsed ? Icons.expand_more : Icons.expand_less),
                     ),
                     IconButton(
-                      tooltip: paper.alwaysOnTop
-                          ? 'Disable always on top'
-                          : 'Keep on top',
+                      tooltip: _tooltipLabel(
+                        enableToolTips,
+                        paper.alwaysOnTop
+                            ? 'Disable always on top'
+                            : 'Keep on top',
+                      ),
                       onPressed: () {
                         paper.alwaysOnTop = !paper.alwaysOnTop;
                         unawaited(onSurfaceChanged(paper));
@@ -1068,17 +1087,18 @@ class PaperPreview extends StatelessWidget {
                           : Icons.push_pin_outlined),
                     ),
                     IconButton(
-                      tooltip: 'Save window bounds',
+                      tooltip:
+                          _tooltipLabel(enableToolTips, 'Save window bounds'),
                       onPressed: () => unawaited(onCaptureBounds(paper)),
                       icon: const Icon(Icons.aspect_ratio_outlined),
                     ),
                     IconButton(
-                      tooltip: 'Hide paper',
+                      tooltip: _tooltipLabel(enableToolTips, 'Hide paper'),
                       onPressed: () => unawaited(onHide(paper)),
                       icon: const Icon(Icons.visibility_off_outlined),
                     ),
                     IconButton(
-                      tooltip: 'Delete paper',
+                      tooltip: _tooltipLabel(enableToolTips, 'Delete paper'),
                       onPressed: () => unawaited(onDelete(paper)),
                       icon: const Icon(Icons.delete_outline),
                     ),
@@ -1095,6 +1115,7 @@ class PaperPreview extends StatelessWidget {
                     showLinkedNoteName: showLinkedNoteName,
                     allowLongLinkedNoteTitles: allowLongLinkedNoteTitles,
                     maxTitleLength: maxTitleLength,
+                    enableToolTips: enableToolTips,
                     visualSize: todoVisualSize,
                     lineSpacing: todoLineSpacing,
                     showDueRelativeTime: showTodoDueRelativeTime,
@@ -1283,6 +1304,7 @@ class _TodoEditor extends StatefulWidget {
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
     required this.maxTitleLength,
+    required this.enableToolTips,
     required this.visualSize,
     required this.lineSpacing,
     required this.showDueRelativeTime,
@@ -1297,6 +1319,7 @@ class _TodoEditor extends StatefulWidget {
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
   final int maxTitleLength;
+  final bool enableToolTips;
   final String visualSize;
   final double lineSpacing;
   final bool showDueRelativeTime;
@@ -1379,7 +1402,8 @@ class _TodoEditorState extends State<_TodoEditor> {
                               onDeleted: () => _clearDueDate(item),
                               deleteIcon: Icon(Icons.close_outlined,
                                   size: visualSpec.chipIconSize),
-                              deleteButtonTooltipMessage: 'Clear due date',
+                              deleteButtonTooltipMessage: _tooltipLabel(
+                                  widget.enableToolTips, 'Clear due date'),
                             ),
                           if (_formatReminderInterval(item)
                               case final reminderInterval?)
@@ -1390,8 +1414,9 @@ class _TodoEditorState extends State<_TodoEditor> {
                               onDeleted: () => _clearReminderInterval(item),
                               deleteIcon: Icon(Icons.close_outlined,
                                   size: visualSpec.chipIconSize),
-                              deleteButtonTooltipMessage:
-                                  'Clear reminder interval',
+                              deleteButtonTooltipMessage: _tooltipLabel(
+                                  widget.enableToolTips,
+                                  'Clear reminder interval'),
                             ),
                           if (widget.enableTodoNoteLinks)
                             if (_linkedNoteFor(item) case final linkedNote?)
@@ -1404,7 +1429,8 @@ class _TodoEditorState extends State<_TodoEditor> {
                                 onDeleted: () => _clearLinkedNote(item),
                                 deleteIcon: Icon(Icons.close_outlined,
                                     size: visualSpec.chipIconSize),
-                                deleteButtonTooltipMessage: 'Unlink note',
+                                deleteButtonTooltipMessage: _tooltipLabel(
+                                    widget.enableToolTips, 'Unlink note'),
                               ),
                         ],
                       ),
@@ -1412,7 +1438,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Set due date',
+                  tooltip: _tooltipLabel(widget.enableToolTips, 'Set due date'),
                   onPressed: () => unawaited(_pickDueDate(context, item)),
                   iconSize: visualSpec.iconSize,
                   constraints: BoxConstraints.tightFor(
@@ -1422,7 +1448,8 @@ class _TodoEditorState extends State<_TodoEditor> {
                   icon: const Icon(Icons.event_outlined),
                 ),
                 IconButton(
-                  tooltip: 'Set reminder interval',
+                  tooltip: _tooltipLabel(
+                      widget.enableToolTips, 'Set reminder interval'),
                   onPressed: () =>
                       unawaited(_pickReminderInterval(context, item)),
                   iconSize: visualSpec.iconSize,
@@ -1433,7 +1460,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                   icon: const Icon(Icons.notifications_none_outlined),
                 ),
                 PopupMenuButton<String>(
-                  tooltip: 'Link note',
+                  tooltip: _tooltipLabel(widget.enableToolTips, 'Link note'),
                   enabled: widget.enableTodoNoteLinks &&
                       widget.notePapers.isNotEmpty,
                   iconSize: visualSpec.iconSize,
@@ -1452,7 +1479,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                   },
                 ),
                 IconButton(
-                  tooltip: 'Delete item',
+                  tooltip: _tooltipLabel(widget.enableToolTips, 'Delete item'),
                   onPressed: widget.paper.items.length <= 1
                       ? null
                       : () => _deleteItem(context, item),

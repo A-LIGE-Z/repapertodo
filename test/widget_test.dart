@@ -185,6 +185,7 @@ void main() {
     expect(find.text('Custom font family'), findsOneWidget);
     expect(find.text('Zoom'), findsOneWidget);
     expect(find.text('Max title length'), findsOneWidget);
+    expect(find.text('Tooltips'), findsOneWidget);
     expect(find.text('Todo spacing'), findsOneWidget);
     expect(find.text('Note spacing'), findsOneWidget);
     expect(find.text('Relative due dates'), findsOneWidget);
@@ -466,6 +467,47 @@ void main() {
     expect(find.byTooltip('New todo paper'), findsNothing);
     expect(find.byTooltip('New note paper'), findsNothing);
     expect(find.byTooltip('Settings'), findsOneWidget);
+  });
+
+  testWidgets('disables interactive tooltips', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        enableToolTips: false,
+        papers: [
+          PaperData(
+            id: 'no-tooltip-paper',
+            type: PaperTypes.todo,
+            title: 'No tooltips',
+            items: [
+              PaperItem(id: 'no-tooltip-item', text: 'Quiet controls'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-no-tooltips-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.byTooltip('Settings'), findsNothing);
+    expect(find.byTooltip('Open paper surface'), findsNothing);
+    expect(find.byTooltip('Set due date'), findsNothing);
+    expect(find.byTooltip('Delete item'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tooltips'), findsOneWidget);
   });
 
   testWidgets('toggles collapse all control', (tester) async {
