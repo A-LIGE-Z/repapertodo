@@ -1,18 +1,15 @@
 import 'dart:io';
 
+import 'package:flutter_test/flutter_test.dart';
+
 void main() {
-  final rules = File('AGENTS.md').readAsStringSync();
+  test('project rules preserve the requested direction', () {
+    final rules = File('AGENTS.md').readAsStringSync();
 
-  if (!rules.contains('Flutter-first reimplementation')) {
-    throw StateError('Project rules must define the Flutter-first direction.');
-  }
-
-  if (!rules.contains('Windows exe first')) {
-    throw StateError('Project rules must preserve Windows as the first target.');
-  }
-
-  if (!rules.contains('Generic WebDAV must remain supported')) {
-    throw StateError('Project rules must require generic WebDAV support.');
-  }
+    expect(rules, contains('Flutter-first reimplementation'));
+    expect(rules, contains('Windows exe first'));
+    expect(rules, contains('Generic WebDAV must remain supported'));
+    expect(rules, contains('no fixed budget ceiling'));
+  });
 }
 

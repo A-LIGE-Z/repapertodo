@@ -4,7 +4,6 @@
 .flutter-plugins-dependencies
 .packages
 build/
-pubspec.lock
 
 # IDE
 .idea/
@@ -19,4 +18,3 @@ Thumbs.db
 data.json
 data.backup*.json
 *.papertodo-sync
-
