@@ -11,6 +11,9 @@ import 'package:repapertodo/src/platform/noop_platform_services.dart';
 
 void main() {
   testWidgets('renders the initial paper board', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final controller = RePaperTodoController(
       initialState: AppState(
         papers: [
@@ -69,8 +72,45 @@ void main() {
     expect(controller.state.papers.single.isVisible, true);
     expect(find.text('Edited title'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.sync_outlined));
+    await tester.tap(find.byTooltip('Delete paper'));
     await tester.pumpAndSettle();
+
+    expect(find.text('Delete paper?'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers, hasLength(1));
+    expect(find.text('Edited title'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete paper'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    });
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(controller.state.papers, isEmpty);
+    expect(find.byKey(const ValueKey('welcome-todo-title')), findsNothing);
+
+    final undoAction = tester.widget<SnackBarAction>(
+      find.byWidgetPredicate(
+        (widget) => widget is SnackBarAction && widget.label == 'Undo',
+      ),
+    );
+    undoAction.onPressed();
+    tester
+        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+        .hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers, hasLength(1));
+    expect(find.byKey(const ValueKey('welcome-todo-title')), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.sync_outlined));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text('Sync is disabled.'), findsOneWidget);
 

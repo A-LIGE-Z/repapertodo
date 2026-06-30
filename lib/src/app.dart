@@ -164,12 +164,43 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   }
 
   Future<void> _deletePaper(PaperData paper) async {
+    final confirmed = await _confirmDeletePaper(paper);
+    if (!confirmed) {
+      return;
+    }
+    final removedIndex = controller.state.papers.indexWhere(
+      (candidate) => candidate.id == paper.id,
+    );
+    if (removedIndex < 0) {
+      return;
+    }
     setState(() {
-      controller.state.papers.removeWhere(
-        (candidate) => candidate.id == paper.id,
-      );
+      controller.state.papers.removeAt(removedIndex);
     });
-    await _saveState();
+    unawaited(_saveState());
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${_displayTitle(paper)} deleted.'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            setState(() {
+              final targetIndex = removedIndex
+                  .clamp(
+                    0,
+                    controller.state.papers.length,
+                  )
+                  .toInt();
+              controller.state.papers.insert(targetIndex, paper);
+            });
+            unawaited(_saveState());
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _hidePaper(PaperData paper) async {
@@ -273,6 +304,35 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       AppSyncStatus.uploaded => 'Local data uploaded.',
       AppSyncStatus.downloaded => 'Remote data downloaded.',
     };
+  }
+
+  Future<bool> _confirmDeletePaper(PaperData paper) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Delete paper?'),
+              content: Text(_displayTitle(paper)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
+  String _displayTitle(PaperData paper) {
+    final title = paper.title.trim();
+    return title.isEmpty ? 'Untitled' : title;
   }
 }
 
