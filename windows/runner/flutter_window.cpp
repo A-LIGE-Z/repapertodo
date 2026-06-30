@@ -173,6 +173,14 @@ void FlutterWindow::SendBoundsChanged() {
                            WindowBoundsValue(window)));
 }
 
+void FlutterWindow::SendCloseRequested() {
+  if (!window_channel_) {
+    return;
+  }
+  window_channel_->InvokeMethod(
+      "closeRequested", std::make_unique<flutter::EncodableValue>());
+}
+
 void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
     window_channel_ = nullptr;
@@ -204,6 +212,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_SIZE:
       SendBoundsChanged();
       break;
+    case WM_CLOSE:
+      SendCloseRequested();
+      ShowWindow(hwnd, SW_HIDE);
+      return 0;
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

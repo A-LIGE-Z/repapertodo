@@ -54,6 +54,16 @@ void main() {
       (_) {},
     );
     await surfaceUpdate;
+    final closeUpdate = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('closeRequested'),
+      ),
+      (_) {},
+    );
+    await closeUpdate;
     await services.paperWindows.hidePaper(paper);
 
     expect(

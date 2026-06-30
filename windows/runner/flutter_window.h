@@ -26,6 +26,7 @@ class FlutterWindow : public Win32Window {
 
  private:
   void SendBoundsChanged();
+  void SendCloseRequested();
 
   // The project to run.
   flutter::DartProject project_;

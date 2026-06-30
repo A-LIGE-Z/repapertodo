@@ -42,16 +42,21 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   Stream<PaperData> get surfaceUpdates => _surfaceUpdates.stream;
 
   Future<void> _handleWindowEvent(MethodCall call) async {
-    if (call.method != 'boundsChanged') {
-      return;
-    }
     final paper = _activePaper;
-    final arguments = call.arguments;
-    if (paper == null || arguments is! Map) {
+    if (paper == null) {
       return;
     }
-    _applyBoundsToPaper(paper, arguments);
-    _surfaceUpdates.add(paper);
+    switch (call.method) {
+      case 'boundsChanged':
+        final arguments = call.arguments;
+        if (arguments is Map) {
+          _applyBoundsToPaper(paper, arguments);
+          _surfaceUpdates.add(paper);
+        }
+      case 'closeRequested':
+        paper.isVisible = false;
+        _surfaceUpdates.add(paper);
+    }
   }
 
   @override
