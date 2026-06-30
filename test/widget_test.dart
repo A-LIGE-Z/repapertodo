@@ -48,6 +48,12 @@ void main() {
 
     expect(controller.state.papers.single.title, 'Edited title');
 
+    await tester.tap(find.byKey(const ValueKey('welcome-todo-todo-1-text')));
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pump();
+
+    expect(controller.state.papers.single.items, hasLength(2));
+
     await tester.tap(find.byIcon(Icons.expand_less));
     await tester.pumpAndSettle();
 

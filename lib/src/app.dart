@@ -513,6 +513,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                   child: TextFormField(
                     key: ValueKey('${widget.paper.id}-${item.id}-text'),
                     initialValue: item.text,
+                    textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       border: InputBorder.none,
                       hintText: 'New item',
@@ -528,6 +529,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                       item.text = value;
                       unawaited(widget.onChanged());
                     },
+                    onFieldSubmitted: (_) => _addItem(),
                   ),
                 ),
                 IconButton(
@@ -551,23 +553,25 @@ class _TodoEditorState extends State<_TodoEditor> {
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
-            onPressed: () {
-              setState(() {
-                widget.paper.items.add(
-                  PaperItem(
-                    id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
-                    order: widget.paper.items.length,
-                  ),
-                );
-                widget.paper.normalize();
-              });
-              unawaited(widget.onChanged());
-            },
+            onPressed: _addItem,
             icon: const Icon(Icons.add),
             label: const Text('Add item'),
           ),
         ),
       ],
     );
+  }
+
+  void _addItem() {
+    setState(() {
+      widget.paper.items.add(
+        PaperItem(
+          id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
+          order: widget.paper.items.length,
+        ),
+      );
+      widget.paper.normalize();
+    });
+    unawaited(widget.onChanged());
   }
 }
