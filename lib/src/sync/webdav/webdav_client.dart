@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:xml/xml.dart';
 
 class WebDavCredentials {
   const WebDavCredentials({
@@ -181,24 +182,24 @@ class WebDavException implements Exception {
 }
 
 List<WebDavEntry> _parseMultiStatus(String xml) {
-  final responsePattern = RegExp(r'<[^:>]*:?response[\s\S]*?</[^:>]*:?response>', caseSensitive: false);
-  return [
-    for (final match in responsePattern.allMatches(xml))
-      _parseEntry(match.group(0)!),
-  ];
+  final document = XmlDocument.parse(xml);
+  return _descendantElements(document)
+      .where((element) => element.name.local == 'response')
+      .map(_parseEntry)
+      .toList(growable: false);
 }
 
-WebDavEntry _parseEntry(String xml) {
-  final href = _firstTagText(xml, 'href') ?? '';
-  final etag = _stripQuotes(_firstTagText(xml, 'getetag'));
-  final lengthText = _firstTagText(xml, 'getcontentlength');
-  final lastModifiedText = _firstTagText(xml, 'getlastmodified');
+WebDavEntry _parseEntry(XmlElement element) {
+  final href = _firstElementText(element, 'href') ?? '';
+  final etag = _stripQuotes(_firstElementText(element, 'getetag'));
+  final lengthText = _firstElementText(element, 'getcontentlength');
+  final lastModifiedText = _firstElementText(element, 'getlastmodified');
   return WebDavEntry(
     href: href,
     etag: etag,
     contentLength: lengthText == null ? null : int.tryParse(lengthText),
     lastModified: lastModifiedText == null ? null : _tryParseHttpDate(lastModifiedText),
-    isCollection: RegExp(r'<[^:>]*:?collection\s*/?>', caseSensitive: false).hasMatch(xml),
+    isCollection: _descendantElements(element).any((child) => child.name.local == 'collection'),
   );
 }
 
@@ -210,16 +211,16 @@ DateTime? _tryParseHttpDate(String value) {
   }
 }
 
-String? _firstTagText(String xml, String localName) {
-  final pattern = RegExp(
-    '<[^:>]*:?' '$localName' r'[^>]*>([\s\S]*?)</[^:>]*:?' '$localName' '>',
-    caseSensitive: false,
-  );
-  final match = pattern.firstMatch(xml);
-  if (match == null) {
+String? _firstElementText(XmlElement element, String localName) {
+  final matches = _descendantElements(element).where((child) => child.name.local == localName);
+  if (matches.isEmpty) {
     return null;
   }
-  return htmlUnescape(match.group(1)!.trim());
+  return matches.first.innerText.trim();
+}
+
+Iterable<XmlElement> _descendantElements(XmlNode node) {
+  return node.descendants.whereType<XmlElement>();
 }
 
 String? _stripQuotes(String? value) {
@@ -227,13 +228,4 @@ String? _stripQuotes(String? value) {
     return null;
   }
   return value.replaceAll('"', '');
-}
-
-String htmlUnescape(String value) {
-  return value
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll('&amp;', '&')
-      .replaceAll('&quot;', '"')
-      .replaceAll('&apos;', "'");
 }

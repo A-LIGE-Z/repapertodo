@@ -91,7 +91,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: state.papers.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             return PaperPreview(paper: state.papers[index]);
           },
