@@ -2,23 +2,39 @@ import 'package:flutter/material.dart';
 
 import '../core/model/sync_settings.dart';
 
-Future<SyncSettings?> showSyncSettingsDialog({
+class SyncSettingsDialogResult {
+  const SyncSettingsDialogResult({
+    required this.sync,
+    required this.startAtLogin,
+  });
+
+  final SyncSettings sync;
+  final bool startAtLogin;
+}
+
+Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required BuildContext context,
   required SyncSettings initialSettings,
+  required bool initialStartAtLogin,
 }) {
-  return showDialog<SyncSettings>(
+  return showDialog<SyncSettingsDialogResult>(
     context: context,
-    builder: (context) => SyncSettingsDialog(initialSettings: initialSettings),
+    builder: (context) => SyncSettingsDialog(
+      initialSettings: initialSettings,
+      initialStartAtLogin: initialStartAtLogin,
+    ),
   );
 }
 
 class SyncSettingsDialog extends StatefulWidget {
   const SyncSettingsDialog({
     required this.initialSettings,
+    required this.initialStartAtLogin,
     super.key,
   });
 
   final SyncSettings initialSettings;
+  final bool initialStartAtLogin;
 
   @override
   State<SyncSettingsDialog> createState() => _SyncSettingsDialogState();
@@ -27,6 +43,7 @@ class SyncSettingsDialog extends StatefulWidget {
 class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _enabled;
   late bool _autoSyncOnStart;
+  late bool _startAtLogin;
   late String _presetId;
   late bool _obscurePassword = true;
   late final TextEditingController _endpointController;
@@ -43,6 +60,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     final webDav = settings.webDav;
     _enabled = settings.enabled;
     _autoSyncOnStart = webDav.autoSyncOnStart;
+    _startAtLogin = widget.initialStartAtLogin;
     _presetId = webDav.presetId;
     _endpointController = TextEditingController(text: webDav.endpoint);
     _usernameController = TextEditingController(text: webDav.username);
@@ -82,6 +100,15 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.login_outlined),
+                title: const Text('Start at login'),
+                value: _startAtLogin,
+                onChanged: (value) => setState(() => _startAtLogin = value),
+              ),
+              const Divider(height: 24),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.sync_outlined),
                 title: const Text('WebDAV sync'),
                 value: _enabled,
                 onChanged: (value) => setState(() => _enabled = value),
@@ -237,6 +264,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       return;
     }
 
-    Navigator.of(context).pop(settings);
+    Navigator.of(context).pop(
+      SyncSettingsDialogResult(
+        sync: settings,
+        startAtLogin: _startAtLogin,
+      ),
+    );
   }
 }

@@ -44,6 +44,7 @@ class AppState {
     this.hideDeepCapsulesWhenCovered = false,
     this.enableAnimations = true,
     this.enableToolTips = true,
+    this.startAtLogin = false,
     this.pinnedTodoHotKey = '',
     this.pinnedNoteHotKey = '',
     this.fullscreenTopmostMode = FullscreenTopmostModes.avoid,
@@ -104,6 +105,7 @@ class AppState {
     'hideDeepCapsulesWhenCovered',
     'enableAnimations',
     'enableToolTips',
+    'startAtLogin',
     'pinnedTodoHotKey',
     'pinnedNoteHotKey',
     'fullscreenTopmostMode',
@@ -156,6 +158,7 @@ class AppState {
   bool hideDeepCapsulesWhenCovered;
   bool enableAnimations;
   bool enableToolTips;
+  bool startAtLogin;
   String pinnedTodoHotKey;
   String pinnedNoteHotKey;
   String fullscreenTopmostMode;
@@ -230,6 +233,7 @@ class AppState {
           boolValue(json['hideDeepCapsulesWhenCovered'], false),
       enableAnimations: boolValue(json['enableAnimations'], true),
       enableToolTips: boolValue(json['enableToolTips'], true),
+      startAtLogin: boolValue(json['startAtLogin'], false),
       pinnedTodoHotKey: stringValue(json['pinnedTodoHotKey'], ''),
       pinnedNoteHotKey: stringValue(json['pinnedNoteHotKey'], ''),
       fullscreenTopmostMode: stringValue(
@@ -332,6 +336,7 @@ class AppState {
       'hideDeepCapsulesWhenCovered': hideDeepCapsulesWhenCovered,
       'enableAnimations': enableAnimations,
       'enableToolTips': enableToolTips,
+      'startAtLogin': startAtLogin,
       'pinnedTodoHotKey': pinnedTodoHotKey,
       'pinnedNoteHotKey': pinnedNoteHotKey,
       'fullscreenTopmostMode': fullscreenTopmostMode,

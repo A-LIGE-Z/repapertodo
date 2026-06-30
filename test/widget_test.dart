@@ -151,6 +151,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Start at login'), findsOneWidget);
     expect(find.text('WebDAV sync'), findsOneWidget);
     expect(find.text('Jianguoyun'), findsOneWidget);
     expect(find.text('Generic'), findsOneWidget);

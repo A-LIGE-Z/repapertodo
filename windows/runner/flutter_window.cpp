@@ -84,6 +84,43 @@ std::wstring TrayPaperLabel(const flutter::EncodableMap& map) {
   return label;
 }
 
+bool SetStartupAtLogin(bool enabled) {
+  HKEY run_key;
+  const wchar_t* key_path =
+      L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+  if (RegCreateKeyExW(HKEY_CURRENT_USER, key_path, 0, nullptr, 0,
+                      KEY_SET_VALUE, nullptr, &run_key,
+                      nullptr) != ERROR_SUCCESS) {
+    return false;
+  }
+
+  const wchar_t* value_name = L"RePaperTodo";
+  bool succeeded = true;
+  if (enabled) {
+    wchar_t module_path[MAX_PATH];
+    const DWORD module_path_length =
+        GetModuleFileNameW(nullptr, module_path, MAX_PATH);
+    if (module_path_length == 0 || module_path_length >= MAX_PATH) {
+      succeeded = false;
+    } else {
+      const std::wstring command =
+          std::wstring(L"\"") + module_path + std::wstring(L"\"");
+      succeeded = RegSetValueExW(
+                      run_key, value_name, 0, REG_SZ,
+                      reinterpret_cast<const BYTE*>(command.c_str()),
+                      static_cast<DWORD>((command.size() + 1) *
+                                         sizeof(wchar_t))) == ERROR_SUCCESS;
+    }
+  } else {
+    const LONG delete_result = RegDeleteValueW(run_key, value_name);
+    succeeded =
+        delete_result == ERROR_SUCCESS || delete_result == ERROR_FILE_NOT_FOUND;
+  }
+
+  RegCloseKey(run_key);
+  return succeeded;
+}
+
 flutter::EncodableValue WindowBoundsValue(HWND window) {
   RECT bounds;
   GetWindowRect(window, &bounds);
@@ -197,6 +234,21 @@ bool FlutterWindow::OnCreate() {
                 }
               }
             }
+          }
+          result->Success();
+          return;
+        }
+        if (method == "setStartupAtLogin") {
+          bool enabled = false;
+          if (call.arguments()) {
+            if (const auto* value = std::get_if<bool>(call.arguments())) {
+              enabled = *value;
+            }
+          }
+          if (!SetStartupAtLogin(enabled)) {
+            result->Error("startup_at_login_failed",
+                          "Unable to update the Windows startup entry.");
+            return;
           }
           result->Success();
           return;

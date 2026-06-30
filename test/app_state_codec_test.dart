@@ -8,6 +8,7 @@ void main() {
     const source = '''
 {
   "theme": "dark",
+  "startAtLogin": true,
   "futureRootField": "keep-me",
   "papers": [
     {
@@ -37,7 +38,9 @@ void main() {
     final items = paper['items'] as List<Object?>;
     final item = items.single as Map<String, Object?>;
 
+    expect(state.startAtLogin, true);
     expect(encoded['futureRootField'], 'keep-me');
+    expect(encoded['startAtLogin'], true);
     expect(paper['futurePaperField'], 42);
     expect(item['futureItemField'], true);
     expect(item['order'], 0);

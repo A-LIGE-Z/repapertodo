@@ -228,7 +228,9 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
   Future<void> registerGlobalHotkeys(AppState state) async {}
 
   @override
-  Future<void> setStartupAtLogin(bool enabled) async {}
+  Future<void> setStartupAtLogin(bool enabled) async {
+    await _channel.invokeMethod<void>('setStartupAtLogin', enabled);
+  }
 
   @override
   Future<void> unregisterGlobalHotkeys() async {}

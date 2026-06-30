@@ -30,6 +30,7 @@ class RePaperTodoController {
           const StartupCommand(StartupCommandKind.none)}) async {
     await _platform.tray.initialize();
     await _platform.systemIntegration.registerGlobalHotkeys(state);
+    await _platform.systemIntegration.setStartupAtLogin(state.startAtLogin);
 
     if (state.papers.isEmpty && !startupCommand.createsPaper) {
       createPaper(PaperTypes.todo);
@@ -80,6 +81,11 @@ class RePaperTodoController {
 
   Future<void> rebuildTrayMenu() async {
     await _platform.tray.rebuildMenu(state);
+  }
+
+  Future<void> setStartupAtLogin(bool enabled) async {
+    state.startAtLogin = enabled;
+    await _platform.systemIntegration.setStartupAtLogin(enabled);
   }
 
   Future<void> showPaper(PaperData paper) async {

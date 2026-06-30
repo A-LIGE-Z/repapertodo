@@ -97,6 +97,7 @@ void main() {
     await hideUpdate;
     await services.paperWindows.hidePaper(paper);
     await services.tray.rebuildMenu(AppState(papers: [paper]));
+    await services.systemIntegration.setStartupAtLogin(true);
 
     expect(
       calls.map((call) => call.method),
@@ -108,6 +109,7 @@ void main() {
         'getBounds',
         'hide',
         'setTrayMenu',
+        'setStartupAtLogin',
       ],
     );
     expect(calls[0].arguments, {
@@ -123,7 +125,7 @@ void main() {
     expect(paper.width, 520);
     expect(paper.height, 460);
     expect(paper.isVisible, false);
-    expect(calls.last.arguments, [
+    expect(calls[calls.length - 2].arguments, [
       {
         'id': 'paper-1',
         'title': 'Inbox',
@@ -131,5 +133,6 @@ void main() {
         'isVisible': false,
       },
     ]);
+    expect(calls.last.arguments, true);
   });
 }

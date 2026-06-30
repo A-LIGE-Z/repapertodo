@@ -323,16 +323,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   }
 
   Future<void> _openSettings() async {
-    final settings = await showSyncSettingsDialog(
+    final result = await showSyncSettingsDialog(
       context: context,
       initialSettings: controller.state.sync,
+      initialStartAtLogin: controller.state.startAtLogin,
     );
-    if (settings == null) {
+    if (result == null) {
       return;
     }
     setState(() {
-      controller.state.sync = settings;
+      controller.state.sync = result.sync;
+      controller.state.startAtLogin = result.startAtLogin;
     });
+    await controller.setStartupAtLogin(result.startAtLogin);
     await widget.store.save(controller.state);
   }
 
