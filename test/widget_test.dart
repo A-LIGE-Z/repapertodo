@@ -209,6 +209,7 @@ void main() {
     expect(find.text('Todo-note links'), findsOneWidget);
     expect(find.text('Show linked note name'), findsOneWidget);
     expect(find.text('Allow long linked note titles'), findsOneWidget);
+    expect(find.text('Hide linked note capsules'), findsOneWidget);
     expect(find.text('WebDAV sync'), findsOneWidget);
     expect(find.text('Jianguoyun'), findsOneWidget);
     expect(find.text('Generic'), findsOneWidget);
@@ -549,6 +550,60 @@ void main() {
 
     expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
     expect(find.text('Note Research note'), findsNothing);
+  });
+
+  testWidgets('hides linked note capsules from the board', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        hideLinkedNotesFromCapsules: true,
+        papers: [
+          PaperData(
+            id: 'todo-paper',
+            type: PaperTypes.todo,
+            title: 'Reading todo',
+            items: [
+              PaperItem(
+                id: 'todo-1',
+                text: 'Read linked note',
+                linkedNoteId: 'linked-note',
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'linked-note',
+            type: PaperTypes.note,
+            title: 'Linked research note',
+            content: 'Hidden as a capsule.',
+          ),
+          PaperData(
+            id: 'loose-note',
+            type: PaperTypes.note,
+            title: 'Loose note',
+            content: 'Still visible on the board.',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-hide-linked-note-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Reading todo'), findsOneWidget);
+    expect(find.text('Read linked note'), findsOneWidget);
+    expect(find.text('Linked research note'), findsNothing);
+    expect(find.text('Hidden as a capsule.'), findsNothing);
+    expect(find.text('Loose note'), findsOneWidget);
+    expect(find.text('Still visible on the board.'), findsWidgets);
   });
 }
 

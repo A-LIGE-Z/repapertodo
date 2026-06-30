@@ -33,6 +33,7 @@ class SyncSettingsDialogResult {
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
+    required this.hideLinkedNotesFromCapsules,
   });
 
   final SyncSettings sync;
@@ -63,6 +64,7 @@ class SyncSettingsDialogResult {
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
+  final bool hideLinkedNotesFromCapsules;
 }
 
 Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
@@ -95,6 +97,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialEnableTodoNoteLinks,
   required bool initialShowLinkedNoteName,
   required bool initialAllowLongLinkedNoteTitles,
+  required bool initialHideLinkedNotesFromCapsules,
 }) {
   return showDialog<SyncSettingsDialogResult>(
     context: context,
@@ -128,6 +131,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialEnableTodoNoteLinks: initialEnableTodoNoteLinks,
       initialShowLinkedNoteName: initialShowLinkedNoteName,
       initialAllowLongLinkedNoteTitles: initialAllowLongLinkedNoteTitles,
+      initialHideLinkedNotesFromCapsules: initialHideLinkedNotesFromCapsules,
     ),
   );
 }
@@ -162,6 +166,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialEnableTodoNoteLinks,
     required this.initialShowLinkedNoteName,
     required this.initialAllowLongLinkedNoteTitles,
+    required this.initialHideLinkedNotesFromCapsules,
     super.key,
   });
 
@@ -193,6 +198,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialEnableTodoNoteLinks;
   final bool initialShowLinkedNoteName;
   final bool initialAllowLongLinkedNoteTitles;
+  final bool initialHideLinkedNotesFromCapsules;
 
   @override
   State<SyncSettingsDialog> createState() => _SyncSettingsDialogState();
@@ -225,6 +231,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _enableTodoNoteLinks;
   late bool _showLinkedNoteName;
   late bool _allowLongLinkedNoteTitles;
+  late bool _hideLinkedNotesFromCapsules;
   late String _presetId;
   late bool _obscurePassword = true;
   late final TextEditingController _endpointController;
@@ -274,6 +281,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _enableTodoNoteLinks = widget.initialEnableTodoNoteLinks;
     _showLinkedNoteName = widget.initialShowLinkedNoteName;
     _allowLongLinkedNoteTitles = widget.initialAllowLongLinkedNoteTitles;
+    _hideLinkedNotesFromCapsules = widget.initialHideLinkedNotesFromCapsules;
     _presetId = webDav.presetId;
     _endpointController = TextEditingController(text: webDav.endpoint);
     _usernameController = TextEditingController(text: webDav.username);
@@ -692,8 +700,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 secondary: const Icon(Icons.account_tree_outlined),
                 title: const Text('Todo-note links'),
                 value: _enableTodoNoteLinks,
-                onChanged: (value) =>
-                    setState(() => _enableTodoNoteLinks = value),
+                onChanged: (value) => setState(() {
+                  _enableTodoNoteLinks = value;
+                  if (!value) {
+                    _hideLinkedNotesFromCapsules = false;
+                  }
+                }),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -712,6 +724,16 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 onChanged: _enableTodoNoteLinks && _showLinkedNoteName
                     ? (value) =>
                         setState(() => _allowLongLinkedNoteTitles = value)
+                    : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.layers_clear_outlined),
+                title: const Text('Hide linked note capsules'),
+                value: _hideLinkedNotesFromCapsules,
+                onChanged: _enableTodoNoteLinks
+                    ? (value) =>
+                        setState(() => _hideLinkedNotesFromCapsules = value)
                     : null,
               ),
               const Divider(height: 24),
@@ -909,6 +931,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         enableTodoNoteLinks: _enableTodoNoteLinks,
         showLinkedNoteName: _showLinkedNoteName,
         allowLongLinkedNoteTitles: _allowLongLinkedNoteTitles,
+        hideLinkedNotesFromCapsules:
+            _enableTodoNoteLinks && _hideLinkedNotesFromCapsules,
       ),
     );
   }

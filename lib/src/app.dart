@@ -151,8 +151,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final visiblePapers =
-        controller.state.papers.where((paper) => paper.isVisible).toList();
+    final linkedNoteIds = _linkedNoteIds();
+    final visiblePapers = controller.state.papers.where((paper) {
+      if (!paper.isVisible) {
+        return false;
+      }
+      return !(controller.state.hideLinkedNotesFromCapsules &&
+          paper.isNote &&
+          linkedNoteIds.contains(paper.id));
+    }).toList();
     final hiddenPapers =
         controller.state.papers.where((paper) => !paper.isVisible).toList();
     final notePapers =
@@ -242,6 +249,22 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
               ),
       ),
     );
+  }
+
+  Set<String> _linkedNoteIds() {
+    final linkedNoteIds = <String>{};
+    for (final paper in controller.state.papers) {
+      if (!paper.isTodo) {
+        continue;
+      }
+      for (final item in paper.items) {
+        final linkedNoteId = item.linkedNoteId;
+        if (linkedNoteId != null) {
+          linkedNoteIds.add(linkedNoteId);
+        }
+      }
+    }
+    return linkedNoteIds;
   }
 
   PaperData? _surfacePaper() {
@@ -529,6 +552,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialShowLinkedNoteName: controller.state.showLinkedNoteName,
       initialAllowLongLinkedNoteTitles:
           controller.state.allowLongLinkedNoteTitles,
+      initialHideLinkedNotesFromCapsules:
+          controller.state.hideLinkedNotesFromCapsules,
     );
     if (result == null) {
       return;
@@ -569,6 +594,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.showLinkedNoteName = result.showLinkedNoteName;
       controller.state.allowLongLinkedNoteTitles =
           result.allowLongLinkedNoteTitles;
+      controller.state.hideLinkedNotesFromCapsules =
+          result.hideLinkedNotesFromCapsules;
     });
     await controller.setStartupAtLogin(result.startAtLogin);
     await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
