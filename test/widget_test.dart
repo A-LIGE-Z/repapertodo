@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/src/app.dart';
 import 'package:repapertodo/src/app_controller.dart';
@@ -37,5 +38,13 @@ void main() {
     expect(find.text('RePaperTodo'), findsWidgets);
     expect(find.text('Windows parity'), findsOneWidget);
     expect(find.text('Build compatible data core'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('WebDAV sync'), findsOneWidget);
+    expect(find.text('Jianguoyun'), findsOneWidget);
+    expect(find.text('Generic'), findsOneWidget);
   });
 }

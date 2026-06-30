@@ -4,6 +4,7 @@ import 'app_controller.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/storage/state_store.dart';
+import 'ui/sync_settings_dialog.dart';
 
 class RePaperTodoApp extends StatelessWidget {
   const RePaperTodoApp({
@@ -52,7 +53,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final visiblePapers = controller.state.papers.where((paper) => paper.isVisible).toList();
+    final visiblePapers =
+        controller.state.papers.where((paper) => paper.isVisible).toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('RePaperTodo'),
@@ -69,7 +71,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
           ),
           IconButton(
             tooltip: 'Settings',
-            onPressed: () {},
+            onPressed: _openSettings,
             icon: const Icon(Icons.settings_outlined),
           ),
         ],
@@ -91,6 +93,20 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   Future<void> _createPaper(String type) async {
     setState(() {
       controller.createPaper(type);
+    });
+    await widget.store.save(controller.state);
+  }
+
+  Future<void> _openSettings() async {
+    final settings = await showSyncSettingsDialog(
+      context: context,
+      initialSettings: controller.state.sync,
+    );
+    if (settings == null) {
+      return;
+    }
+    setState(() {
+      controller.state.sync = settings;
     });
     await widget.store.save(controller.state);
   }
@@ -131,7 +147,9 @@ class PaperPreview extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    paper.isTodo ? Icons.check_box_outlined : Icons.notes_outlined,
+                    paper.isTodo
+                        ? Icons.check_box_outlined
+                        : Icons.notes_outlined,
                     size: 18,
                     color: colorScheme.primary,
                   ),
@@ -154,17 +172,24 @@ class PaperPreview extends StatelessWidget {
                     child: Row(
                       children: [
                         Icon(
-                          item.done ? Icons.check_box : Icons.check_box_outline_blank,
+                          item.done
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
                           size: 18,
-                          color: item.done ? colorScheme.primary : colorScheme.outline,
+                          color: item.done
+                              ? colorScheme.primary
+                              : colorScheme.outline,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             item.text.isEmpty ? 'New item' : item.text,
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              color: item.done ? colorScheme.outline : colorScheme.onSurface,
-                              decoration: item.done ? TextDecoration.lineThrough : null,
+                              color: item.done
+                                  ? colorScheme.outline
+                                  : colorScheme.onSurface,
+                              decoration:
+                                  item.done ? TextDecoration.lineThrough : null,
                             ),
                           ),
                         ),

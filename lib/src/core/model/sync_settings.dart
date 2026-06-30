@@ -58,6 +58,15 @@ class SyncSettings {
     }
   }
 
+  SyncSettings copy() {
+    return SyncSettings(
+      enabled: enabled,
+      provider: provider,
+      webDav: webDav.copy(),
+      extra: Map<String, Object?>.from(extra),
+    );
+  }
+
   JsonMap toJson() {
     return {
       ...extra,
@@ -149,6 +158,19 @@ class WebDavSyncSettings {
     if (presetId == WebDavPresetIds.jianguoyun && endpoint.isEmpty) {
       endpoint = 'https://dav.jianguoyun.com/dav/';
     }
+  }
+
+  WebDavSyncSettings copy() {
+    return WebDavSyncSettings(
+      presetId: presetId,
+      endpoint: endpoint,
+      username: username,
+      password: password,
+      rootPath: rootPath,
+      autoSyncOnStart: autoSyncOnStart,
+      autoSyncIntervalMinutes: autoSyncIntervalMinutes,
+      extra: Map<String, Object?>.from(extra),
+    );
   }
 
   JsonMap toJson() {
