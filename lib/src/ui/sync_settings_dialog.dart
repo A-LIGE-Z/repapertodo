@@ -36,6 +36,9 @@ class SyncSettingsDialogResult {
     required this.deepCapsuleSide,
     required this.deepCapsuleStartTopMargin,
     required this.deepCapsuleMonitorDeviceName,
+    required this.showDeepCapsuleWhileExpanded,
+    required this.collapseExpandedDeepCapsuleOnClick,
+    required this.hideDeepCapsulesWhenCovered,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
@@ -76,6 +79,9 @@ class SyncSettingsDialogResult {
   final String deepCapsuleSide;
   final double deepCapsuleStartTopMargin;
   final String deepCapsuleMonitorDeviceName;
+  final bool showDeepCapsuleWhileExpanded;
+  final bool collapseExpandedDeepCapsuleOnClick;
+  final bool hideDeepCapsulesWhenCovered;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
@@ -118,6 +124,9 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required String initialDeepCapsuleSide,
   required double initialDeepCapsuleStartTopMargin,
   required String initialDeepCapsuleMonitorDeviceName,
+  required bool initialShowDeepCapsuleWhileExpanded,
+  required bool initialCollapseExpandedDeepCapsuleOnClick,
+  required bool initialHideDeepCapsulesWhenCovered,
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
@@ -161,6 +170,10 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialDeepCapsuleSide: initialDeepCapsuleSide,
       initialDeepCapsuleStartTopMargin: initialDeepCapsuleStartTopMargin,
       initialDeepCapsuleMonitorDeviceName: initialDeepCapsuleMonitorDeviceName,
+      initialShowDeepCapsuleWhileExpanded: initialShowDeepCapsuleWhileExpanded,
+      initialCollapseExpandedDeepCapsuleOnClick:
+          initialCollapseExpandedDeepCapsuleOnClick,
+      initialHideDeepCapsulesWhenCovered: initialHideDeepCapsulesWhenCovered,
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
@@ -205,6 +218,9 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialDeepCapsuleSide,
     required this.initialDeepCapsuleStartTopMargin,
     required this.initialDeepCapsuleMonitorDeviceName,
+    required this.initialShowDeepCapsuleWhileExpanded,
+    required this.initialCollapseExpandedDeepCapsuleOnClick,
+    required this.initialHideDeepCapsulesWhenCovered,
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
@@ -246,6 +262,9 @@ class SyncSettingsDialog extends StatefulWidget {
   final String initialDeepCapsuleSide;
   final double initialDeepCapsuleStartTopMargin;
   final String initialDeepCapsuleMonitorDeviceName;
+  final bool initialShowDeepCapsuleWhileExpanded;
+  final bool initialCollapseExpandedDeepCapsuleOnClick;
+  final bool initialHideDeepCapsulesWhenCovered;
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
@@ -285,6 +304,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _useCapsuleCollapseAll;
   late bool _capsuleCollapseAllActive;
   late String _deepCapsuleSide;
+  late bool _showDeepCapsuleWhileExpanded;
+  late bool _collapseExpandedDeepCapsuleOnClick;
+  late bool _hideDeepCapsulesWhenCovered;
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
@@ -344,6 +366,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _capsuleCollapseAllActive = widget.initialCapsuleCollapseAllActive;
     _deepCapsuleSide =
         DeepCapsuleSides.normalize(widget.initialDeepCapsuleSide);
+    _showDeepCapsuleWhileExpanded = widget.initialShowDeepCapsuleWhileExpanded;
+    _collapseExpandedDeepCapsuleOnClick =
+        widget.initialCollapseExpandedDeepCapsuleOnClick;
+    _hideDeepCapsulesWhenCovered = widget.initialHideDeepCapsulesWhenCovered;
     _startAtLogin = widget.initialStartAtLogin;
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
@@ -686,6 +712,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     _useDeepCapsuleMode = false;
                     _useCapsuleCollapseAll = false;
                     _capsuleCollapseAllActive = false;
+                    _showDeepCapsuleWhileExpanded = false;
+                    _collapseExpandedDeepCapsuleOnClick = false;
+                    _hideDeepCapsulesWhenCovered = false;
                   }
                 }),
               ),
@@ -695,7 +724,14 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 title: const Text('Deep capsule mode'),
                 value: _useDeepCapsuleMode,
                 onChanged: _useCapsuleMode
-                    ? (value) => setState(() => _useDeepCapsuleMode = value)
+                    ? (value) => setState(() {
+                          _useDeepCapsuleMode = value;
+                          if (!value) {
+                            _showDeepCapsuleWhileExpanded = false;
+                            _collapseExpandedDeepCapsuleOnClick = false;
+                            _hideDeepCapsulesWhenCovered = false;
+                          }
+                        })
                     : null,
               ),
               SwitchListTile(
@@ -762,6 +798,37 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   labelText: 'Deep capsule monitor',
                   prefixIcon: Icon(Icons.monitor_outlined),
                 ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.open_in_full_outlined),
+                title: const Text('Show deep capsule while expanded'),
+                value: _showDeepCapsuleWhileExpanded,
+                onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                    ? (value) =>
+                        setState(() => _showDeepCapsuleWhileExpanded = value)
+                    : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.ads_click_outlined),
+                title: const Text('Collapse expanded deep capsule on click'),
+                value: _collapseExpandedDeepCapsuleOnClick,
+                onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                    ? (value) => setState(
+                          () => _collapseExpandedDeepCapsuleOnClick = value,
+                        )
+                    : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.layers_clear_outlined),
+                title: const Text('Hide covered deep capsules'),
+                value: _hideDeepCapsulesWhenCovered,
+                onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                    ? (value) =>
+                        setState(() => _hideDeepCapsulesWhenCovered = value)
+                    : null,
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -1127,6 +1194,16 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         deepCapsuleMonitorDeviceName: _useCapsuleMode && _useDeepCapsuleMode
             ? _deepCapsuleMonitorController.text.trim()
             : '',
+        showDeepCapsuleWhileExpanded: _useCapsuleMode && _useDeepCapsuleMode
+            ? _showDeepCapsuleWhileExpanded
+            : false,
+        collapseExpandedDeepCapsuleOnClick:
+            _useCapsuleMode && _useDeepCapsuleMode
+                ? _collapseExpandedDeepCapsuleOnClick
+                : false,
+        hideDeepCapsulesWhenCovered: _useCapsuleMode && _useDeepCapsuleMode
+            ? _hideDeepCapsulesWhenCovered
+            : false,
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,

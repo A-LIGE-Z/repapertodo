@@ -619,6 +619,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
           controller.state.deepCapsuleStartTopMargin,
       initialDeepCapsuleMonitorDeviceName:
           controller.state.deepCapsuleMonitorDeviceName,
+      initialShowDeepCapsuleWhileExpanded:
+          controller.state.showDeepCapsuleWhileExpanded,
+      initialCollapseExpandedDeepCapsuleOnClick:
+          controller.state.collapseExpandedDeepCapsuleOnClick,
+      initialHideDeepCapsulesWhenCovered:
+          controller.state.hideDeepCapsulesWhenCovered,
       initialStartAtLogin: controller.state.startAtLogin,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
@@ -673,6 +679,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
           result.deepCapsuleStartTopMargin;
       controller.state.deepCapsuleMonitorDeviceName =
           result.deepCapsuleMonitorDeviceName;
+      controller.state.showDeepCapsuleWhileExpanded =
+          result.showDeepCapsuleWhileExpanded;
+      controller.state.collapseExpandedDeepCapsuleOnClick =
+          result.collapseExpandedDeepCapsuleOnClick;
+      controller.state.hideDeepCapsulesWhenCovered =
+          result.hideDeepCapsulesWhenCovered;
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;

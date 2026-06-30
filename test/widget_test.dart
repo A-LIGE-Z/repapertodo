@@ -205,6 +205,10 @@ void main() {
     expect(find.text('Collapse all active'), findsOneWidget);
     expect(find.text('Deep capsule top margin'), findsOneWidget);
     expect(find.text('Deep capsule monitor'), findsOneWidget);
+    expect(find.text('Show deep capsule while expanded'), findsOneWidget);
+    expect(
+        find.text('Collapse expanded deep capsule on click'), findsOneWidget);
+    expect(find.text('Hide covered deep capsules'), findsOneWidget);
     expect(find.text('Todo reminders'), findsOneWidget);
     expect(find.text('Reminder interval'), findsOneWidget);
     expect(find.text('Minutes'), findsOneWidget);
@@ -714,6 +718,57 @@ void main() {
     expect(find.byTooltip('Expand all papers'), findsNothing);
     expect(find.byTooltip('Collapse all papers'), findsNothing);
     expect(find.text('Still expanded'), findsOneWidget);
+  });
+
+  testWidgets('saves deep capsule visibility settings', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        showDeepCapsuleWhileExpanded: true,
+        collapseExpandedDeepCapsuleOnClick: false,
+        hideDeepCapsulesWhenCovered: false,
+        papers: [
+          PaperData(
+            id: 'deep-capsule-settings-paper',
+            type: PaperTypes.todo,
+            title: 'Deep capsule settings',
+            items: [
+              PaperItem(id: 'deep-capsule-settings-item', text: 'Tune'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-deep-capsule-settings.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Show deep capsule while expanded'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Show deep capsule while expanded'));
+    await tester.tap(find.text('Collapse expanded deep capsule on click'));
+    await tester.tap(find.text('Hide covered deep capsules'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.showDeepCapsuleWhileExpanded, false);
+    expect(controller.state.collapseExpandedDeepCapsuleOnClick, true);
+    expect(controller.state.hideDeepCapsulesWhenCovered, true);
   });
 
   testWidgets('links todo items to note papers', (tester) async {
