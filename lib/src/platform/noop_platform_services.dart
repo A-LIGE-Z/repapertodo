@@ -87,5 +87,8 @@ class NoopSystemIntegrationHost implements SystemIntegrationHost {
   Future<void> setHideFromWindowSwitcher(bool enabled) async {}
 
   @override
+  Future<void> setFullscreenTopmostMode(String mode) async {}
+
+  @override
   Future<void> unregisterGlobalHotkeys() async {}
 }

@@ -41,4 +41,5 @@ abstract interface class SystemIntegrationHost {
   Future<bool> isForegroundFullscreen();
   Future<void> setStartupAtLogin(bool enabled);
   Future<void> setHideFromWindowSwitcher(bool enabled);
+  Future<void> setFullscreenTopmostMode(String mode);
 }

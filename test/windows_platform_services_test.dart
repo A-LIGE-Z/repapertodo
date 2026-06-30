@@ -19,6 +19,9 @@ void main() {
           'height': 360,
         };
       }
+      if (call.method == 'isForegroundFullscreen') {
+        return true;
+      }
       return null;
     });
     addTearDown(() {
@@ -99,6 +102,10 @@ void main() {
     await services.tray.rebuildMenu(AppState(papers: [paper]));
     await services.systemIntegration.setStartupAtLogin(true);
     await services.systemIntegration.setHideFromWindowSwitcher(true);
+    await services.systemIntegration
+        .setFullscreenTopmostMode(FullscreenTopmostModes.stayOnTop);
+    final foregroundFullscreen =
+        await services.systemIntegration.isForegroundFullscreen();
 
     expect(
       calls.map((call) => call.method),
@@ -112,8 +119,11 @@ void main() {
         'setTrayMenu',
         'setStartupAtLogin',
         'setHideFromWindowSwitcher',
+        'setFullscreenTopmostMode',
+        'isForegroundFullscreen',
       ],
     );
+    expect(foregroundFullscreen, true);
     expect(calls[0].arguments, {
       'x': 10.0,
       'y': 20.0,
@@ -127,7 +137,7 @@ void main() {
     expect(paper.width, 520);
     expect(paper.height, 460);
     expect(paper.isVisible, false);
-    expect(calls[calls.length - 3].arguments, [
+    expect(calls[calls.length - 5].arguments, [
       {
         'id': 'paper-1',
         'title': 'Inbox',
@@ -135,7 +145,9 @@ void main() {
         'isVisible': false,
       },
     ]);
-    expect(calls[calls.length - 2].arguments, true);
-    expect(calls.last.arguments, true);
+    expect(calls[calls.length - 4].arguments, true);
+    expect(calls[calls.length - 3].arguments, true);
+    expect(calls[calls.length - 2].arguments, FullscreenTopmostModes.stayOnTop);
+    expect(calls.last.arguments, isNull);
   });
 }

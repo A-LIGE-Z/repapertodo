@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import '../core/model/app_state.dart';
+import '../core/model/paper_constants.dart';
 import '../core/model/paper_data.dart';
 import '../core/startup/startup_command.dart';
 import 'platform_services.dart';
@@ -222,7 +223,9 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
   final MethodChannel _channel;
 
   @override
-  Future<bool> isForegroundFullscreen() async => false;
+  Future<bool> isForegroundFullscreen() async {
+    return await _channel.invokeMethod<bool>('isForegroundFullscreen') ?? false;
+  }
 
   @override
   Future<void> registerGlobalHotkeys(AppState state) async {}
@@ -235,6 +238,14 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
   @override
   Future<void> setHideFromWindowSwitcher(bool enabled) async {
     await _channel.invokeMethod<void>('setHideFromWindowSwitcher', enabled);
+  }
+
+  @override
+  Future<void> setFullscreenTopmostMode(String mode) async {
+    await _channel.invokeMethod<void>(
+      'setFullscreenTopmostMode',
+      FullscreenTopmostModes.normalize(mode),
+    );
   }
 
   @override

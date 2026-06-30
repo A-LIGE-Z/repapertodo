@@ -136,6 +136,33 @@ void SetHideFromWindowSwitcher(HWND window, bool enabled) {
                    SWP_FRAMECHANGED);
 }
 
+bool IsForegroundFullscreen(HWND own_window) {
+  HWND foreground_window = GetForegroundWindow();
+  if (!foreground_window || foreground_window == own_window ||
+      IsIconic(foreground_window)) {
+    return false;
+  }
+
+  RECT foreground_bounds;
+  if (!GetWindowRect(foreground_window, &foreground_bounds)) {
+    return false;
+  }
+
+  HMONITOR monitor =
+      MonitorFromWindow(foreground_window, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO monitor_info;
+  monitor_info.cbSize = sizeof(MONITORINFO);
+  if (!GetMonitorInfoW(monitor, &monitor_info)) {
+    return false;
+  }
+
+  const RECT& monitor_bounds = monitor_info.rcMonitor;
+  return foreground_bounds.left <= monitor_bounds.left &&
+         foreground_bounds.top <= monitor_bounds.top &&
+         foreground_bounds.right >= monitor_bounds.right &&
+         foreground_bounds.bottom >= monitor_bounds.bottom;
+}
+
 flutter::EncodableValue WindowBoundsValue(HWND window) {
   RECT bounds;
   GetWindowRect(window, &bounds);
@@ -215,8 +242,12 @@ bool FlutterWindow::OnCreate() {
               enabled = *value;
             }
           }
-          SetWindowPos(window, enabled ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0,
-                       0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+          const bool should_apply_topmost =
+              enabled &&
+              !(avoid_fullscreen_topmost_ && IsForegroundFullscreen(window));
+          SetWindowPos(window, should_apply_topmost ? HWND_TOPMOST : HWND_NOTOPMOST,
+                       0, 0, 0, 0,
+                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
           result->Success();
           return;
         }
@@ -277,6 +308,20 @@ bool FlutterWindow::OnCreate() {
           }
           SetHideFromWindowSwitcher(window, enabled);
           result->Success();
+          return;
+        }
+        if (method == "setFullscreenTopmostMode") {
+          avoid_fullscreen_topmost_ = true;
+          if (call.arguments()) {
+            if (const auto* value = std::get_if<std::string>(call.arguments())) {
+              avoid_fullscreen_topmost_ = *value != "stayOnTop";
+            }
+          }
+          result->Success();
+          return;
+        }
+        if (method == "isForegroundFullscreen") {
+          result->Success(flutter::EncodableValue(IsForegroundFullscreen(window)));
           return;
         }
         if (method == "setBounds") {

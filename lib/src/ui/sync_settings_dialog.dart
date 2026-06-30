@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/model/paper_constants.dart';
 import '../core/model/sync_settings.dart';
 
 class SyncSettingsDialogResult {
@@ -7,11 +8,13 @@ class SyncSettingsDialogResult {
     required this.sync,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
+    required this.fullscreenTopmostMode,
   });
 
   final SyncSettings sync;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
+  final String fullscreenTopmostMode;
 }
 
 Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
@@ -19,6 +22,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required SyncSettings initialSettings,
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
+  required String initialFullscreenTopmostMode,
 }) {
   return showDialog<SyncSettingsDialogResult>(
     context: context,
@@ -26,6 +30,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialSettings: initialSettings,
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
+      initialFullscreenTopmostMode: initialFullscreenTopmostMode,
     ),
   );
 }
@@ -35,12 +40,14 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialSettings,
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
+    required this.initialFullscreenTopmostMode,
     super.key,
   });
 
   final SyncSettings initialSettings;
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
+  final String initialFullscreenTopmostMode;
 
   @override
   State<SyncSettingsDialog> createState() => _SyncSettingsDialogState();
@@ -51,6 +58,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _autoSyncOnStart;
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
+  late String _fullscreenTopmostMode;
   late String _presetId;
   late bool _obscurePassword = true;
   late final TextEditingController _endpointController;
@@ -69,6 +77,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _autoSyncOnStart = webDav.autoSyncOnStart;
     _startAtLogin = widget.initialStartAtLogin;
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
+    _fullscreenTopmostMode =
+        FullscreenTopmostModes.normalize(widget.initialFullscreenTopmostMode);
     _presetId = webDav.presetId;
     _endpointController = TextEditingController(text: webDav.endpoint);
     _usernameController = TextEditingController(text: webDav.username);
@@ -120,6 +130,25 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 value: _hideFromWindowSwitcher,
                 onChanged: (value) =>
                     setState(() => _hideFromWindowSwitcher = value),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: FullscreenTopmostModes.avoid,
+                    icon: Icon(Icons.fullscreen_exit_outlined),
+                    label: Text('Avoid fullscreen'),
+                  ),
+                  ButtonSegment(
+                    value: FullscreenTopmostModes.stayOnTop,
+                    icon: Icon(Icons.push_pin_outlined),
+                    label: Text('Stay on top'),
+                  ),
+                ],
+                selected: {_fullscreenTopmostMode},
+                onSelectionChanged: (selection) => setState(
+                  () => _fullscreenTopmostMode = selection.single,
+                ),
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -285,6 +314,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         sync: settings,
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
+        fullscreenTopmostMode: _fullscreenTopmostMode,
       ),
     );
   }

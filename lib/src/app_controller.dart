@@ -33,6 +33,8 @@ class RePaperTodoController {
     await _platform.systemIntegration.setStartupAtLogin(state.startAtLogin);
     await _platform.systemIntegration
         .setHideFromWindowSwitcher(state.hidePapersFromWindowSwitcher);
+    await _platform.systemIntegration
+        .setFullscreenTopmostMode(state.fullscreenTopmostMode);
 
     if (state.papers.isEmpty && !startupCommand.createsPaper) {
       createPaper(PaperTypes.todo);
@@ -93,6 +95,13 @@ class RePaperTodoController {
   Future<void> setHideFromWindowSwitcher(bool enabled) async {
     state.hidePapersFromWindowSwitcher = enabled;
     await _platform.systemIntegration.setHideFromWindowSwitcher(enabled);
+  }
+
+  Future<void> setFullscreenTopmostMode(String mode) async {
+    state.fullscreenTopmostMode = mode;
+    state.normalize();
+    await _platform.systemIntegration
+        .setFullscreenTopmostMode(state.fullscreenTopmostMode);
   }
 
   Future<void> showPaper(PaperData paper) async {

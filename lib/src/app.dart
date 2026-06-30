@@ -329,6 +329,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialStartAtLogin: controller.state.startAtLogin,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
+      initialFullscreenTopmostMode: controller.state.fullscreenTopmostMode,
     );
     if (result == null) {
       return;
@@ -338,9 +339,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
+      controller.state.fullscreenTopmostMode = result.fullscreenTopmostMode;
     });
     await controller.setStartupAtLogin(result.startAtLogin);
     await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
+    await controller.setFullscreenTopmostMode(result.fullscreenTopmostMode);
     await widget.store.save(controller.state);
   }
 
