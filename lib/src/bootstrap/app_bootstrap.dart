@@ -7,6 +7,7 @@ import '../core/storage/state_store.dart';
 import '../core/startup/startup_command.dart';
 import '../platform/noop_platform_services.dart';
 import '../platform/platform_services.dart';
+import '../platform/windows_platform_services.dart';
 import '../sync/app_sync_service.dart';
 
 class BootstrappedApp {
@@ -31,7 +32,7 @@ class AppBootstrap {
     final resolvedStore =
         store ?? StateStore(filePath: await defaultStateFilePath());
     final state = await resolvedStore.load();
-    final resolvedPlatform = platform ?? NoopPlatformServices();
+    final resolvedPlatform = platform ?? _defaultPlatformServices();
     final startupCommand = StartupCommand.parse(args);
     final controller = RePaperTodoController(
       initialState: state,
@@ -60,5 +61,12 @@ class AppBootstrap {
       return p.join(p.dirname(Platform.resolvedExecutable), 'data.json');
     }
     return p.join(Directory.current.path, 'data.json');
+  }
+
+  static PlatformServices _defaultPlatformServices() {
+    if (Platform.isWindows) {
+      return WindowsPlatformServices();
+    }
+    return NoopPlatformServices();
   }
 }

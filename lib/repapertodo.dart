@@ -12,6 +12,7 @@ export 'src/core/state/app_state_codec.dart';
 export 'src/bootstrap/app_bootstrap.dart';
 export 'src/platform/noop_platform_services.dart';
 export 'src/platform/platform_services.dart';
+export 'src/platform/windows_platform_services.dart';
 export 'src/app_controller.dart';
 export 'src/sync/app_sync_service.dart';
 export 'src/sync/sync_manifest.dart';

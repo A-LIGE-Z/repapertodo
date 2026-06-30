@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <string>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -25,6 +26,60 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  window_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "repapertodo/window",
+          &flutter::StandardMethodCodec::GetInstance());
+  window_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        HWND window = GetHandle();
+        if (!window) {
+          result->Error("window_unavailable", "The main window is unavailable.");
+          return;
+        }
+
+        const std::string& method = call.method_name();
+        if (method == "show") {
+          ShowWindow(window, SW_SHOWNORMAL);
+          SetForegroundWindow(window);
+          result->Success();
+          return;
+        }
+        if (method == "hide") {
+          ShowWindow(window, SW_HIDE);
+          result->Success();
+          return;
+        }
+        if (method == "setAlwaysOnTop") {
+          bool enabled = false;
+          if (call.arguments()) {
+            if (const auto* value =
+                    std::get_if<bool>(call.arguments())) {
+              enabled = *value;
+            }
+          }
+          SetWindowPos(window, enabled ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0,
+                       0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+          result->Success();
+          return;
+        }
+        if (method == "setTitle") {
+          std::string title = "RePaperTodo";
+          if (call.arguments()) {
+            if (const auto* value =
+                    std::get_if<std::string>(call.arguments())) {
+              title = *value;
+            }
+          }
+          SetWindowTextA(window, title.c_str());
+          result->Success();
+          return;
+        }
+
+        result->NotImplemented();
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -41,6 +96,7 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
+    window_channel_ = nullptr;
     flutter_controller_ = nullptr;
   }
 
