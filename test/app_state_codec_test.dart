@@ -62,6 +62,32 @@ void main() {
     expect(state.externalMarkdownExtension, '.txt');
   });
 
+  test('normalizes todo note links against existing notes', () {
+    final state = AppState(
+      papers: [
+        PaperData(
+          id: 'todo-paper',
+          type: PaperTypes.todo,
+          items: [
+            PaperItem(id: 'item-valid', linkedNoteId: 'note-paper'),
+            PaperItem(id: 'item-missing', linkedNoteId: 'missing-note'),
+          ],
+        ),
+        PaperData(
+          id: 'note-paper',
+          type: PaperTypes.note,
+          title: 'Keep me',
+        ),
+      ],
+    )..normalize();
+
+    final itemsById = {
+      for (final item in state.papers.first.items) item.id: item,
+    };
+    expect(itemsById['item-valid']?.linkedNoteId, 'note-paper');
+    expect(itemsById['item-missing']?.linkedNoteId, isNull);
+  });
+
   test('decodes and normalizes WebDAV sync settings', () {
     final state = AppState.fromJson({
       'sync': {

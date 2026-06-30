@@ -292,6 +292,19 @@ class AppState {
         paper.capsuleSide = deepCapsuleSide;
       }
     }
+    final noteIds =
+        papers.where((paper) => paper.isNote).map((paper) => paper.id).toSet();
+    for (final paper in papers) {
+      if (!paper.isTodo) {
+        continue;
+      }
+      for (final item in paper.items) {
+        final linkedNoteId = item.linkedNoteId;
+        if (linkedNoteId != null && !noteIds.contains(linkedNoteId)) {
+          item.linkedNoteId = null;
+        }
+      }
+    }
   }
 
   JsonMap toJson() {
