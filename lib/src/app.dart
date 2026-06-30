@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import 'app_controller.dart';
 import 'core/model/app_state.dart';
@@ -201,6 +202,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
               showLinkedNoteName: controller.state.showLinkedNoteName,
               allowLongLinkedNoteTitles:
                   controller.state.allowLongLinkedNoteTitles,
+              markdownRenderMode: controller.state.markdownRenderMode,
               todoLineSpacing: controller.state.todoLineSpacing,
               noteLineSpacing: controller.state.noteLineSpacing,
               onChanged: _refreshAndSaveState,
@@ -417,6 +419,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialSettings: controller.state.sync,
       initialTheme: controller.state.theme,
       initialColorScheme: controller.state.colorScheme,
+      initialMarkdownRenderMode: controller.state.markdownRenderMode,
       initialUiFontPreset: controller.state.uiFontPreset,
       initialSystemFontFamilyName: controller.state.systemFontFamilyName,
       initialZoom: controller.state.zoom,
@@ -438,6 +441,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.sync = result.sync;
       controller.state.theme = result.theme;
       controller.state.colorScheme = result.colorScheme;
+      controller.state.markdownRenderMode = result.markdownRenderMode;
       controller.state.uiFontPreset = result.uiFontPreset;
       controller.state.systemFontFamilyName = result.systemFontFamilyName;
       controller.state.zoom = result.zoom;
@@ -535,6 +539,7 @@ class PaperPreview extends StatelessWidget {
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
+    required this.markdownRenderMode,
     required this.todoLineSpacing,
     required this.noteLineSpacing,
     required this.onChanged,
@@ -552,6 +557,7 @@ class PaperPreview extends StatelessWidget {
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
+  final String markdownRenderMode;
   final double todoLineSpacing;
   final double noteLineSpacing;
   final Future<void> Function() onChanged;
@@ -682,22 +688,11 @@ class PaperPreview extends StatelessWidget {
                     onChanged: onChanged,
                   )
                 else
-                  TextFormField(
-                    key: ValueKey('${paper.id}-content'),
-                    initialValue: paper.content,
-                    minLines: 4,
-                    maxLines: 12,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Write a note...',
-                    ),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      height: noteLineSpacing,
-                    ),
-                    onChanged: (value) {
-                      paper.content = value;
-                      unawaited(onChanged());
-                    },
+                  _NoteEditor(
+                    paper: paper,
+                    markdownRenderMode: markdownRenderMode,
+                    lineSpacing: noteLineSpacing,
+                    onChanged: onChanged,
                   ),
               ],
             ],
@@ -705,6 +700,163 @@ class PaperPreview extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _NoteEditor extends StatefulWidget {
+  const _NoteEditor({
+    required this.paper,
+    required this.markdownRenderMode,
+    required this.lineSpacing,
+    required this.onChanged,
+  });
+
+  final PaperData paper;
+  final String markdownRenderMode;
+  final double lineSpacing;
+  final Future<void> Function() onChanged;
+
+  @override
+  State<_NoteEditor> createState() => _NoteEditorState();
+}
+
+class _NoteEditorState extends State<_NoteEditor> {
+  static const _viewEdit = 'edit';
+  static const _viewPreview = 'preview';
+  static const _viewSplit = 'split';
+
+  late String _view = _defaultView(widget.markdownRenderMode);
+
+  @override
+  void didUpdateWidget(covariant _NoteEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.markdownRenderMode != widget.markdownRenderMode) {
+      _view = _defaultView(widget.markdownRenderMode);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
+    if (mode == MarkdownRenderModes.off) {
+      return _editor(context, minLines: 4, maxLines: 12);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SegmentedButton<String>(
+            segments: [
+              const ButtonSegment(
+                value: _viewEdit,
+                icon: Icon(Icons.edit_outlined),
+                label: Text('Edit'),
+              ),
+              const ButtonSegment(
+                value: _viewPreview,
+                icon: Icon(Icons.visibility_outlined),
+                label: Text('Preview'),
+              ),
+              if (mode == MarkdownRenderModes.enhanced)
+                const ButtonSegment(
+                  value: _viewSplit,
+                  icon: Icon(Icons.vertical_split_outlined),
+                  label: Text('Split'),
+                ),
+            ],
+            selected: {_safeView(mode)},
+            onSelectionChanged: (selection) =>
+                setState(() => _view = selection.single),
+          ),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final view = _safeView(mode);
+            final canSplit = constraints.maxWidth >= 640;
+            if (view == _viewPreview) {
+              return _preview(context);
+            }
+            if (view == _viewSplit && canSplit) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: _editor(context, minLines: 8, maxLines: 18)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _preview(context)),
+                ],
+              );
+            }
+            return _editor(context, minLines: 4, maxLines: 12);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _editor(
+    BuildContext context, {
+    required int minLines,
+    required int maxLines,
+  }) {
+    return TextFormField(
+      key: ValueKey('${widget.paper.id}-content'),
+      initialValue: widget.paper.content,
+      minLines: minLines,
+      maxLines: maxLines,
+      decoration: const InputDecoration(
+        border: OutlineInputBorder(),
+        hintText: 'Write a note...',
+      ),
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            height: widget.lineSpacing,
+          ),
+      onChanged: (value) {
+        widget.paper.content = value;
+        unawaited(widget.onChanged());
+      },
+    );
+  }
+
+  Widget _preview(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 112),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: MarkdownBody(
+            data: widget.paper.content.trim().isEmpty
+                ? '_No note content._'
+                : widget.paper.content,
+            styleSheet:
+                MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                    p: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          height: widget.lineSpacing,
+                        )),
+            selectable: true,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _safeView(String mode) {
+    if (_view == _viewSplit && mode != MarkdownRenderModes.enhanced) {
+      return _viewEdit;
+    }
+    return _view;
+  }
+
+  String _defaultView(String mode) {
+    return MarkdownRenderModes.normalize(mode) == MarkdownRenderModes.enhanced
+        ? _viewSplit
+        : _viewEdit;
   }
 }
 

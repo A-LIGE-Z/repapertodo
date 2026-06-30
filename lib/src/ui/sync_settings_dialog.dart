@@ -8,6 +8,7 @@ class SyncSettingsDialogResult {
     required this.sync,
     required this.theme,
     required this.colorScheme,
+    required this.markdownRenderMode,
     required this.uiFontPreset,
     required this.systemFontFamilyName,
     required this.zoom,
@@ -24,6 +25,7 @@ class SyncSettingsDialogResult {
   final SyncSettings sync;
   final String theme;
   final String colorScheme;
+  final String markdownRenderMode;
   final String uiFontPreset;
   final String systemFontFamilyName;
   final double zoom;
@@ -42,6 +44,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required SyncSettings initialSettings,
   required String initialTheme,
   required String initialColorScheme,
+  required String initialMarkdownRenderMode,
   required String initialUiFontPreset,
   required String initialSystemFontFamilyName,
   required double initialZoom,
@@ -60,6 +63,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialSettings: initialSettings,
       initialTheme: initialTheme,
       initialColorScheme: initialColorScheme,
+      initialMarkdownRenderMode: initialMarkdownRenderMode,
       initialUiFontPreset: initialUiFontPreset,
       initialSystemFontFamilyName: initialSystemFontFamilyName,
       initialZoom: initialZoom,
@@ -80,6 +84,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialSettings,
     required this.initialTheme,
     required this.initialColorScheme,
+    required this.initialMarkdownRenderMode,
     required this.initialUiFontPreset,
     required this.initialSystemFontFamilyName,
     required this.initialZoom,
@@ -97,6 +102,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final SyncSettings initialSettings;
   final String initialTheme;
   final String initialColorScheme;
+  final String initialMarkdownRenderMode;
   final String initialUiFontPreset;
   final String initialSystemFontFamilyName;
   final double initialZoom;
@@ -118,6 +124,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _autoSyncOnStart;
   late String _theme;
   late String _colorScheme;
+  late String _markdownRenderMode;
   late String _uiFontPreset;
   late double _zoom;
   late double _todoLineSpacing;
@@ -147,6 +154,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _autoSyncOnStart = webDav.autoSyncOnStart;
     _theme = _normalizeTheme(widget.initialTheme);
     _colorScheme = ColorSchemes.normalize(widget.initialColorScheme);
+    _markdownRenderMode =
+        MarkdownRenderModes.normalize(widget.initialMarkdownRenderMode);
     _uiFontPreset = UiFontPresets.normalize(widget.initialUiFontPreset);
     _zoom = widget.initialZoom.clamp(0.6, 1.8).toDouble();
     _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 2.4).toDouble();
@@ -250,6 +259,29 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: MarkdownRenderModes.off,
+                    icon: Icon(Icons.edit_outlined),
+                    label: Text('Markdown off'),
+                  ),
+                  ButtonSegment(
+                    value: MarkdownRenderModes.basic,
+                    icon: Icon(Icons.article_outlined),
+                    label: Text('Basic'),
+                  ),
+                  ButtonSegment(
+                    value: MarkdownRenderModes.enhanced,
+                    icon: Icon(Icons.vertical_split_outlined),
+                    label: Text('Enhanced'),
+                  ),
+                ],
+                selected: {_markdownRenderMode},
+                onSelectionChanged: (selection) =>
+                    setState(() => _markdownRenderMode = selection.single),
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _uiFontPreset,
                 decoration: const InputDecoration(
@@ -549,6 +581,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         sync: settings,
         theme: _theme,
         colorScheme: _colorScheme,
+        markdownRenderMode: _markdownRenderMode,
         uiFontPreset: _uiFontPreset,
         systemFontFamilyName: _fontFamilyController.text.trim(),
         zoom: _zoom,

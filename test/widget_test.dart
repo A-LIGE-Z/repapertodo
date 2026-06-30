@@ -172,6 +172,9 @@ void main() {
     expect(find.text('Forest'), findsOneWidget);
     expect(find.text('Rose'), findsOneWidget);
     expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Markdown off'), findsOneWidget);
+    expect(find.text('Basic'), findsOneWidget);
+    expect(find.text('Enhanced'), findsOneWidget);
     expect(find.text('Font preset'), findsOneWidget);
     expect(find.text('Default'), findsOneWidget);
     expect(find.text('Custom font family'), findsOneWidget);
@@ -188,6 +191,40 @@ void main() {
     expect(find.text('WebDAV sync'), findsOneWidget);
     expect(find.text('Jianguoyun'), findsOneWidget);
     expect(find.text('Generic'), findsOneWidget);
+  });
+
+  testWidgets('renders markdown note preview controls', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'note-paper',
+            type: PaperTypes.note,
+            title: 'Markdown note',
+            content: '# Research note\n\n- Extract claims',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-markdown-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Edit'), findsOneWidget);
+    expect(find.text('Preview'), findsOneWidget);
+    expect(find.text('Split'), findsOneWidget);
+    expect(find.text('Research note'), findsOneWidget);
+    expect(find.text('Extract claims'), findsOneWidget);
   });
 
   testWidgets('links todo items to note papers', (tester) async {
