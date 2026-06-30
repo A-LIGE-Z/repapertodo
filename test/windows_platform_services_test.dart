@@ -104,6 +104,22 @@ void main() {
     await services.systemIntegration.setHideFromWindowSwitcher(true);
     await services.systemIntegration
         .setFullscreenTopmostMode(FullscreenTopmostModes.stayOnTop);
+    await services.systemIntegration.registerGlobalHotkeys(
+      AppState(
+        pinnedTodoHotKey: 'Ctrl+Alt+T',
+        pinnedNoteHotKey: 'Ctrl+Alt+N',
+      ),
+    );
+    await services.systemIntegration.unregisterGlobalHotkeys();
+    final startupCommand = services.startup.commands.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('startupCommandRequested', 'new-todo'),
+      ),
+      (_) {},
+    );
     final foregroundFullscreen =
         await services.systemIntegration.isForegroundFullscreen();
     await services.externalFiles.openFile('C:\\Temp\\note.md');
@@ -121,11 +137,14 @@ void main() {
         'setStartupAtLogin',
         'setHideFromWindowSwitcher',
         'setFullscreenTopmostMode',
+        'registerGlobalHotkeys',
+        'unregisterGlobalHotkeys',
         'isForegroundFullscreen',
         'openExternalFile',
       ],
     );
     expect(foregroundFullscreen, true);
+    expect((await startupCommand).kind, StartupCommandKind.newTodo);
     expect(calls[0].arguments, {
       'x': 10.0,
       'y': 20.0,
@@ -150,7 +169,12 @@ void main() {
     expect(calls[7].arguments, true);
     expect(calls[8].arguments, true);
     expect(calls[9].arguments, FullscreenTopmostModes.stayOnTop);
-    expect(calls[10].arguments, isNull);
+    expect(calls[10].arguments, {
+      'todo': 'Ctrl+Alt+T',
+      'note': 'Ctrl+Alt+N',
+    });
+    expect(calls[11].arguments, isNull);
+    expect(calls[12].arguments, isNull);
     expect(calls.last.arguments, 'C:\\Temp\\note.md');
   });
 }

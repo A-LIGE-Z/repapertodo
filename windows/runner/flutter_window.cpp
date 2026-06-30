@@ -1,5 +1,8 @@
 #include "flutter_window.h"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <optional>
 #include <string>
 #include <variant>
@@ -54,6 +57,30 @@ bool GetBoolArgument(const flutter::EncodableMap& map,
     return *value;
   }
   return fallback;
+}
+
+std::string TrimAscii(const std::string& value) {
+  const auto begin = std::find_if_not(
+      value.begin(), value.end(),
+      [](unsigned char character) { return std::isspace(character); });
+  const auto end = std::find_if_not(
+                       value.rbegin(), value.rend(),
+                       [](unsigned char character) {
+                         return std::isspace(character);
+                       })
+                       .base();
+  if (begin >= end) {
+    return std::string();
+  }
+  return std::string(begin, end);
+}
+
+std::string UpperAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char character) {
+                   return static_cast<char>(std::toupper(character));
+                 });
+  return value;
 }
 
 std::wstring Utf8ToWide(const std::string& value) {
@@ -178,6 +205,142 @@ flutter::EncodableValue WindowBoundsValue(HWND window) {
   return flutter::EncodableValue(result_map);
 }
 
+std::vector<std::string> SplitHotkey(const std::string& hotkey) {
+  std::vector<std::string> parts;
+  std::string current;
+  for (const char character : hotkey) {
+    if (character == '+') {
+      const std::string part = TrimAscii(current);
+      if (!part.empty()) {
+        parts.push_back(part);
+      }
+      current.clear();
+    } else {
+      current.push_back(character);
+    }
+  }
+  const std::string part = TrimAscii(current);
+  if (!part.empty()) {
+    parts.push_back(part);
+  }
+  return parts;
+}
+
+bool TryParseVirtualKey(const std::string& token, UINT* key) {
+  if (token.size() == 1) {
+    const unsigned char character = static_cast<unsigned char>(token[0]);
+    if (std::isalnum(character)) {
+      *key = static_cast<UINT>(std::toupper(character));
+      return true;
+    }
+  }
+  if (token.size() >= 2 && token[0] == 'F') {
+    const int function_key = std::atoi(token.c_str() + 1);
+    if (function_key >= 1 && function_key <= 24) {
+      *key = VK_F1 + static_cast<UINT>(function_key - 1);
+      return true;
+    }
+  }
+  if (token == "SPACE") {
+    *key = VK_SPACE;
+    return true;
+  }
+  if (token == "TAB") {
+    *key = VK_TAB;
+    return true;
+  }
+  if (token == "ENTER" || token == "RETURN") {
+    *key = VK_RETURN;
+    return true;
+  }
+  if (token == "ESC" || token == "ESCAPE") {
+    *key = VK_ESCAPE;
+    return true;
+  }
+  if (token == "BACKSPACE") {
+    *key = VK_BACK;
+    return true;
+  }
+  if (token == "DELETE" || token == "DEL") {
+    *key = VK_DELETE;
+    return true;
+  }
+  if (token == "INSERT" || token == "INS") {
+    *key = VK_INSERT;
+    return true;
+  }
+  if (token == "HOME") {
+    *key = VK_HOME;
+    return true;
+  }
+  if (token == "END") {
+    *key = VK_END;
+    return true;
+  }
+  if (token == "PAGEUP" || token == "PGUP") {
+    *key = VK_PRIOR;
+    return true;
+  }
+  if (token == "PAGEDOWN" || token == "PGDN") {
+    *key = VK_NEXT;
+    return true;
+  }
+  if (token == "UP") {
+    *key = VK_UP;
+    return true;
+  }
+  if (token == "DOWN") {
+    *key = VK_DOWN;
+    return true;
+  }
+  if (token == "LEFT") {
+    *key = VK_LEFT;
+    return true;
+  }
+  if (token == "RIGHT") {
+    *key = VK_RIGHT;
+    return true;
+  }
+  return false;
+}
+
+bool TryParseHotkey(const std::string& hotkey, UINT* modifiers, UINT* key) {
+  *modifiers = MOD_NOREPEAT;
+  *key = 0;
+  for (const std::string& raw_part : SplitHotkey(hotkey)) {
+    const std::string part = UpperAscii(raw_part);
+    if (part == "CTRL" || part == "CONTROL") {
+      *modifiers |= MOD_CONTROL;
+    } else if (part == "ALT") {
+      *modifiers |= MOD_ALT;
+    } else if (part == "SHIFT") {
+      *modifiers |= MOD_SHIFT;
+    } else if (part == "WIN" || part == "WINDOWS" || part == "META") {
+      *modifiers |= MOD_WIN;
+    } else if (*key == 0) {
+      if (!TryParseVirtualKey(part, key)) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+  return *key != 0;
+}
+
+bool RegisterConfiguredHotkey(HWND window, int id, const std::string& hotkey) {
+  const std::string trimmed_hotkey = TrimAscii(hotkey);
+  if (trimmed_hotkey.empty()) {
+    return false;
+  }
+  UINT modifiers = 0;
+  UINT key = 0;
+  if (!TryParseHotkey(trimmed_hotkey, &modifiers, &key)) {
+    return false;
+  }
+  return RegisterHotKey(window, id, modifiers, key) == TRUE;
+}
+
 }  // namespace
 
 constexpr UINT kTrayIconId = 1;
@@ -186,6 +349,8 @@ constexpr UINT kTrayShowCommand = 40001;
 constexpr UINT kTrayHideCommand = 40002;
 constexpr UINT kTrayExitCommand = 40003;
 constexpr UINT kTrayPaperCommandBase = 41000;
+constexpr int kPinnedTodoHotkeyId = 42001;
+constexpr int kPinnedNoteHotkeyId = 42002;
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -317,6 +482,33 @@ bool FlutterWindow::OnCreate() {
               avoid_fullscreen_topmost_ = *value != "stayOnTop";
             }
           }
+          result->Success();
+          return;
+        }
+        if (method == "registerGlobalHotkeys") {
+          UnregisterHotKey(window, kPinnedTodoHotkeyId);
+          UnregisterHotKey(window, kPinnedNoteHotkeyId);
+          todo_hotkey_registered_ = false;
+          note_hotkey_registered_ = false;
+          if (call.arguments()) {
+            if (const auto* hotkeys =
+                    std::get_if<flutter::EncodableMap>(call.arguments())) {
+              todo_hotkey_registered_ = RegisterConfiguredHotkey(
+                  window, kPinnedTodoHotkeyId,
+                  GetStringArgument(*hotkeys, "todo", ""));
+              note_hotkey_registered_ = RegisterConfiguredHotkey(
+                  window, kPinnedNoteHotkeyId,
+                  GetStringArgument(*hotkeys, "note", ""));
+            }
+          }
+          result->Success();
+          return;
+        }
+        if (method == "unregisterGlobalHotkeys") {
+          UnregisterHotKey(window, kPinnedTodoHotkeyId);
+          UnregisterHotKey(window, kPinnedNoteHotkeyId);
+          todo_hotkey_registered_ = false;
+          note_hotkey_registered_ = false;
           result->Success();
           return;
         }
@@ -495,6 +687,15 @@ void FlutterWindow::SendPaperRequested(const std::string& paper_id) {
       "paperRequested", std::make_unique<flutter::EncodableValue>(paper_id));
 }
 
+void FlutterWindow::SendStartupCommandRequested(const std::string& command) {
+  if (!window_channel_) {
+    return;
+  }
+  window_channel_->InvokeMethod(
+      "startupCommandRequested",
+      std::make_unique<flutter::EncodableValue>(command));
+}
+
 void FlutterWindow::SendWindowEvent(const char* method) {
   if (!window_channel_) {
     return;
@@ -504,6 +705,13 @@ void FlutterWindow::SendWindowEvent(const char* method) {
 }
 
 void FlutterWindow::OnDestroy() {
+  HWND window = GetHandle();
+  if (window) {
+    UnregisterHotKey(window, kPinnedTodoHotkeyId);
+    UnregisterHotKey(window, kPinnedNoteHotkeyId);
+  }
+  todo_hotkey_registered_ = false;
+  note_hotkey_registered_ = false;
   RemoveTrayIcon();
   if (flutter_controller_) {
     window_channel_ = nullptr;
@@ -539,6 +747,16 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       SendCloseRequested();
       ShowWindow(hwnd, SW_HIDE);
       return 0;
+    case WM_HOTKEY:
+      if (wparam == kPinnedTodoHotkeyId && todo_hotkey_registered_) {
+        SendStartupCommandRequested("new-todo");
+        return 0;
+      }
+      if (wparam == kPinnedNoteHotkeyId && note_hotkey_registered_) {
+        SendStartupCommandRequested("new-note");
+        return 0;
+      }
+      break;
     case kTrayIconMessage:
       switch (LOWORD(lparam)) {
         case WM_LBUTTONUP:

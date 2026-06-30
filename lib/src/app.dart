@@ -11,6 +11,7 @@ import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/model/paper_item.dart';
 import 'core/storage/state_store.dart';
+import 'core/startup/startup_command.dart';
 import 'sync/app_sync_service.dart';
 import 'ui/sync_settings_dialog.dart';
 
@@ -131,6 +132,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   Future<void> _saveQueue = Future<void>.value();
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
   StreamSubscription<String>? _paperOpenSubscription;
+  StreamSubscription<StartupCommand>? _startupCommandSubscription;
   Timer? _surfaceSaveDebounce;
   Timer? _titleSurfaceDebounce;
   Timer? _todoReminderTimer;
@@ -147,6 +149,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     _paperOpenSubscription = controller.paperOpenRequests.listen((paperId) {
       unawaited(_handlePaperOpenRequest(paperId));
     });
+    _startupCommandSubscription = controller.startupCommands.listen((command) {
+      unawaited(_handleStartupCommand(command));
+    });
     _restartTodoReminderTimer();
   }
 
@@ -157,6 +162,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     _todoReminderTimer?.cancel();
     unawaited(_surfaceUpdateSubscription?.cancel());
     unawaited(_paperOpenSubscription?.cancel());
+    unawaited(_startupCommandSubscription?.cancel());
     super.dispose();
   }
 
@@ -521,6 +527,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     }
     final paper = controller.state.papers[paperIndex];
     await _openPaper(paper);
+  }
+
+  Future<void> _handleStartupCommand(StartupCommand command) async {
+    if (command.kind == StartupCommandKind.none) {
+      return;
+    }
+    await controller.executeStartupCommand(command);
+    if (mounted) {
+      setState(() {});
+    }
+    await _saveState();
   }
 
   void _handleSurfaceUpdate(PaperData paper) {

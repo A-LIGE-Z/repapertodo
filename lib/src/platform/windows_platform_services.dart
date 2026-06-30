@@ -11,9 +11,14 @@ import 'platform_services.dart';
 class WindowsPlatformServices implements PlatformServices {
   WindowsPlatformServices({
     MethodChannel channel = const MethodChannel('repapertodo/window'),
-  })  : paperWindows = WindowsPaperWindowHost(channel),
+  }) : this._(channel, WindowsStartupHost());
+
+  WindowsPlatformServices._(
+    MethodChannel channel,
+    WindowsStartupHost startupHost,
+  )   : paperWindows = WindowsPaperWindowHost(channel, startupHost),
         tray = WindowsTrayHost(channel),
-        startup = WindowsStartupHost(),
+        startup = startupHost,
         systemIntegration = WindowsSystemIntegrationHost(channel),
         externalFiles = WindowsExternalFileHost(channel);
 
@@ -34,11 +39,12 @@ class WindowsPlatformServices implements PlatformServices {
 }
 
 class WindowsPaperWindowHost implements PaperWindowHost {
-  WindowsPaperWindowHost(this._channel) {
+  WindowsPaperWindowHost(this._channel, this._startupHost) {
     _channel.setMethodCallHandler(_handleWindowEvent);
   }
 
   final MethodChannel _channel;
+  final WindowsStartupHost _startupHost;
   final StreamController<PaperData> _surfaceUpdates =
       StreamController<PaperData>.broadcast();
   final StreamController<String> _paperOpenRequests =
@@ -86,6 +92,13 @@ class WindowsPaperWindowHost implements PaperWindowHost {
         }
         paper.isVisible = false;
         _surfaceUpdates.add(paper);
+      case 'startupCommandRequested':
+        final command = StartupCommand.parse([
+          if (call.arguments is String) call.arguments as String,
+        ]);
+        if (command.kind != StartupCommandKind.none) {
+          _startupHost.addCommand(command);
+        }
     }
   }
 
@@ -211,14 +224,21 @@ class WindowsTrayHost implements TrayHost {
 }
 
 class WindowsStartupHost implements StartupHost {
+  final StreamController<StartupCommand> _commands =
+      StreamController<StartupCommand>.broadcast();
+
   @override
   Future<bool> acquireSingleInstance() async => true;
 
   @override
-  Stream<StartupCommand> get commands => const Stream.empty();
+  Stream<StartupCommand> get commands => _commands.stream;
 
   @override
   Future<void> forwardToPrimary(List<String> args) async {}
+
+  void addCommand(StartupCommand command) {
+    _commands.add(command);
+  }
 }
 
 class WindowsSystemIntegrationHost implements SystemIntegrationHost {
@@ -232,7 +252,12 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
   }
 
   @override
-  Future<void> registerGlobalHotkeys(AppState state) async {}
+  Future<void> registerGlobalHotkeys(AppState state) async {
+    await _channel.invokeMethod<void>('registerGlobalHotkeys', {
+      'todo': state.pinnedTodoHotKey,
+      'note': state.pinnedNoteHotKey,
+    });
+  }
 
   @override
   Future<void> setStartupAtLogin(bool enabled) async {
@@ -253,7 +278,9 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
   }
 
   @override
-  Future<void> unregisterGlobalHotkeys() async {}
+  Future<void> unregisterGlobalHotkeys() async {
+    await _channel.invokeMethod<void>('unregisterGlobalHotkeys');
+  }
 
   Future<void> setAlwaysOnTop(bool enabled) async {
     await _channel.invokeMethod<void>('setAlwaysOnTop', enabled);

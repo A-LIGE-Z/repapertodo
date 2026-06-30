@@ -35,6 +35,7 @@ class FlutterWindow : public Win32Window {
   void SendBoundsChanged();
   void SendCloseRequested();
   void SendPaperRequested(const std::string& paper_id);
+  void SendStartupCommandRequested(const std::string& command);
   void SendWindowEvent(const char* method);
 
   // The project to run.
@@ -49,6 +50,8 @@ class FlutterWindow : public Win32Window {
   NOTIFYICONDATA tray_icon_data_ = {};
   bool tray_icon_added_ = false;
   bool avoid_fullscreen_topmost_ = true;
+  bool todo_hotkey_registered_ = false;
+  bool note_hotkey_registered_ = false;
   std::vector<std::pair<std::string, std::wstring>> tray_papers_;
 };
 

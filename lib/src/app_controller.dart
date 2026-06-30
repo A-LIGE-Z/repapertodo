@@ -25,6 +25,8 @@ class RePaperTodoController {
   Stream<String> get paperOpenRequests =>
       _platform.paperWindows.paperOpenRequests;
 
+  Stream<StartupCommand> get startupCommands => _platform.startup.commands;
+
   Future<void> start(
       {StartupCommand startupCommand =
           const StartupCommand(StartupCommandKind.none)}) async {

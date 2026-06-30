@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:repapertodo/src/core/model/paper_constants.dart';
 import 'package:repapertodo/src/core/model/paper_data.dart';
 import 'package:repapertodo/src/core/model/paper_item.dart';
 import 'package:repapertodo/src/core/storage/state_store.dart';
+import 'package:repapertodo/src/core/startup/startup_command.dart';
 import 'package:repapertodo/src/platform/noop_platform_services.dart';
 import 'package:repapertodo/src/platform/platform_services.dart';
 
@@ -892,6 +894,47 @@ void main() {
     );
   });
 
+  testWidgets('executes platform startup commands while running',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final startup = _RecordingStartupHost();
+    final platform = _RecordingPlatformServices(startup: startup);
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'runtime-command-paper',
+            type: PaperTypes.todo,
+            title: 'Runtime commands',
+            items: [
+              PaperItem(id: 'runtime-command-item', text: 'Waiting'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-runtime-command.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    startup.addCommand(const StartupCommand(StartupCommandKind.newTodo));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers, hasLength(2));
+    expect(controller.state.papers.last.type, PaperTypes.todo);
+    expect(platform.paperWindows.shownTitles, contains('Todo2'));
+    expect(find.text('Todo2'), findsOneWidget);
+  });
+
   testWidgets('links todo items to note papers', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1074,6 +1117,9 @@ void main() {
 }
 
 class _RecordingPlatformServices implements PlatformServices {
+  _RecordingPlatformServices({StartupHost? startup})
+      : startup = startup ?? NoopStartupHost();
+
   @override
   final _RecordingPaperWindowHost paperWindows = _RecordingPaperWindowHost();
 
@@ -1081,7 +1127,7 @@ class _RecordingPlatformServices implements PlatformServices {
   final TrayHost tray = NoopTrayHost();
 
   @override
-  final StartupHost startup = NoopStartupHost();
+  final StartupHost startup;
 
   @override
   @override
@@ -1113,6 +1159,17 @@ class _RecordingExternalFileHost implements ExternalFileHost {
   @override
   Future<void> openFile(String path) async {
     openedPaths.add(path);
+  }
+}
+
+class _RecordingStartupHost extends NoopStartupHost {
+  final _commands = StreamController<StartupCommand>.broadcast();
+
+  @override
+  Stream<StartupCommand> get commands => _commands.stream;
+
+  void addCommand(StartupCommand command) {
+    _commands.add(command);
   }
 }
 
