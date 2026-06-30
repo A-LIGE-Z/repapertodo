@@ -13,6 +13,8 @@ abstract interface class PaperWindowHost {
   Future<void> showPaper(PaperData paper);
   Future<void> hidePaper(PaperData paper);
   Future<void> closePaperSurface(PaperData paper);
+  Future<void> updatePaperSurface(PaperData paper);
+  Future<void> capturePaperSurfaceBounds(PaperData paper);
   Future<void> restoreAll(AppState state);
 }
 
@@ -34,4 +36,3 @@ abstract interface class SystemIntegrationHost {
   Future<bool> isForegroundFullscreen();
   Future<void> setStartupAtLogin(bool enabled);
 }
-

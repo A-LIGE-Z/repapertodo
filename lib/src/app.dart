@@ -109,6 +109,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
               paper: visiblePapers[index],
               onChanged: _saveState,
               onDelete: _deletePaper,
+              onSurfaceChanged: _updatePaperSurface,
+              onCaptureBounds: _capturePaperBounds,
             );
           },
         ),
@@ -136,6 +138,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
         (candidate) => candidate.id == paper.id,
       );
     });
+    await _saveState();
+  }
+
+  Future<void> _updatePaperSurface(PaperData paper) async {
+    setState(() {});
+    await controller.updatePaperSurface(paper);
+  }
+
+  Future<void> _capturePaperBounds(PaperData paper) async {
+    await controller.capturePaperSurfaceBounds(paper);
+    setState(() {});
     await _saveState();
   }
 
@@ -204,12 +217,16 @@ class PaperPreview extends StatelessWidget {
     required this.paper,
     required this.onChanged,
     required this.onDelete,
+    required this.onSurfaceChanged,
+    required this.onCaptureBounds,
     super.key,
   });
 
   final PaperData paper;
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onDelete;
+  final Future<void> Function(PaperData paper) onSurfaceChanged;
+  final Future<void> Function(PaperData paper) onCaptureBounds;
 
   @override
   Widget build(BuildContext context) {
@@ -260,6 +277,24 @@ class PaperPreview extends StatelessWidget {
                         unawaited(onChanged());
                       },
                     ),
+                  ),
+                  IconButton(
+                    tooltip: paper.alwaysOnTop
+                        ? 'Disable always on top'
+                        : 'Keep on top',
+                    onPressed: () {
+                      paper.alwaysOnTop = !paper.alwaysOnTop;
+                      unawaited(onSurfaceChanged(paper));
+                      unawaited(onChanged());
+                    },
+                    icon: Icon(paper.alwaysOnTop
+                        ? Icons.push_pin
+                        : Icons.push_pin_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Save window bounds',
+                    onPressed: () => unawaited(onCaptureBounds(paper)),
+                    icon: const Icon(Icons.aspect_ratio_outlined),
                   ),
                   IconButton(
                     tooltip: 'Delete paper',

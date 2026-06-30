@@ -2,8 +2,33 @@
 
 #include <optional>
 #include <string>
+#include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+double GetNumberArgument(const flutter::EncodableMap& map,
+                         const std::string& key,
+                         double fallback) {
+  auto iterator = map.find(flutter::EncodableValue(key));
+  if (iterator == map.end()) {
+    return fallback;
+  }
+  const auto& value = iterator->second;
+  if (const auto* double_value = std::get_if<double>(&value)) {
+    return *double_value;
+  }
+  if (const auto* int_value = std::get_if<int32_t>(&value)) {
+    return static_cast<double>(*int_value);
+  }
+  if (const auto* long_value = std::get_if<int64_t>(&value)) {
+    return static_cast<double>(*long_value);
+  }
+  return fallback;
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -75,6 +100,48 @@ bool FlutterWindow::OnCreate() {
           }
           SetWindowTextA(window, title.c_str());
           result->Success();
+          return;
+        }
+        if (method == "setBounds") {
+          RECT current_bounds;
+          GetWindowRect(window, &current_bounds);
+          double x = static_cast<double>(current_bounds.left);
+          double y = static_cast<double>(current_bounds.top);
+          double width =
+              static_cast<double>(current_bounds.right - current_bounds.left);
+          double height =
+              static_cast<double>(current_bounds.bottom - current_bounds.top);
+          if (call.arguments()) {
+            if (const auto* bounds =
+                    std::get_if<flutter::EncodableMap>(call.arguments())) {
+              x = GetNumberArgument(*bounds, "x", x);
+              y = GetNumberArgument(*bounds, "y", y);
+              width = GetNumberArgument(*bounds, "width", width);
+              height = GetNumberArgument(*bounds, "height", height);
+            }
+          }
+          SetWindowPos(window, nullptr, static_cast<int>(x),
+                       static_cast<int>(y), static_cast<int>(width),
+                       static_cast<int>(height),
+                       SWP_NOZORDER | SWP_NOACTIVATE);
+          result->Success();
+          return;
+        }
+        if (method == "getBounds") {
+          RECT bounds;
+          GetWindowRect(window, &bounds);
+          flutter::EncodableMap result_map;
+          result_map[flutter::EncodableValue("x")] =
+              flutter::EncodableValue(static_cast<int32_t>(bounds.left));
+          result_map[flutter::EncodableValue("y")] =
+              flutter::EncodableValue(static_cast<int32_t>(bounds.top));
+          result_map[flutter::EncodableValue("width")] =
+              flutter::EncodableValue(
+                  static_cast<int32_t>(bounds.right - bounds.left));
+          result_map[flutter::EncodableValue("height")] =
+              flutter::EncodableValue(
+                  static_cast<int32_t>(bounds.bottom - bounds.top));
+          result->Success(flutter::EncodableValue(result_map));
           return;
         }
 

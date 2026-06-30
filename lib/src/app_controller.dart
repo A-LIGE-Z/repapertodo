@@ -62,6 +62,14 @@ class RePaperTodoController {
     state.normalize();
   }
 
+  Future<void> updatePaperSurface(PaperData paper) async {
+    await _platform.paperWindows.updatePaperSurface(paper);
+  }
+
+  Future<void> capturePaperSurfaceBounds(PaperData paper) async {
+    await _platform.paperWindows.capturePaperSurfaceBounds(paper);
+  }
+
   Future<void> executeStartupCommand(StartupCommand command) async {
     switch (command.kind) {
       case StartupCommandKind.none:

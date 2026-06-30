@@ -34,6 +34,20 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   final MethodChannel _channel;
 
   @override
+  Future<void> capturePaperSurfaceBounds(PaperData paper) async {
+    final bounds = await _channel.invokeMapMethod<String, Object?>('getBounds');
+    if (bounds == null) {
+      return;
+    }
+    paper
+      ..x = _doubleValue(bounds['x'], paper.x)
+      ..y = _doubleValue(bounds['y'], paper.y)
+      ..width = _doubleValue(bounds['width'], paper.width)
+      ..height = _doubleValue(bounds['height'], paper.height);
+    paper.normalize();
+  }
+
+  @override
   Future<void> closePaperSurface(PaperData paper) async {
     paper.isVisible = false;
     await _channel.invokeMethod<void>('hide');
@@ -53,6 +67,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       await _channel.invokeMethod<void>('hide');
       return;
     }
+    await _applyBounds(visiblePapers.first);
     await _channel.invokeMethod<void>('show');
     await _channel.invokeMethod<void>(
         'setTitle', _windowTitle(visiblePapers.first));
@@ -65,14 +80,41 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> showPaper(PaperData paper) async {
     paper.isVisible = true;
+    await _applyBounds(paper);
     await _channel.invokeMethod<void>('show');
     await _channel.invokeMethod<void>('setTitle', _windowTitle(paper));
     await _channel.invokeMethod<void>('setAlwaysOnTop', paper.alwaysOnTop);
   }
 
+  @override
+  Future<void> updatePaperSurface(PaperData paper) async {
+    if (!paper.isVisible) {
+      return;
+    }
+    await _applyBounds(paper);
+    await _channel.invokeMethod<void>('setTitle', _windowTitle(paper));
+    await _channel.invokeMethod<void>('setAlwaysOnTop', paper.alwaysOnTop);
+  }
+
+  Future<void> _applyBounds(PaperData paper) async {
+    await _channel.invokeMethod<void>('setBounds', {
+      'x': paper.x,
+      'y': paper.y,
+      'width': paper.width,
+      'height': paper.height,
+    });
+  }
+
   String _windowTitle(PaperData paper) {
     final title = paper.title.trim();
     return title.isEmpty ? 'RePaperTodo' : 'RePaperTodo - $title';
+  }
+
+  double _doubleValue(Object? value, double fallback) {
+    if (value is num && value.isFinite) {
+      return value.toDouble();
+    }
+    return fallback;
   }
 }
 

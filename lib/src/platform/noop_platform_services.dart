@@ -27,6 +27,9 @@ class NoopPlatformServices implements PlatformServices {
 
 class NoopPaperWindowHost implements PaperWindowHost {
   @override
+  Future<void> capturePaperSurfaceBounds(PaperData paper) async {}
+
+  @override
   Future<void> closePaperSurface(PaperData paper) async {}
 
   @override
@@ -37,6 +40,9 @@ class NoopPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<void> showPaper(PaperData paper) async {}
+
+  @override
+  Future<void> updatePaperSurface(PaperData paper) async {}
 }
 
 class NoopTrayHost implements TrayHost {
@@ -74,4 +80,3 @@ class NoopSystemIntegrationHost implements SystemIntegrationHost {
   @override
   Future<void> unregisterGlobalHotkeys() async {}
 }
-
