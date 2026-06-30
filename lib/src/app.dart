@@ -139,6 +139,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
               paper: visiblePapers[index],
               onChanged: _refreshAndSaveState,
               onTitleChanged: _updatePaperTitle,
+              onOpen: _openPaper,
               onHide: _hidePaper,
               onDelete: _deletePaper,
               onSurfaceChanged: _updatePaperSurface,
@@ -151,9 +152,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   }
 
   Future<void> _createPaper(String type) async {
+    late final PaperData paper;
     setState(() {
-      controller.createPaper(type);
+      paper = controller.createPaper(type);
     });
+    await controller.showPaper(paper);
     await _saveState();
   }
 
@@ -232,6 +235,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     await _saveState();
   }
 
+  Future<void> _openPaper(PaperData paper) async {
+    setState(() {
+      paper.isVisible = true;
+    });
+    await controller.showPaper(paper);
+    await _saveState();
+  }
+
   Future<void> _showHiddenPapers() async {
     final hiddenPapers =
         controller.state.papers.where((paper) => !paper.isVisible).toList();
@@ -254,13 +265,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       return;
     }
     final paper = controller.state.papers[paperIndex];
-    if (mounted) {
-      setState(() {
-        paper.isVisible = true;
-      });
-    }
-    await controller.showPaper(paper);
-    await _saveState();
+    await _openPaper(paper);
   }
 
   void _handleSurfaceUpdate(PaperData paper) {
@@ -379,6 +384,7 @@ class PaperPreview extends StatelessWidget {
     required this.paper,
     required this.onChanged,
     required this.onTitleChanged,
+    required this.onOpen,
     required this.onHide,
     required this.onDelete,
     required this.onSurfaceChanged,
@@ -389,6 +395,7 @@ class PaperPreview extends StatelessWidget {
   final PaperData paper;
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
+  final Future<void> Function(PaperData paper) onOpen;
   final Future<void> Function(PaperData paper) onHide;
   final Future<void> Function(PaperData paper) onDelete;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
@@ -444,46 +451,61 @@ class PaperPreview extends StatelessWidget {
                       },
                     ),
                   ),
-                  IconButton(
-                    tooltip:
-                        paper.isCollapsed ? 'Expand paper' : 'Collapse paper',
-                    onPressed: () {
-                      paper.isCollapsed = !paper.isCollapsed;
-                      unawaited(onChanged());
-                    },
-                    icon: Icon(paper.isCollapsed
-                        ? Icons.expand_more
-                        : Icons.expand_less),
-                  ),
-                  IconButton(
-                    tooltip: paper.alwaysOnTop
-                        ? 'Disable always on top'
-                        : 'Keep on top',
-                    onPressed: () {
-                      paper.alwaysOnTop = !paper.alwaysOnTop;
-                      unawaited(onSurfaceChanged(paper));
-                      unawaited(onChanged());
-                    },
-                    icon: Icon(paper.alwaysOnTop
-                        ? Icons.push_pin
-                        : Icons.push_pin_outlined),
-                  ),
-                  IconButton(
-                    tooltip: 'Save window bounds',
-                    onPressed: () => unawaited(onCaptureBounds(paper)),
-                    icon: const Icon(Icons.aspect_ratio_outlined),
-                  ),
-                  IconButton(
-                    tooltip: 'Hide paper',
-                    onPressed: () => unawaited(onHide(paper)),
-                    icon: const Icon(Icons.visibility_off_outlined),
-                  ),
-                  IconButton(
-                    tooltip: 'Delete paper',
-                    onPressed: () => unawaited(onDelete(paper)),
-                    icon: const Icon(Icons.delete_outline),
-                  ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    IconButton(
+                      tooltip: 'Open paper surface',
+                      onPressed: () => unawaited(onOpen(paper)),
+                      icon: const Icon(Icons.open_in_new),
+                    ),
+                    IconButton(
+                      tooltip:
+                          paper.isCollapsed ? 'Expand paper' : 'Collapse paper',
+                      onPressed: () {
+                        paper.isCollapsed = !paper.isCollapsed;
+                        unawaited(onChanged());
+                      },
+                      icon: Icon(paper.isCollapsed
+                          ? Icons.expand_more
+                          : Icons.expand_less),
+                    ),
+                    IconButton(
+                      tooltip: paper.alwaysOnTop
+                          ? 'Disable always on top'
+                          : 'Keep on top',
+                      onPressed: () {
+                        paper.alwaysOnTop = !paper.alwaysOnTop;
+                        unawaited(onSurfaceChanged(paper));
+                        unawaited(onChanged());
+                      },
+                      icon: Icon(paper.alwaysOnTop
+                          ? Icons.push_pin
+                          : Icons.push_pin_outlined),
+                    ),
+                    IconButton(
+                      tooltip: 'Save window bounds',
+                      onPressed: () => unawaited(onCaptureBounds(paper)),
+                      icon: const Icon(Icons.aspect_ratio_outlined),
+                    ),
+                    IconButton(
+                      tooltip: 'Hide paper',
+                      onPressed: () => unawaited(onHide(paper)),
+                      icon: const Icon(Icons.visibility_off_outlined),
+                    ),
+                    IconButton(
+                      tooltip: 'Delete paper',
+                      onPressed: () => unawaited(onDelete(paper)),
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ],
+                ),
               ),
               if (!paper.isCollapsed) ...[
                 const SizedBox(height: 12),

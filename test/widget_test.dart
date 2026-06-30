@@ -52,6 +52,11 @@ void main() {
     expect(controller.state.papers.single.title, 'Edited title');
     expect(platform.paperWindows.updatedTitles, contains('Edited title'));
 
+    await tester.tap(find.byTooltip('Open paper surface'));
+    await tester.pump();
+
+    expect(platform.paperWindows.shownTitles, contains('Edited title'));
+
     await tester.tap(find.byKey(const ValueKey('welcome-todo-todo-1-text')));
     await tester.testTextInput.receiveAction(TextInputAction.next);
     await tester.pump();
@@ -168,6 +173,12 @@ class _RecordingPlatformServices implements PlatformServices {
 
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final updatedTitles = <String>[];
+  final shownTitles = <String>[];
+
+  @override
+  Future<void> showPaper(PaperData paper) async {
+    shownTitles.add(paper.title);
+  }
 
   @override
   Future<void> updatePaperSurface(PaperData paper) async {
