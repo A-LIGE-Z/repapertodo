@@ -306,6 +306,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       allowLongLinkedNoteTitles: controller.state.allowLongLinkedNoteTitles,
       maxTitleLength: controller.state.maxTitleLength,
       enableToolTips: controller.state.enableToolTips,
+      enableAnimations: controller.state.enableAnimations,
       markdownRenderMode: controller.state.markdownRenderMode,
       todoVisualSize: controller.state.todoVisualSize,
       todoLineSpacing: controller.state.todoLineSpacing,
@@ -589,6 +590,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialZoom: controller.state.zoom,
       initialMaxTitleLength: controller.state.maxTitleLength,
       initialEnableToolTips: controller.state.enableToolTips,
+      initialEnableAnimations: controller.state.enableAnimations,
       initialTodoLineSpacing: controller.state.todoLineSpacing,
       initialNoteLineSpacing: controller.state.noteLineSpacing,
       initialShowTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
@@ -635,6 +637,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.zoom = result.zoom;
       controller.state.maxTitleLength = result.maxTitleLength;
       controller.state.enableToolTips = result.enableToolTips;
+      controller.state.enableAnimations = result.enableAnimations;
       controller.state.todoLineSpacing = result.todoLineSpacing;
       controller.state.noteLineSpacing = result.noteLineSpacing;
       controller.state.showTodoDueRelativeTime = result.showTodoDueRelativeTime;
@@ -994,6 +997,7 @@ class PaperPreview extends StatelessWidget {
     required this.allowLongLinkedNoteTitles,
     required this.maxTitleLength,
     required this.enableToolTips,
+    required this.enableAnimations,
     required this.markdownRenderMode,
     required this.todoVisualSize,
     required this.todoLineSpacing,
@@ -1019,6 +1023,7 @@ class PaperPreview extends StatelessWidget {
   final bool allowLongLinkedNoteTitles;
   final int maxTitleLength;
   final bool enableToolTips;
+  final bool enableAnimations;
   final String markdownRenderMode;
   final String todoVisualSize;
   final double todoLineSpacing;
@@ -1164,36 +1169,66 @@ class PaperPreview extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!isCollapsed) ...[
-                const SizedBox(height: 12),
-                if (paper.isTodo)
-                  _TodoEditor(
-                    paper: paper,
-                    notePapers: notePapers,
-                    enableTodoNoteLinks: enableTodoNoteLinks,
-                    showLinkedNoteName: showLinkedNoteName,
-                    allowLongLinkedNoteTitles: allowLongLinkedNoteTitles,
-                    maxTitleLength: maxTitleLength,
-                    enableToolTips: enableToolTips,
-                    visualSize: todoVisualSize,
-                    lineSpacing: todoLineSpacing,
-                    showDueRelativeTime: showTodoDueRelativeTime,
-                    dueYearDisplayMode: todoDueYearDisplayMode,
-                    onOpen: onOpen,
-                    onChanged: onChanged,
-                  )
-                else
-                  _NoteEditor(
-                    paper: paper,
-                    markdownRenderMode: markdownRenderMode,
-                    lineSpacing: noteLineSpacing,
-                    onChanged: onChanged,
-                  ),
-              ],
+              _animatedPaperBody(isCollapsed),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _animatedPaperBody(bool isCollapsed) {
+    final body = isCollapsed
+        ? const SizedBox.shrink(key: ValueKey('collapsed'))
+        : Column(
+            key: const ValueKey('expanded'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              if (paper.isTodo)
+                _TodoEditor(
+                  paper: paper,
+                  notePapers: notePapers,
+                  enableTodoNoteLinks: enableTodoNoteLinks,
+                  showLinkedNoteName: showLinkedNoteName,
+                  allowLongLinkedNoteTitles: allowLongLinkedNoteTitles,
+                  maxTitleLength: maxTitleLength,
+                  enableToolTips: enableToolTips,
+                  visualSize: todoVisualSize,
+                  lineSpacing: todoLineSpacing,
+                  showDueRelativeTime: showTodoDueRelativeTime,
+                  dueYearDisplayMode: todoDueYearDisplayMode,
+                  onOpen: onOpen,
+                  onChanged: onChanged,
+                )
+              else
+                _NoteEditor(
+                  paper: paper,
+                  markdownRenderMode: markdownRenderMode,
+                  lineSpacing: noteLineSpacing,
+                  onChanged: onChanged,
+                ),
+            ],
+          );
+    if (!enableAnimations) {
+      return body;
+    }
+    return AnimatedSwitcher(
+      key: ValueKey('${paper.id}-body-animation'),
+      duration: const Duration(milliseconds: 180),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        return SizeTransition(
+          sizeFactor: animation,
+          alignment: AlignmentDirectional.topStart,
+          child: FadeTransition(
+            opacity: animation,
+            child: child,
+          ),
+        );
+      },
+      child: body,
     );
   }
 }

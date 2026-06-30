@@ -189,6 +189,7 @@ void main() {
     expect(find.text('Zoom'), findsOneWidget);
     expect(find.text('Max title length'), findsOneWidget);
     expect(find.text('Tooltips'), findsOneWidget);
+    expect(find.text('Animations'), findsOneWidget);
     expect(find.text('Todo spacing'), findsOneWidget);
     expect(find.text('Note spacing'), findsOneWidget);
     expect(find.text('Relative due dates'), findsOneWidget);
@@ -553,6 +554,69 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tooltips'), findsOneWidget);
+  });
+
+  testWidgets('toggles paper body animations', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final animatedController = RePaperTodoController(
+      initialState: AppState(
+        enableAnimations: true,
+        papers: [
+          PaperData(
+            id: 'animated-paper',
+            type: PaperTypes.todo,
+            title: 'Animated paper',
+            items: [
+              PaperItem(id: 'animated-item', text: 'Animated content'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: animatedController,
+        store: StateStore(filePath: 'build/test-widget-animated-data.json'),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('animated-paper-body-animation')),
+      findsOneWidget,
+    );
+
+    final stillController = RePaperTodoController(
+      initialState: AppState(
+        enableAnimations: false,
+        papers: [
+          PaperData(
+            id: 'still-paper',
+            type: PaperTypes.todo,
+            title: 'Still paper',
+            items: [
+              PaperItem(id: 'still-item', text: 'Still content'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: stillController,
+        store: StateStore(filePath: 'build/test-widget-still-data.json'),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('still-paper-body-animation')),
+      findsNothing,
+    );
   });
 
   testWidgets('toggles collapse all control', (tester) async {

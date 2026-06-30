@@ -16,6 +16,7 @@ class SyncSettingsDialogResult {
     required this.zoom,
     required this.maxTitleLength,
     required this.enableToolTips,
+    required this.enableAnimations,
     required this.todoLineSpacing,
     required this.noteLineSpacing,
     required this.showTodoDueRelativeTime,
@@ -50,6 +51,7 @@ class SyncSettingsDialogResult {
   final double zoom;
   final int maxTitleLength;
   final bool enableToolTips;
+  final bool enableAnimations;
   final double todoLineSpacing;
   final double noteLineSpacing;
   final bool showTodoDueRelativeTime;
@@ -86,6 +88,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required double initialZoom,
   required int initialMaxTitleLength,
   required bool initialEnableToolTips,
+  required bool initialEnableAnimations,
   required double initialTodoLineSpacing,
   required double initialNoteLineSpacing,
   required bool initialShowTodoDueRelativeTime,
@@ -122,6 +125,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialZoom: initialZoom,
       initialMaxTitleLength: initialMaxTitleLength,
       initialEnableToolTips: initialEnableToolTips,
+      initialEnableAnimations: initialEnableAnimations,
       initialTodoLineSpacing: initialTodoLineSpacing,
       initialNoteLineSpacing: initialNoteLineSpacing,
       initialShowTodoDueRelativeTime: initialShowTodoDueRelativeTime,
@@ -161,6 +165,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialZoom,
     required this.initialMaxTitleLength,
     required this.initialEnableToolTips,
+    required this.initialEnableAnimations,
     required this.initialTodoLineSpacing,
     required this.initialNoteLineSpacing,
     required this.initialShowTodoDueRelativeTime,
@@ -196,6 +201,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final double initialZoom;
   final int initialMaxTitleLength;
   final bool initialEnableToolTips;
+  final bool initialEnableAnimations;
   final double initialTodoLineSpacing;
   final double initialNoteLineSpacing;
   final bool initialShowTodoDueRelativeTime;
@@ -233,6 +239,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late double _zoom;
   late double _maxTitleLength;
   late bool _enableToolTips;
+  late bool _enableAnimations;
   late double _todoLineSpacing;
   late double _noteLineSpacing;
   late bool _showTodoDueRelativeTime;
@@ -281,6 +288,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _zoom = widget.initialZoom.clamp(0.6, 1.8).toDouble();
     _maxTitleLength = widget.initialMaxTitleLength.clamp(4, 80).toDouble();
     _enableToolTips = widget.initialEnableToolTips;
+    _enableAnimations = widget.initialEnableAnimations;
     _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 2.4).toDouble();
     _noteLineSpacing = widget.initialNoteLineSpacing.clamp(0.8, 2.4).toDouble();
     _showTodoDueRelativeTime = widget.initialShowTodoDueRelativeTime;
@@ -535,6 +543,13 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 title: const Text('Tooltips'),
                 value: _enableToolTips,
                 onChanged: (value) => setState(() => _enableToolTips = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.animation_outlined),
+                title: const Text('Animations'),
+                value: _enableAnimations,
+                onChanged: (value) => setState(() => _enableAnimations = value),
               ),
               _SettingsSlider(
                 icon: Icons.checklist_outlined,
@@ -969,6 +984,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         zoom: _zoom,
         maxTitleLength: _maxTitleLength.round().clamp(4, 80).toInt(),
         enableToolTips: _enableToolTips,
+        enableAnimations: _enableAnimations,
         todoLineSpacing: _todoLineSpacing,
         noteLineSpacing: _noteLineSpacing,
         showTodoDueRelativeTime: _showTodoDueRelativeTime,
