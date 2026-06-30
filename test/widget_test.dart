@@ -222,6 +222,29 @@ void main() {
 
     expect(platform.paperWindows.shownTitles, contains('Research note'));
 
+    await tester.tap(find.byTooltip('Delete paper').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
+    expect(find.text('Note Research note'), findsNothing);
+
+    final undoDeleteAction = tester.widget<SnackBarAction>(
+      find.byWidgetPredicate(
+        (widget) => widget is SnackBarAction && widget.label == 'Undo',
+      ),
+    );
+    undoDeleteAction.onPressed();
+    tester
+        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+        .hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+
+    expect(
+        controller.state.papers.first.items.single.linkedNoteId, 'note-paper');
+    expect(find.text('Note Research note'), findsOneWidget);
+
     await tester.tap(find.byIcon(Icons.close_outlined));
     await tester.pump();
 

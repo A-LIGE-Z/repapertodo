@@ -201,8 +201,28 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     if (removedIndex < 0) {
       return;
     }
+    final detachedLinks = <_LinkedNoteRestore>[];
     setState(() {
       controller.state.papers.removeAt(removedIndex);
+      if (paper.isNote) {
+        for (final todoPaper in controller.state.papers) {
+          if (!todoPaper.isTodo) {
+            continue;
+          }
+          for (final item in todoPaper.items) {
+            if (item.linkedNoteId == paper.id) {
+              detachedLinks.add(
+                _LinkedNoteRestore(
+                  paperId: todoPaper.id,
+                  itemId: item.id,
+                  noteId: paper.id,
+                ),
+              );
+              item.linkedNoteId = null;
+            }
+          }
+        }
+      }
     });
     unawaited(_saveState());
     if (!mounted) {
@@ -222,6 +242,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
                   )
                   .toInt();
               controller.state.papers.insert(targetIndex, paper);
+              for (final link in detachedLinks) {
+                _restoreLinkedNote(link);
+              }
             });
             unawaited(_saveState());
           },
@@ -391,6 +414,32 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     final title = paper.title.trim();
     return title.isEmpty ? 'Untitled' : title;
   }
+
+  void _restoreLinkedNote(_LinkedNoteRestore link) {
+    for (final paper in controller.state.papers) {
+      if (paper.id != link.paperId) {
+        continue;
+      }
+      for (final item in paper.items) {
+        if (item.id == link.itemId) {
+          item.linkedNoteId = link.noteId;
+          return;
+        }
+      }
+    }
+  }
+}
+
+class _LinkedNoteRestore {
+  const _LinkedNoteRestore({
+    required this.paperId,
+    required this.itemId,
+    required this.noteId,
+  });
+
+  final String paperId;
+  final String itemId;
+  final String noteId;
 }
 
 class PaperPreview extends StatelessWidget {
