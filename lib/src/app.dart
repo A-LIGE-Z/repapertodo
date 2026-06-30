@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
+import 'core/model/app_state.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/model/paper_item.dart';
@@ -29,13 +30,13 @@ class RePaperTodoApp extends StatefulWidget {
 class _RePaperTodoAppState extends State<RePaperTodoApp> {
   @override
   Widget build(BuildContext context) {
+    final state = widget.controller.state;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'RePaperTodo',
-      theme: _appTheme(Brightness.light, widget.controller.state.colorScheme),
-      darkTheme:
-          _appTheme(Brightness.dark, widget.controller.state.colorScheme),
-      themeMode: _themeMode(widget.controller.state.theme),
+      theme: _appTheme(Brightness.light, state),
+      darkTheme: _appTheme(Brightness.dark, state),
+      themeMode: _themeMode(state.theme),
       home: PaperBoardScreen(
         controller: widget.controller,
         store: widget.store,
@@ -45,13 +46,24 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
     );
   }
 
-  ThemeData _appTheme(Brightness brightness, String colorSchemeId) {
-    return ThemeData(
+  ThemeData _appTheme(Brightness brightness, AppState state) {
+    final base = ThemeData(
       colorScheme: ColorScheme.fromSeed(
-        seedColor: _seedColor(colorSchemeId),
+        seedColor: _seedColor(state.colorScheme),
         brightness: brightness,
       ),
       useMaterial3: true,
+    );
+    final fontFamily = _fontFamily(state);
+    return base.copyWith(
+      textTheme: base.textTheme.apply(
+        fontFamily: fontFamily,
+        fontSizeFactor: state.zoom,
+      ),
+      primaryTextTheme: base.primaryTextTheme.apply(
+        fontFamily: fontFamily,
+        fontSizeFactor: state.zoom,
+      ),
     );
   }
 
@@ -69,6 +81,16 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
       ColorSchemes.forest => const Color(0xFF2E7D32),
       ColorSchemes.rose => const Color(0xFFC85A7C),
       _ => const Color(0xFFE07A5F),
+    };
+  }
+
+  String? _fontFamily(AppState state) {
+    return switch (UiFontPresets.normalize(state.uiFontPreset)) {
+      UiFontPresets.serif => 'serif',
+      UiFontPresets.mono => 'monospace',
+      UiFontPresets.custom when state.systemFontFamilyName.isNotEmpty =>
+        state.systemFontFamilyName,
+      _ => null,
     };
   }
 }
@@ -179,6 +201,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
               showLinkedNoteName: controller.state.showLinkedNoteName,
               allowLongLinkedNoteTitles:
                   controller.state.allowLongLinkedNoteTitles,
+              todoLineSpacing: controller.state.todoLineSpacing,
+              noteLineSpacing: controller.state.noteLineSpacing,
               onChanged: _refreshAndSaveState,
               onTitleChanged: _updatePaperTitle,
               onOpen: _openPaper,
@@ -393,6 +417,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialSettings: controller.state.sync,
       initialTheme: controller.state.theme,
       initialColorScheme: controller.state.colorScheme,
+      initialUiFontPreset: controller.state.uiFontPreset,
+      initialSystemFontFamilyName: controller.state.systemFontFamilyName,
+      initialZoom: controller.state.zoom,
+      initialTodoLineSpacing: controller.state.todoLineSpacing,
+      initialNoteLineSpacing: controller.state.noteLineSpacing,
       initialStartAtLogin: controller.state.startAtLogin,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
@@ -409,6 +438,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.sync = result.sync;
       controller.state.theme = result.theme;
       controller.state.colorScheme = result.colorScheme;
+      controller.state.uiFontPreset = result.uiFontPreset;
+      controller.state.systemFontFamilyName = result.systemFontFamilyName;
+      controller.state.zoom = result.zoom;
+      controller.state.todoLineSpacing = result.todoLineSpacing;
+      controller.state.noteLineSpacing = result.noteLineSpacing;
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
@@ -501,6 +535,8 @@ class PaperPreview extends StatelessWidget {
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
+    required this.todoLineSpacing,
+    required this.noteLineSpacing,
     required this.onChanged,
     required this.onTitleChanged,
     required this.onOpen,
@@ -516,6 +552,8 @@ class PaperPreview extends StatelessWidget {
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
+  final double todoLineSpacing;
+  final double noteLineSpacing;
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
   final Future<void> Function(PaperData paper) onOpen;
@@ -639,6 +677,7 @@ class PaperPreview extends StatelessWidget {
                     enableTodoNoteLinks: enableTodoNoteLinks,
                     showLinkedNoteName: showLinkedNoteName,
                     allowLongLinkedNoteTitles: allowLongLinkedNoteTitles,
+                    lineSpacing: todoLineSpacing,
                     onOpen: onOpen,
                     onChanged: onChanged,
                   )
@@ -652,7 +691,9 @@ class PaperPreview extends StatelessWidget {
                       border: OutlineInputBorder(),
                       hintText: 'Write a note...',
                     ),
-                    style: theme.textTheme.bodyMedium,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      height: noteLineSpacing,
+                    ),
                     onChanged: (value) {
                       paper.content = value;
                       unawaited(onChanged());
@@ -674,6 +715,7 @@ class _TodoEditor extends StatefulWidget {
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
+    required this.lineSpacing,
     required this.onOpen,
     required this.onChanged,
   });
@@ -683,6 +725,7 @@ class _TodoEditor extends StatefulWidget {
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
+  final double lineSpacing;
   final Future<void> Function(PaperData paper) onOpen;
   final Future<void> Function() onChanged;
 
@@ -729,6 +772,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                               : colorScheme.onSurface,
                           decoration:
                               item.done ? TextDecoration.lineThrough : null,
+                          height: widget.lineSpacing,
                         ),
                         onChanged: (value) {
                           item.text = value;

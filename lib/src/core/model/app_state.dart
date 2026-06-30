@@ -266,6 +266,8 @@ class AppState {
     colorScheme = ColorSchemes.normalize(colorScheme);
     markdownRenderMode = MarkdownRenderModes.normalize(markdownRenderMode);
     todoVisualSize = TodoVisualSizes.normalize(todoVisualSize);
+    uiFontPreset = UiFontPresets.normalize(uiFontPreset);
+    systemFontFamilyName = systemFontFamilyName.trim();
     zoom = zoom.clamp(0.6, 1.8).toDouble();
     todoDueYearDisplayMode =
         TodoDueYearDisplayModes.normalize(todoDueYearDisplayMode);

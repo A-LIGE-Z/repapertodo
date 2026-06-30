@@ -13,7 +13,9 @@ abstract final class MarkdownRenderModes {
   static const enhanced = 'enhanced';
 
   static String normalize(String? value) {
-    return value == off || value == basic || value == enhanced ? value! : enhanced;
+    return value == off || value == basic || value == enhanced
+        ? value!
+        : enhanced;
   }
 }
 
@@ -24,7 +26,22 @@ abstract final class TodoVisualSizes {
   static const extraLarge = 'extraLarge';
 
   static String normalize(String? value) {
-    return value == small || value == large || value == extraLarge ? value! : medium;
+    return value == small || value == large || value == extraLarge
+        ? value!
+        : medium;
+  }
+}
+
+abstract final class UiFontPresets {
+  static const defaultPreset = 'default';
+  static const serif = 'serif';
+  static const mono = 'mono';
+  static const custom = 'custom';
+
+  static String normalize(String? value) {
+    return value == serif || value == mono || value == custom
+        ? value!
+        : defaultPreset;
   }
 }
 
@@ -35,7 +52,9 @@ abstract final class ColorSchemes {
   static const rose = 'rose';
 
   static String normalize(String? value) {
-    return value == warm || value == ink || value == forest || value == rose ? value! : warm;
+    return value == warm || value == ink || value == forest || value == rose
+        ? value!
+        : warm;
   }
 }
 

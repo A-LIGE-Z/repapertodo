@@ -171,6 +171,13 @@ void main() {
     expect(find.text('Ink'), findsOneWidget);
     expect(find.text('Forest'), findsOneWidget);
     expect(find.text('Rose'), findsOneWidget);
+    expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Font preset'), findsOneWidget);
+    expect(find.text('Default'), findsOneWidget);
+    expect(find.text('Custom font family'), findsOneWidget);
+    expect(find.text('Zoom'), findsOneWidget);
+    expect(find.text('Todo spacing'), findsOneWidget);
+    expect(find.text('Note spacing'), findsOneWidget);
     expect(find.text('Start at login'), findsOneWidget);
     expect(find.text('Hide from task switcher'), findsOneWidget);
     expect(find.text('Avoid fullscreen'), findsOneWidget);

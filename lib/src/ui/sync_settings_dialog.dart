@@ -8,6 +8,11 @@ class SyncSettingsDialogResult {
     required this.sync,
     required this.theme,
     required this.colorScheme,
+    required this.uiFontPreset,
+    required this.systemFontFamilyName,
+    required this.zoom,
+    required this.todoLineSpacing,
+    required this.noteLineSpacing,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
@@ -19,6 +24,11 @@ class SyncSettingsDialogResult {
   final SyncSettings sync;
   final String theme;
   final String colorScheme;
+  final String uiFontPreset;
+  final String systemFontFamilyName;
+  final double zoom;
+  final double todoLineSpacing;
+  final double noteLineSpacing;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
@@ -32,6 +42,11 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required SyncSettings initialSettings,
   required String initialTheme,
   required String initialColorScheme,
+  required String initialUiFontPreset,
+  required String initialSystemFontFamilyName,
+  required double initialZoom,
+  required double initialTodoLineSpacing,
+  required double initialNoteLineSpacing,
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
@@ -45,6 +60,11 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialSettings: initialSettings,
       initialTheme: initialTheme,
       initialColorScheme: initialColorScheme,
+      initialUiFontPreset: initialUiFontPreset,
+      initialSystemFontFamilyName: initialSystemFontFamilyName,
+      initialZoom: initialZoom,
+      initialTodoLineSpacing: initialTodoLineSpacing,
+      initialNoteLineSpacing: initialNoteLineSpacing,
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
@@ -60,6 +80,11 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialSettings,
     required this.initialTheme,
     required this.initialColorScheme,
+    required this.initialUiFontPreset,
+    required this.initialSystemFontFamilyName,
+    required this.initialZoom,
+    required this.initialTodoLineSpacing,
+    required this.initialNoteLineSpacing,
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
@@ -72,6 +97,11 @@ class SyncSettingsDialog extends StatefulWidget {
   final SyncSettings initialSettings;
   final String initialTheme;
   final String initialColorScheme;
+  final String initialUiFontPreset;
+  final String initialSystemFontFamilyName;
+  final double initialZoom;
+  final double initialTodoLineSpacing;
+  final double initialNoteLineSpacing;
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
@@ -88,6 +118,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _autoSyncOnStart;
   late String _theme;
   late String _colorScheme;
+  late String _uiFontPreset;
+  late double _zoom;
+  late double _todoLineSpacing;
+  late double _noteLineSpacing;
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
@@ -101,6 +135,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _passwordController;
   late final TextEditingController _rootPathController;
   late final TextEditingController _intervalController;
+  late final TextEditingController _fontFamilyController;
   String? _errorText;
 
   @override
@@ -112,6 +147,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _autoSyncOnStart = webDav.autoSyncOnStart;
     _theme = _normalizeTheme(widget.initialTheme);
     _colorScheme = ColorSchemes.normalize(widget.initialColorScheme);
+    _uiFontPreset = UiFontPresets.normalize(widget.initialUiFontPreset);
+    _zoom = widget.initialZoom.clamp(0.6, 1.8).toDouble();
+    _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 2.4).toDouble();
+    _noteLineSpacing = widget.initialNoteLineSpacing.clamp(0.8, 2.4).toDouble();
     _startAtLogin = widget.initialStartAtLogin;
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
@@ -126,6 +165,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _rootPathController = TextEditingController(text: webDav.rootPath);
     _intervalController =
         TextEditingController(text: webDav.autoSyncIntervalMinutes.toString());
+    _fontFamilyController =
+        TextEditingController(text: widget.initialSystemFontFamilyName);
   }
 
   @override
@@ -135,6 +176,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _passwordController.dispose();
     _rootPathController.dispose();
     _intervalController.dispose();
+    _fontFamilyController.dispose();
     super.dispose();
   }
 
@@ -201,6 +243,84 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 selected: {_colorScheme},
                 onSelectionChanged: (selection) =>
                     setState(() => _colorScheme = selection.single),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Appearance',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: _uiFontPreset,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Font preset',
+                  prefixIcon: Icon(Icons.font_download_outlined),
+                ),
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(
+                    value: UiFontPresets.defaultPreset,
+                    child: Text('Default'),
+                  ),
+                  DropdownMenuItem(
+                    value: UiFontPresets.serif,
+                    child: Text('Serif'),
+                  ),
+                  DropdownMenuItem(
+                    value: UiFontPresets.mono,
+                    child: Text('Mono'),
+                  ),
+                  DropdownMenuItem(
+                    value: UiFontPresets.custom,
+                    child: Text('Custom'),
+                  ),
+                ],
+                onChanged: (value) => setState(
+                  () => _uiFontPreset =
+                      UiFontPresets.normalize(value ?? _uiFontPreset),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _fontFamilyController,
+                enabled: _uiFontPreset == UiFontPresets.custom,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Custom font family',
+                  prefixIcon: Icon(Icons.title_outlined),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _SettingsSlider(
+                icon: Icons.zoom_in_outlined,
+                label: 'Zoom',
+                valueLabel: '${(_zoom * 100).round()}%',
+                value: _zoom,
+                min: 0.6,
+                max: 1.8,
+                divisions: 12,
+                onChanged: (value) => setState(() => _zoom = value),
+              ),
+              _SettingsSlider(
+                icon: Icons.checklist_outlined,
+                label: 'Todo spacing',
+                valueLabel: _todoLineSpacing.toStringAsFixed(1),
+                value: _todoLineSpacing,
+                min: 0.8,
+                max: 2.4,
+                divisions: 16,
+                onChanged: (value) => setState(() => _todoLineSpacing = value),
+              ),
+              _SettingsSlider(
+                icon: Icons.notes_outlined,
+                label: 'Note spacing',
+                valueLabel: _noteLineSpacing.toStringAsFixed(1),
+                value: _noteLineSpacing,
+                min: 0.8,
+                max: 2.4,
+                divisions: 16,
+                onChanged: (value) => setState(() => _noteLineSpacing = value),
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -429,6 +549,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         sync: settings,
         theme: _theme,
         colorScheme: _colorScheme,
+        uiFontPreset: _uiFontPreset,
+        systemFontFamilyName: _fontFamilyController.text.trim(),
+        zoom: _zoom,
+        todoLineSpacing: _todoLineSpacing,
+        noteLineSpacing: _noteLineSpacing,
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,
@@ -444,5 +569,61 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       'light' || 'dark' || 'system' => theme,
       _ => 'system',
     };
+  }
+}
+
+class _SettingsSlider extends StatelessWidget {
+  const _SettingsSlider({
+    required this.icon,
+    required this.label,
+    required this.valueLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String label;
+  final String valueLabel;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Text(label)),
+                    Text(valueLabel),
+                  ],
+                ),
+                Slider(
+                  value: value,
+                  min: min,
+                  max: max,
+                  divisions: divisions,
+                  label: valueLabel,
+                  onChanged: onChanged,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
