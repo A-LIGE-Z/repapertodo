@@ -7,6 +7,7 @@ import '../core/storage/state_store.dart';
 import '../core/startup/startup_command.dart';
 import '../platform/noop_platform_services.dart';
 import '../platform/platform_services.dart';
+import '../sync/app_sync_service.dart';
 
 class BootstrappedApp {
   const BootstrappedApp({
@@ -25,8 +26,10 @@ class AppBootstrap {
     List<String> args, {
     PlatformServices? platform,
     StateStore? store,
+    AppSyncService? syncService,
   }) async {
-    final resolvedStore = store ?? StateStore(filePath: await defaultStateFilePath());
+    final resolvedStore =
+        store ?? StateStore(filePath: await defaultStateFilePath());
     final state = await resolvedStore.load();
     final resolvedPlatform = platform ?? NoopPlatformServices();
     final startupCommand = StartupCommand.parse(args);
@@ -35,6 +38,16 @@ class AppBootstrap {
       platform: resolvedPlatform,
     );
     await controller.start(startupCommand: startupCommand);
+    if (controller.state.sync.enabled &&
+        controller.state.sync.webDav.autoSyncOnStart) {
+      final result = await (syncService ?? AppSyncService()).syncNow(
+        localState: controller.state,
+        store: resolvedStore,
+      );
+      if (result.state != null) {
+        controller.replaceState(result.state!);
+      }
+    }
     await resolvedStore.save(controller.state);
     return BootstrappedApp(
       controller: controller,
