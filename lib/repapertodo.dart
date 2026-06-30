@@ -5,6 +5,7 @@ export 'src/core/model/note_canvas_element.dart';
 export 'src/core/model/paper_constants.dart';
 export 'src/core/model/paper_data.dart';
 export 'src/core/model/paper_item.dart';
+export 'src/core/model/sync_settings.dart';
 export 'src/core/startup/startup_command.dart';
 export 'src/core/storage/state_store.dart';
 export 'src/core/state/app_state_codec.dart';

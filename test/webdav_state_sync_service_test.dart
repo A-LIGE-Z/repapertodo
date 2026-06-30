@@ -103,4 +103,34 @@ void main() {
     expect(result.state?.papers.single.title, 'Remote note');
     expect(result.state?.papers.single.content, 'From WebDAV');
   });
+
+  test('creates a sync service from Jianguoyun WebDAV settings', () async {
+    final requests = <http.Request>[];
+    final service = WebDavStateSyncService.fromSettings(
+      WebDavSyncSettings.jianguoyun(
+        username: 'user@example.com',
+        password: 'app-password',
+      ),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return switch (request.method) {
+          'MKCOL' => http.Response('', 201),
+          'PUT' => http.Response('', 201),
+          _ => http.Response('unexpected ${request.method}', 500),
+        };
+      }),
+    );
+
+    final result = await service.push(AppState());
+
+    expect(result.status, WebDavStateSyncStatus.uploaded);
+    expect(requests.first.url.toString(),
+        'https://dav.jianguoyun.com/dav/RePaperTodo');
+    expect(
+      requests
+          .where((request) => request.method == 'PUT')
+          .map((request) => request.url.path),
+      contains('/dav/RePaperTodo/manifest.json'),
+    );
+  });
 }

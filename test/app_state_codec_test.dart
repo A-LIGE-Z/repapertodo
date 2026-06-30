@@ -58,5 +58,46 @@ void main() {
     expect(state.todoVisualSize, TodoVisualSizes.medium);
     expect(state.externalMarkdownExtension, '.txt');
   });
-}
 
+  test('decodes and normalizes WebDAV sync settings', () {
+    final state = AppState.fromJson({
+      'sync': {
+        'enabled': true,
+        'provider': 'webDav',
+        'futureSyncField': 'keep-sync',
+        'webDav': {
+          'presetId': 'jianguoyun',
+          'endpoint': '',
+          'username': '  user@example.com  ',
+          'password': 'app-password',
+          'rootPath': '/RePaperTodo//',
+          'autoSyncOnStart': true,
+          'autoSyncIntervalMinutes': 2000,
+          'futureWebDavField': 7,
+        },
+      },
+    });
+
+    expect(state.sync.enabled, true);
+    expect(state.sync.provider, SyncProviderIds.webDav);
+    expect(state.sync.extra['futureSyncField'], 'keep-sync');
+    expect(state.sync.webDav.presetId, WebDavPresetIds.jianguoyun);
+    expect(state.sync.webDav.endpoint, 'https://dav.jianguoyun.com/dav/');
+    expect(state.sync.webDav.username, 'user@example.com');
+    expect(state.sync.webDav.rootPath, 'RePaperTodo');
+    expect(state.sync.webDav.autoSyncIntervalMinutes, 1440);
+    expect(state.sync.webDav.extra['futureWebDavField'], 7);
+    expect(state.sync.webDav.isConfigured, true);
+  });
+
+  test('rejects incomplete WebDAV endpoint settings', () {
+    final settings = WebDavSyncSettings(
+      endpoint: 'dav.jianguoyun.com/dav',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
+
+    expect(settings.endpointUri, isNull);
+    expect(settings.isConfigured, false);
+  });
+}

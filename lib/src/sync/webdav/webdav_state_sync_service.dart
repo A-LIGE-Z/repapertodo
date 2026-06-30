@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
+
 import '../../core/model/app_state.dart';
+import '../../core/model/sync_settings.dart';
 import '../../core/state/app_state_codec.dart';
 import '../sync_manifest.dart';
 import 'webdav_client.dart';
@@ -51,6 +54,31 @@ class WebDavStateSyncService {
   })  : _client = client,
         _codec = codec,
         _paths = paths;
+
+  factory WebDavStateSyncService.fromSettings(
+    WebDavSyncSettings settings, {
+    AppStateCodec codec = const AppStateCodec(),
+    http.Client? httpClient,
+  }) {
+    settings.normalize();
+    final endpoint = settings.endpointUri;
+    if (endpoint == null || !settings.isConfigured) {
+      throw const WebDavSyncConfigurationException(
+          'WebDAV sync settings are incomplete.');
+    }
+    return WebDavStateSyncService(
+      client: WebDavClient(
+        baseUri: endpoint,
+        credentials: WebDavCredentials(
+          username: settings.username,
+          password: settings.password,
+        ),
+        httpClient: httpClient,
+      ),
+      codec: codec,
+      paths: WebDavStateSyncPaths(rootPath: settings.rootPath),
+    );
+  }
 
   final WebDavClient _client;
   final AppStateCodec _codec;
@@ -149,4 +177,15 @@ String _normalizeRemotePath(String path) {
       .split('/')
       .where((segment) => segment.trim().isNotEmpty)
       .join('/');
+}
+
+class WebDavSyncConfigurationException implements Exception {
+  const WebDavSyncConfigurationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() {
+    return message;
+  }
 }
