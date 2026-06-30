@@ -190,6 +190,16 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
               onPressed: () => _createPaper(PaperTypes.note),
               icon: const Icon(Icons.note_add_outlined),
             ),
+          if (controller.state.useCapsuleCollapseAll)
+            IconButton(
+              tooltip: controller.state.capsuleCollapseAllActive
+                  ? 'Expand all papers'
+                  : 'Collapse all papers',
+              onPressed: _toggleCollapseAll,
+              icon: Icon(controller.state.capsuleCollapseAllActive
+                  ? Icons.unfold_more
+                  : Icons.unfold_less),
+            ),
           IconButton(
             tooltip: 'Sync now',
             onPressed: _isSyncing ? null : _syncNow,
@@ -259,6 +269,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       todoLineSpacing: controller.state.todoLineSpacing,
       showTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
       todoDueYearDisplayMode: controller.state.todoDueYearDisplayMode,
+      collapseAllActive: controller.state.useCapsuleCollapseAll &&
+          controller.state.capsuleCollapseAllActive,
       noteLineSpacing: controller.state.noteLineSpacing,
       onChanged: _refreshAndSaveState,
       onTitleChanged: _updatePaperTitle,
@@ -276,6 +288,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       paper = controller.createPaper(type);
     });
     await controller.showPaper(paper);
+    await _saveState();
+  }
+
+  Future<void> _toggleCollapseAll() async {
+    setState(() {
+      controller.state.capsuleCollapseAllActive =
+          !controller.state.capsuleCollapseAllActive;
+    });
     await _saveState();
   }
 
@@ -498,6 +518,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialShowTopBarNewNoteButton: controller.state.showTopBarNewNoteButton,
       initialShowTopBarExternalOpenButton:
           controller.state.showTopBarExternalOpenButton,
+      initialUseCapsuleCollapseAll: controller.state.useCapsuleCollapseAll,
+      initialCapsuleCollapseAllActive:
+          controller.state.capsuleCollapseAllActive,
       initialStartAtLogin: controller.state.startAtLogin,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
@@ -535,6 +558,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.showTopBarNewNoteButton = result.showTopBarNewNoteButton;
       controller.state.showTopBarExternalOpenButton =
           result.showTopBarExternalOpenButton;
+      controller.state.useCapsuleCollapseAll = result.useCapsuleCollapseAll;
+      controller.state.capsuleCollapseAllActive =
+          result.capsuleCollapseAllActive;
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
@@ -753,6 +779,7 @@ class PaperPreview extends StatelessWidget {
     required this.todoLineSpacing,
     required this.showTodoDueRelativeTime,
     required this.todoDueYearDisplayMode,
+    required this.collapseAllActive,
     required this.noteLineSpacing,
     required this.onChanged,
     required this.onTitleChanged,
@@ -774,6 +801,7 @@ class PaperPreview extends StatelessWidget {
   final double todoLineSpacing;
   final bool showTodoDueRelativeTime;
   final String todoDueYearDisplayMode;
+  final bool collapseAllActive;
   final double noteLineSpacing;
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
@@ -787,6 +815,7 @@ class PaperPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isCollapsed = collapseAllActive || paper.isCollapsed;
     return Semantics(
       label: '${paper.title} ${paper.type} paper',
       child: DecoratedBox(
@@ -848,15 +877,19 @@ class PaperPreview extends StatelessWidget {
                       icon: const Icon(Icons.open_in_new),
                     ),
                     IconButton(
-                      tooltip:
-                          paper.isCollapsed ? 'Expand paper' : 'Collapse paper',
-                      onPressed: () {
-                        paper.isCollapsed = !paper.isCollapsed;
-                        unawaited(onChanged());
-                      },
-                      icon: Icon(paper.isCollapsed
-                          ? Icons.expand_more
-                          : Icons.expand_less),
+                      tooltip: collapseAllActive
+                          ? 'Collapse all is active'
+                          : paper.isCollapsed
+                              ? 'Expand paper'
+                              : 'Collapse paper',
+                      onPressed: collapseAllActive
+                          ? null
+                          : () {
+                              paper.isCollapsed = !paper.isCollapsed;
+                              unawaited(onChanged());
+                            },
+                      icon: Icon(
+                          isCollapsed ? Icons.expand_more : Icons.expand_less),
                     ),
                     IconButton(
                       tooltip: paper.alwaysOnTop
@@ -889,7 +922,7 @@ class PaperPreview extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!paper.isCollapsed) ...[
+              if (!isCollapsed) ...[
                 const SizedBox(height: 12),
                 if (paper.isTodo)
                   _TodoEditor(

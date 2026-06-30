@@ -25,6 +25,8 @@ class SyncSettingsDialogResult {
     required this.showTopBarNewTodoButton,
     required this.showTopBarNewNoteButton,
     required this.showTopBarExternalOpenButton,
+    required this.useCapsuleCollapseAll,
+    required this.capsuleCollapseAllActive,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
@@ -53,6 +55,8 @@ class SyncSettingsDialogResult {
   final bool showTopBarNewTodoButton;
   final bool showTopBarNewNoteButton;
   final bool showTopBarExternalOpenButton;
+  final bool useCapsuleCollapseAll;
+  final bool capsuleCollapseAllActive;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
@@ -83,6 +87,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialShowTopBarNewTodoButton,
   required bool initialShowTopBarNewNoteButton,
   required bool initialShowTopBarExternalOpenButton,
+  required bool initialUseCapsuleCollapseAll,
+  required bool initialCapsuleCollapseAllActive,
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
@@ -114,6 +120,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialShowTopBarNewTodoButton: initialShowTopBarNewTodoButton,
       initialShowTopBarNewNoteButton: initialShowTopBarNewNoteButton,
       initialShowTopBarExternalOpenButton: initialShowTopBarExternalOpenButton,
+      initialUseCapsuleCollapseAll: initialUseCapsuleCollapseAll,
+      initialCapsuleCollapseAllActive: initialCapsuleCollapseAllActive,
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
@@ -146,6 +154,8 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialShowTopBarNewTodoButton,
     required this.initialShowTopBarNewNoteButton,
     required this.initialShowTopBarExternalOpenButton,
+    required this.initialUseCapsuleCollapseAll,
+    required this.initialCapsuleCollapseAllActive,
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
@@ -175,6 +185,8 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialShowTopBarNewTodoButton;
   final bool initialShowTopBarNewNoteButton;
   final bool initialShowTopBarExternalOpenButton;
+  final bool initialUseCapsuleCollapseAll;
+  final bool initialCapsuleCollapseAllActive;
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
@@ -205,6 +217,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _showTopBarNewTodoButton;
   late bool _showTopBarNewNoteButton;
   late bool _showTopBarExternalOpenButton;
+  late bool _useCapsuleCollapseAll;
+  late bool _capsuleCollapseAllActive;
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
@@ -251,6 +265,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _showTopBarNewTodoButton = widget.initialShowTopBarNewTodoButton;
     _showTopBarNewNoteButton = widget.initialShowTopBarNewNoteButton;
     _showTopBarExternalOpenButton = widget.initialShowTopBarExternalOpenButton;
+    _useCapsuleCollapseAll = widget.initialUseCapsuleCollapseAll;
+    _capsuleCollapseAllActive = widget.initialCapsuleCollapseAllActive;
     _startAtLogin = widget.initialStartAtLogin;
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
@@ -533,6 +549,28 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 value: _showTopBarExternalOpenButton,
                 onChanged: (value) =>
                     setState(() => _showTopBarExternalOpenButton = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.unfold_less_outlined),
+                title: const Text('Collapse all control'),
+                value: _useCapsuleCollapseAll,
+                onChanged: (value) => setState(() {
+                  _useCapsuleCollapseAll = value;
+                  if (!value) {
+                    _capsuleCollapseAllActive = false;
+                  }
+                }),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.vertical_align_center_outlined),
+                title: const Text('Collapse all active'),
+                value: _capsuleCollapseAllActive,
+                onChanged: _useCapsuleCollapseAll
+                    ? (value) =>
+                        setState(() => _capsuleCollapseAllActive = value)
+                    : null,
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -862,6 +900,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         showTopBarNewTodoButton: _showTopBarNewTodoButton,
         showTopBarNewNoteButton: _showTopBarNewNoteButton,
         showTopBarExternalOpenButton: _showTopBarExternalOpenButton,
+        useCapsuleCollapseAll: _useCapsuleCollapseAll,
+        capsuleCollapseAllActive:
+            _useCapsuleCollapseAll && _capsuleCollapseAllActive,
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,

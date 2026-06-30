@@ -193,6 +193,8 @@ void main() {
     expect(find.text('Top bar new todo'), findsOneWidget);
     expect(find.text('Top bar new note'), findsOneWidget);
     expect(find.text('Top bar open surface'), findsOneWidget);
+    expect(find.text('Collapse all control'), findsOneWidget);
+    expect(find.text('Collapse all active'), findsOneWidget);
     expect(find.text('Todo reminders'), findsOneWidget);
     expect(find.text('Reminder interval'), findsOneWidget);
     expect(find.text('Minutes'), findsOneWidget);
@@ -412,6 +414,61 @@ void main() {
     expect(find.byTooltip('New todo paper'), findsNothing);
     expect(find.byTooltip('New note paper'), findsNothing);
     expect(find.byTooltip('Settings'), findsOneWidget);
+  });
+
+  testWidgets('toggles collapse all control', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleCollapseAll: true,
+        papers: [
+          PaperData(
+            id: 'collapse-a',
+            type: PaperTypes.todo,
+            title: 'Collapse A',
+            items: [
+              PaperItem(id: 'collapse-item-a', text: 'Visible task'),
+            ],
+          ),
+          PaperData(
+            id: 'collapse-b',
+            type: PaperTypes.note,
+            title: 'Collapse B',
+            content: 'Visible note',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-collapse-all-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Visible task'), findsOneWidget);
+    expect(find.text('Visible note'), findsWidgets);
+
+    await tester.tap(find.byTooltip('Collapse all papers'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.capsuleCollapseAllActive, true);
+    expect(find.text('Visible task'), findsNothing);
+    expect(find.text('Visible note'), findsNothing);
+    expect(find.byTooltip('Expand all papers'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Expand all papers'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.capsuleCollapseAllActive, false);
+    expect(find.text('Visible task'), findsOneWidget);
+    expect(find.text('Visible note'), findsWidgets);
   });
 
   testWidgets('links todo items to note papers', (tester) async {
