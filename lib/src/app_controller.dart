@@ -31,6 +31,8 @@ class RePaperTodoController {
     await _platform.tray.initialize();
     await _platform.systemIntegration.registerGlobalHotkeys(state);
     await _platform.systemIntegration.setStartupAtLogin(state.startAtLogin);
+    await _platform.systemIntegration
+        .setHideFromWindowSwitcher(state.hidePapersFromWindowSwitcher);
 
     if (state.papers.isEmpty && !startupCommand.createsPaper) {
       createPaper(PaperTypes.todo);
@@ -86,6 +88,11 @@ class RePaperTodoController {
   Future<void> setStartupAtLogin(bool enabled) async {
     state.startAtLogin = enabled;
     await _platform.systemIntegration.setStartupAtLogin(enabled);
+  }
+
+  Future<void> setHideFromWindowSwitcher(bool enabled) async {
+    state.hidePapersFromWindowSwitcher = enabled;
+    await _platform.systemIntegration.setHideFromWindowSwitcher(enabled);
   }
 
   Future<void> showPaper(PaperData paper) async {

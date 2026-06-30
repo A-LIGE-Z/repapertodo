@@ -84,5 +84,8 @@ class NoopSystemIntegrationHost implements SystemIntegrationHost {
   Future<void> setStartupAtLogin(bool enabled) async {}
 
   @override
+  Future<void> setHideFromWindowSwitcher(bool enabled) async {}
+
+  @override
   Future<void> unregisterGlobalHotkeys() async {}
 }

@@ -121,6 +121,21 @@ bool SetStartupAtLogin(bool enabled) {
   return succeeded;
 }
 
+void SetHideFromWindowSwitcher(HWND window, bool enabled) {
+  LONG_PTR extended_style = GetWindowLongPtrW(window, GWL_EXSTYLE);
+  if (enabled) {
+    extended_style |= WS_EX_TOOLWINDOW;
+    extended_style &= ~WS_EX_APPWINDOW;
+  } else {
+    extended_style &= ~WS_EX_TOOLWINDOW;
+    extended_style |= WS_EX_APPWINDOW;
+  }
+  SetWindowLongPtrW(window, GWL_EXSTYLE, extended_style);
+  SetWindowPos(window, nullptr, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_FRAMECHANGED);
+}
+
 flutter::EncodableValue WindowBoundsValue(HWND window) {
   RECT bounds;
   GetWindowRect(window, &bounds);
@@ -250,6 +265,17 @@ bool FlutterWindow::OnCreate() {
                           "Unable to update the Windows startup entry.");
             return;
           }
+          result->Success();
+          return;
+        }
+        if (method == "setHideFromWindowSwitcher") {
+          bool enabled = false;
+          if (call.arguments()) {
+            if (const auto* value = std::get_if<bool>(call.arguments())) {
+              enabled = *value;
+            }
+          }
+          SetHideFromWindowSwitcher(window, enabled);
           result->Success();
           return;
         }

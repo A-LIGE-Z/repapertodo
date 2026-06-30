@@ -40,4 +40,5 @@ abstract interface class SystemIntegrationHost {
   Future<void> unregisterGlobalHotkeys();
   Future<bool> isForegroundFullscreen();
   Future<void> setStartupAtLogin(bool enabled);
+  Future<void> setHideFromWindowSwitcher(bool enabled);
 }

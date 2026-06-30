@@ -98,6 +98,7 @@ void main() {
     await services.paperWindows.hidePaper(paper);
     await services.tray.rebuildMenu(AppState(papers: [paper]));
     await services.systemIntegration.setStartupAtLogin(true);
+    await services.systemIntegration.setHideFromWindowSwitcher(true);
 
     expect(
       calls.map((call) => call.method),
@@ -110,6 +111,7 @@ void main() {
         'hide',
         'setTrayMenu',
         'setStartupAtLogin',
+        'setHideFromWindowSwitcher',
       ],
     );
     expect(calls[0].arguments, {
@@ -125,7 +127,7 @@ void main() {
     expect(paper.width, 520);
     expect(paper.height, 460);
     expect(paper.isVisible, false);
-    expect(calls[calls.length - 2].arguments, [
+    expect(calls[calls.length - 3].arguments, [
       {
         'id': 'paper-1',
         'title': 'Inbox',
@@ -133,6 +135,7 @@ void main() {
         'isVisible': false,
       },
     ]);
+    expect(calls[calls.length - 2].arguments, true);
     expect(calls.last.arguments, true);
   });
 }

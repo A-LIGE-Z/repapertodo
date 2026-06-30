@@ -6,22 +6,26 @@ class SyncSettingsDialogResult {
   const SyncSettingsDialogResult({
     required this.sync,
     required this.startAtLogin,
+    required this.hideFromWindowSwitcher,
   });
 
   final SyncSettings sync;
   final bool startAtLogin;
+  final bool hideFromWindowSwitcher;
 }
 
 Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required BuildContext context,
   required SyncSettings initialSettings,
   required bool initialStartAtLogin,
+  required bool initialHideFromWindowSwitcher,
 }) {
   return showDialog<SyncSettingsDialogResult>(
     context: context,
     builder: (context) => SyncSettingsDialog(
       initialSettings: initialSettings,
       initialStartAtLogin: initialStartAtLogin,
+      initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
     ),
   );
 }
@@ -30,11 +34,13 @@ class SyncSettingsDialog extends StatefulWidget {
   const SyncSettingsDialog({
     required this.initialSettings,
     required this.initialStartAtLogin,
+    required this.initialHideFromWindowSwitcher,
     super.key,
   });
 
   final SyncSettings initialSettings;
   final bool initialStartAtLogin;
+  final bool initialHideFromWindowSwitcher;
 
   @override
   State<SyncSettingsDialog> createState() => _SyncSettingsDialogState();
@@ -44,6 +50,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _enabled;
   late bool _autoSyncOnStart;
   late bool _startAtLogin;
+  late bool _hideFromWindowSwitcher;
   late String _presetId;
   late bool _obscurePassword = true;
   late final TextEditingController _endpointController;
@@ -61,6 +68,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _enabled = settings.enabled;
     _autoSyncOnStart = webDav.autoSyncOnStart;
     _startAtLogin = widget.initialStartAtLogin;
+    _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _presetId = webDav.presetId;
     _endpointController = TextEditingController(text: webDav.endpoint);
     _usernameController = TextEditingController(text: webDav.username);
@@ -104,6 +112,14 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 title: const Text('Start at login'),
                 value: _startAtLogin,
                 onChanged: (value) => setState(() => _startAtLogin = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.visibility_off_outlined),
+                title: const Text('Hide from task switcher'),
+                value: _hideFromWindowSwitcher,
+                onChanged: (value) =>
+                    setState(() => _hideFromWindowSwitcher = value),
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -268,6 +284,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       SyncSettingsDialogResult(
         sync: settings,
         startAtLogin: _startAtLogin,
+        hideFromWindowSwitcher: _hideFromWindowSwitcher,
       ),
     );
   }

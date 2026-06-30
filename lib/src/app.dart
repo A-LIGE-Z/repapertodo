@@ -327,6 +327,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       context: context,
       initialSettings: controller.state.sync,
       initialStartAtLogin: controller.state.startAtLogin,
+      initialHideFromWindowSwitcher:
+          controller.state.hidePapersFromWindowSwitcher,
     );
     if (result == null) {
       return;
@@ -334,8 +336,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     setState(() {
       controller.state.sync = result.sync;
       controller.state.startAtLogin = result.startAtLogin;
+      controller.state.hidePapersFromWindowSwitcher =
+          result.hideFromWindowSwitcher;
     });
     await controller.setStartupAtLogin(result.startAtLogin);
+    await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
     await widget.store.save(controller.state);
   }
 

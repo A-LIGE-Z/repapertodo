@@ -233,6 +233,11 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
   }
 
   @override
+  Future<void> setHideFromWindowSwitcher(bool enabled) async {
+    await _channel.invokeMethod<void>('setHideFromWindowSwitcher', enabled);
+  }
+
+  @override
   Future<void> unregisterGlobalHotkeys() async {}
 
   Future<void> setAlwaysOnTop(bool enabled) async {
