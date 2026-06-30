@@ -45,6 +45,18 @@ void main() {
 
     expect(controller.state.papers.single.title, 'Edited title');
 
+    await tester.tap(find.byIcon(Icons.expand_less));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.isCollapsed, true);
+    expect(find.text('Build compatible data core'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.expand_more));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.isCollapsed, false);
+    expect(find.text('Build compatible data core'), findsOneWidget);
+
     await tester.tap(find.byIcon(Icons.visibility_off_outlined));
     await tester.pumpAndSettle();
 

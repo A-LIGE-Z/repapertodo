@@ -130,7 +130,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
           itemBuilder: (context, index) {
             return PaperPreview(
               paper: visiblePapers[index],
-              onChanged: _saveState,
+              onChanged: _refreshAndSaveState,
               onHide: _hidePaper,
               onDelete: _deletePaper,
               onSurfaceChanged: _updatePaperSurface,
@@ -154,6 +154,13 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       return widget.store.save(controller.state);
     });
     await _saveQueue;
+  }
+
+  Future<void> _refreshAndSaveState() async {
+    if (mounted) {
+      setState(() {});
+    }
+    await _saveState();
   }
 
   Future<void> _deletePaper(PaperData paper) async {
@@ -338,6 +345,17 @@ class PaperPreview extends StatelessWidget {
                     ),
                   ),
                   IconButton(
+                    tooltip:
+                        paper.isCollapsed ? 'Expand paper' : 'Collapse paper',
+                    onPressed: () {
+                      paper.isCollapsed = !paper.isCollapsed;
+                      unawaited(onChanged());
+                    },
+                    icon: Icon(paper.isCollapsed
+                        ? Icons.expand_more
+                        : Icons.expand_less),
+                  ),
+                  IconButton(
                     tooltip: paper.alwaysOnTop
                         ? 'Disable always on top'
                         : 'Keep on top',
@@ -367,28 +385,30 @@ class PaperPreview extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              if (paper.isTodo)
-                _TodoEditor(
-                  paper: paper,
-                  onChanged: onChanged,
-                )
-              else
-                TextFormField(
-                  key: ValueKey('${paper.id}-content'),
-                  initialValue: paper.content,
-                  minLines: 4,
-                  maxLines: 12,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'Write a note...',
+              if (!paper.isCollapsed) ...[
+                const SizedBox(height: 12),
+                if (paper.isTodo)
+                  _TodoEditor(
+                    paper: paper,
+                    onChanged: onChanged,
+                  )
+                else
+                  TextFormField(
+                    key: ValueKey('${paper.id}-content'),
+                    initialValue: paper.content,
+                    minLines: 4,
+                    maxLines: 12,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Write a note...',
+                    ),
+                    style: theme.textTheme.bodyMedium,
+                    onChanged: (value) {
+                      paper.content = value;
+                      unawaited(onChanged());
+                    },
                   ),
-                  style: theme.textTheme.bodyMedium,
-                  onChanged: (value) {
-                    paper.content = value;
-                    unawaited(onChanged());
-                  },
-                ),
+              ],
             ],
           ),
         ),
