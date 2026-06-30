@@ -28,6 +28,21 @@ double GetNumberArgument(const flutter::EncodableMap& map,
   return fallback;
 }
 
+flutter::EncodableValue WindowBoundsValue(HWND window) {
+  RECT bounds;
+  GetWindowRect(window, &bounds);
+  flutter::EncodableMap result_map;
+  result_map[flutter::EncodableValue("x")] =
+      flutter::EncodableValue(static_cast<int32_t>(bounds.left));
+  result_map[flutter::EncodableValue("y")] =
+      flutter::EncodableValue(static_cast<int32_t>(bounds.top));
+  result_map[flutter::EncodableValue("width")] = flutter::EncodableValue(
+      static_cast<int32_t>(bounds.right - bounds.left));
+  result_map[flutter::EncodableValue("height")] = flutter::EncodableValue(
+      static_cast<int32_t>(bounds.bottom - bounds.top));
+  return flutter::EncodableValue(result_map);
+}
+
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -128,20 +143,7 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "getBounds") {
-          RECT bounds;
-          GetWindowRect(window, &bounds);
-          flutter::EncodableMap result_map;
-          result_map[flutter::EncodableValue("x")] =
-              flutter::EncodableValue(static_cast<int32_t>(bounds.left));
-          result_map[flutter::EncodableValue("y")] =
-              flutter::EncodableValue(static_cast<int32_t>(bounds.top));
-          result_map[flutter::EncodableValue("width")] =
-              flutter::EncodableValue(
-                  static_cast<int32_t>(bounds.right - bounds.left));
-          result_map[flutter::EncodableValue("height")] =
-              flutter::EncodableValue(
-                  static_cast<int32_t>(bounds.bottom - bounds.top));
-          result->Success(flutter::EncodableValue(result_map));
+          result->Success(WindowBoundsValue(window));
           return;
         }
 
@@ -159,6 +161,16 @@ bool FlutterWindow::OnCreate() {
   flutter_controller_->ForceRedraw();
 
   return true;
+}
+
+void FlutterWindow::SendBoundsChanged() {
+  HWND window = GetHandle();
+  if (!window_channel_ || !window) {
+    return;
+  }
+  window_channel_->InvokeMethod(
+      "boundsChanged", std::make_unique<flutter::EncodableValue>(
+                           WindowBoundsValue(window)));
 }
 
 void FlutterWindow::OnDestroy() {
@@ -187,6 +199,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    case WM_MOVE:
+    case WM_SIZE:
+      SendBoundsChanged();
       break;
   }
 

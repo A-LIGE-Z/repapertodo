@@ -29,9 +29,24 @@ class WindowsPlatformServices implements PlatformServices {
 }
 
 class WindowsPaperWindowHost implements PaperWindowHost {
-  WindowsPaperWindowHost(this._channel);
+  WindowsPaperWindowHost(this._channel) {
+    _channel.setMethodCallHandler(_handleWindowEvent);
+  }
 
   final MethodChannel _channel;
+  PaperData? _activePaper;
+
+  Future<void> _handleWindowEvent(MethodCall call) async {
+    if (call.method != 'boundsChanged') {
+      return;
+    }
+    final paper = _activePaper;
+    final arguments = call.arguments;
+    if (paper == null || arguments is! Map) {
+      return;
+    }
+    _applyBoundsToPaper(paper, arguments);
+  }
 
   @override
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {
@@ -39,12 +54,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     if (bounds == null) {
       return;
     }
-    paper
-      ..x = _doubleValue(bounds['x'], paper.x)
-      ..y = _doubleValue(bounds['y'], paper.y)
-      ..width = _doubleValue(bounds['width'], paper.width)
-      ..height = _doubleValue(bounds['height'], paper.height);
-    paper.normalize();
+    _applyBoundsToPaper(paper, Map<Object?, Object?>.from(bounds));
   }
 
   @override
@@ -67,6 +77,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       await _channel.invokeMethod<void>('hide');
       return;
     }
+    _activePaper = visiblePapers.first;
     await _applyBounds(visiblePapers.first);
     await _channel.invokeMethod<void>('show');
     await _channel.invokeMethod<void>(
@@ -80,6 +91,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> showPaper(PaperData paper) async {
     paper.isVisible = true;
+    _activePaper = paper;
     await _applyBounds(paper);
     await _channel.invokeMethod<void>('show');
     await _channel.invokeMethod<void>('setTitle', _windowTitle(paper));
@@ -115,6 +127,15 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       return value.toDouble();
     }
     return fallback;
+  }
+
+  void _applyBoundsToPaper(PaperData paper, Map<Object?, Object?> bounds) {
+    paper
+      ..x = _doubleValue(bounds['x'], paper.x)
+      ..y = _doubleValue(bounds['y'], paper.y)
+      ..width = _doubleValue(bounds['width'], paper.width)
+      ..height = _doubleValue(bounds['height'], paper.height);
+    paper.normalize();
   }
 }
 
