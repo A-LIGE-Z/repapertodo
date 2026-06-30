@@ -7,6 +7,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include <memory>
+#include <shellapi.h>
 
 #include "win32_window.h"
 
@@ -25,8 +26,12 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  void AddTrayIcon();
+  void RemoveTrayIcon();
+  void ShowTrayMenu();
   void SendBoundsChanged();
   void SendCloseRequested();
+  void SendWindowEvent(const char* method);
 
   // The project to run.
   flutter::DartProject project_;
@@ -36,6 +41,9 @@ class FlutterWindow : public Win32Window {
 
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       window_channel_;
+
+  NOTIFYICONDATA tray_icon_data_ = {};
+  bool tray_icon_added_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

@@ -64,6 +64,27 @@ void main() {
       (_) {},
     );
     await closeUpdate;
+    final showUpdate = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('showRequested'),
+      ),
+      (_) {},
+    );
+    await showUpdate;
+    expect(paper.isVisible, true);
+    final hideUpdate = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('hideRequested'),
+      ),
+      (_) {},
+    );
+    await hideUpdate;
     await services.paperWindows.hidePaper(paper);
 
     expect(

@@ -5,6 +5,7 @@
 #include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "resource.h"
 
 namespace {
 
@@ -44,6 +45,12 @@ flutter::EncodableValue WindowBoundsValue(HWND window) {
 }
 
 }  // namespace
+
+constexpr UINT kTrayIconId = 1;
+constexpr UINT kTrayIconMessage = WM_APP + 1;
+constexpr UINT kTrayShowCommand = 40001;
+constexpr UINT kTrayHideCommand = 40002;
+constexpr UINT kTrayExitCommand = 40003;
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -150,6 +157,7 @@ bool FlutterWindow::OnCreate() {
         result->NotImplemented();
       });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  AddTrayIcon();
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
@@ -163,6 +171,71 @@ bool FlutterWindow::OnCreate() {
   return true;
 }
 
+void FlutterWindow::AddTrayIcon() {
+  if (tray_icon_added_) {
+    return;
+  }
+  HWND window = GetHandle();
+  if (!window) {
+    return;
+  }
+  tray_icon_data_ = {};
+  tray_icon_data_.cbSize = sizeof(NOTIFYICONDATA);
+  tray_icon_data_.hWnd = window;
+  tray_icon_data_.uID = kTrayIconId;
+  tray_icon_data_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+  tray_icon_data_.uCallbackMessage = kTrayIconMessage;
+  tray_icon_data_.hIcon =
+      LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+  wcscpy_s(tray_icon_data_.szTip, L"RePaperTodo");
+  tray_icon_added_ = Shell_NotifyIcon(NIM_ADD, &tray_icon_data_) == TRUE;
+}
+
+void FlutterWindow::RemoveTrayIcon() {
+  if (!tray_icon_added_) {
+    return;
+  }
+  Shell_NotifyIcon(NIM_DELETE, &tray_icon_data_);
+  tray_icon_added_ = false;
+}
+
+void FlutterWindow::ShowTrayMenu() {
+  HWND window = GetHandle();
+  if (!window) {
+    return;
+  }
+  POINT cursor_position;
+  GetCursorPos(&cursor_position);
+  HMENU menu = CreatePopupMenu();
+  AppendMenu(menu, MF_STRING, kTrayShowCommand, L"Show");
+  AppendMenu(menu, MF_STRING, kTrayHideCommand, L"Hide");
+  AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
+  AppendMenu(menu, MF_STRING, kTrayExitCommand, L"Exit");
+
+  SetForegroundWindow(window);
+  UINT command = TrackPopupMenu(menu,
+                                TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
+                                cursor_position.x, cursor_position.y, 0,
+                                window, nullptr);
+  DestroyMenu(menu);
+
+  switch (command) {
+    case kTrayShowCommand:
+      SendWindowEvent("showRequested");
+      ShowWindow(window, SW_SHOWNORMAL);
+      SetForegroundWindow(window);
+      break;
+    case kTrayHideCommand:
+      SendWindowEvent("hideRequested");
+      ShowWindow(window, SW_HIDE);
+      break;
+    case kTrayExitCommand:
+      RemoveTrayIcon();
+      DestroyWindow(window);
+      break;
+  }
+}
+
 void FlutterWindow::SendBoundsChanged() {
   HWND window = GetHandle();
   if (!window_channel_ || !window) {
@@ -174,14 +247,19 @@ void FlutterWindow::SendBoundsChanged() {
 }
 
 void FlutterWindow::SendCloseRequested() {
+  SendWindowEvent("closeRequested");
+}
+
+void FlutterWindow::SendWindowEvent(const char* method) {
   if (!window_channel_) {
     return;
   }
-  window_channel_->InvokeMethod(
-      "closeRequested", std::make_unique<flutter::EncodableValue>());
+  window_channel_->InvokeMethod(method,
+                                std::make_unique<flutter::EncodableValue>());
 }
 
 void FlutterWindow::OnDestroy() {
+  RemoveTrayIcon();
   if (flutter_controller_) {
     window_channel_ = nullptr;
     flutter_controller_ = nullptr;
@@ -216,6 +294,19 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       SendCloseRequested();
       ShowWindow(hwnd, SW_HIDE);
       return 0;
+    case kTrayIconMessage:
+      switch (LOWORD(lparam)) {
+        case WM_LBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+          SendWindowEvent("showRequested");
+          ShowWindow(hwnd, SW_SHOWNORMAL);
+          SetForegroundWindow(hwnd);
+          return 0;
+        case WM_RBUTTONUP:
+          ShowTrayMenu();
+          return 0;
+      }
+      break;
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

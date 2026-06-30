@@ -56,6 +56,12 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       case 'closeRequested':
         paper.isVisible = false;
         _surfaceUpdates.add(paper);
+      case 'showRequested':
+        paper.isVisible = true;
+        _surfaceUpdates.add(paper);
+      case 'hideRequested':
+        paper.isVisible = false;
+        _surfaceUpdates.add(paper);
     }
   }
 
