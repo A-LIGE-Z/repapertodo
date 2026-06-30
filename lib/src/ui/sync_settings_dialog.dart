@@ -31,6 +31,8 @@ class SyncSettingsDialogResult {
     required this.showTopBarExternalOpenButton,
     required this.useCapsuleCollapseAll,
     required this.capsuleCollapseAllActive,
+    required this.deepCapsuleSide,
+    required this.deepCapsuleStartTopMargin,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
@@ -66,6 +68,8 @@ class SyncSettingsDialogResult {
   final bool showTopBarExternalOpenButton;
   final bool useCapsuleCollapseAll;
   final bool capsuleCollapseAllActive;
+  final String deepCapsuleSide;
+  final double deepCapsuleStartTopMargin;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
@@ -103,6 +107,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialShowTopBarExternalOpenButton,
   required bool initialUseCapsuleCollapseAll,
   required bool initialCapsuleCollapseAllActive,
+  required String initialDeepCapsuleSide,
+  required double initialDeepCapsuleStartTopMargin,
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
@@ -141,6 +147,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialShowTopBarExternalOpenButton: initialShowTopBarExternalOpenButton,
       initialUseCapsuleCollapseAll: initialUseCapsuleCollapseAll,
       initialCapsuleCollapseAllActive: initialCapsuleCollapseAllActive,
+      initialDeepCapsuleSide: initialDeepCapsuleSide,
+      initialDeepCapsuleStartTopMargin: initialDeepCapsuleStartTopMargin,
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
@@ -180,6 +188,8 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialShowTopBarExternalOpenButton,
     required this.initialUseCapsuleCollapseAll,
     required this.initialCapsuleCollapseAllActive,
+    required this.initialDeepCapsuleSide,
+    required this.initialDeepCapsuleStartTopMargin,
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
@@ -216,6 +226,8 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialShowTopBarExternalOpenButton;
   final bool initialUseCapsuleCollapseAll;
   final bool initialCapsuleCollapseAllActive;
+  final String initialDeepCapsuleSide;
+  final double initialDeepCapsuleStartTopMargin;
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
@@ -252,6 +264,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _showTopBarExternalOpenButton;
   late bool _useCapsuleCollapseAll;
   late bool _capsuleCollapseAllActive;
+  late String _deepCapsuleSide;
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
@@ -268,6 +281,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _intervalController;
   late final TextEditingController _fontFamilyController;
   late final TextEditingController _externalMarkdownExtensionController;
+  late final TextEditingController _deepCapsuleTopMarginController;
   late final TextEditingController _reminderIntervalController;
   late final TextEditingController _reminderDurationController;
   String? _errorText;
@@ -305,6 +319,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _showTopBarExternalOpenButton = widget.initialShowTopBarExternalOpenButton;
     _useCapsuleCollapseAll = widget.initialUseCapsuleCollapseAll;
     _capsuleCollapseAllActive = widget.initialCapsuleCollapseAllActive;
+    _deepCapsuleSide =
+        DeepCapsuleSides.normalize(widget.initialDeepCapsuleSide);
     _startAtLogin = widget.initialStartAtLogin;
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
@@ -325,6 +341,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _externalMarkdownExtensionController = TextEditingController(
       text: widget.initialExternalMarkdownExtension,
     );
+    _deepCapsuleTopMarginController = TextEditingController(
+      text: widget.initialDeepCapsuleStartTopMargin
+          .clamp(8, 10000)
+          .toStringAsFixed(0),
+    );
     _reminderIntervalController = TextEditingController(
       text: widget.initialTodoReminderIntervalValue.clamp(1, 240).toString(),
     );
@@ -344,6 +365,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _intervalController.dispose();
     _fontFamilyController.dispose();
     _externalMarkdownExtensionController.dispose();
+    _deepCapsuleTopMarginController.dispose();
     _reminderIntervalController.dispose();
     _reminderDurationController.dispose();
     super.dispose();
@@ -648,6 +670,34 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                         setState(() => _capsuleCollapseAllActive = value)
                     : null,
               ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: DeepCapsuleSides.left,
+                    icon: Icon(Icons.keyboard_double_arrow_left_outlined),
+                    label: Text('Left'),
+                  ),
+                  ButtonSegment(
+                    value: DeepCapsuleSides.right,
+                    icon: Icon(Icons.keyboard_double_arrow_right_outlined),
+                    label: Text('Right'),
+                  ),
+                ],
+                selected: {_deepCapsuleSide},
+                onSelectionChanged: (selection) =>
+                    setState(() => _deepCapsuleSide = selection.single),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _deepCapsuleTopMarginController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Deep capsule top margin',
+                  prefixIcon: Icon(Icons.vertical_align_top_outlined),
+                ),
+                keyboardType: TextInputType.number,
+              ),
               const Divider(height: 24),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -950,6 +1000,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         int.tryParse(_reminderIntervalController.text.trim()) ?? 10;
     final reminderDuration =
         int.tryParse(_reminderDurationController.text.trim()) ?? 5;
+    final deepCapsuleTopMargin =
+        double.tryParse(_deepCapsuleTopMarginController.text.trim()) ?? 48;
     final settings = SyncSettings(
       enabled: _enabled,
       provider: _enabled ? SyncProviderIds.webDav : SyncProviderIds.none,
@@ -1001,6 +1053,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         useCapsuleCollapseAll: _useCapsuleCollapseAll,
         capsuleCollapseAllActive:
             _useCapsuleCollapseAll && _capsuleCollapseAllActive,
+        deepCapsuleSide: DeepCapsuleSides.normalize(_deepCapsuleSide),
+        deepCapsuleStartTopMargin:
+            deepCapsuleTopMargin.clamp(8, 10000).toDouble(),
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,

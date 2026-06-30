@@ -610,6 +610,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialUseCapsuleCollapseAll: controller.state.useCapsuleCollapseAll,
       initialCapsuleCollapseAllActive:
           controller.state.capsuleCollapseAllActive,
+      initialDeepCapsuleSide: controller.state.deepCapsuleSide,
+      initialDeepCapsuleStartTopMargin:
+          controller.state.deepCapsuleStartTopMargin,
       initialStartAtLogin: controller.state.startAtLogin,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
@@ -657,6 +660,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.useCapsuleCollapseAll = result.useCapsuleCollapseAll;
       controller.state.capsuleCollapseAllActive =
           result.capsuleCollapseAllActive;
+      controller.state.deepCapsuleSide = result.deepCapsuleSide;
+      controller.state.deepCapsuleStartTopMargin =
+          result.deepCapsuleStartTopMargin;
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
