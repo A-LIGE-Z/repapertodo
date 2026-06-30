@@ -69,6 +69,7 @@ void main() {
     await tester.pump();
 
     expect(platform.paperWindows.shownTitles, contains('Edited title'));
+    expect(find.byTooltip('Back to board'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('welcome-todo-todo-1-text')));
     await tester.testTextInput.receiveAction(TextInputAction.next);

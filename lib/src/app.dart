@@ -121,6 +121,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   StreamSubscription<String>? _paperOpenSubscription;
   Timer? _surfaceSaveDebounce;
   Timer? _titleSurfaceDebounce;
+  String? _surfacePaperId;
 
   RePaperTodoController get controller => widget.controller;
 
@@ -152,9 +153,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
         controller.state.papers.where((paper) => !paper.isVisible).toList();
     final notePapers =
         controller.state.papers.where((paper) => paper.isNote).toList();
+    final surfacePaper = _surfacePaper();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('RePaperTodo'),
+        leading: surfacePaper == null
+            ? null
+            : IconButton(
+                tooltip: 'Back to board',
+                onPressed: () => setState(() => _surfacePaperId = null),
+                icon: const Icon(Icons.arrow_back),
+              ),
+        title: Text(
+          surfacePaper == null ? 'RePaperTodo' : _displayTitle(surfacePaper),
+        ),
         actions: [
           IconButton(
             tooltip: 'New todo paper',
@@ -190,32 +201,56 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       ),
       body: ColoredBox(
         color: colorScheme.surface,
-        child: ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: visiblePapers.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            return PaperPreview(
-              paper: visiblePapers[index],
-              notePapers: notePapers,
-              enableTodoNoteLinks: controller.state.enableTodoNoteLinks,
-              showLinkedNoteName: controller.state.showLinkedNoteName,
-              allowLongLinkedNoteTitles:
-                  controller.state.allowLongLinkedNoteTitles,
-              markdownRenderMode: controller.state.markdownRenderMode,
-              todoLineSpacing: controller.state.todoLineSpacing,
-              noteLineSpacing: controller.state.noteLineSpacing,
-              onChanged: _refreshAndSaveState,
-              onTitleChanged: _updatePaperTitle,
-              onOpen: _openPaper,
-              onHide: _hidePaper,
-              onDelete: _deletePaper,
-              onSurfaceChanged: _updatePaperSurface,
-              onCaptureBounds: _capturePaperBounds,
-            );
-          },
-        ),
+        child: surfacePaper == null
+            ? ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: visiblePapers.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  return _paperPreview(visiblePapers[index], notePapers);
+                },
+              )
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _paperPreview(surfacePaper, notePapers),
+                ],
+              ),
       ),
+    );
+  }
+
+  PaperData? _surfacePaper() {
+    final surfacePaperId = _surfacePaperId;
+    if (surfacePaperId == null) {
+      return null;
+    }
+    for (final paper in controller.state.papers) {
+      if (paper.id == surfacePaperId && paper.isVisible) {
+        return paper;
+      }
+    }
+    return null;
+  }
+
+  PaperPreview _paperPreview(PaperData paper, List<PaperData> notePapers) {
+    return PaperPreview(
+      paper: paper,
+      notePapers: notePapers,
+      enableTodoNoteLinks: controller.state.enableTodoNoteLinks,
+      showLinkedNoteName: controller.state.showLinkedNoteName,
+      allowLongLinkedNoteTitles: controller.state.allowLongLinkedNoteTitles,
+      markdownRenderMode: controller.state.markdownRenderMode,
+      todoLineSpacing: controller.state.todoLineSpacing,
+      noteLineSpacing: controller.state.noteLineSpacing,
+      onChanged: _refreshAndSaveState,
+      onTitleChanged: _updatePaperTitle,
+      onOpen: _openPaper,
+      onHide: _hidePaper,
+      onDelete: _deletePaper,
+      onSurfaceChanged: _updatePaperSurface,
+      onCaptureBounds: _capturePaperBounds,
     );
   }
 
@@ -269,6 +304,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     final detachedLinks = <_LinkedNoteRestore>[];
     setState(() {
       controller.state.papers.removeAt(removedIndex);
+      if (_surfacePaperId == paper.id) {
+        _surfacePaperId = null;
+      }
       if (paper.isNote) {
         for (final todoPaper in controller.state.papers) {
           if (!todoPaper.isTodo) {
@@ -321,6 +359,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   Future<void> _hidePaper(PaperData paper) async {
     setState(() {
       paper.isVisible = false;
+      if (_surfacePaperId == paper.id) {
+        _surfacePaperId = null;
+      }
     });
     await controller.hidePaper(paper);
     await _saveState();
@@ -329,6 +370,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   Future<void> _openPaper(PaperData paper) async {
     setState(() {
       paper.isVisible = true;
+      _surfacePaperId = paper.id;
     });
     await controller.showPaper(paper);
     await _saveState();
