@@ -83,6 +83,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final visiblePapers =
         controller.state.papers.where((paper) => paper.isVisible).toList();
+    final hiddenPapers =
+        controller.state.papers.where((paper) => !paper.isVisible).toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('RePaperTodo'),
@@ -108,6 +110,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
                 : const Icon(Icons.sync_outlined),
           ),
           IconButton(
+            tooltip: 'Show hidden papers',
+            onPressed: hiddenPapers.isEmpty ? null : _showHiddenPapers,
+            icon: const Icon(Icons.visibility_outlined),
+          ),
+          IconButton(
             tooltip: 'Settings',
             onPressed: _openSettings,
             icon: const Icon(Icons.settings_outlined),
@@ -124,6 +131,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
             return PaperPreview(
               paper: visiblePapers[index],
               onChanged: _saveState,
+              onHide: _hidePaper,
               onDelete: _deletePaper,
               onSurfaceChanged: _updatePaperSurface,
               onCaptureBounds: _capturePaperBounds,
@@ -154,6 +162,28 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
         (candidate) => candidate.id == paper.id,
       );
     });
+    await _saveState();
+  }
+
+  Future<void> _hidePaper(PaperData paper) async {
+    setState(() {
+      paper.isVisible = false;
+    });
+    await controller.hidePaper(paper);
+    await _saveState();
+  }
+
+  Future<void> _showHiddenPapers() async {
+    final hiddenPapers =
+        controller.state.papers.where((paper) => !paper.isVisible).toList();
+    setState(() {
+      for (final paper in hiddenPapers) {
+        paper.isVisible = true;
+      }
+    });
+    for (final paper in hiddenPapers) {
+      await controller.showPaper(paper);
+    }
     await _saveState();
   }
 
@@ -243,6 +273,7 @@ class PaperPreview extends StatelessWidget {
   const PaperPreview({
     required this.paper,
     required this.onChanged,
+    required this.onHide,
     required this.onDelete,
     required this.onSurfaceChanged,
     required this.onCaptureBounds,
@@ -251,6 +282,7 @@ class PaperPreview extends StatelessWidget {
 
   final PaperData paper;
   final Future<void> Function() onChanged;
+  final Future<void> Function(PaperData paper) onHide;
   final Future<void> Function(PaperData paper) onDelete;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
   final Future<void> Function(PaperData paper) onCaptureBounds;
@@ -324,9 +356,14 @@ class PaperPreview extends StatelessWidget {
                     icon: const Icon(Icons.aspect_ratio_outlined),
                   ),
                   IconButton(
+                    tooltip: 'Hide paper',
+                    onPressed: () => unawaited(onHide(paper)),
+                    icon: const Icon(Icons.visibility_off_outlined),
+                  ),
+                  IconButton(
                     tooltip: 'Delete paper',
                     onPressed: () => unawaited(onDelete(paper)),
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.delete_outline),
                   ),
                 ],
               ),

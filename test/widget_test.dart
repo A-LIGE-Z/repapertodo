@@ -45,6 +45,18 @@ void main() {
 
     expect(controller.state.papers.single.title, 'Edited title');
 
+    await tester.tap(find.byIcon(Icons.visibility_off_outlined));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.isVisible, false);
+    expect(find.text('Edited title'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.isVisible, true);
+    expect(find.text('Edited title'), findsOneWidget);
+
     await tester.tap(find.byIcon(Icons.sync_outlined));
     await tester.pumpAndSettle();
 

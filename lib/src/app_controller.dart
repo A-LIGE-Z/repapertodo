@@ -75,6 +75,16 @@ class RePaperTodoController {
     await _platform.paperWindows.capturePaperSurfaceBounds(paper);
   }
 
+  Future<void> showPaper(PaperData paper) async {
+    paper.isVisible = true;
+    await _platform.paperWindows.showPaper(paper);
+  }
+
+  Future<void> hidePaper(PaperData paper) async {
+    paper.isVisible = false;
+    await _platform.paperWindows.hidePaper(paper);
+  }
+
   Future<void> executeStartupCommand(StartupCommand command) async {
     switch (command.kind) {
       case StartupCommandKind.none:
