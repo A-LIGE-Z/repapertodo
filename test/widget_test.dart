@@ -220,6 +220,10 @@ void main() {
     expect(find.text('Hide from task switcher'), findsOneWidget);
     expect(find.text('Avoid fullscreen'), findsOneWidget);
     expect(find.text('Stay on top'), findsOneWidget);
+    expect(find.text('Run linked script capsules on click'), findsOneWidget);
+    expect(find.text('Persistent PowerShell process'), findsOneWidget);
+    expect(find.text('Prefer PowerShell 7'), findsOneWidget);
+    expect(find.text('Hide script run window'), findsOneWidget);
     expect(find.text('Todo-note links'), findsOneWidget);
     expect(find.text('Show linked note name'), findsOneWidget);
     expect(find.text('Allow long linked note titles'), findsOneWidget);
@@ -769,6 +773,61 @@ void main() {
     expect(controller.state.showDeepCapsuleWhileExpanded, false);
     expect(controller.state.collapseExpandedDeepCapsuleOnClick, true);
     expect(controller.state.hideDeepCapsulesWhenCovered, true);
+  });
+
+  testWidgets('saves linked script capsule settings', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        runLinkedScriptCapsulesOnClick: false,
+        usePersistentPowerShellProcess: false,
+        preferPowerShell7: true,
+        hideScriptRunWindow: true,
+        papers: [
+          PaperData(
+            id: 'script-settings-paper',
+            type: PaperTypes.todo,
+            title: 'Script settings',
+            items: [
+              PaperItem(id: 'script-settings-item', text: 'Tune scripts'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-script-settings.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Run linked script capsules on click'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Run linked script capsules on click'));
+    await tester.pump();
+    await tester.tap(find.text('Persistent PowerShell process'));
+    await tester.tap(find.text('Prefer PowerShell 7'));
+    await tester.tap(find.text('Hide script run window'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.runLinkedScriptCapsulesOnClick, true);
+    expect(controller.state.usePersistentPowerShellProcess, true);
+    expect(controller.state.preferPowerShell7, false);
+    expect(controller.state.hideScriptRunWindow, false);
   });
 
   testWidgets('links todo items to note papers', (tester) async {

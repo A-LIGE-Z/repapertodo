@@ -42,6 +42,10 @@ class SyncSettingsDialogResult {
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
+    required this.runLinkedScriptCapsulesOnClick,
+    required this.usePersistentPowerShellProcess,
+    required this.preferPowerShell7,
+    required this.hideScriptRunWindow,
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
@@ -85,6 +89,10 @@ class SyncSettingsDialogResult {
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
+  final bool runLinkedScriptCapsulesOnClick;
+  final bool usePersistentPowerShellProcess;
+  final bool preferPowerShell7;
+  final bool hideScriptRunWindow;
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
@@ -130,6 +138,10 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
+  required bool initialRunLinkedScriptCapsulesOnClick,
+  required bool initialUsePersistentPowerShellProcess,
+  required bool initialPreferPowerShell7,
+  required bool initialHideScriptRunWindow,
   required bool initialEnableTodoNoteLinks,
   required bool initialShowLinkedNoteName,
   required bool initialAllowLongLinkedNoteTitles,
@@ -177,6 +189,12 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
+      initialRunLinkedScriptCapsulesOnClick:
+          initialRunLinkedScriptCapsulesOnClick,
+      initialUsePersistentPowerShellProcess:
+          initialUsePersistentPowerShellProcess,
+      initialPreferPowerShell7: initialPreferPowerShell7,
+      initialHideScriptRunWindow: initialHideScriptRunWindow,
       initialEnableTodoNoteLinks: initialEnableTodoNoteLinks,
       initialShowLinkedNoteName: initialShowLinkedNoteName,
       initialAllowLongLinkedNoteTitles: initialAllowLongLinkedNoteTitles,
@@ -224,6 +242,10 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
+    required this.initialRunLinkedScriptCapsulesOnClick,
+    required this.initialUsePersistentPowerShellProcess,
+    required this.initialPreferPowerShell7,
+    required this.initialHideScriptRunWindow,
     required this.initialEnableTodoNoteLinks,
     required this.initialShowLinkedNoteName,
     required this.initialAllowLongLinkedNoteTitles,
@@ -268,6 +290,10 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
+  final bool initialRunLinkedScriptCapsulesOnClick;
+  final bool initialUsePersistentPowerShellProcess;
+  final bool initialPreferPowerShell7;
+  final bool initialHideScriptRunWindow;
   final bool initialEnableTodoNoteLinks;
   final bool initialShowLinkedNoteName;
   final bool initialAllowLongLinkedNoteTitles;
@@ -310,6 +336,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
+  late bool _runLinkedScriptCapsulesOnClick;
+  late bool _usePersistentPowerShellProcess;
+  late bool _preferPowerShell7;
+  late bool _hideScriptRunWindow;
   late bool _enableTodoNoteLinks;
   late bool _showLinkedNoteName;
   late bool _allowLongLinkedNoteTitles;
@@ -374,6 +404,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
         FullscreenTopmostModes.normalize(widget.initialFullscreenTopmostMode);
+    _runLinkedScriptCapsulesOnClick =
+        widget.initialRunLinkedScriptCapsulesOnClick;
+    _usePersistentPowerShellProcess =
+        widget.initialUsePersistentPowerShellProcess;
+    _preferPowerShell7 = widget.initialPreferPowerShell7;
+    _hideScriptRunWindow = widget.initialHideScriptRunWindow;
     _enableTodoNoteLinks = widget.initialEnableTodoNoteLinks;
     _showLinkedNoteName = widget.initialShowLinkedNoteName;
     _allowLongLinkedNoteTitles = widget.initialAllowLongLinkedNoteTitles;
@@ -868,6 +904,44 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const Divider(height: 24),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.terminal_outlined),
+                title: const Text('Run linked script capsules on click'),
+                value: _runLinkedScriptCapsulesOnClick,
+                onChanged: (value) =>
+                    setState(() => _runLinkedScriptCapsulesOnClick = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.memory_outlined),
+                title: const Text('Persistent PowerShell process'),
+                value: _usePersistentPowerShellProcess,
+                onChanged: _runLinkedScriptCapsulesOnClick
+                    ? (value) => setState(
+                          () => _usePersistentPowerShellProcess = value,
+                        )
+                    : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.bolt_outlined),
+                title: const Text('Prefer PowerShell 7'),
+                value: _preferPowerShell7,
+                onChanged: _runLinkedScriptCapsulesOnClick
+                    ? (value) => setState(() => _preferPowerShell7 = value)
+                    : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.visibility_off_outlined),
+                title: const Text('Hide script run window'),
+                value: _hideScriptRunWindow,
+                onChanged: _runLinkedScriptCapsulesOnClick
+                    ? (value) => setState(() => _hideScriptRunWindow = value)
+                    : null,
+              ),
+              const Divider(height: 24),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.notifications_active_outlined),
                 title: const Text('Todo reminders'),
                 value: _useTodoReminderInterval,
@@ -1207,6 +1281,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,
+        runLinkedScriptCapsulesOnClick: _runLinkedScriptCapsulesOnClick,
+        usePersistentPowerShellProcess: _usePersistentPowerShellProcess,
+        preferPowerShell7: _preferPowerShell7,
+        hideScriptRunWindow: _hideScriptRunWindow,
         enableTodoNoteLinks: _enableTodoNoteLinks,
         showLinkedNoteName: _showLinkedNoteName,
         allowLongLinkedNoteTitles: _allowLongLinkedNoteTitles,

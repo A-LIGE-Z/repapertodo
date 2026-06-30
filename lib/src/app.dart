@@ -629,6 +629,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
       initialFullscreenTopmostMode: controller.state.fullscreenTopmostMode,
+      initialRunLinkedScriptCapsulesOnClick:
+          controller.state.runLinkedScriptCapsulesOnClick,
+      initialUsePersistentPowerShellProcess:
+          controller.state.usePersistentPowerShellProcess,
+      initialPreferPowerShell7: controller.state.preferPowerShell7,
+      initialHideScriptRunWindow: controller.state.hideScriptRunWindow,
       initialEnableTodoNoteLinks: controller.state.enableTodoNoteLinks,
       initialShowLinkedNoteName: controller.state.showLinkedNoteName,
       initialAllowLongLinkedNoteTitles:
@@ -689,6 +695,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
       controller.state.fullscreenTopmostMode = result.fullscreenTopmostMode;
+      controller.state.runLinkedScriptCapsulesOnClick =
+          result.runLinkedScriptCapsulesOnClick;
+      controller.state.usePersistentPowerShellProcess =
+          result.usePersistentPowerShellProcess;
+      controller.state.preferPowerShell7 = result.preferPowerShell7;
+      controller.state.hideScriptRunWindow = result.hideScriptRunWindow;
       controller.state.enableTodoNoteLinks = result.enableTodoNoteLinks;
       controller.state.showLinkedNoteName = result.showLinkedNoteName;
       controller.state.allowLongLinkedNoteTitles =
