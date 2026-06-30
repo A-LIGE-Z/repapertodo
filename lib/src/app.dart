@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 
-import 'core/model/app_state.dart';
+import 'app_controller.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
-import 'core/model/paper_item.dart';
+import 'core/storage/state_store.dart';
 
 class RePaperTodoApp extends StatelessWidget {
-  const RePaperTodoApp({super.key});
+  const RePaperTodoApp({
+    required this.controller,
+    required this.store,
+    super.key,
+  });
+
+  final RePaperTodoController controller;
+  final StateStore store;
 
   @override
   Widget build(BuildContext context) {
@@ -18,30 +25,8 @@ class RePaperTodoApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: PaperBoardScreen(
-        initialState: AppState(
-          papers: [
-            PaperData(
-              id: 'welcome-todo',
-              type: PaperTypes.todo,
-              title: 'Windows parity',
-              items: [
-                PaperItem(id: 'todo-1', text: 'Build compatible data core'),
-                PaperItem(id: 'todo-2', text: 'Restore independent paper windows'),
-                PaperItem(id: 'todo-3', text: 'Add WebDAV sync'),
-              ],
-            ),
-            PaperData(
-              id: 'welcome-note',
-              type: PaperTypes.note,
-              title: 'RePaperTodo',
-              content: 'Flutter-first, local-first, Windows exe first.',
-              x: 460,
-              y: 150,
-              width: PaperLayoutDefaults.noteDefaultWidth,
-              height: PaperLayoutDefaults.noteDefaultHeight,
-            ),
-          ],
-        ),
+        controller: controller,
+        store: store,
       ),
     );
   }
@@ -49,34 +34,37 @@ class RePaperTodoApp extends StatelessWidget {
 
 class PaperBoardScreen extends StatefulWidget {
   const PaperBoardScreen({
-    required this.initialState,
+    required this.controller,
+    required this.store,
     super.key,
   });
 
-  final AppState initialState;
+  final RePaperTodoController controller;
+  final StateStore store;
 
   @override
   State<PaperBoardScreen> createState() => _PaperBoardScreenState();
 }
 
 class _PaperBoardScreenState extends State<PaperBoardScreen> {
-  late final AppState state = widget.initialState..normalize();
+  RePaperTodoController get controller => widget.controller;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final visiblePapers = controller.state.papers.where((paper) => paper.isVisible).toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('RePaperTodo'),
         actions: [
           IconButton(
             tooltip: 'New todo paper',
-            onPressed: () {},
+            onPressed: () => _createPaper(PaperTypes.todo),
             icon: const Icon(Icons.add_task),
           ),
           IconButton(
             tooltip: 'New note paper',
-            onPressed: () {},
+            onPressed: () => _createPaper(PaperTypes.note),
             icon: const Icon(Icons.note_add_outlined),
           ),
           IconButton(
@@ -90,14 +78,21 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
         color: colorScheme.surface,
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
-          itemCount: state.papers.length,
+          itemCount: visiblePapers.length,
           separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
-            return PaperPreview(paper: state.papers[index]);
+            return PaperPreview(paper: visiblePapers[index]);
           },
         ),
       ),
     );
+  }
+
+  Future<void> _createPaper(String type) async {
+    setState(() {
+      controller.createPaper(type);
+    });
+    await widget.store.save(controller.state);
   }
 }
 

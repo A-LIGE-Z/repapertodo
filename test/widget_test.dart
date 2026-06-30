@@ -1,9 +1,38 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/src/app.dart';
+import 'package:repapertodo/src/app_controller.dart';
+import 'package:repapertodo/src/core/model/app_state.dart';
+import 'package:repapertodo/src/core/model/paper_constants.dart';
+import 'package:repapertodo/src/core/model/paper_data.dart';
+import 'package:repapertodo/src/core/model/paper_item.dart';
+import 'package:repapertodo/src/core/storage/state_store.dart';
+import 'package:repapertodo/src/platform/noop_platform_services.dart';
 
 void main() {
   testWidgets('renders the initial paper board', (tester) async {
-    await tester.pumpWidget(const RePaperTodoApp());
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'welcome-todo',
+            type: PaperTypes.todo,
+            title: 'Windows parity',
+            items: [
+              PaperItem(id: 'todo-1', text: 'Build compatible data core'),
+            ],
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
 
     expect(find.text('RePaperTodo'), findsWidgets);
     expect(find.text('Windows parity'), findsOneWidget);

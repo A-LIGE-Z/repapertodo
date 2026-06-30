@@ -8,6 +8,8 @@ export 'src/core/model/paper_item.dart';
 export 'src/core/startup/startup_command.dart';
 export 'src/core/storage/state_store.dart';
 export 'src/core/state/app_state_codec.dart';
+export 'src/bootstrap/app_bootstrap.dart';
+export 'src/platform/noop_platform_services.dart';
 export 'src/platform/platform_services.dart';
 export 'src/app_controller.dart';
 export 'src/sync/sync_manifest.dart';
