@@ -12,4 +12,18 @@ void main() {
 
     expect(paper.capsuleSide, DeepCapsuleSides.left);
   });
+
+  test('new papers skip deep capsule defaults when disabled', () {
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        deepCapsuleSide: DeepCapsuleSides.left,
+        useDeepCapsuleMode: false,
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    final paper = controller.createPaper(PaperTypes.note);
+
+    expect(paper.capsuleSide, isEmpty);
+  });
 }

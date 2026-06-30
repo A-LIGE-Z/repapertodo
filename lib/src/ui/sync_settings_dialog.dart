@@ -29,6 +29,8 @@ class SyncSettingsDialogResult {
     required this.showTopBarNewTodoButton,
     required this.showTopBarNewNoteButton,
     required this.showTopBarExternalOpenButton,
+    required this.useCapsuleMode,
+    required this.useDeepCapsuleMode,
     required this.useCapsuleCollapseAll,
     required this.capsuleCollapseAllActive,
     required this.deepCapsuleSide,
@@ -66,6 +68,8 @@ class SyncSettingsDialogResult {
   final bool showTopBarNewTodoButton;
   final bool showTopBarNewNoteButton;
   final bool showTopBarExternalOpenButton;
+  final bool useCapsuleMode;
+  final bool useDeepCapsuleMode;
   final bool useCapsuleCollapseAll;
   final bool capsuleCollapseAllActive;
   final String deepCapsuleSide;
@@ -105,6 +109,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialShowTopBarNewTodoButton,
   required bool initialShowTopBarNewNoteButton,
   required bool initialShowTopBarExternalOpenButton,
+  required bool initialUseCapsuleMode,
+  required bool initialUseDeepCapsuleMode,
   required bool initialUseCapsuleCollapseAll,
   required bool initialCapsuleCollapseAllActive,
   required String initialDeepCapsuleSide,
@@ -145,6 +151,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialShowTopBarNewTodoButton: initialShowTopBarNewTodoButton,
       initialShowTopBarNewNoteButton: initialShowTopBarNewNoteButton,
       initialShowTopBarExternalOpenButton: initialShowTopBarExternalOpenButton,
+      initialUseCapsuleMode: initialUseCapsuleMode,
+      initialUseDeepCapsuleMode: initialUseDeepCapsuleMode,
       initialUseCapsuleCollapseAll: initialUseCapsuleCollapseAll,
       initialCapsuleCollapseAllActive: initialCapsuleCollapseAllActive,
       initialDeepCapsuleSide: initialDeepCapsuleSide,
@@ -186,6 +194,8 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialShowTopBarNewTodoButton,
     required this.initialShowTopBarNewNoteButton,
     required this.initialShowTopBarExternalOpenButton,
+    required this.initialUseCapsuleMode,
+    required this.initialUseDeepCapsuleMode,
     required this.initialUseCapsuleCollapseAll,
     required this.initialCapsuleCollapseAllActive,
     required this.initialDeepCapsuleSide,
@@ -224,6 +234,8 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialShowTopBarNewTodoButton;
   final bool initialShowTopBarNewNoteButton;
   final bool initialShowTopBarExternalOpenButton;
+  final bool initialUseCapsuleMode;
+  final bool initialUseDeepCapsuleMode;
   final bool initialUseCapsuleCollapseAll;
   final bool initialCapsuleCollapseAllActive;
   final String initialDeepCapsuleSide;
@@ -262,6 +274,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _showTopBarNewTodoButton;
   late bool _showTopBarNewNoteButton;
   late bool _showTopBarExternalOpenButton;
+  late bool _useCapsuleMode;
+  late bool _useDeepCapsuleMode;
   late bool _useCapsuleCollapseAll;
   late bool _capsuleCollapseAllActive;
   late String _deepCapsuleSide;
@@ -317,6 +331,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _showTopBarNewTodoButton = widget.initialShowTopBarNewTodoButton;
     _showTopBarNewNoteButton = widget.initialShowTopBarNewNoteButton;
     _showTopBarExternalOpenButton = widget.initialShowTopBarExternalOpenButton;
+    _useCapsuleMode = widget.initialUseCapsuleMode;
+    _useDeepCapsuleMode = widget.initialUseDeepCapsuleMode;
     _useCapsuleCollapseAll = widget.initialUseCapsuleCollapseAll;
     _capsuleCollapseAllActive = widget.initialCapsuleCollapseAllActive;
     _deepCapsuleSide =
@@ -650,22 +666,47 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.unfold_less_outlined),
-                title: const Text('Collapse all control'),
-                value: _useCapsuleCollapseAll,
+                secondary: const Icon(Icons.view_agenda_outlined),
+                title: const Text('Capsule mode'),
+                value: _useCapsuleMode,
                 onChanged: (value) => setState(() {
-                  _useCapsuleCollapseAll = value;
+                  _useCapsuleMode = value;
                   if (!value) {
+                    _useDeepCapsuleMode = false;
+                    _useCapsuleCollapseAll = false;
                     _capsuleCollapseAllActive = false;
                   }
                 }),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.stacked_line_chart_outlined),
+                title: const Text('Deep capsule mode'),
+                value: _useDeepCapsuleMode,
+                onChanged: _useCapsuleMode
+                    ? (value) => setState(() => _useDeepCapsuleMode = value)
+                    : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.unfold_less_outlined),
+                title: const Text('Collapse all control'),
+                value: _useCapsuleCollapseAll,
+                onChanged: _useCapsuleMode
+                    ? (value) => setState(() {
+                          _useCapsuleCollapseAll = value;
+                          if (!value) {
+                            _capsuleCollapseAllActive = false;
+                          }
+                        })
+                    : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.vertical_align_center_outlined),
                 title: const Text('Collapse all active'),
                 value: _capsuleCollapseAllActive,
-                onChanged: _useCapsuleCollapseAll
+                onChanged: _useCapsuleMode && _useCapsuleCollapseAll
                     ? (value) =>
                         setState(() => _capsuleCollapseAllActive = value)
                     : null,
@@ -685,12 +726,15 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   ),
                 ],
                 selected: {_deepCapsuleSide},
-                onSelectionChanged: (selection) =>
-                    setState(() => _deepCapsuleSide = selection.single),
+                onSelectionChanged: _useCapsuleMode && _useDeepCapsuleMode
+                    ? (selection) =>
+                        setState(() => _deepCapsuleSide = selection.single)
+                    : null,
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _deepCapsuleTopMarginController,
+                enabled: _useCapsuleMode && _useDeepCapsuleMode,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   labelText: 'Deep capsule top margin',
@@ -1050,9 +1094,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         showTopBarNewTodoButton: _showTopBarNewTodoButton,
         showTopBarNewNoteButton: _showTopBarNewNoteButton,
         showTopBarExternalOpenButton: _showTopBarExternalOpenButton,
-        useCapsuleCollapseAll: _useCapsuleCollapseAll,
-        capsuleCollapseAllActive:
-            _useCapsuleCollapseAll && _capsuleCollapseAllActive,
+        useCapsuleMode: _useCapsuleMode,
+        useDeepCapsuleMode: _useCapsuleMode && _useDeepCapsuleMode,
+        useCapsuleCollapseAll: _useCapsuleMode && _useCapsuleCollapseAll,
+        capsuleCollapseAllActive: _useCapsuleMode &&
+            _useCapsuleCollapseAll &&
+            _capsuleCollapseAllActive,
         deepCapsuleSide: DeepCapsuleSides.normalize(_deepCapsuleSide),
         deepCapsuleStartTopMargin:
             deepCapsuleTopMargin.clamp(8, 10000).toDouble(),

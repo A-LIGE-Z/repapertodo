@@ -290,7 +290,7 @@ class AppState {
     sync.normalize();
     for (final paper in papers) {
       paper.normalize();
-      if (paper.capsuleSide.isEmpty) {
+      if (useCapsuleMode && useDeepCapsuleMode && paper.capsuleSide.isEmpty) {
         paper.capsuleSide = deepCapsuleSide;
       }
     }

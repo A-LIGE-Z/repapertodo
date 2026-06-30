@@ -199,6 +199,8 @@ void main() {
     expect(find.text('Top bar new todo'), findsOneWidget);
     expect(find.text('Top bar new note'), findsOneWidget);
     expect(find.text('Top bar open surface'), findsOneWidget);
+    expect(find.text('Capsule mode'), findsOneWidget);
+    expect(find.text('Deep capsule mode'), findsOneWidget);
     expect(find.text('Collapse all control'), findsOneWidget);
     expect(find.text('Collapse all active'), findsOneWidget);
     expect(find.text('Deep capsule top margin'), findsOneWidget);
@@ -673,6 +675,44 @@ void main() {
     expect(controller.state.capsuleCollapseAllActive, false);
     expect(find.text('Visible task'), findsOneWidget);
     expect(find.text('Visible note'), findsWidgets);
+  });
+
+  testWidgets('hides collapse all when capsule mode is disabled',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        useCapsuleCollapseAll: true,
+        capsuleCollapseAllActive: true,
+        papers: [
+          PaperData(
+            id: 'no-capsule-paper',
+            type: PaperTypes.todo,
+            title: 'No capsule',
+            items: [
+              PaperItem(id: 'no-capsule-item', text: 'Still expanded'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-no-capsule-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.byTooltip('Expand all papers'), findsNothing);
+    expect(find.byTooltip('Collapse all papers'), findsNothing);
+    expect(find.text('Still expanded'), findsOneWidget);
   });
 
   testWidgets('links todo items to note papers', (tester) async {

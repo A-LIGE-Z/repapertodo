@@ -211,7 +211,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
               onPressed: () => _createPaper(PaperTypes.note),
               icon: const Icon(Icons.note_add_outlined),
             ),
-          if (controller.state.useCapsuleCollapseAll)
+          if (controller.state.useCapsuleMode &&
+              controller.state.useCapsuleCollapseAll)
             IconButton(
               tooltip: _tooltipLabel(
                 enableToolTips,
@@ -312,7 +313,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       todoLineSpacing: controller.state.todoLineSpacing,
       showTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
       todoDueYearDisplayMode: controller.state.todoDueYearDisplayMode,
-      collapseAllActive: controller.state.useCapsuleCollapseAll &&
+      collapseAllActive: controller.state.useCapsuleMode &&
+          controller.state.useCapsuleCollapseAll &&
           controller.state.capsuleCollapseAllActive,
       noteLineSpacing: controller.state.noteLineSpacing,
       onChanged: _refreshAndSaveState,
@@ -607,6 +609,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialShowTopBarNewNoteButton: controller.state.showTopBarNewNoteButton,
       initialShowTopBarExternalOpenButton:
           controller.state.showTopBarExternalOpenButton,
+      initialUseCapsuleMode: controller.state.useCapsuleMode,
+      initialUseDeepCapsuleMode: controller.state.useDeepCapsuleMode,
       initialUseCapsuleCollapseAll: controller.state.useCapsuleCollapseAll,
       initialCapsuleCollapseAllActive:
           controller.state.capsuleCollapseAllActive,
@@ -657,6 +661,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.showTopBarNewNoteButton = result.showTopBarNewNoteButton;
       controller.state.showTopBarExternalOpenButton =
           result.showTopBarExternalOpenButton;
+      controller.state.useCapsuleMode = result.useCapsuleMode;
+      controller.state.useDeepCapsuleMode = result.useDeepCapsuleMode;
       controller.state.useCapsuleCollapseAll = result.useCapsuleCollapseAll;
       controller.state.capsuleCollapseAllActive =
           result.capsuleCollapseAllActive;

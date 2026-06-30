@@ -64,8 +64,10 @@ class RePaperTodoController {
             ]
           : const [],
     );
-    paper.capsuleSide = state.deepCapsuleSide;
-    paper.capsuleMonitorDeviceName = state.deepCapsuleMonitorDeviceName;
+    if (state.useCapsuleMode && state.useDeepCapsuleMode) {
+      paper.capsuleSide = state.deepCapsuleSide;
+      paper.capsuleMonitorDeviceName = state.deepCapsuleMonitorDeviceName;
+    }
     state.papers.add(paper);
     return paper;
   }
