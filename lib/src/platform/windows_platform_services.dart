@@ -34,7 +34,12 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   }
 
   final MethodChannel _channel;
+  final StreamController<PaperData> _surfaceUpdates =
+      StreamController<PaperData>.broadcast();
   PaperData? _activePaper;
+
+  @override
+  Stream<PaperData> get surfaceUpdates => _surfaceUpdates.stream;
 
   Future<void> _handleWindowEvent(MethodCall call) async {
     if (call.method != 'boundsChanged') {
@@ -46,6 +51,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       return;
     }
     _applyBoundsToPaper(paper, arguments);
+    _surfaceUpdates.add(paper);
   }
 
   @override

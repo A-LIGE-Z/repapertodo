@@ -39,6 +39,21 @@ void main() {
 
     await services.paperWindows.showPaper(paper);
     await services.paperWindows.capturePaperSurfaceBounds(paper);
+    final surfaceUpdate = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('boundsChanged', {
+          'x': 55,
+          'y': 66,
+          'width': 520,
+          'height': 460,
+        }),
+      ),
+      (_) {},
+    );
+    await surfaceUpdate;
     await services.paperWindows.hidePaper(paper);
 
     expect(
@@ -53,10 +68,10 @@ void main() {
     });
     expect(calls[2].arguments, 'RePaperTodo - Inbox');
     expect(calls[3].arguments, true);
-    expect(paper.x, 33);
-    expect(paper.y, 44);
-    expect(paper.width, 420);
-    expect(paper.height, 360);
+    expect(paper.x, 55);
+    expect(paper.y, 66);
+    expect(paper.width, 520);
+    expect(paper.height, 460);
     expect(paper.isVisible, false);
   });
 }

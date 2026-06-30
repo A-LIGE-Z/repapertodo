@@ -59,8 +59,24 @@ class PaperBoardScreen extends StatefulWidget {
 class _PaperBoardScreenState extends State<PaperBoardScreen> {
   bool _isSyncing = false;
   Future<void> _saveQueue = Future<void>.value();
+  StreamSubscription<PaperData>? _surfaceUpdateSubscription;
+  Timer? _surfaceSaveDebounce;
 
   RePaperTodoController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _surfaceUpdateSubscription =
+        controller.paperSurfaceUpdates.listen(_handleSurfaceUpdate);
+  }
+
+  @override
+  void dispose() {
+    _surfaceSaveDebounce?.cancel();
+    unawaited(_surfaceUpdateSubscription?.cancel());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -139,6 +155,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       );
     });
     await _saveState();
+  }
+
+  void _handleSurfaceUpdate(PaperData paper) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+    _surfaceSaveDebounce?.cancel();
+    _surfaceSaveDebounce = Timer(const Duration(milliseconds: 500), () {
+      unawaited(_saveState());
+    });
   }
 
   Future<void> _updatePaperSurface(PaperData paper) async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'core/model/app_state.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
@@ -16,6 +18,9 @@ class RePaperTodoController {
 
   AppState state;
   final PlatformServices _platform;
+
+  Stream<PaperData> get paperSurfaceUpdates =>
+      _platform.paperWindows.surfaceUpdates;
 
   Future<void> start(
       {StartupCommand startupCommand =

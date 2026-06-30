@@ -27,6 +27,9 @@ class NoopPlatformServices implements PlatformServices {
 
 class NoopPaperWindowHost implements PaperWindowHost {
   @override
+  Stream<PaperData> get surfaceUpdates => const Stream.empty();
+
+  @override
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {}
 
   @override

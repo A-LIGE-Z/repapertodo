@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../core/model/app_state.dart';
 import '../core/model/paper_data.dart';
 import '../core/startup/startup_command.dart';
@@ -10,6 +12,8 @@ abstract interface class PlatformServices {
 }
 
 abstract interface class PaperWindowHost {
+  Stream<PaperData> get surfaceUpdates;
+
   Future<void> showPaper(PaperData paper);
   Future<void> hidePaper(PaperData paper);
   Future<void> closePaperSurface(PaperData paper);
