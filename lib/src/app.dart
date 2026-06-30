@@ -140,6 +140,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
             return PaperPreview(
               paper: visiblePapers[index],
               notePapers: notePapers,
+              enableTodoNoteLinks: controller.state.enableTodoNoteLinks,
+              showLinkedNoteName: controller.state.showLinkedNoteName,
+              allowLongLinkedNoteTitles:
+                  controller.state.allowLongLinkedNoteTitles,
               onChanged: _refreshAndSaveState,
               onTitleChanged: _updatePaperTitle,
               onOpen: _openPaper,
@@ -356,6 +360,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
       initialFullscreenTopmostMode: controller.state.fullscreenTopmostMode,
+      initialEnableTodoNoteLinks: controller.state.enableTodoNoteLinks,
+      initialShowLinkedNoteName: controller.state.showLinkedNoteName,
+      initialAllowLongLinkedNoteTitles:
+          controller.state.allowLongLinkedNoteTitles,
     );
     if (result == null) {
       return;
@@ -366,6 +374,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
       controller.state.fullscreenTopmostMode = result.fullscreenTopmostMode;
+      controller.state.enableTodoNoteLinks = result.enableTodoNoteLinks;
+      controller.state.showLinkedNoteName = result.showLinkedNoteName;
+      controller.state.allowLongLinkedNoteTitles =
+          result.allowLongLinkedNoteTitles;
     });
     await controller.setStartupAtLogin(result.startAtLogin);
     await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
@@ -446,6 +458,9 @@ class PaperPreview extends StatelessWidget {
   const PaperPreview({
     required this.paper,
     required this.notePapers,
+    required this.enableTodoNoteLinks,
+    required this.showLinkedNoteName,
+    required this.allowLongLinkedNoteTitles,
     required this.onChanged,
     required this.onTitleChanged,
     required this.onOpen,
@@ -458,6 +473,9 @@ class PaperPreview extends StatelessWidget {
 
   final PaperData paper;
   final List<PaperData> notePapers;
+  final bool enableTodoNoteLinks;
+  final bool showLinkedNoteName;
+  final bool allowLongLinkedNoteTitles;
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
   final Future<void> Function(PaperData paper) onOpen;
@@ -578,6 +596,9 @@ class PaperPreview extends StatelessWidget {
                   _TodoEditor(
                     paper: paper,
                     notePapers: notePapers,
+                    enableTodoNoteLinks: enableTodoNoteLinks,
+                    showLinkedNoteName: showLinkedNoteName,
+                    allowLongLinkedNoteTitles: allowLongLinkedNoteTitles,
                     onOpen: onOpen,
                     onChanged: onChanged,
                   )
@@ -610,12 +631,18 @@ class _TodoEditor extends StatefulWidget {
   const _TodoEditor({
     required this.paper,
     required this.notePapers,
+    required this.enableTodoNoteLinks,
+    required this.showLinkedNoteName,
+    required this.allowLongLinkedNoteTitles,
     required this.onOpen,
     required this.onChanged,
   });
 
   final PaperData paper;
   final List<PaperData> notePapers;
+  final bool enableTodoNoteLinks;
+  final bool showLinkedNoteName;
+  final bool allowLongLinkedNoteTitles;
   final Future<void> Function(PaperData paper) onOpen;
   final Future<void> Function() onChanged;
 
@@ -684,18 +711,19 @@ class _TodoEditorState extends State<_TodoEditor> {
                                   const Icon(Icons.close_outlined, size: 18),
                               deleteButtonTooltipMessage: 'Clear due date',
                             ),
-                          if (_linkedNoteFor(item) case final linkedNote?)
-                            InputChip(
-                              avatar:
-                                  const Icon(Icons.notes_outlined, size: 18),
-                              label: Text(_noteChipLabel(linkedNote)),
-                              onPressed: () =>
-                                  unawaited(widget.onOpen(linkedNote)),
-                              onDeleted: () => _clearLinkedNote(item),
-                              deleteIcon:
-                                  const Icon(Icons.close_outlined, size: 18),
-                              deleteButtonTooltipMessage: 'Unlink note',
-                            ),
+                          if (widget.enableTodoNoteLinks)
+                            if (_linkedNoteFor(item) case final linkedNote?)
+                              InputChip(
+                                avatar:
+                                    const Icon(Icons.notes_outlined, size: 18),
+                                label: Text(_noteChipLabel(linkedNote)),
+                                onPressed: () =>
+                                    unawaited(widget.onOpen(linkedNote)),
+                                onDeleted: () => _clearLinkedNote(item),
+                                deleteIcon:
+                                    const Icon(Icons.close_outlined, size: 18),
+                                deleteButtonTooltipMessage: 'Unlink note',
+                              ),
                         ],
                       ),
                     ],
@@ -708,7 +736,8 @@ class _TodoEditorState extends State<_TodoEditor> {
                 ),
                 PopupMenuButton<String>(
                   tooltip: 'Link note',
-                  enabled: widget.notePapers.isNotEmpty,
+                  enabled: widget.enableTodoNoteLinks &&
+                      widget.notePapers.isNotEmpty,
                   icon: Icon(item.linkedNoteId == null
                       ? Icons.note_add_outlined
                       : Icons.link_outlined),
@@ -843,7 +872,14 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   String _noteChipLabel(PaperData note) {
-    return 'Note ${_displayPaperTitle(note)}';
+    if (!widget.showLinkedNoteName) {
+      return 'Note';
+    }
+    final title = _displayPaperTitle(note);
+    if (widget.allowLongLinkedNoteTitles || title.length <= 24) {
+      return 'Note $title';
+    }
+    return 'Note ${title.substring(0, 23)}...';
   }
 
   String _displayPaperTitle(PaperData paper) {

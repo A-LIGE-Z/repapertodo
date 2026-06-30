@@ -168,6 +168,9 @@ void main() {
     expect(find.text('Hide from task switcher'), findsOneWidget);
     expect(find.text('Avoid fullscreen'), findsOneWidget);
     expect(find.text('Stay on top'), findsOneWidget);
+    expect(find.text('Todo-note links'), findsOneWidget);
+    expect(find.text('Show linked note name'), findsOneWidget);
+    expect(find.text('Allow long linked note titles'), findsOneWidget);
     expect(find.text('WebDAV sync'), findsOneWidget);
     expect(find.text('Jianguoyun'), findsOneWidget);
     expect(find.text('Generic'), findsOneWidget);
@@ -180,6 +183,7 @@ void main() {
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
       initialState: AppState(
+        showLinkedNoteName: true,
         papers: [
           PaperData(
             id: 'todo-paper',

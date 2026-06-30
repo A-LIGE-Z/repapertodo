@@ -9,12 +9,18 @@ class SyncSettingsDialogResult {
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
+    required this.enableTodoNoteLinks,
+    required this.showLinkedNoteName,
+    required this.allowLongLinkedNoteTitles,
   });
 
   final SyncSettings sync;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
+  final bool enableTodoNoteLinks;
+  final bool showLinkedNoteName;
+  final bool allowLongLinkedNoteTitles;
 }
 
 Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
@@ -23,6 +29,9 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
+  required bool initialEnableTodoNoteLinks,
+  required bool initialShowLinkedNoteName,
+  required bool initialAllowLongLinkedNoteTitles,
 }) {
   return showDialog<SyncSettingsDialogResult>(
     context: context,
@@ -31,6 +40,9 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
+      initialEnableTodoNoteLinks: initialEnableTodoNoteLinks,
+      initialShowLinkedNoteName: initialShowLinkedNoteName,
+      initialAllowLongLinkedNoteTitles: initialAllowLongLinkedNoteTitles,
     ),
   );
 }
@@ -41,6 +53,9 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
+    required this.initialEnableTodoNoteLinks,
+    required this.initialShowLinkedNoteName,
+    required this.initialAllowLongLinkedNoteTitles,
     super.key,
   });
 
@@ -48,6 +63,9 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
+  final bool initialEnableTodoNoteLinks;
+  final bool initialShowLinkedNoteName;
+  final bool initialAllowLongLinkedNoteTitles;
 
   @override
   State<SyncSettingsDialog> createState() => _SyncSettingsDialogState();
@@ -59,6 +77,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
+  late bool _enableTodoNoteLinks;
+  late bool _showLinkedNoteName;
+  late bool _allowLongLinkedNoteTitles;
   late String _presetId;
   late bool _obscurePassword = true;
   late final TextEditingController _endpointController;
@@ -79,6 +100,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
         FullscreenTopmostModes.normalize(widget.initialFullscreenTopmostMode);
+    _enableTodoNoteLinks = widget.initialEnableTodoNoteLinks;
+    _showLinkedNoteName = widget.initialShowLinkedNoteName;
+    _allowLongLinkedNoteTitles = widget.initialAllowLongLinkedNoteTitles;
     _presetId = webDav.presetId;
     _endpointController = TextEditingController(text: webDav.endpoint);
     _usernameController = TextEditingController(text: webDav.username);
@@ -149,6 +173,34 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 onSelectionChanged: (selection) => setState(
                   () => _fullscreenTopmostMode = selection.single,
                 ),
+              ),
+              const Divider(height: 24),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.account_tree_outlined),
+                title: const Text('Todo-note links'),
+                value: _enableTodoNoteLinks,
+                onChanged: (value) =>
+                    setState(() => _enableTodoNoteLinks = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.notes_outlined),
+                title: const Text('Show linked note name'),
+                value: _showLinkedNoteName,
+                onChanged: _enableTodoNoteLinks
+                    ? (value) => setState(() => _showLinkedNoteName = value)
+                    : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.subject_outlined),
+                title: const Text('Allow long linked note titles'),
+                value: _allowLongLinkedNoteTitles,
+                onChanged: _enableTodoNoteLinks && _showLinkedNoteName
+                    ? (value) =>
+                        setState(() => _allowLongLinkedNoteTitles = value)
+                    : null,
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -315,6 +367,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,
+        enableTodoNoteLinks: _enableTodoNoteLinks,
+        showLinkedNoteName: _showLinkedNoteName,
+        allowLongLinkedNoteTitles: _allowLongLinkedNoteTitles,
       ),
     );
   }
