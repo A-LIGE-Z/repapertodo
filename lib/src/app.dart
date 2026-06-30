@@ -382,7 +382,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     await controller.setStartupAtLogin(result.startAtLogin);
     await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
     await controller.setFullscreenTopmostMode(result.fullscreenTopmostMode);
-    await widget.store.save(controller.state);
+    await _saveState();
   }
 
   String _syncMessage(AppSyncResult result) {
