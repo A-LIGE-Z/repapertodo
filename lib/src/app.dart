@@ -61,6 +61,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   Future<void> _saveQueue = Future<void>.value();
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
   Timer? _surfaceSaveDebounce;
+  Timer? _titleSurfaceDebounce;
 
   RePaperTodoController get controller => widget.controller;
 
@@ -74,6 +75,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   @override
   void dispose() {
     _surfaceSaveDebounce?.cancel();
+    _titleSurfaceDebounce?.cancel();
     unawaited(_surfaceUpdateSubscription?.cancel());
     super.dispose();
   }
@@ -131,6 +133,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
             return PaperPreview(
               paper: visiblePapers[index],
               onChanged: _refreshAndSaveState,
+              onTitleChanged: _updatePaperTitle,
               onHide: _hidePaper,
               onDelete: _deletePaper,
               onSurfaceChanged: _updatePaperSurface,
@@ -160,6 +163,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     if (mounted) {
       setState(() {});
     }
+    await _saveState();
+  }
+
+  Future<void> _updatePaperTitle(PaperData paper) async {
+    if (mounted) {
+      setState(() {});
+    }
+    _titleSurfaceDebounce?.cancel();
+    _titleSurfaceDebounce = Timer(const Duration(milliseconds: 250), () {
+      unawaited(controller.updatePaperSurface(paper));
+    });
     await _saveState();
   }
 
@@ -340,6 +354,7 @@ class PaperPreview extends StatelessWidget {
   const PaperPreview({
     required this.paper,
     required this.onChanged,
+    required this.onTitleChanged,
     required this.onHide,
     required this.onDelete,
     required this.onSurfaceChanged,
@@ -349,6 +364,7 @@ class PaperPreview extends StatelessWidget {
 
   final PaperData paper;
   final Future<void> Function() onChanged;
+  final Future<void> Function(PaperData paper) onTitleChanged;
   final Future<void> Function(PaperData paper) onHide;
   final Future<void> Function(PaperData paper) onDelete;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
@@ -400,7 +416,7 @@ class PaperPreview extends StatelessWidget {
                       style: theme.textTheme.titleMedium,
                       onChanged: (value) {
                         paper.title = value;
-                        unawaited(onChanged());
+                        unawaited(onTitleChanged(paper));
                       },
                     ),
                   ),

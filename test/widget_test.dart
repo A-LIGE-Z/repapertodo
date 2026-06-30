@@ -8,12 +8,14 @@ import 'package:repapertodo/src/core/model/paper_data.dart';
 import 'package:repapertodo/src/core/model/paper_item.dart';
 import 'package:repapertodo/src/core/storage/state_store.dart';
 import 'package:repapertodo/src/platform/noop_platform_services.dart';
+import 'package:repapertodo/src/platform/platform_services.dart';
 
 void main() {
   testWidgets('renders the initial paper board', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
+    final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
       initialState: AppState(
         papers: [
@@ -27,7 +29,7 @@ void main() {
           ),
         ],
       ),
-      platform: NoopPlatformServices(),
+      platform: platform,
     );
     final store = StateStore(filePath: 'build/test-widget-data.json');
 
@@ -45,8 +47,10 @@ void main() {
     await tester.enterText(
         find.byKey(const ValueKey('welcome-todo-title')), 'Edited title');
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(controller.state.papers.single.title, 'Edited title');
+    expect(platform.paperWindows.updatedTitles, contains('Edited title'));
 
     await tester.tap(find.byKey(const ValueKey('welcome-todo-todo-1-text')));
     await tester.testTextInput.receiveAction(TextInputAction.next);
@@ -128,4 +132,27 @@ void main() {
     expect(find.text('Jianguoyun'), findsOneWidget);
     expect(find.text('Generic'), findsOneWidget);
   });
+}
+
+class _RecordingPlatformServices implements PlatformServices {
+  @override
+  final _RecordingPaperWindowHost paperWindows = _RecordingPaperWindowHost();
+
+  @override
+  final TrayHost tray = NoopTrayHost();
+
+  @override
+  final StartupHost startup = NoopStartupHost();
+
+  @override
+  final SystemIntegrationHost systemIntegration = NoopSystemIntegrationHost();
+}
+
+class _RecordingPaperWindowHost extends NoopPaperWindowHost {
+  final updatedTitles = <String>[];
+
+  @override
+  Future<void> updatePaperSurface(PaperData paper) async {
+    updatedTitles.add(paper.title);
+  }
 }
