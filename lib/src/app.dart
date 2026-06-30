@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
+import 'core/model/paper_item.dart';
 import 'core/storage/state_store.dart';
 import 'sync/app_sync_service.dart';
 import 'ui/sync_settings_dialog.dart';
@@ -55,6 +58,7 @@ class PaperBoardScreen extends StatefulWidget {
 
 class _PaperBoardScreenState extends State<PaperBoardScreen> {
   bool _isSyncing = false;
+  Future<void> _saveQueue = Future<void>.value();
 
   RePaperTodoController get controller => widget.controller;
 
@@ -101,7 +105,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
           itemCount: visiblePapers.length,
           separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
-            return PaperPreview(paper: visiblePapers[index]);
+            return PaperPreview(
+              paper: visiblePapers[index],
+              onChanged: _saveState,
+              onDelete: _deletePaper,
+            );
           },
         ),
       ),
@@ -113,6 +121,22 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.createPaper(type);
     });
     await widget.store.save(controller.state);
+  }
+
+  Future<void> _saveState() async {
+    _saveQueue = _saveQueue.catchError((_) {}).then((_) {
+      return widget.store.save(controller.state);
+    });
+    await _saveQueue;
+  }
+
+  Future<void> _deletePaper(PaperData paper) async {
+    setState(() {
+      controller.state.papers.removeWhere(
+        (candidate) => candidate.id == paper.id,
+      );
+    });
+    await _saveState();
   }
 
   Future<void> _syncNow() async {
@@ -178,10 +202,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
 class PaperPreview extends StatelessWidget {
   const PaperPreview({
     required this.paper,
+    required this.onChanged,
+    required this.onDelete,
     super.key,
   });
 
   final PaperData paper;
+  final Future<void> Function() onChanged;
+  final Future<void> Function(PaperData paper) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -218,57 +246,149 @@ class PaperPreview extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      paper.title.isEmpty ? 'Untitled' : paper.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: TextFormField(
+                      key: ValueKey('${paper.id}-title'),
+                      initialValue: paper.title,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'Untitled',
+                        isDense: true,
+                      ),
                       style: theme.textTheme.titleMedium,
+                      onChanged: (value) {
+                        paper.title = value;
+                        unawaited(onChanged());
+                      },
                     ),
+                  ),
+                  IconButton(
+                    tooltip: 'Delete paper',
+                    onPressed: () => unawaited(onDelete(paper)),
+                    icon: const Icon(Icons.close),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
               if (paper.isTodo)
-                ...paper.items.map(
-                  (item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          item.done
-                              ? Icons.check_box
-                              : Icons.check_box_outline_blank,
-                          size: 18,
-                          color: item.done
-                              ? colorScheme.primary
-                              : colorScheme.outline,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            item.text.isEmpty ? 'New item' : item.text,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: item.done
-                                  ? colorScheme.outline
-                                  : colorScheme.onSurface,
-                              decoration:
-                                  item.done ? TextDecoration.lineThrough : null,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                _TodoEditor(
+                  paper: paper,
+                  onChanged: onChanged,
                 )
               else
-                Text(
-                  paper.content,
+                TextFormField(
+                  key: ValueKey('${paper.id}-content'),
+                  initialValue: paper.content,
+                  minLines: 4,
+                  maxLines: 12,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Write a note...',
+                  ),
                   style: theme.textTheme.bodyMedium,
+                  onChanged: (value) {
+                    paper.content = value;
+                    unawaited(onChanged());
+                  },
                 ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TodoEditor extends StatefulWidget {
+  const _TodoEditor({
+    required this.paper,
+    required this.onChanged,
+  });
+
+  final PaperData paper;
+  final Future<void> Function() onChanged;
+
+  @override
+  State<_TodoEditor> createState() => _TodoEditorState();
+}
+
+class _TodoEditorState extends State<_TodoEditor> {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Column(
+      children: [
+        for (final item in widget.paper.items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: item.done,
+                  onChanged: (value) {
+                    setState(() => item.done = value ?? false);
+                    unawaited(widget.onChanged());
+                  },
+                ),
+                Expanded(
+                  child: TextFormField(
+                    key: ValueKey('${widget.paper.id}-${item.id}-text'),
+                    initialValue: item.text,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: 'New item',
+                      isDense: true,
+                    ),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: item.done
+                          ? colorScheme.outline
+                          : colorScheme.onSurface,
+                      decoration: item.done ? TextDecoration.lineThrough : null,
+                    ),
+                    onChanged: (value) {
+                      item.text = value;
+                      unawaited(widget.onChanged());
+                    },
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Delete item',
+                  onPressed: widget.paper.items.length <= 1
+                      ? null
+                      : () {
+                          setState(() {
+                            widget.paper.items.removeWhere(
+                              (candidate) => candidate.id == item.id,
+                            );
+                            widget.paper.normalize();
+                          });
+                          unawaited(widget.onChanged());
+                        },
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () {
+              setState(() {
+                widget.paper.items.add(
+                  PaperItem(
+                    id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
+                    order: widget.paper.items.length,
+                  ),
+                );
+                widget.paper.normalize();
+              });
+              unawaited(widget.onChanged());
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Add item'),
+          ),
+        ),
+      ],
     );
   }
 }

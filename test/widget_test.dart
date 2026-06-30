@@ -39,6 +39,12 @@ void main() {
     expect(find.text('Windows parity'), findsOneWidget);
     expect(find.text('Build compatible data core'), findsOneWidget);
 
+    await tester.enterText(
+        find.byKey(const ValueKey('welcome-todo-title')), 'Edited title');
+    await tester.pump();
+
+    expect(controller.state.papers.single.title, 'Edited title');
+
     await tester.tap(find.byIcon(Icons.sync_outlined));
     await tester.pumpAndSettle();
 
