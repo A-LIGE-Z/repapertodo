@@ -96,6 +96,14 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
   }
 }
 
+String _shortenTitle(String title, int maxLength) {
+  final normalizedMaxLength = maxLength.clamp(4, 80).toInt();
+  if (title.length <= normalizedMaxLength) {
+    return title;
+  }
+  return '${title.substring(0, normalizedMaxLength - 3)}...';
+}
+
 class PaperBoardScreen extends StatefulWidget {
   const PaperBoardScreen({
     required this.controller,
@@ -287,6 +295,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       enableTodoNoteLinks: controller.state.enableTodoNoteLinks,
       showLinkedNoteName: controller.state.showLinkedNoteName,
       allowLongLinkedNoteTitles: controller.state.allowLongLinkedNoteTitles,
+      maxTitleLength: controller.state.maxTitleLength,
       markdownRenderMode: controller.state.markdownRenderMode,
       todoVisualSize: controller.state.todoVisualSize,
       todoLineSpacing: controller.state.todoLineSpacing,
@@ -525,6 +534,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialUiFontPreset: controller.state.uiFontPreset,
       initialSystemFontFamilyName: controller.state.systemFontFamilyName,
       initialZoom: controller.state.zoom,
+      initialMaxTitleLength: controller.state.maxTitleLength,
       initialTodoLineSpacing: controller.state.todoLineSpacing,
       initialNoteLineSpacing: controller.state.noteLineSpacing,
       initialShowTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
@@ -567,6 +577,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.uiFontPreset = result.uiFontPreset;
       controller.state.systemFontFamilyName = result.systemFontFamilyName;
       controller.state.zoom = result.zoom;
+      controller.state.maxTitleLength = result.maxTitleLength;
       controller.state.todoLineSpacing = result.todoLineSpacing;
       controller.state.noteLineSpacing = result.noteLineSpacing;
       controller.state.showTodoDueRelativeTime = result.showTodoDueRelativeTime;
@@ -644,7 +655,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
 
   String _displayTitle(PaperData paper) {
     final title = paper.title.trim();
-    return title.isEmpty ? 'Untitled' : title;
+    return _shortenTitle(
+      title.isEmpty ? 'Untitled' : title,
+      controller.state.maxTitleLength,
+    );
   }
 
   void _restoreLinkedNote(_LinkedNoteRestore link) {
@@ -921,6 +935,7 @@ class PaperPreview extends StatelessWidget {
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
+    required this.maxTitleLength,
     required this.markdownRenderMode,
     required this.todoVisualSize,
     required this.todoLineSpacing,
@@ -943,6 +958,7 @@ class PaperPreview extends StatelessWidget {
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
+  final int maxTitleLength;
   final String markdownRenderMode;
   final String todoVisualSize;
   final double todoLineSpacing;
@@ -1078,6 +1094,7 @@ class PaperPreview extends StatelessWidget {
                     enableTodoNoteLinks: enableTodoNoteLinks,
                     showLinkedNoteName: showLinkedNoteName,
                     allowLongLinkedNoteTitles: allowLongLinkedNoteTitles,
+                    maxTitleLength: maxTitleLength,
                     visualSize: todoVisualSize,
                     lineSpacing: todoLineSpacing,
                     showDueRelativeTime: showTodoDueRelativeTime,
@@ -1265,6 +1282,7 @@ class _TodoEditor extends StatefulWidget {
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
+    required this.maxTitleLength,
     required this.visualSize,
     required this.lineSpacing,
     required this.showDueRelativeTime,
@@ -1278,6 +1296,7 @@ class _TodoEditor extends StatefulWidget {
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
+  final int maxTitleLength;
   final String visualSize;
   final double lineSpacing;
   final bool showDueRelativeTime;
@@ -1594,11 +1613,10 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (!widget.showLinkedNoteName) {
       return 'Note';
     }
-    final title = _displayPaperTitle(note);
-    if (widget.allowLongLinkedNoteTitles || title.length <= 24) {
-      return 'Note $title';
-    }
-    return 'Note ${title.substring(0, 23)}...';
+    final title = widget.allowLongLinkedNoteTitles
+        ? _displayPaperTitle(note)
+        : _shortenTitle(_displayPaperTitle(note), widget.maxTitleLength);
+    return 'Note $title';
   }
 
   String _displayPaperTitle(PaperData paper) {

@@ -184,6 +184,7 @@ void main() {
     expect(find.text('Default'), findsOneWidget);
     expect(find.text('Custom font family'), findsOneWidget);
     expect(find.text('Zoom'), findsOneWidget);
+    expect(find.text('Max title length'), findsOneWidget);
     expect(find.text('Todo spacing'), findsOneWidget);
     expect(find.text('Note spacing'), findsOneWidget);
     expect(find.text('Relative due dates'), findsOneWidget);
@@ -600,6 +601,52 @@ void main() {
 
     expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
     expect(find.text('Note Research note'), findsNothing);
+  });
+
+  testWidgets('shortens linked note titles with max title length',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        maxTitleLength: 10,
+        showLinkedNoteName: true,
+        papers: [
+          PaperData(
+            id: 'todo-paper',
+            type: PaperTypes.todo,
+            title: 'Reading',
+            items: [
+              PaperItem(
+                id: 'todo-1',
+                text: 'Summarize paper',
+                linkedNoteId: 'note-paper',
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'note-paper',
+            type: PaperTypes.note,
+            title: 'Very long research note',
+            content: 'Notes live here.',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-title-length-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Note Very lo...'), findsOneWidget);
+    expect(find.text('Note Very long research note'), findsNothing);
   });
 
   testWidgets('hides linked note capsules from the board', (tester) async {

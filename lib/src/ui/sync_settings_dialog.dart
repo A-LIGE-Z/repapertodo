@@ -13,6 +13,7 @@ class SyncSettingsDialogResult {
     required this.uiFontPreset,
     required this.systemFontFamilyName,
     required this.zoom,
+    required this.maxTitleLength,
     required this.todoLineSpacing,
     required this.noteLineSpacing,
     required this.showTodoDueRelativeTime,
@@ -44,6 +45,7 @@ class SyncSettingsDialogResult {
   final String uiFontPreset;
   final String systemFontFamilyName;
   final double zoom;
+  final int maxTitleLength;
   final double todoLineSpacing;
   final double noteLineSpacing;
   final bool showTodoDueRelativeTime;
@@ -77,6 +79,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required String initialUiFontPreset,
   required String initialSystemFontFamilyName,
   required double initialZoom,
+  required int initialMaxTitleLength,
   required double initialTodoLineSpacing,
   required double initialNoteLineSpacing,
   required bool initialShowTodoDueRelativeTime,
@@ -110,6 +113,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialUiFontPreset: initialUiFontPreset,
       initialSystemFontFamilyName: initialSystemFontFamilyName,
       initialZoom: initialZoom,
+      initialMaxTitleLength: initialMaxTitleLength,
       initialTodoLineSpacing: initialTodoLineSpacing,
       initialNoteLineSpacing: initialNoteLineSpacing,
       initialShowTodoDueRelativeTime: initialShowTodoDueRelativeTime,
@@ -146,6 +150,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialUiFontPreset,
     required this.initialSystemFontFamilyName,
     required this.initialZoom,
+    required this.initialMaxTitleLength,
     required this.initialTodoLineSpacing,
     required this.initialNoteLineSpacing,
     required this.initialShowTodoDueRelativeTime,
@@ -178,6 +183,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final String initialUiFontPreset;
   final String initialSystemFontFamilyName;
   final double initialZoom;
+  final int initialMaxTitleLength;
   final double initialTodoLineSpacing;
   final double initialNoteLineSpacing;
   final bool initialShowTodoDueRelativeTime;
@@ -213,6 +219,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late String _todoVisualSize;
   late String _uiFontPreset;
   late double _zoom;
+  late double _maxTitleLength;
   late double _todoLineSpacing;
   late double _noteLineSpacing;
   late bool _showTodoDueRelativeTime;
@@ -258,6 +265,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _todoVisualSize = TodoVisualSizes.normalize(widget.initialTodoVisualSize);
     _uiFontPreset = UiFontPresets.normalize(widget.initialUiFontPreset);
     _zoom = widget.initialZoom.clamp(0.6, 1.8).toDouble();
+    _maxTitleLength = widget.initialMaxTitleLength.clamp(4, 80).toDouble();
     _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 2.4).toDouble();
     _noteLineSpacing = widget.initialNoteLineSpacing.clamp(0.8, 2.4).toDouble();
     _showTodoDueRelativeTime = widget.initialShowTodoDueRelativeTime;
@@ -482,6 +490,16 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 max: 1.8,
                 divisions: 12,
                 onChanged: (value) => setState(() => _zoom = value),
+              ),
+              _SettingsSlider(
+                icon: Icons.short_text_outlined,
+                label: 'Max title length',
+                valueLabel: '${_maxTitleLength.round()} chars',
+                value: _maxTitleLength,
+                min: 4,
+                max: 80,
+                divisions: 76,
+                onChanged: (value) => setState(() => _maxTitleLength = value),
               ),
               _SettingsSlider(
                 icon: Icons.checklist_outlined,
@@ -909,6 +927,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         uiFontPreset: _uiFontPreset,
         systemFontFamilyName: _fontFamilyController.text.trim(),
         zoom: _zoom,
+        maxTitleLength: _maxTitleLength.round().clamp(4, 80).toInt(),
         todoLineSpacing: _todoLineSpacing,
         noteLineSpacing: _noteLineSpacing,
         showTodoDueRelativeTime: _showTodoDueRelativeTime,
