@@ -171,16 +171,25 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
           surfacePaper == null ? 'RePaperTodo' : _displayTitle(surfacePaper),
         ),
         actions: [
-          IconButton(
-            tooltip: 'New todo paper',
-            onPressed: () => _createPaper(PaperTypes.todo),
-            icon: const Icon(Icons.add_task),
-          ),
-          IconButton(
-            tooltip: 'New note paper',
-            onPressed: () => _createPaper(PaperTypes.note),
-            icon: const Icon(Icons.note_add_outlined),
-          ),
+          if (surfacePaper != null &&
+              controller.state.showTopBarExternalOpenButton)
+            IconButton(
+              tooltip: 'Open current paper surface',
+              onPressed: () => _openPaper(surfacePaper),
+              icon: const Icon(Icons.open_in_new),
+            ),
+          if (controller.state.showTopBarNewTodoButton)
+            IconButton(
+              tooltip: 'New todo paper',
+              onPressed: () => _createPaper(PaperTypes.todo),
+              icon: const Icon(Icons.add_task),
+            ),
+          if (controller.state.showTopBarNewNoteButton)
+            IconButton(
+              tooltip: 'New note paper',
+              onPressed: () => _createPaper(PaperTypes.note),
+              icon: const Icon(Icons.note_add_outlined),
+            ),
           IconButton(
             tooltip: 'Sync now',
             onPressed: _isSyncing ? null : _syncNow,
@@ -485,6 +494,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialTodoReminderScope: controller.state.todoReminderScope,
       initialTodoReminderBubbleDurationSeconds:
           controller.state.todoReminderBubbleDurationSeconds,
+      initialShowTopBarNewTodoButton: controller.state.showTopBarNewTodoButton,
+      initialShowTopBarNewNoteButton: controller.state.showTopBarNewNoteButton,
+      initialShowTopBarExternalOpenButton:
+          controller.state.showTopBarExternalOpenButton,
       initialStartAtLogin: controller.state.startAtLogin,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
@@ -518,6 +531,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.todoReminderScope = result.todoReminderScope;
       controller.state.todoReminderBubbleDurationSeconds =
           result.todoReminderBubbleDurationSeconds;
+      controller.state.showTopBarNewTodoButton = result.showTopBarNewTodoButton;
+      controller.state.showTopBarNewNoteButton = result.showTopBarNewNoteButton;
+      controller.state.showTopBarExternalOpenButton =
+          result.showTopBarExternalOpenButton;
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;

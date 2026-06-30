@@ -190,6 +190,9 @@ void main() {
     expect(find.text('No year'), findsOneWidget);
     expect(find.text('YY'), findsOneWidget);
     expect(find.text('YYYY'), findsOneWidget);
+    expect(find.text('Top bar new todo'), findsOneWidget);
+    expect(find.text('Top bar new note'), findsOneWidget);
+    expect(find.text('Top bar open surface'), findsOneWidget);
     expect(find.text('Todo reminders'), findsOneWidget);
     expect(find.text('Reminder interval'), findsOneWidget);
     expect(find.text('Minutes'), findsOneWidget);
@@ -374,6 +377,41 @@ void main() {
     expect(dueButton.iconSize, 30);
     expect(dueButton.constraints?.minWidth, 52);
     expect(dueButton.constraints?.minHeight, 52);
+  });
+
+  testWidgets('hides disabled top bar creation buttons', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        showTopBarNewTodoButton: false,
+        showTopBarNewNoteButton: false,
+        papers: [
+          PaperData(
+            id: 'topbar-paper',
+            type: PaperTypes.todo,
+            title: 'Top bar',
+            items: [
+              PaperItem(id: 'topbar-item', text: 'Keep surface controls'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-topbar-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.byTooltip('New todo paper'), findsNothing);
+    expect(find.byTooltip('New note paper'), findsNothing);
+    expect(find.byTooltip('Settings'), findsOneWidget);
   });
 
   testWidgets('links todo items to note papers', (tester) async {

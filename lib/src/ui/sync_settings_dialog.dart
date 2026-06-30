@@ -22,6 +22,9 @@ class SyncSettingsDialogResult {
     required this.todoReminderIntervalUnit,
     required this.todoReminderScope,
     required this.todoReminderBubbleDurationSeconds,
+    required this.showTopBarNewTodoButton,
+    required this.showTopBarNewNoteButton,
+    required this.showTopBarExternalOpenButton,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
@@ -47,6 +50,9 @@ class SyncSettingsDialogResult {
   final String todoReminderIntervalUnit;
   final String todoReminderScope;
   final int todoReminderBubbleDurationSeconds;
+  final bool showTopBarNewTodoButton;
+  final bool showTopBarNewNoteButton;
+  final bool showTopBarExternalOpenButton;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
@@ -74,6 +80,9 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required String initialTodoReminderIntervalUnit,
   required String initialTodoReminderScope,
   required int initialTodoReminderBubbleDurationSeconds,
+  required bool initialShowTopBarNewTodoButton,
+  required bool initialShowTopBarNewNoteButton,
+  required bool initialShowTopBarExternalOpenButton,
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
@@ -102,6 +111,9 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialTodoReminderScope: initialTodoReminderScope,
       initialTodoReminderBubbleDurationSeconds:
           initialTodoReminderBubbleDurationSeconds,
+      initialShowTopBarNewTodoButton: initialShowTopBarNewTodoButton,
+      initialShowTopBarNewNoteButton: initialShowTopBarNewNoteButton,
+      initialShowTopBarExternalOpenButton: initialShowTopBarExternalOpenButton,
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
@@ -131,6 +143,9 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialTodoReminderIntervalUnit,
     required this.initialTodoReminderScope,
     required this.initialTodoReminderBubbleDurationSeconds,
+    required this.initialShowTopBarNewTodoButton,
+    required this.initialShowTopBarNewNoteButton,
+    required this.initialShowTopBarExternalOpenButton,
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
@@ -157,6 +172,9 @@ class SyncSettingsDialog extends StatefulWidget {
   final String initialTodoReminderIntervalUnit;
   final String initialTodoReminderScope;
   final int initialTodoReminderBubbleDurationSeconds;
+  final bool initialShowTopBarNewTodoButton;
+  final bool initialShowTopBarNewNoteButton;
+  final bool initialShowTopBarExternalOpenButton;
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
@@ -184,6 +202,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _useTodoReminderInterval;
   late String _todoReminderIntervalUnit;
   late String _todoReminderScope;
+  late bool _showTopBarNewTodoButton;
+  late bool _showTopBarNewNoteButton;
+  late bool _showTopBarExternalOpenButton;
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
@@ -227,6 +248,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     );
     _todoReminderScope =
         TodoReminderScopes.normalize(widget.initialTodoReminderScope);
+    _showTopBarNewTodoButton = widget.initialShowTopBarNewTodoButton;
+    _showTopBarNewNoteButton = widget.initialShowTopBarNewNoteButton;
+    _showTopBarExternalOpenButton = widget.initialShowTopBarExternalOpenButton;
     _startAtLogin = widget.initialStartAtLogin;
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
@@ -484,6 +508,31 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     ? null
                     : (selection) => setState(
                         () => _todoDueYearDisplayMode = selection.single),
+              ),
+              const Divider(height: 24),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.add_task_outlined),
+                title: const Text('Top bar new todo'),
+                value: _showTopBarNewTodoButton,
+                onChanged: (value) =>
+                    setState(() => _showTopBarNewTodoButton = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.note_add_outlined),
+                title: const Text('Top bar new note'),
+                value: _showTopBarNewNoteButton,
+                onChanged: (value) =>
+                    setState(() => _showTopBarNewNoteButton = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.open_in_new_outlined),
+                title: const Text('Top bar open surface'),
+                value: _showTopBarExternalOpenButton,
+                onChanged: (value) =>
+                    setState(() => _showTopBarExternalOpenButton = value),
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -810,6 +859,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         todoReminderScope: _todoReminderScope,
         todoReminderBubbleDurationSeconds:
             reminderDuration.clamp(1, 600).toInt(),
+        showTopBarNewTodoButton: _showTopBarNewTodoButton,
+        showTopBarNewNoteButton: _showTopBarNewNoteButton,
+        showTopBarExternalOpenButton: _showTopBarExternalOpenButton,
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,
