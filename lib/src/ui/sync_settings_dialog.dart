@@ -9,6 +9,7 @@ class SyncSettingsDialogResult {
     required this.theme,
     required this.colorScheme,
     required this.markdownRenderMode,
+    required this.todoVisualSize,
     required this.uiFontPreset,
     required this.systemFontFamilyName,
     required this.zoom,
@@ -33,6 +34,7 @@ class SyncSettingsDialogResult {
   final String theme;
   final String colorScheme;
   final String markdownRenderMode;
+  final String todoVisualSize;
   final String uiFontPreset;
   final String systemFontFamilyName;
   final double zoom;
@@ -59,6 +61,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required String initialTheme,
   required String initialColorScheme,
   required String initialMarkdownRenderMode,
+  required String initialTodoVisualSize,
   required String initialUiFontPreset,
   required String initialSystemFontFamilyName,
   required double initialZoom,
@@ -85,6 +88,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialTheme: initialTheme,
       initialColorScheme: initialColorScheme,
       initialMarkdownRenderMode: initialMarkdownRenderMode,
+      initialTodoVisualSize: initialTodoVisualSize,
       initialUiFontPreset: initialUiFontPreset,
       initialSystemFontFamilyName: initialSystemFontFamilyName,
       initialZoom: initialZoom,
@@ -114,6 +118,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialTheme,
     required this.initialColorScheme,
     required this.initialMarkdownRenderMode,
+    required this.initialTodoVisualSize,
     required this.initialUiFontPreset,
     required this.initialSystemFontFamilyName,
     required this.initialZoom,
@@ -139,6 +144,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final String initialTheme;
   final String initialColorScheme;
   final String initialMarkdownRenderMode;
+  final String initialTodoVisualSize;
   final String initialUiFontPreset;
   final String initialSystemFontFamilyName;
   final double initialZoom;
@@ -168,6 +174,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late String _theme;
   late String _colorScheme;
   late String _markdownRenderMode;
+  late String _todoVisualSize;
   late String _uiFontPreset;
   late double _zoom;
   late double _todoLineSpacing;
@@ -206,6 +213,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _colorScheme = ColorSchemes.normalize(widget.initialColorScheme);
     _markdownRenderMode =
         MarkdownRenderModes.normalize(widget.initialMarkdownRenderMode);
+    _todoVisualSize = TodoVisualSizes.normalize(widget.initialTodoVisualSize);
     _uiFontPreset = UiFontPresets.normalize(widget.initialUiFontPreset);
     _zoom = widget.initialZoom.clamp(0.6, 1.8).toDouble();
     _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 2.4).toDouble();
@@ -349,6 +357,30 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 selected: {_markdownRenderMode},
                 onSelectionChanged: (selection) =>
                     setState(() => _markdownRenderMode = selection.single),
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: TodoVisualSizes.small,
+                    label: Text('Small'),
+                  ),
+                  ButtonSegment(
+                    value: TodoVisualSizes.medium,
+                    label: Text('Medium'),
+                  ),
+                  ButtonSegment(
+                    value: TodoVisualSizes.large,
+                    label: Text('Large'),
+                  ),
+                  ButtonSegment(
+                    value: TodoVisualSizes.extraLarge,
+                    label: Text('XL'),
+                  ),
+                ],
+                selected: {_todoVisualSize},
+                onSelectionChanged: (selection) =>
+                    setState(() => _todoVisualSize = selection.single),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -764,6 +796,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         theme: _theme,
         colorScheme: _colorScheme,
         markdownRenderMode: _markdownRenderMode,
+        todoVisualSize: _todoVisualSize,
         uiFontPreset: _uiFontPreset,
         systemFontFamilyName: _fontFamilyController.text.trim(),
         zoom: _zoom,

@@ -246,6 +246,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       showLinkedNoteName: controller.state.showLinkedNoteName,
       allowLongLinkedNoteTitles: controller.state.allowLongLinkedNoteTitles,
       markdownRenderMode: controller.state.markdownRenderMode,
+      todoVisualSize: controller.state.todoVisualSize,
       todoLineSpacing: controller.state.todoLineSpacing,
       showTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
       todoDueYearDisplayMode: controller.state.todoDueYearDisplayMode,
@@ -468,6 +469,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialTheme: controller.state.theme,
       initialColorScheme: controller.state.colorScheme,
       initialMarkdownRenderMode: controller.state.markdownRenderMode,
+      initialTodoVisualSize: controller.state.todoVisualSize,
       initialUiFontPreset: controller.state.uiFontPreset,
       initialSystemFontFamilyName: controller.state.systemFontFamilyName,
       initialZoom: controller.state.zoom,
@@ -500,6 +502,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.theme = result.theme;
       controller.state.colorScheme = result.colorScheme;
       controller.state.markdownRenderMode = result.markdownRenderMode;
+      controller.state.todoVisualSize = result.todoVisualSize;
       controller.state.uiFontPreset = result.uiFontPreset;
       controller.state.systemFontFamilyName = result.systemFontFamilyName;
       controller.state.zoom = result.zoom;
@@ -729,6 +732,7 @@ class PaperPreview extends StatelessWidget {
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
     required this.markdownRenderMode,
+    required this.todoVisualSize,
     required this.todoLineSpacing,
     required this.showTodoDueRelativeTime,
     required this.todoDueYearDisplayMode,
@@ -749,6 +753,7 @@ class PaperPreview extends StatelessWidget {
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
   final String markdownRenderMode;
+  final String todoVisualSize;
   final double todoLineSpacing;
   final bool showTodoDueRelativeTime;
   final String todoDueYearDisplayMode;
@@ -876,6 +881,7 @@ class PaperPreview extends StatelessWidget {
                     enableTodoNoteLinks: enableTodoNoteLinks,
                     showLinkedNoteName: showLinkedNoteName,
                     allowLongLinkedNoteTitles: allowLongLinkedNoteTitles,
+                    visualSize: todoVisualSize,
                     lineSpacing: todoLineSpacing,
                     showDueRelativeTime: showTodoDueRelativeTime,
                     dueYearDisplayMode: todoDueYearDisplayMode,
@@ -1062,6 +1068,7 @@ class _TodoEditor extends StatefulWidget {
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
+    required this.visualSize,
     required this.lineSpacing,
     required this.showDueRelativeTime,
     required this.dueYearDisplayMode,
@@ -1074,6 +1081,7 @@ class _TodoEditor extends StatefulWidget {
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
+  final String visualSize;
   final double lineSpacing;
   final bool showDueRelativeTime;
   final String dueYearDisplayMode;
@@ -1089,20 +1097,32 @@ class _TodoEditorState extends State<_TodoEditor> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final visualSpec = _TodoVisualSpec.from(widget.visualSize);
+    final itemTextStyle = theme.textTheme.bodyMedium
+        ?.apply(fontSizeFactor: visualSpec.textScale)
+        .copyWith(
+          height: widget.lineSpacing,
+        );
     return Column(
       children: [
         for (final item in widget.paper.items)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.only(bottom: visualSpec.itemGap),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Checkbox(
-                  value: item.done,
-                  onChanged: (value) {
-                    setState(() => item.done = value ?? false);
-                    unawaited(widget.onChanged());
-                  },
+                SizedBox.square(
+                  dimension: visualSpec.controlExtent,
+                  child: Transform.scale(
+                    scale: visualSpec.checkboxScale,
+                    child: Checkbox(
+                      value: item.done,
+                      onChanged: (value) {
+                        setState(() => item.done = value ?? false);
+                        unawaited(widget.onChanged());
+                      },
+                    ),
+                  ),
                 ),
                 Expanded(
                   child: Column(
@@ -1117,13 +1137,12 @@ class _TodoEditorState extends State<_TodoEditor> {
                           hintText: 'New item',
                           isDense: true,
                         ),
-                        style: theme.textTheme.bodyMedium?.copyWith(
+                        style: itemTextStyle?.copyWith(
                           color: item.done
                               ? colorScheme.outline
                               : colorScheme.onSurface,
                           decoration:
                               item.done ? TextDecoration.lineThrough : null,
-                          height: widget.lineSpacing,
                         ),
                         onChanged: (value) {
                           item.text = value;
@@ -1138,25 +1157,25 @@ class _TodoEditorState extends State<_TodoEditor> {
                           if (_formatDueDate(item.dueAtLocal)
                               case final dueDate?)
                             InputChip(
-                              avatar:
-                                  const Icon(Icons.event_outlined, size: 18),
+                              avatar: Icon(Icons.event_outlined,
+                                  size: visualSpec.chipIconSize),
                               label: Text('Due $dueDate'),
                               onDeleted: () => _clearDueDate(item),
-                              deleteIcon:
-                                  const Icon(Icons.close_outlined, size: 18),
+                              deleteIcon: Icon(Icons.close_outlined,
+                                  size: visualSpec.chipIconSize),
                               deleteButtonTooltipMessage: 'Clear due date',
                             ),
                           if (widget.enableTodoNoteLinks)
                             if (_linkedNoteFor(item) case final linkedNote?)
                               InputChip(
-                                avatar:
-                                    const Icon(Icons.notes_outlined, size: 18),
+                                avatar: Icon(Icons.notes_outlined,
+                                    size: visualSpec.chipIconSize),
                                 label: Text(_noteChipLabel(linkedNote)),
                                 onPressed: () =>
                                     unawaited(widget.onOpen(linkedNote)),
                                 onDeleted: () => _clearLinkedNote(item),
-                                deleteIcon:
-                                    const Icon(Icons.close_outlined, size: 18),
+                                deleteIcon: Icon(Icons.close_outlined,
+                                    size: visualSpec.chipIconSize),
                                 deleteButtonTooltipMessage: 'Unlink note',
                               ),
                         ],
@@ -1167,12 +1186,18 @@ class _TodoEditorState extends State<_TodoEditor> {
                 IconButton(
                   tooltip: 'Set due date',
                   onPressed: () => unawaited(_pickDueDate(context, item)),
+                  iconSize: visualSpec.iconSize,
+                  constraints: BoxConstraints.tightFor(
+                    width: visualSpec.controlExtent,
+                    height: visualSpec.controlExtent,
+                  ),
                   icon: const Icon(Icons.event_outlined),
                 ),
                 PopupMenuButton<String>(
                   tooltip: 'Link note',
                   enabled: widget.enableTodoNoteLinks &&
                       widget.notePapers.isNotEmpty,
+                  iconSize: visualSpec.iconSize,
                   icon: Icon(item.linkedNoteId == null
                       ? Icons.note_add_outlined
                       : Icons.link_outlined),
@@ -1192,6 +1217,11 @@ class _TodoEditorState extends State<_TodoEditor> {
                   onPressed: widget.paper.items.length <= 1
                       ? null
                       : () => _deleteItem(context, item),
+                  iconSize: visualSpec.iconSize,
+                  constraints: BoxConstraints.tightFor(
+                    width: visualSpec.controlExtent,
+                    height: visualSpec.controlExtent,
+                  ),
                   icon: const Icon(Icons.delete_outline),
                 ),
               ],
@@ -1358,6 +1388,61 @@ class _TodoEditorState extends State<_TodoEditor> {
       -1 => 'Yesterday',
       > 1 => 'In $days days',
       _ => '${-days} days overdue',
+    };
+  }
+}
+
+class _TodoVisualSpec {
+  const _TodoVisualSpec({
+    required this.textScale,
+    required this.checkboxScale,
+    required this.iconSize,
+    required this.chipIconSize,
+    required this.controlExtent,
+    required this.itemGap,
+  });
+
+  final double textScale;
+  final double checkboxScale;
+  final double iconSize;
+  final double chipIconSize;
+  final double controlExtent;
+  final double itemGap;
+
+  static _TodoVisualSpec from(String value) {
+    return switch (TodoVisualSizes.normalize(value)) {
+      TodoVisualSizes.small => const _TodoVisualSpec(
+          textScale: 0.94,
+          checkboxScale: 0.9,
+          iconSize: 20,
+          chipIconSize: 16,
+          controlExtent: 44,
+          itemGap: 4,
+        ),
+      TodoVisualSizes.large => const _TodoVisualSpec(
+          textScale: 1.08,
+          checkboxScale: 1.08,
+          iconSize: 26,
+          chipIconSize: 20,
+          controlExtent: 48,
+          itemGap: 12,
+        ),
+      TodoVisualSizes.extraLarge => const _TodoVisualSpec(
+          textScale: 1.18,
+          checkboxScale: 1.18,
+          iconSize: 30,
+          chipIconSize: 22,
+          controlExtent: 52,
+          itemGap: 16,
+        ),
+      _ => const _TodoVisualSpec(
+          textScale: 1,
+          checkboxScale: 1,
+          iconSize: 24,
+          chipIconSize: 18,
+          controlExtent: 44,
+          itemGap: 8,
+        ),
     };
   }
 }

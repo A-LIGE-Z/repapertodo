@@ -176,6 +176,10 @@ void main() {
     expect(find.text('Markdown off'), findsOneWidget);
     expect(find.text('Basic'), findsOneWidget);
     expect(find.text('Enhanced'), findsOneWidget);
+    expect(find.text('Small'), findsOneWidget);
+    expect(find.text('Medium'), findsOneWidget);
+    expect(find.text('Large'), findsOneWidget);
+    expect(find.text('XL'), findsOneWidget);
     expect(find.text('Font preset'), findsOneWidget);
     expect(find.text('Default'), findsOneWidget);
     expect(find.text('Custom font family'), findsOneWidget);
@@ -332,6 +336,44 @@ void main() {
     );
 
     expect(find.text('Due Today'), findsOneWidget);
+  });
+
+  testWidgets('applies extra large todo visual size', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        todoVisualSize: TodoVisualSizes.extraLarge,
+        papers: [
+          PaperData(
+            id: 'large-todo',
+            type: PaperTypes.todo,
+            title: 'Large todo',
+            items: [
+              PaperItem(id: 'large-item', text: 'Readable task'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-todo-visual-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    final dueButton = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.event_outlined).first,
+    );
+    expect(dueButton.iconSize, 30);
+    expect(dueButton.constraints?.minWidth, 52);
+    expect(dueButton.constraints?.minHeight, 52);
   });
 
   testWidgets('links todo items to note papers', (tester) async {
