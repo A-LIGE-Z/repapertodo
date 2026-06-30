@@ -10,7 +10,8 @@ class NoopPlatformServices implements PlatformServices {
       : paperWindows = NoopPaperWindowHost(),
         tray = NoopTrayHost(),
         startup = NoopStartupHost(),
-        systemIntegration = NoopSystemIntegrationHost();
+        systemIntegration = NoopSystemIntegrationHost(),
+        externalFiles = NoopExternalFileHost();
 
   @override
   final PaperWindowHost paperWindows;
@@ -23,6 +24,9 @@ class NoopPlatformServices implements PlatformServices {
 
   @override
   final SystemIntegrationHost systemIntegration;
+
+  @override
+  final ExternalFileHost externalFiles;
 }
 
 class NoopPaperWindowHost implements PaperWindowHost {
@@ -91,4 +95,11 @@ class NoopSystemIntegrationHost implements SystemIntegrationHost {
 
   @override
   Future<void> unregisterGlobalHotkeys() async {}
+}
+
+class NoopExternalFileHost implements ExternalFileHost {
+  @override
+  Future<void> openFile(String path) async {
+    throw UnsupportedError('External file opening is not supported here.');
+  }
 }

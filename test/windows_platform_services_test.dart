@@ -106,6 +106,7 @@ void main() {
         .setFullscreenTopmostMode(FullscreenTopmostModes.stayOnTop);
     final foregroundFullscreen =
         await services.systemIntegration.isForegroundFullscreen();
+    await services.externalFiles.openFile('C:\\Temp\\note.md');
 
     expect(
       calls.map((call) => call.method),
@@ -121,6 +122,7 @@ void main() {
         'setHideFromWindowSwitcher',
         'setFullscreenTopmostMode',
         'isForegroundFullscreen',
+        'openExternalFile',
       ],
     );
     expect(foregroundFullscreen, true);
@@ -137,7 +139,7 @@ void main() {
     expect(paper.width, 520);
     expect(paper.height, 460);
     expect(paper.isVisible, false);
-    expect(calls[calls.length - 5].arguments, [
+    expect(calls[6].arguments, [
       {
         'id': 'paper-1',
         'title': 'Inbox',
@@ -145,9 +147,10 @@ void main() {
         'isVisible': false,
       },
     ]);
-    expect(calls[calls.length - 4].arguments, true);
-    expect(calls[calls.length - 3].arguments, true);
-    expect(calls[calls.length - 2].arguments, FullscreenTopmostModes.stayOnTop);
-    expect(calls.last.arguments, isNull);
+    expect(calls[7].arguments, true);
+    expect(calls[8].arguments, true);
+    expect(calls[9].arguments, FullscreenTopmostModes.stayOnTop);
+    expect(calls[10].arguments, isNull);
+    expect(calls.last.arguments, 'C:\\Temp\\note.md');
   });
 }

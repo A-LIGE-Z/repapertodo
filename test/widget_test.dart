@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/src/app.dart';
@@ -183,6 +185,7 @@ void main() {
     expect(find.text('Font preset'), findsOneWidget);
     expect(find.text('Default'), findsOneWidget);
     expect(find.text('Custom font family'), findsOneWidget);
+    expect(find.text('External markdown extension'), findsOneWidget);
     expect(find.text('Zoom'), findsOneWidget);
     expect(find.text('Max title length'), findsOneWidget);
     expect(find.text('Tooltips'), findsOneWidget);
@@ -249,6 +252,48 @@ void main() {
     expect(find.text('Split'), findsOneWidget);
     expect(find.text('Research note'), findsOneWidget);
     expect(find.text('Extract claims'), findsOneWidget);
+  });
+
+  testWidgets('opens note markdown externally', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        externalMarkdownExtension: '.txt',
+        papers: [
+          PaperData(
+            id: 'external-note',
+            type: PaperTypes.note,
+            title: 'External Note',
+            content: '# Exported note\n\nMarkdown body.',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-external-note-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.file_open_outlined));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    });
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.externalFiles.openedPaths, hasLength(1));
+    final openedFile = File(platform.externalFiles.openedPaths.single);
+    expect(openedFile.path.endsWith('.txt'), true);
+    expect(openedFile.readAsStringSync(), '# Exported note\n\nMarkdown body.');
+    expect(find.textContaining('Opened markdown file:'), findsOneWidget);
   });
 
   testWidgets('shows due todo reminders', (tester) async {
@@ -758,6 +803,9 @@ class _RecordingPlatformServices implements PlatformServices {
 
   @override
   final SystemIntegrationHost systemIntegration = NoopSystemIntegrationHost();
+
+  @override
+  final _RecordingExternalFileHost externalFiles = _RecordingExternalFileHost();
 }
 
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
@@ -772,5 +820,14 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   @override
   Future<void> updatePaperSurface(PaperData paper) async {
     updatedTitles.add(paper.title);
+  }
+}
+
+class _RecordingExternalFileHost implements ExternalFileHost {
+  final openedPaths = <String>[];
+
+  @override
+  Future<void> openFile(String path) async {
+    openedPaths.add(path);
   }
 }

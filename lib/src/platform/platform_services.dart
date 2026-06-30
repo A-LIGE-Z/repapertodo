@@ -9,6 +9,7 @@ abstract interface class PlatformServices {
   TrayHost get tray;
   StartupHost get startup;
   SystemIntegrationHost get systemIntegration;
+  ExternalFileHost get externalFiles;
 }
 
 abstract interface class PaperWindowHost {
@@ -42,4 +43,8 @@ abstract interface class SystemIntegrationHost {
   Future<void> setStartupAtLogin(bool enabled);
   Future<void> setHideFromWindowSwitcher(bool enabled);
   Future<void> setFullscreenTopmostMode(String mode);
+}
+
+abstract interface class ExternalFileHost {
+  Future<void> openFile(String path);
 }

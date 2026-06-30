@@ -12,6 +12,7 @@ class SyncSettingsDialogResult {
     required this.todoVisualSize,
     required this.uiFontPreset,
     required this.systemFontFamilyName,
+    required this.externalMarkdownExtension,
     required this.zoom,
     required this.maxTitleLength,
     required this.enableToolTips,
@@ -45,6 +46,7 @@ class SyncSettingsDialogResult {
   final String todoVisualSize;
   final String uiFontPreset;
   final String systemFontFamilyName;
+  final String externalMarkdownExtension;
   final double zoom;
   final int maxTitleLength;
   final bool enableToolTips;
@@ -80,6 +82,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required String initialTodoVisualSize,
   required String initialUiFontPreset,
   required String initialSystemFontFamilyName,
+  required String initialExternalMarkdownExtension,
   required double initialZoom,
   required int initialMaxTitleLength,
   required bool initialEnableToolTips,
@@ -115,6 +118,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialTodoVisualSize: initialTodoVisualSize,
       initialUiFontPreset: initialUiFontPreset,
       initialSystemFontFamilyName: initialSystemFontFamilyName,
+      initialExternalMarkdownExtension: initialExternalMarkdownExtension,
       initialZoom: initialZoom,
       initialMaxTitleLength: initialMaxTitleLength,
       initialEnableToolTips: initialEnableToolTips,
@@ -153,6 +157,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialTodoVisualSize,
     required this.initialUiFontPreset,
     required this.initialSystemFontFamilyName,
+    required this.initialExternalMarkdownExtension,
     required this.initialZoom,
     required this.initialMaxTitleLength,
     required this.initialEnableToolTips,
@@ -187,6 +192,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final String initialTodoVisualSize;
   final String initialUiFontPreset;
   final String initialSystemFontFamilyName;
+  final String initialExternalMarkdownExtension;
   final double initialZoom;
   final int initialMaxTitleLength;
   final bool initialEnableToolTips;
@@ -254,6 +260,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _rootPathController;
   late final TextEditingController _intervalController;
   late final TextEditingController _fontFamilyController;
+  late final TextEditingController _externalMarkdownExtensionController;
   late final TextEditingController _reminderIntervalController;
   late final TextEditingController _reminderDurationController;
   String? _errorText;
@@ -307,6 +314,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         TextEditingController(text: webDav.autoSyncIntervalMinutes.toString());
     _fontFamilyController =
         TextEditingController(text: widget.initialSystemFontFamilyName);
+    _externalMarkdownExtensionController = TextEditingController(
+      text: widget.initialExternalMarkdownExtension,
+    );
     _reminderIntervalController = TextEditingController(
       text: widget.initialTodoReminderIntervalValue.clamp(1, 240).toString(),
     );
@@ -325,6 +335,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _rootPathController.dispose();
     _intervalController.dispose();
     _fontFamilyController.dispose();
+    _externalMarkdownExtensionController.dispose();
     _reminderIntervalController.dispose();
     _reminderDurationController.dispose();
     super.dispose();
@@ -486,6 +497,15 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   border: OutlineInputBorder(),
                   labelText: 'Custom font family',
                   prefixIcon: Icon(Icons.title_outlined),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _externalMarkdownExtensionController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'External markdown extension',
+                  prefixIcon: Icon(Icons.file_open_outlined),
                 ),
               ),
               const SizedBox(height: 12),
@@ -944,6 +964,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         todoVisualSize: _todoVisualSize,
         uiFontPreset: _uiFontPreset,
         systemFontFamilyName: _fontFamilyController.text.trim(),
+        externalMarkdownExtension:
+            _normalizeExtension(_externalMarkdownExtensionController.text),
         zoom: _zoom,
         maxTitleLength: _maxTitleLength.round().clamp(4, 80).toInt(),
         enableToolTips: _enableToolTips,
@@ -980,6 +1002,23 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       'light' || 'dark' || 'system' => theme,
       _ => 'system',
     };
+  }
+
+  String _normalizeExtension(String extension) {
+    var value = extension.trim();
+    if (value.isEmpty) {
+      return '.md';
+    }
+    if (value.startsWith('*.')) {
+      value = value.substring(1);
+    }
+    if (!value.startsWith('.')) {
+      value = '.$value';
+    }
+    if (value.length < 2 || value.length > 32 || value.contains('..')) {
+      return '.md';
+    }
+    return value.toLowerCase();
   }
 }
 

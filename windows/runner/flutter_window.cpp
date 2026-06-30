@@ -324,6 +324,28 @@ bool FlutterWindow::OnCreate() {
           result->Success(flutter::EncodableValue(IsForegroundFullscreen(window)));
           return;
         }
+        if (method == "openExternalFile") {
+          std::string path;
+          if (call.arguments()) {
+            if (const auto* value = std::get_if<std::string>(call.arguments())) {
+              path = *value;
+            }
+          }
+          if (path.empty()) {
+            result->Error("invalid_path", "The external file path is empty.");
+            return;
+          }
+          HINSTANCE open_result =
+              ShellExecuteW(window, L"open", Utf8ToWide(path).c_str(), nullptr,
+                            nullptr, SW_SHOWNORMAL);
+          if (reinterpret_cast<intptr_t>(open_result) <= 32) {
+            result->Error("open_external_file_failed",
+                          "Unable to open the external file.");
+            return;
+          }
+          result->Success();
+          return;
+        }
         if (method == "setBounds") {
           RECT current_bounds;
           GetWindowRect(window, &current_bounds);

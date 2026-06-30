@@ -104,6 +104,10 @@ class RePaperTodoController {
         .setFullscreenTopmostMode(state.fullscreenTopmostMode);
   }
 
+  Future<void> openExternalFile(String path) async {
+    await _platform.externalFiles.openFile(path);
+  }
+
   Future<void> showPaper(PaperData paper) async {
     paper.isVisible = true;
     await _platform.paperWindows.showPaper(paper);

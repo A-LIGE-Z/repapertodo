@@ -14,7 +14,8 @@ class WindowsPlatformServices implements PlatformServices {
   })  : paperWindows = WindowsPaperWindowHost(channel),
         tray = WindowsTrayHost(channel),
         startup = WindowsStartupHost(),
-        systemIntegration = WindowsSystemIntegrationHost(channel);
+        systemIntegration = WindowsSystemIntegrationHost(channel),
+        externalFiles = WindowsExternalFileHost(channel);
 
   @override
   final PaperWindowHost paperWindows;
@@ -27,6 +28,9 @@ class WindowsPlatformServices implements PlatformServices {
 
   @override
   final SystemIntegrationHost systemIntegration;
+
+  @override
+  final ExternalFileHost externalFiles;
 }
 
 class WindowsPaperWindowHost implements PaperWindowHost {
@@ -253,5 +257,16 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
 
   Future<void> setAlwaysOnTop(bool enabled) async {
     await _channel.invokeMethod<void>('setAlwaysOnTop', enabled);
+  }
+}
+
+class WindowsExternalFileHost implements ExternalFileHost {
+  WindowsExternalFileHost(this._channel);
+
+  final MethodChannel _channel;
+
+  @override
+  Future<void> openFile(String path) async {
+    await _channel.invokeMethod<void>('openExternalFile', path);
   }
 }

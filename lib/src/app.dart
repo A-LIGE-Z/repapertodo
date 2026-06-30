@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:path/path.dart' as p;
 
 import 'app_controller.dart';
 import 'core/model/app_state.dart';
@@ -315,6 +317,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       onChanged: _refreshAndSaveState,
       onTitleChanged: _updatePaperTitle,
       onOpen: _openPaper,
+      onOpenExternalMarkdown: _openNoteMarkdownExternally,
       onHide: _hidePaper,
       onDelete: _deletePaper,
       onSurfaceChanged: _updatePaperSurface,
@@ -452,6 +455,46 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     await _saveState();
   }
 
+  Future<void> _openNoteMarkdownExternally(PaperData paper) async {
+    if (!paper.isNote) {
+      return;
+    }
+    try {
+      final file = _writeExternalMarkdownFile(paper);
+      await controller.openExternalFile(file.path);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Opened markdown file: ${file.path}')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('External markdown open failed: $error')),
+      );
+    }
+  }
+
+  File _writeExternalMarkdownFile(PaperData paper) {
+    final directory = Directory.systemTemp.createTempSync('repapertodo_md_');
+    final title = paper.title.trim().isEmpty ? 'Untitled' : paper.title.trim();
+    final file = File(
+      p.join(
+        directory.path,
+        '${_safeFilename(title)}${controller.state.externalMarkdownExtension}',
+      ),
+    );
+    file.writeAsStringSync(paper.content);
+    return file;
+  }
+
+  String _safeFilename(String value) {
+    return value.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_').trim();
+  }
+
   Future<void> _showHiddenPapers() async {
     final hiddenPapers =
         controller.state.papers.where((paper) => !paper.isVisible).toList();
@@ -541,6 +584,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialTodoVisualSize: controller.state.todoVisualSize,
       initialUiFontPreset: controller.state.uiFontPreset,
       initialSystemFontFamilyName: controller.state.systemFontFamilyName,
+      initialExternalMarkdownExtension:
+          controller.state.externalMarkdownExtension,
       initialZoom: controller.state.zoom,
       initialMaxTitleLength: controller.state.maxTitleLength,
       initialEnableToolTips: controller.state.enableToolTips,
@@ -585,6 +630,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.todoVisualSize = result.todoVisualSize;
       controller.state.uiFontPreset = result.uiFontPreset;
       controller.state.systemFontFamilyName = result.systemFontFamilyName;
+      controller.state.externalMarkdownExtension =
+          result.externalMarkdownExtension;
       controller.state.zoom = result.zoom;
       controller.state.maxTitleLength = result.maxTitleLength;
       controller.state.enableToolTips = result.enableToolTips;
@@ -957,6 +1004,7 @@ class PaperPreview extends StatelessWidget {
     required this.onChanged,
     required this.onTitleChanged,
     required this.onOpen,
+    required this.onOpenExternalMarkdown,
     required this.onHide,
     required this.onDelete,
     required this.onSurfaceChanged,
@@ -981,6 +1029,7 @@ class PaperPreview extends StatelessWidget {
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
   final Future<void> Function(PaperData paper) onOpen;
+  final Future<void> Function(PaperData paper) onOpenExternalMarkdown;
   final Future<void> Function(PaperData paper) onHide;
   final Future<void> Function(PaperData paper) onDelete;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
@@ -1052,6 +1101,16 @@ class PaperPreview extends StatelessWidget {
                       onPressed: () => unawaited(onOpen(paper)),
                       icon: const Icon(Icons.open_in_new),
                     ),
+                    if (paper.isNote)
+                      IconButton(
+                        tooltip: _tooltipLabel(
+                          enableToolTips,
+                          'Open markdown externally',
+                        ),
+                        onPressed: () =>
+                            unawaited(onOpenExternalMarkdown(paper)),
+                        icon: const Icon(Icons.file_open_outlined),
+                      ),
                     IconButton(
                       tooltip: _tooltipLabel(
                         enableToolTips,
