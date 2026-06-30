@@ -16,6 +16,14 @@ class StateStore {
   final String backupPath;
   final AppStateCodec _codec;
 
+  Future<DateTime?> lastModifiedUtc() async {
+    final primary = File(filePath);
+    if (!await primary.exists()) {
+      return null;
+    }
+    return (await primary.lastModified()).toUtc();
+  }
+
   Future<AppState> load() async {
     final primary = File(filePath);
     final backup = File(backupPath);
@@ -83,7 +91,8 @@ class StateStore {
     final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(':', '');
     for (var index = 0; index < 1000; index++) {
       final extra = index == 0 ? '' : '.$index';
-      final target = File(p.join(directory, '$stem.$suffix.$stamp$extra$extension'));
+      final target =
+          File(p.join(directory, '$stem.$suffix.$stamp$extra$extension'));
       if (!await target.exists()) {
         await source.copy(target.path);
         return;
@@ -103,4 +112,3 @@ class StateStoreException implements Exception {
     return cause == null ? message : '$message Cause: $cause';
   }
 }
-

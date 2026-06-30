@@ -14,10 +14,12 @@ class RePaperTodoController {
     state.normalize();
   }
 
-  final AppState state;
+  AppState state;
   final PlatformServices _platform;
 
-  Future<void> start({StartupCommand startupCommand = const StartupCommand(StartupCommandKind.none)}) async {
+  Future<void> start(
+      {StartupCommand startupCommand =
+          const StartupCommand(StartupCommandKind.none)}) async {
     await _platform.tray.initialize();
     await _platform.systemIntegration.registerGlobalHotkeys(state);
 
@@ -43,13 +45,21 @@ class RePaperTodoController {
           ? PaperLayoutDefaults.noteDefaultHeight
           : PaperLayoutDefaults.todoDefaultHeight,
       items: normalizedType == PaperTypes.todo
-          ? [PaperItem(id: DateTime.now().microsecondsSinceEpoch.toRadixString(16))]
+          ? [
+              PaperItem(
+                  id: DateTime.now().microsecondsSinceEpoch.toRadixString(16))
+            ]
           : const [],
     );
     paper.capsuleSide = state.deepCapsuleSide;
     paper.capsuleMonitorDeviceName = state.deepCapsuleMonitorDeviceName;
     state.papers.add(paper);
     return paper;
+  }
+
+  void replaceState(AppState newState) {
+    state = newState;
+    state.normalize();
   }
 
   Future<void> executeStartupCommand(StartupCommand command) async {
@@ -69,7 +79,8 @@ class RePaperTodoController {
       case StartupCommandKind.toggle:
         final shouldHide = state.papers.any((paper) => paper.isVisible);
         await executeStartupCommand(
-          StartupCommand(shouldHide ? StartupCommandKind.hide : StartupCommandKind.show),
+          StartupCommand(
+              shouldHide ? StartupCommandKind.hide : StartupCommandKind.show),
         );
       case StartupCommandKind.newTodo:
         await _platform.paperWindows.showPaper(createPaper(PaperTypes.todo));
@@ -82,8 +93,10 @@ class RePaperTodoController {
   }
 
   String _defaultTitle(String type) {
-    final sameTypeCount = state.papers.where((paper) => paper.type == type).length + 1;
-    return type == PaperTypes.note ? 'Note$sameTypeCount' : 'Todo$sameTypeCount';
+    final sameTypeCount =
+        state.papers.where((paper) => paper.type == type).length + 1;
+    return type == PaperTypes.note
+        ? 'Note$sameTypeCount'
+        : 'Todo$sameTypeCount';
   }
 }
-

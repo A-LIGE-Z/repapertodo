@@ -39,6 +39,11 @@ void main() {
     expect(find.text('Windows parity'), findsOneWidget);
     expect(find.text('Build compatible data core'), findsOneWidget);
 
+    await tester.tap(find.byIcon(Icons.sync_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync is disabled.'), findsOneWidget);
+
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
 

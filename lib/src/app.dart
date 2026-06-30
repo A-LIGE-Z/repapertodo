@@ -4,17 +4,20 @@ import 'app_controller.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/storage/state_store.dart';
+import 'sync/app_sync_service.dart';
 import 'ui/sync_settings_dialog.dart';
 
 class RePaperTodoApp extends StatelessWidget {
   const RePaperTodoApp({
     required this.controller,
     required this.store,
+    this.syncService,
     super.key,
   });
 
   final RePaperTodoController controller;
   final StateStore store;
+  final AppSyncService? syncService;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +31,7 @@ class RePaperTodoApp extends StatelessWidget {
       home: PaperBoardScreen(
         controller: controller,
         store: store,
+        syncService: syncService ?? AppSyncService(),
       ),
     );
   }
@@ -37,17 +41,21 @@ class PaperBoardScreen extends StatefulWidget {
   const PaperBoardScreen({
     required this.controller,
     required this.store,
+    required this.syncService,
     super.key,
   });
 
   final RePaperTodoController controller;
   final StateStore store;
+  final AppSyncService syncService;
 
   @override
   State<PaperBoardScreen> createState() => _PaperBoardScreenState();
 }
 
 class _PaperBoardScreenState extends State<PaperBoardScreen> {
+  bool _isSyncing = false;
+
   RePaperTodoController get controller => widget.controller;
 
   @override
@@ -68,6 +76,16 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
             tooltip: 'New note paper',
             onPressed: () => _createPaper(PaperTypes.note),
             icon: const Icon(Icons.note_add_outlined),
+          ),
+          IconButton(
+            tooltip: 'Sync now',
+            onPressed: _isSyncing ? null : _syncNow,
+            icon: _isSyncing
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync_outlined),
           ),
           IconButton(
             tooltip: 'Settings',
@@ -97,6 +115,38 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     await widget.store.save(controller.state);
   }
 
+  Future<void> _syncNow() async {
+    setState(() => _isSyncing = true);
+    try {
+      final result = await widget.syncService.syncNow(
+        localState: controller.state,
+        store: widget.store,
+      );
+      if (result.state != null) {
+        setState(() {
+          controller.replaceState(result.state!);
+        });
+      }
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_syncMessage(result))),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sync failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
   Future<void> _openSettings() async {
     final settings = await showSyncSettingsDialog(
       context: context,
@@ -109,6 +159,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.sync = settings;
     });
     await widget.store.save(controller.state);
+  }
+
+  String _syncMessage(AppSyncResult result) {
+    if (result.message.isNotEmpty) {
+      return result.message;
+    }
+    return switch (result.status) {
+      AppSyncStatus.disabled => 'Sync is disabled.',
+      AppSyncStatus.configurationMissing =>
+        'Complete WebDAV sync settings first.',
+      AppSyncStatus.uploaded => 'Local data uploaded.',
+      AppSyncStatus.downloaded => 'Remote data downloaded.',
+    };
   }
 }
 
