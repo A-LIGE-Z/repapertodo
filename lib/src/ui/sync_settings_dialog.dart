@@ -6,6 +6,8 @@ import '../core/model/sync_settings.dart';
 class SyncSettingsDialogResult {
   const SyncSettingsDialogResult({
     required this.sync,
+    required this.theme,
+    required this.colorScheme,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
@@ -15,6 +17,8 @@ class SyncSettingsDialogResult {
   });
 
   final SyncSettings sync;
+  final String theme;
+  final String colorScheme;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
@@ -26,6 +30,8 @@ class SyncSettingsDialogResult {
 Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required BuildContext context,
   required SyncSettings initialSettings,
+  required String initialTheme,
+  required String initialColorScheme,
   required bool initialStartAtLogin,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
@@ -37,6 +43,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
     context: context,
     builder: (context) => SyncSettingsDialog(
       initialSettings: initialSettings,
+      initialTheme: initialTheme,
+      initialColorScheme: initialColorScheme,
       initialStartAtLogin: initialStartAtLogin,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
@@ -50,6 +58,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
 class SyncSettingsDialog extends StatefulWidget {
   const SyncSettingsDialog({
     required this.initialSettings,
+    required this.initialTheme,
+    required this.initialColorScheme,
     required this.initialStartAtLogin,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
@@ -60,6 +70,8 @@ class SyncSettingsDialog extends StatefulWidget {
   });
 
   final SyncSettings initialSettings;
+  final String initialTheme;
+  final String initialColorScheme;
   final bool initialStartAtLogin;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
@@ -74,6 +86,8 @@ class SyncSettingsDialog extends StatefulWidget {
 class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _enabled;
   late bool _autoSyncOnStart;
+  late String _theme;
+  late String _colorScheme;
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
@@ -96,6 +110,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     final webDav = settings.webDav;
     _enabled = settings.enabled;
     _autoSyncOnStart = webDav.autoSyncOnStart;
+    _theme = _normalizeTheme(widget.initialTheme);
+    _colorScheme = ColorSchemes.normalize(widget.initialColorScheme);
     _startAtLogin = widget.initialStartAtLogin;
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
@@ -140,6 +156,53 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'system',
+                    icon: Icon(Icons.brightness_auto_outlined),
+                    label: Text('System'),
+                  ),
+                  ButtonSegment(
+                    value: 'light',
+                    icon: Icon(Icons.light_mode_outlined),
+                    label: Text('Light'),
+                  ),
+                  ButtonSegment(
+                    value: 'dark',
+                    icon: Icon(Icons.dark_mode_outlined),
+                    label: Text('Dark'),
+                  ),
+                ],
+                selected: {_theme},
+                onSelectionChanged: (selection) =>
+                    setState(() => _theme = selection.single),
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: ColorSchemes.warm,
+                    label: Text('Warm'),
+                  ),
+                  ButtonSegment(
+                    value: ColorSchemes.ink,
+                    label: Text('Ink'),
+                  ),
+                  ButtonSegment(
+                    value: ColorSchemes.forest,
+                    label: Text('Forest'),
+                  ),
+                  ButtonSegment(
+                    value: ColorSchemes.rose,
+                    label: Text('Rose'),
+                  ),
+                ],
+                selected: {_colorScheme},
+                onSelectionChanged: (selection) =>
+                    setState(() => _colorScheme = selection.single),
+              ),
+              const Divider(height: 24),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.login_outlined),
@@ -364,6 +427,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     Navigator.of(context).pop(
       SyncSettingsDialogResult(
         sync: settings,
+        theme: _theme,
+        colorScheme: _colorScheme,
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,
@@ -372,5 +437,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         allowLongLinkedNoteTitles: _allowLongLinkedNoteTitles,
       ),
     );
+  }
+
+  String _normalizeTheme(String theme) {
+    return switch (theme) {
+      'light' || 'dark' || 'system' => theme,
+      _ => 'system',
+    };
   }
 }

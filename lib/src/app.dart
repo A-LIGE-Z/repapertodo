@@ -10,7 +10,7 @@ import 'core/storage/state_store.dart';
 import 'sync/app_sync_service.dart';
 import 'ui/sync_settings_dialog.dart';
 
-class RePaperTodoApp extends StatelessWidget {
+class RePaperTodoApp extends StatefulWidget {
   const RePaperTodoApp({
     required this.controller,
     required this.store,
@@ -23,20 +23,53 @@ class RePaperTodoApp extends StatelessWidget {
   final AppSyncService? syncService;
 
   @override
+  State<RePaperTodoApp> createState() => _RePaperTodoAppState();
+}
+
+class _RePaperTodoAppState extends State<RePaperTodoApp> {
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'RePaperTodo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5B7CFA)),
-        useMaterial3: true,
-      ),
+      theme: _appTheme(Brightness.light, widget.controller.state.colorScheme),
+      darkTheme:
+          _appTheme(Brightness.dark, widget.controller.state.colorScheme),
+      themeMode: _themeMode(widget.controller.state.theme),
       home: PaperBoardScreen(
-        controller: controller,
-        store: store,
-        syncService: syncService ?? AppSyncService(),
+        controller: widget.controller,
+        store: widget.store,
+        syncService: widget.syncService ?? AppSyncService(),
+        onAppThemeChanged: () => setState(() {}),
       ),
     );
+  }
+
+  ThemeData _appTheme(Brightness brightness, String colorSchemeId) {
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: _seedColor(colorSchemeId),
+        brightness: brightness,
+      ),
+      useMaterial3: true,
+    );
+  }
+
+  ThemeMode _themeMode(String theme) {
+    return switch (theme) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  }
+
+  Color _seedColor(String colorSchemeId) {
+    return switch (ColorSchemes.normalize(colorSchemeId)) {
+      ColorSchemes.ink => const Color(0xFF4F6D7A),
+      ColorSchemes.forest => const Color(0xFF2E7D32),
+      ColorSchemes.rose => const Color(0xFFC85A7C),
+      _ => const Color(0xFFE07A5F),
+    };
   }
 }
 
@@ -45,12 +78,14 @@ class PaperBoardScreen extends StatefulWidget {
     required this.controller,
     required this.store,
     required this.syncService,
+    this.onAppThemeChanged,
     super.key,
   });
 
   final RePaperTodoController controller;
   final StateStore store;
   final AppSyncService syncService;
+  final VoidCallback? onAppThemeChanged;
 
   @override
   State<PaperBoardScreen> createState() => _PaperBoardScreenState();
@@ -356,6 +391,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     final result = await showSyncSettingsDialog(
       context: context,
       initialSettings: controller.state.sync,
+      initialTheme: controller.state.theme,
+      initialColorScheme: controller.state.colorScheme,
       initialStartAtLogin: controller.state.startAtLogin,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
@@ -370,6 +407,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     }
     setState(() {
       controller.state.sync = result.sync;
+      controller.state.theme = result.theme;
+      controller.state.colorScheme = result.colorScheme;
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
@@ -382,6 +421,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     await controller.setStartupAtLogin(result.startAtLogin);
     await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
     await controller.setFullscreenTopmostMode(result.fullscreenTopmostMode);
+    widget.onAppThemeChanged?.call();
     await _saveState();
   }
 

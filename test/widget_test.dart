@@ -164,6 +164,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('System'), findsOneWidget);
+    expect(find.text('Light'), findsOneWidget);
+    expect(find.text('Dark'), findsOneWidget);
+    expect(find.text('Warm'), findsOneWidget);
+    expect(find.text('Ink'), findsOneWidget);
+    expect(find.text('Forest'), findsOneWidget);
+    expect(find.text('Rose'), findsOneWidget);
     expect(find.text('Start at login'), findsOneWidget);
     expect(find.text('Hide from task switcher'), findsOneWidget);
     expect(find.text('Avoid fullscreen'), findsOneWidget);
