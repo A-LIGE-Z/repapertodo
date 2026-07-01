@@ -86,6 +86,11 @@ class SyncSettings {
     return deletedPaperTombstones.containsKey(paperId.trim());
   }
 
+  DateTime? paperDeletedAtUtc(String paperId) {
+    return DateTime.tryParse(deletedPaperTombstones[paperId.trim()] ?? '')
+        ?.toUtc();
+  }
+
   void markPaperDeleted(String paperId, DateTime deletedAtUtc) {
     final id = paperId.trim();
     if (id.isEmpty) {
@@ -108,6 +113,12 @@ class SyncSettings {
           itemId.trim(),
         ) ??
         false;
+  }
+
+  DateTime? todoItemDeletedAtUtc(String paperId, String itemId) {
+    return DateTime.tryParse(
+      deletedTodoItemTombstones[paperId.trim()]?[itemId.trim()] ?? '',
+    )?.toUtc();
   }
 
   void markTodoItemDeleted(

@@ -108,6 +108,7 @@ void main() {
         _operation(
           sequence: 2,
           kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 8, 59),
           payload: {
             'paper': PaperData(
               id: 'paper-1',
@@ -124,6 +125,7 @@ void main() {
         _operation(
           sequence: 4,
           kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 0, 2),
           payload: {
             'paper': PaperData(
               id: 'todo',
@@ -152,6 +154,72 @@ void main() {
       'item-2',
     ]);
     expect(result.state.papers.single.items.single.text, 'Updated keep');
+  });
+
+  test('newer upserts restore deleted papers and todo items', () {
+    final deletedAtUtc = DateTime.utc(2026, 7, 1, 9);
+    final result = applier.apply(
+      AppState(
+        sync: SyncSettings(
+          deletedPaperTombstones: {
+            'paper-1': deletedAtUtc.toIso8601String(),
+            'todo': deletedAtUtc.toIso8601String(),
+          },
+          deletedTodoItemTombstones: {
+            'todo': {
+              'item-1': deletedAtUtc.toIso8601String(),
+            },
+          },
+        ),
+        papers: [
+          PaperData(
+            id: 'todo',
+            type: PaperTypes.todo,
+            items: [PaperItem(id: 'item-2', text: 'Keep me')],
+          ),
+        ],
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 5),
+          payload: {
+            'paper': PaperData(
+              id: 'paper-1',
+              type: PaperTypes.note,
+              title: 'Restored',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.upsertTodoItem,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 6),
+          payload: {
+            'paperId': 'todo',
+            'item': PaperItem(id: 'item-1', text: 'Restored item').toJson(),
+          },
+        ),
+      ],
+    );
+
+    expect(
+        result.state.sync.deletedPaperTombstones, isNot(contains('paper-1')));
+    expect(result.state.sync.deletedPaperTombstones, isNot(contains('todo')));
+    expect(
+      result.state.sync.deletedTodoItemTombstones['todo'],
+      isNot(contains('item-1')),
+    );
+    expect(result.state.papers.map((paper) => paper.id), [
+      'todo',
+      'paper-1',
+    ]);
+    expect(result.state.papers.last.title, 'Restored');
+    expect(result.state.papers.first.items.map((item) => item.id), [
+      'item-2',
+      'item-1',
+    ]);
   });
 
   test('updates note content and settings', () {
@@ -236,13 +304,14 @@ SyncOperation _operation({
   required int sequence,
   required SyncOperationKind kind,
   required Map<String, Object?> payload,
+  DateTime? createdAtUtc,
 }) {
   return SyncOperation(
     id: 'device-a-$sequence',
     deviceId: 'device-a',
     sequence: sequence,
     kind: kind,
-    createdAtUtc: DateTime.utc(2026, 7, 1, 9, 0, sequence),
+    createdAtUtc: createdAtUtc ?? DateTime.utc(2026, 7, 1, 9, 0, sequence),
     payload: payload,
   );
 }

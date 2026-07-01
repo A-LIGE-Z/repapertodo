@@ -58,32 +58,44 @@ class SyncOperationApplier {
       case SyncOperationKind.stateSnapshot:
         return;
       case SyncOperationKind.upsertPaper:
-        _upsertPaper(state, operation.payload);
+        _upsertPaper(state, operation.payload, operation.createdAtUtc);
       case SyncOperationKind.deletePaper:
         _deletePaper(state, operation.payload, operation.createdAtUtc);
       case SyncOperationKind.upsertTodoItem:
-        _upsertTodoItem(state, operation.payload);
+        _upsertTodoItem(state, operation.payload, operation.createdAtUtc);
       case SyncOperationKind.deleteTodoItem:
         _deleteTodoItem(state, operation.payload, operation.createdAtUtc);
       case SyncOperationKind.updateNoteContent:
-        _updateNoteContent(state, operation.payload);
+        _updateNoteContent(state, operation.payload, operation.createdAtUtc);
       case SyncOperationKind.updateSettings:
         _updateSettings(state, operation.payload);
     }
   }
 
-  void _upsertPaper(AppState state, JsonMap payload) {
+  void _upsertPaper(
+    AppState state,
+    JsonMap payload,
+    DateTime createdAtUtc,
+  ) {
     final paperJson = _jsonMapOrNull(payload['paper']);
     if (paperJson == null) {
       return;
     }
     final paper = PaperData.fromJson(paperJson);
-    if (state.sync.isPaperDeleted(paper.id)) {
+    final deletedAtUtc = state.sync.paperDeletedAtUtc(paper.id);
+    if (deletedAtUtc != null &&
+        !_isNewerOperation(createdAtUtc, deletedAtUtc)) {
       return;
     }
+    state.sync.clearPaperDeleted(paper.id);
     if (paper.isTodo) {
       paper.items.removeWhere((item) {
-        return state.sync.isTodoItemDeleted(paper.id, item.id);
+        return _shouldSkipTodoItemUpsert(
+          state,
+          paper.id,
+          item.id,
+          createdAtUtc,
+        );
       });
     }
     final index =
@@ -111,13 +123,19 @@ class SyncOperationApplier {
     }
   }
 
-  void _upsertTodoItem(AppState state, JsonMap payload) {
+  void _upsertTodoItem(
+    AppState state,
+    JsonMap payload,
+    DateTime createdAtUtc,
+  ) {
     final paperId = stringValue(payload['paperId'], '');
     final itemJson = _jsonMapOrNull(payload['item']);
     if (paperId.isEmpty || itemJson == null) {
       return;
     }
-    if (state.sync.isPaperDeleted(paperId)) {
+    final paperDeletedAtUtc = state.sync.paperDeletedAtUtc(paperId);
+    if (paperDeletedAtUtc != null &&
+        !_isNewerOperation(createdAtUtc, paperDeletedAtUtc)) {
       return;
     }
     final paper =
@@ -125,8 +143,14 @@ class SyncOperationApplier {
     if (paper == null || !paper.isTodo) {
       return;
     }
+    state.sync.clearPaperDeleted(paperId);
     final item = PaperItem.fromJson(itemJson);
-    if (state.sync.isTodoItemDeleted(paperId, item.id)) {
+    if (_shouldSkipTodoItemUpsert(
+      state,
+      paperId,
+      item.id,
+      createdAtUtc,
+    )) {
       return;
     }
     final index =
@@ -153,13 +177,19 @@ class SyncOperationApplier {
     paper.items.removeWhere((item) => item.id == itemId);
   }
 
-  void _updateNoteContent(AppState state, JsonMap payload) {
+  void _updateNoteContent(
+    AppState state,
+    JsonMap payload,
+    DateTime createdAtUtc,
+  ) {
     final paperId = stringValue(payload['paperId'], '');
     final content = stringValue(payload['content'], '');
     if (paperId.isEmpty) {
       return;
     }
-    if (state.sync.isPaperDeleted(paperId)) {
+    final paperDeletedAtUtc = state.sync.paperDeletedAtUtc(paperId);
+    if (paperDeletedAtUtc != null &&
+        !_isNewerOperation(createdAtUtc, paperDeletedAtUtc)) {
       return;
     }
     final paper =
@@ -167,6 +197,7 @@ class SyncOperationApplier {
     if (paper == null || !paper.isNote) {
       return;
     }
+    state.sync.clearPaperDeleted(paperId);
     paper.content = content;
   }
 
@@ -236,6 +267,27 @@ class SyncOperationApplier {
       ..deepCapsuleMonitorDeviceName = updated.deepCapsuleMonitorDeviceName
       ..sync = updated.sync
       ..extra = updated.extra;
+  }
+
+  bool _shouldSkipTodoItemUpsert(
+    AppState state,
+    String paperId,
+    String itemId,
+    DateTime createdAtUtc,
+  ) {
+    final deletedAtUtc = state.sync.todoItemDeletedAtUtc(paperId, itemId);
+    if (deletedAtUtc == null) {
+      return false;
+    }
+    if (!_isNewerOperation(createdAtUtc, deletedAtUtc)) {
+      return true;
+    }
+    state.sync.clearTodoItemDeleted(paperId, itemId);
+    return false;
+  }
+
+  bool _isNewerOperation(DateTime operationTime, DateTime tombstoneTime) {
+    return operationTime.toUtc().isAfter(tombstoneTime.toUtc());
   }
 }
 

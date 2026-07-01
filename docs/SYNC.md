@@ -42,8 +42,9 @@ items before saving the merged local state.
 
 Delete operations also write local tombstones into sync state. These tombstones
 prevent stale paper or todo-item upserts from older devices from recreating
-content the user already deleted. Undoing a local delete clears the matching
-tombstone before the next save.
+content the user already deleted. Upserts created after the tombstone time are
+treated as intentional restores and clear the matching tombstone. Undoing a
+local delete clears the matching tombstone before the next save.
 
 ## Target Remote Layout
 
