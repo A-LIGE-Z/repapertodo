@@ -24,9 +24,14 @@ class SyncSettings {
     this.provider = SyncProviderIds.none,
     WebDavSyncSettings? webDav,
     Map<String, int>? operationDeviceSequences,
+    Map<String, String>? deletedPaperTombstones,
+    Map<String, Map<String, String>>? deletedTodoItemTombstones,
     JsonMap? extra,
   })  : webDav = webDav ?? WebDavSyncSettings(),
         operationDeviceSequences = operationDeviceSequences ?? <String, int>{},
+        deletedPaperTombstones = deletedPaperTombstones ?? <String, String>{},
+        deletedTodoItemTombstones =
+            deletedTodoItemTombstones ?? <String, Map<String, String>>{},
         extra = extra ?? <String, Object?>{};
 
   static const _knownKeys = {
@@ -34,12 +39,16 @@ class SyncSettings {
     'provider',
     'webDav',
     'operationDeviceSequences',
+    'deletedPaperTombstones',
+    'deletedTodoItemTombstones',
   };
 
   bool enabled;
   String provider;
   WebDavSyncSettings webDav;
   Map<String, int> operationDeviceSequences;
+  Map<String, String> deletedPaperTombstones;
+  Map<String, Map<String, String>> deletedTodoItemTombstones;
   JsonMap extra;
 
   factory SyncSettings.fromJson(JsonMap json) {
@@ -51,6 +60,10 @@ class SyncSettings {
           ? WebDavSyncSettings.fromJson(Map<String, Object?>.from(webDavJson))
           : null,
       operationDeviceSequences: intMap(json['operationDeviceSequences']),
+      deletedPaperTombstones:
+          _normalizeTombstoneMap(json['deletedPaperTombstones']),
+      deletedTodoItemTombstones:
+          _normalizeNestedTombstoneMap(json['deletedTodoItemTombstones']),
       extra: preserveUnknown(json, _knownKeys),
     )..normalize();
   }
@@ -61,8 +74,67 @@ class SyncSettings {
     operationDeviceSequences = _normalizeDeviceSequences(
       operationDeviceSequences,
     );
+    deletedPaperTombstones = _normalizeTombstoneMap(deletedPaperTombstones);
+    deletedTodoItemTombstones =
+        _normalizeNestedTombstoneMap(deletedTodoItemTombstones);
     if (enabled && provider == SyncProviderIds.none) {
       provider = SyncProviderIds.webDav;
+    }
+  }
+
+  bool isPaperDeleted(String paperId) {
+    return deletedPaperTombstones.containsKey(paperId.trim());
+  }
+
+  void markPaperDeleted(String paperId, DateTime deletedAtUtc) {
+    final id = paperId.trim();
+    if (id.isEmpty) {
+      return;
+    }
+    deletedPaperTombstones[id] = _tombstoneTimestamp(deletedAtUtc);
+    deletedTodoItemTombstones.remove(id);
+  }
+
+  void clearPaperDeleted(String paperId) {
+    final id = paperId.trim();
+    if (id.isEmpty) {
+      return;
+    }
+    deletedPaperTombstones.remove(id);
+  }
+
+  bool isTodoItemDeleted(String paperId, String itemId) {
+    return deletedTodoItemTombstones[paperId.trim()]?.containsKey(
+          itemId.trim(),
+        ) ??
+        false;
+  }
+
+  void markTodoItemDeleted(
+    String paperId,
+    String itemId,
+    DateTime deletedAtUtc,
+  ) {
+    final normalizedPaperId = paperId.trim();
+    final normalizedItemId = itemId.trim();
+    if (normalizedPaperId.isEmpty || normalizedItemId.isEmpty) {
+      return;
+    }
+    deletedTodoItemTombstones.putIfAbsent(
+            normalizedPaperId, () => <String, String>{})[normalizedItemId] =
+        _tombstoneTimestamp(deletedAtUtc);
+  }
+
+  void clearTodoItemDeleted(String paperId, String itemId) {
+    final normalizedPaperId = paperId.trim();
+    final normalizedItemId = itemId.trim();
+    final paperTombstones = deletedTodoItemTombstones[normalizedPaperId];
+    if (paperTombstones == null || normalizedItemId.isEmpty) {
+      return;
+    }
+    paperTombstones.remove(normalizedItemId);
+    if (paperTombstones.isEmpty) {
+      deletedTodoItemTombstones.remove(normalizedPaperId);
     }
   }
 
@@ -72,6 +144,13 @@ class SyncSettings {
       provider: provider,
       webDav: webDav.copy(),
       operationDeviceSequences: Map<String, int>.from(operationDeviceSequences),
+      deletedPaperTombstones: Map<String, String>.from(
+        deletedPaperTombstones,
+      ),
+      deletedTodoItemTombstones: {
+        for (final entry in deletedTodoItemTombstones.entries)
+          entry.key: Map<String, String>.from(entry.value),
+      },
       extra: Map<String, Object?>.from(extra),
     );
   }
@@ -83,6 +162,8 @@ class SyncSettings {
       'provider': provider,
       'webDav': webDav.toJson(),
       'operationDeviceSequences': operationDeviceSequences,
+      'deletedPaperTombstones': deletedPaperTombstones,
+      'deletedTodoItemTombstones': deletedTodoItemTombstones,
     };
   }
 }
@@ -217,4 +298,54 @@ Map<String, int> _normalizeDeviceSequences(Map<String, int> source) {
     normalized[key] = entry.value;
   }
   return normalized;
+}
+
+Map<String, String> _normalizeTombstoneMap(Object? value) {
+  if (value is! Map) {
+    return <String, String>{};
+  }
+  final normalized = <String, String>{};
+  for (final entry in value.entries) {
+    if (entry.key is! String || entry.value is! String) {
+      continue;
+    }
+    final id = (entry.key as String).trim();
+    final timestamp = _normalizeTombstoneTimestamp(entry.value as String);
+    if (id.isEmpty || timestamp.isEmpty) {
+      continue;
+    }
+    normalized[id] = timestamp;
+  }
+  return normalized;
+}
+
+Map<String, Map<String, String>> _normalizeNestedTombstoneMap(Object? value) {
+  if (value is! Map) {
+    return <String, Map<String, String>>{};
+  }
+  final normalized = <String, Map<String, String>>{};
+  for (final entry in value.entries) {
+    if (entry.key is! String) {
+      continue;
+    }
+    final paperId = (entry.key as String).trim();
+    final itemTombstones = _normalizeTombstoneMap(entry.value);
+    if (paperId.isEmpty || itemTombstones.isEmpty) {
+      continue;
+    }
+    normalized[paperId] = itemTombstones;
+  }
+  return normalized;
+}
+
+String _tombstoneTimestamp(DateTime value) {
+  return value.toUtc().toIso8601String();
+}
+
+String _normalizeTombstoneTimestamp(String value) {
+  final parsed = DateTime.tryParse(value.trim());
+  if (parsed == null) {
+    return '';
+  }
+  return _tombstoneTimestamp(parsed);
 }

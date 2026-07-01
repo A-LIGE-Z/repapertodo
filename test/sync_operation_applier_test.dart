@@ -84,6 +84,76 @@ void main() {
     expect(result.state.papers.single.items.single.done, true);
   });
 
+  test('tombstones keep deleted papers and todo items from reappearing', () {
+    final result = applier.apply(
+      AppState(
+        papers: [
+          PaperData(id: 'paper-1', type: PaperTypes.note, title: 'Local'),
+          PaperData(
+            id: 'todo',
+            type: PaperTypes.todo,
+            items: [
+              PaperItem(id: 'item-1', text: 'Delete me'),
+              PaperItem(id: 'item-2', text: 'Keep me'),
+            ],
+          ),
+        ],
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.deletePaper,
+          payload: {'paperId': 'paper-1'},
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'paper-1',
+              type: PaperTypes.note,
+              title: 'Stale remote',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 3,
+          kind: SyncOperationKind.deleteTodoItem,
+          payload: {'paperId': 'todo', 'itemId': 'item-1'},
+        ),
+        _operation(
+          sequence: 4,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'todo',
+              type: PaperTypes.todo,
+              items: [
+                PaperItem(id: 'item-1', text: 'Stale item'),
+                PaperItem(id: 'item-2', text: 'Updated keep'),
+              ],
+            ).toJson(),
+          },
+        ),
+      ],
+    );
+
+    expect(result.appliedCount, 4);
+    expect(
+      result.state.sync.deletedPaperTombstones['paper-1'],
+      DateTime.utc(2026, 7, 1, 9, 0, 1).toIso8601String(),
+    );
+    expect(
+      result.state.sync.deletedTodoItemTombstones['todo']?['item-1'],
+      DateTime.utc(2026, 7, 1, 9, 0, 3).toIso8601String(),
+    );
+    expect(result.state.papers.map((paper) => paper.id), ['todo']);
+    expect(result.state.papers.single.items.map((item) => item.id), [
+      'item-2',
+    ]);
+    expect(result.state.papers.single.items.single.text, 'Updated keep');
+  });
+
   test('updates note content and settings', () {
     final result = applier.apply(
       AppState(

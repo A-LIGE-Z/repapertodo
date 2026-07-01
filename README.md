@@ -16,7 +16,9 @@ The goal is to reproduce PaperTodo's full feature set and product philosophy, st
 
 ## Current Status
 
-This repository is an initial planning and scaffold repository. Flutter tooling is expected but was not available in the current environment when this scaffold was created.
+This repository now contains a Flutter Windows/Android codebase with the shared
+PaperTodo-compatible data model, desktop-first paper UI, local persistence,
+platform-service boundaries, startup command handling, and WebDAV snapshot plus
+operation-log sync foundations.
 
 See [AGENTS.md](AGENTS.md) for project rules and [docs/ROADMAP.md](docs/ROADMAP.md) for the staged implementation plan.
-

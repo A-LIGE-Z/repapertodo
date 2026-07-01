@@ -379,6 +379,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       onOpenUri: _openUri,
       onHide: _hidePaper,
       onDelete: _deletePaper,
+      onTodoItemDeleted: _markTodoItemDeleted,
+      onTodoItemRestored: _clearTodoItemDeleted,
       onSurfaceChanged: _updatePaperSurface,
       onCaptureBounds: _capturePaperBounds,
     );
@@ -454,6 +456,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     }
     final detachedLinks = <_LinkedNoteRestore>[];
     setState(() {
+      controller.state.sync.markPaperDeleted(paper.id, DateTime.now().toUtc());
       controller.state.papers.removeAt(removedIndex);
       if (_surfacePaperId == paper.id) {
         _surfacePaperId = null;
@@ -495,6 +498,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                     controller.state.papers.length,
                   )
                   .toInt();
+              controller.state.sync.clearPaperDeleted(paper.id);
               controller.state.papers.insert(targetIndex, paper);
               for (final link in detachedLinks) {
                 _restoreLinkedNote(link);
@@ -505,6 +509,18 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         ),
       ),
     );
+  }
+
+  void _markTodoItemDeleted(PaperData paper, PaperItem item) {
+    controller.state.sync.markTodoItemDeleted(
+      paper.id,
+      item.id,
+      DateTime.now().toUtc(),
+    );
+  }
+
+  void _clearTodoItemDeleted(PaperData paper, PaperItem item) {
+    controller.state.sync.clearTodoItemDeleted(paper.id, item.id);
   }
 
   Future<void> _hidePaper(PaperData paper) async {
@@ -1521,6 +1537,8 @@ class PaperPreview extends StatelessWidget {
     required this.onOpenUri,
     required this.onHide,
     required this.onDelete,
+    required this.onTodoItemDeleted,
+    required this.onTodoItemRestored,
     required this.onSurfaceChanged,
     required this.onCaptureBounds,
     super.key,
@@ -1550,6 +1568,8 @@ class PaperPreview extends StatelessWidget {
   final Future<void> Function(String uri) onOpenUri;
   final Future<void> Function(PaperData paper) onHide;
   final Future<void> Function(PaperData paper) onDelete;
+  final void Function(PaperData paper, PaperItem item) onTodoItemDeleted;
+  final void Function(PaperData paper, PaperItem item) onTodoItemRestored;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
   final Future<void> Function(PaperData paper) onCaptureBounds;
 
@@ -1758,6 +1778,8 @@ class PaperPreview extends StatelessWidget {
                   onOpen: onOpen,
                   onRunScriptCapsule: onRunScriptCapsule,
                   onChanged: onChanged,
+                  onItemDeleted: onTodoItemDeleted,
+                  onItemRestored: onTodoItemRestored,
                 )
               else
                 _NoteEditor(
@@ -3036,6 +3058,8 @@ class _TodoEditor extends StatefulWidget {
     required this.onOpen,
     required this.onRunScriptCapsule,
     required this.onChanged,
+    required this.onItemDeleted,
+    required this.onItemRestored,
   });
 
   final PaperData paper;
@@ -3054,6 +3078,8 @@ class _TodoEditor extends StatefulWidget {
   final Future<void> Function(PaperData paper) onOpen;
   final Future<void> Function(ScriptCapsuleSpec spec) onRunScriptCapsule;
   final Future<void> Function() onChanged;
+  final void Function(PaperData paper, PaperItem item) onItemDeleted;
+  final void Function(PaperData paper, PaperItem item) onItemRestored;
 
   @override
   State<_TodoEditor> createState() => _TodoEditorState();
@@ -3308,16 +3334,44 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _restoreTodoSnapshot(List<Map<String, Object?>> snapshot) {
+    final beforeItems = [...widget.paper.items];
+    late final List<PaperItem> afterItems;
     setState(() {
-      widget.paper.items = [
+      afterItems = [
         for (final itemJson in snapshot)
           PaperItem.fromJson(Map<String, Object?>.from(itemJson)),
       ];
+      widget.paper.items = afterItems;
       widget.paper.normalize();
       _textFieldRevision++;
     });
+    _reconcileTodoItemTombstones(beforeItems, afterItems);
     _requestTodoFocus();
     unawaited(widget.onChanged());
+  }
+
+  void _reconcileTodoItemTombstones(
+    List<PaperItem> beforeItems,
+    List<PaperItem> afterItems,
+  ) {
+    final beforeById = {
+      for (final item in beforeItems)
+        if (item.id.trim().isNotEmpty) item.id: item,
+    };
+    final afterById = {
+      for (final item in afterItems)
+        if (item.id.trim().isNotEmpty) item.id: item,
+    };
+    for (final entry in beforeById.entries) {
+      if (!afterById.containsKey(entry.key)) {
+        widget.onItemDeleted(widget.paper, entry.value);
+      }
+    }
+    for (final entry in afterById.entries) {
+      if (!beforeById.containsKey(entry.key)) {
+        widget.onItemRestored(widget.paper, entry.value);
+      }
+    }
   }
 
   void _requestTodoFocus() {
@@ -3606,6 +3660,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       widget.paper.items.removeAt(removedIndex);
       widget.paper.normalize();
     });
+    widget.onItemDeleted(widget.paper, item);
     unawaited(widget.onChanged());
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -3624,6 +3679,7 @@ class _TodoEditorState extends State<_TodoEditor> {
               widget.paper.items.insert(targetIndex, item);
               widget.paper.normalize();
             });
+            widget.onItemRestored(widget.paper, item);
             unawaited(widget.onChanged());
           },
         ),

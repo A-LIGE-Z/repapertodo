@@ -36,8 +36,14 @@ device ID, timestamp, ETag, size, and last-modified time.
 Selected snapshot files can also be downloaded and decoded for recovery.
 Each push also writes a one-line plain JSON operation record in `ops/` that
 points at the uploaded snapshot and advances that device's manifest sequence.
-The sync core can enumerate and download these operation logs as merge inputs,
-while full operation-level merge behavior remains a planned phase.
+The sync core can enumerate and download these operation logs as merge inputs.
+It applies operation-level merges for settings, papers, note content, and todo
+items before saving the merged local state.
+
+Delete operations also write local tombstones into sync state. These tombstones
+prevent stale paper or todo-item upserts from older devices from recreating
+content the user already deleted. Undoing a local delete clears the matching
+tombstone before the next save.
 
 ## Target Remote Layout
 

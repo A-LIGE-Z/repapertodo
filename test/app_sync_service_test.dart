@@ -517,6 +517,100 @@ void main() {
     });
   });
 
+  test('uploads local delete diffs and saves tombstones', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_upload_delete_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await File(p.join(directory.path, 'sync-device-id'))
+        .writeAsString('device-local');
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 8},
+      papers: [
+        PaperData(
+          id: 'old-note',
+          type: PaperTypes.note,
+          title: 'Remove',
+        ),
+        PaperData(
+          id: 'todo',
+          type: PaperTypes.todo,
+          items: [
+            PaperItem(id: 'item-1', text: 'Remove item'),
+            PaperItem(id: 'item-2', text: 'Keep item'),
+          ],
+        ),
+      ],
+    );
+    final afterState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 8},
+      papers: [
+        PaperData(
+          id: 'todo',
+          type: PaperTypes.todo,
+          items: [
+            PaperItem(id: 'item-2', text: 'Keep item'),
+          ],
+        ),
+      ],
+    );
+    final uploadedOperations = <SyncOperation>[];
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) {
+        return _FakeWebDavStateSyncService(
+          onUploadOperationLogs: (
+            operations, {
+            previousDeviceSequences,
+          }) async {
+            uploadedOperations.addAll(operations);
+            return WebDavOperationLogUploadResult(
+              deviceSequences: {
+                ...?previousDeviceSequences,
+                deviceId ?? '': operations.last.sequence,
+              },
+              uploadedCount: operations.length,
+            );
+          },
+        );
+      },
+    );
+
+    final result = await service.uploadLocalOperations(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 12),
+    );
+
+    expect(
+      uploadedOperations.map((operation) => operation.kind),
+      [
+        SyncOperationKind.deletePaper,
+        SyncOperationKind.deleteTodoItem,
+        SyncOperationKind.upsertTodoItem,
+      ],
+    );
+    expect(result.generatedCount, 3);
+    expect(result.uploadedCount, 3);
+    expect(result.state.sync.operationDeviceSequences, {'device-local': 11});
+    expect(result.state.sync.deletedPaperTombstones['old-note'],
+        DateTime.utc(2026, 7, 1, 12).toIso8601String());
+    expect(result.state.sync.deletedTodoItemTombstones['todo']?['item-1'],
+        DateTime.utc(2026, 7, 1, 12).toIso8601String());
+
+    final stored = await store.load();
+    expect(stored.sync.deletedPaperTombstones.containsKey('old-note'), true);
+    expect(
+      stored.sync.deletedTodoItemTombstones['todo']?.containsKey('item-1'),
+      true,
+    );
+  });
+
   test('merge skips operation logs covered by explicit device sequences',
       () async {
     final directory = await Directory.systemTemp

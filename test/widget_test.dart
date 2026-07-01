@@ -93,6 +93,11 @@ void main() {
     await tester.pump();
 
     expect(controller.state.papers.single.items, hasLength(2));
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['welcome-todo']
+          ?.containsKey('todo-1'),
+      true,
+    );
 
     final itemUndoAction = tester.widget<SnackBarAction>(
       find.byWidgetPredicate(
@@ -106,6 +111,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.items, hasLength(3));
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['welcome-todo']
+          ?.containsKey('todo-1'),
+      isNot(true),
+    );
 
     await tester.tap(find.byIcon(Icons.expand_less));
     await tester.pumpAndSettle();
@@ -152,6 +162,7 @@ void main() {
 
     expect(controller.state.papers, isEmpty);
     expect(find.byKey(const ValueKey('welcome-todo-title')), findsNothing);
+    expect(controller.state.sync.isPaperDeleted('welcome-todo'), true);
 
     final undoAction = tester.widget<SnackBarAction>(
       find.byWidgetPredicate(
@@ -166,6 +177,7 @@ void main() {
 
     expect(controller.state.papers, hasLength(1));
     expect(find.byKey(const ValueKey('welcome-todo-title')), findsOneWidget);
+    expect(controller.state.sync.isPaperDeleted('welcome-todo'), false);
 
     await tester.tap(find.byIcon(Icons.sync_outlined));
     await tester.pump();

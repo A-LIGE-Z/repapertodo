@@ -60,11 +60,11 @@ class SyncOperationApplier {
       case SyncOperationKind.upsertPaper:
         _upsertPaper(state, operation.payload);
       case SyncOperationKind.deletePaper:
-        _deletePaper(state, operation.payload);
+        _deletePaper(state, operation.payload, operation.createdAtUtc);
       case SyncOperationKind.upsertTodoItem:
         _upsertTodoItem(state, operation.payload);
       case SyncOperationKind.deleteTodoItem:
-        _deleteTodoItem(state, operation.payload);
+        _deleteTodoItem(state, operation.payload, operation.createdAtUtc);
       case SyncOperationKind.updateNoteContent:
         _updateNoteContent(state, operation.payload);
       case SyncOperationKind.updateSettings:
@@ -78,6 +78,14 @@ class SyncOperationApplier {
       return;
     }
     final paper = PaperData.fromJson(paperJson);
+    if (state.sync.isPaperDeleted(paper.id)) {
+      return;
+    }
+    if (paper.isTodo) {
+      paper.items.removeWhere((item) {
+        return state.sync.isTodoItemDeleted(paper.id, item.id);
+      });
+    }
     final index =
         state.papers.indexWhere((candidate) => candidate.id == paper.id);
     if (index < 0) {
@@ -87,11 +95,12 @@ class SyncOperationApplier {
     }
   }
 
-  void _deletePaper(AppState state, JsonMap payload) {
+  void _deletePaper(AppState state, JsonMap payload, DateTime deletedAtUtc) {
     final paperId = stringValue(payload['paperId'], '');
     if (paperId.isEmpty) {
       return;
     }
+    state.sync.markPaperDeleted(paperId, deletedAtUtc);
     state.papers.removeWhere((paper) => paper.id == paperId);
     for (final paper in state.papers) {
       for (final item in paper.items) {
@@ -108,12 +117,18 @@ class SyncOperationApplier {
     if (paperId.isEmpty || itemJson == null) {
       return;
     }
+    if (state.sync.isPaperDeleted(paperId)) {
+      return;
+    }
     final paper =
         state.papers.where((paper) => paper.id == paperId).firstOrNull;
     if (paper == null || !paper.isTodo) {
       return;
     }
     final item = PaperItem.fromJson(itemJson);
+    if (state.sync.isTodoItemDeleted(paperId, item.id)) {
+      return;
+    }
     final index =
         paper.items.indexWhere((candidate) => candidate.id == item.id);
     if (index < 0) {
@@ -123,12 +138,13 @@ class SyncOperationApplier {
     }
   }
 
-  void _deleteTodoItem(AppState state, JsonMap payload) {
+  void _deleteTodoItem(AppState state, JsonMap payload, DateTime deletedAtUtc) {
     final paperId = stringValue(payload['paperId'], '');
     final itemId = stringValue(payload['itemId'], '');
     if (paperId.isEmpty || itemId.isEmpty) {
       return;
     }
+    state.sync.markTodoItemDeleted(paperId, itemId, deletedAtUtc);
     final paper =
         state.papers.where((paper) => paper.id == paperId).firstOrNull;
     if (paper == null || !paper.isTodo) {
@@ -141,6 +157,9 @@ class SyncOperationApplier {
     final paperId = stringValue(payload['paperId'], '');
     final content = stringValue(payload['content'], '');
     if (paperId.isEmpty) {
+      return;
+    }
+    if (state.sync.isPaperDeleted(paperId)) {
       return;
     }
     final paper =

@@ -320,13 +320,17 @@ class AppSyncService {
       );
     }
 
+    final tombstonesChanged = _markLocalDeleteTombstones(
+      afterState,
+      operations,
+    );
     final uploadResult = await context.client.uploadOperationLogs(
       operations,
       previousDeviceSequences: previousSequences,
     );
     afterState.sync.operationDeviceSequences = uploadResult.deviceSequences;
     afterState.normalize();
-    if (uploadResult.uploadedCount > 0) {
+    if (uploadResult.uploadedCount > 0 || tombstonesChanged) {
       await store.save(afterState);
     }
     return AppSyncLocalOperationUploadResult(
@@ -421,6 +425,44 @@ class AppSyncService {
     }
     state.sync.operationDeviceSequences = manifest.deviceSequences;
     state.normalize();
+  }
+
+  bool _markLocalDeleteTombstones(
+    AppState state,
+    Iterable<SyncOperation> operations,
+  ) {
+    var changed = false;
+    for (final operation in operations) {
+      switch (operation.kind) {
+        case SyncOperationKind.deletePaper:
+          final paperId = operation.payload['paperId'];
+          if (paperId is String && paperId.trim().isNotEmpty) {
+            changed = changed || !state.sync.isPaperDeleted(paperId);
+            state.sync.markPaperDeleted(paperId, operation.createdAtUtc);
+          }
+        case SyncOperationKind.deleteTodoItem:
+          final paperId = operation.payload['paperId'];
+          final itemId = operation.payload['itemId'];
+          if (paperId is String &&
+              itemId is String &&
+              paperId.trim().isNotEmpty &&
+              itemId.trim().isNotEmpty) {
+            changed = changed || !state.sync.isTodoItemDeleted(paperId, itemId);
+            state.sync.markTodoItemDeleted(
+              paperId,
+              itemId,
+              operation.createdAtUtc,
+            );
+          }
+        case SyncOperationKind.stateSnapshot:
+        case SyncOperationKind.upsertPaper:
+        case SyncOperationKind.upsertTodoItem:
+        case SyncOperationKind.updateNoteContent:
+        case SyncOperationKind.updateSettings:
+          break;
+      }
+    }
+    return changed;
   }
 }
 

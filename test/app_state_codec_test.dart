@@ -633,6 +633,18 @@ Plain item
           'stale-device': 0,
           '': 7,
         },
+        'deletedPaperTombstones': {
+          ' old-paper ': '2026-07-01T10:00:00+08:00',
+          'bad-paper': 'not-a-date',
+          '': '2026-07-01T10:00:00Z',
+        },
+        'deletedTodoItemTombstones': {
+          ' todo-paper ': {
+            ' old-item ': '2026-07-01T11:30:00+08:00',
+            'bad-item': 'not-a-date',
+          },
+          'bad-paper': 'not-a-map',
+        },
         'webDav': {
           'presetId': 'jianguoyun',
           'endpoint': '',
@@ -652,6 +664,17 @@ Plain item
     expect(state.sync.operationDeviceSequences, {
       'win-device': 3,
       'android-device': 2,
+    });
+    expect(state.sync.deletedPaperTombstones, {
+      'old-paper':
+          DateTime.parse('2026-07-01T10:00:00+08:00').toUtc().toIso8601String(),
+    });
+    expect(state.sync.deletedTodoItemTombstones, {
+      'todo-paper': {
+        'old-item': DateTime.parse('2026-07-01T11:30:00+08:00')
+            .toUtc()
+            .toIso8601String(),
+      },
     });
     expect(state.sync.webDav.presetId, WebDavPresetIds.jianguoyun);
     expect(state.sync.webDav.endpoint, 'https://dav.jianguoyun.com/dav/');
