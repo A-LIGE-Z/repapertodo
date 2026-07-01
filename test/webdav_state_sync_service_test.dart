@@ -1229,6 +1229,14 @@ void main() {
           createdAtUtc: DateTime.utc(2026, 7, 1, 9, 3),
           payload: {'paperId': 'ignored'},
         ),
+        SyncOperation(
+          id: 'short-invalid-device',
+          deviceId: 'bad',
+          sequence: 1,
+          kind: SyncOperationKind.updateNoteContent,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 4),
+          payload: {'paperId': 'note', 'content': 'Ignored'},
+        ),
       ],
       previousDeviceSequences: {' Device A ': 1},
     );

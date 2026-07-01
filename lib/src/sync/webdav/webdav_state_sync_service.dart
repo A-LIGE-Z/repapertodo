@@ -643,10 +643,16 @@ class WebDavStateSyncService {
   }
 
   SyncOperation? _normalizeOperationForUpload(SyncOperation operation) {
-    if (operation.sequence <= 0 || operation.deviceId.trim().isEmpty) {
+    if (operation.sequence <= 0) {
       return null;
     }
-    final normalizedDeviceId = _normalizeDeviceId(operation.deviceId);
+    final normalizedDeviceId = normalizeSyncDeviceId(
+      operation.deviceId,
+      fallback: '',
+    );
+    if (normalizedDeviceId.isEmpty) {
+      return null;
+    }
     return SyncOperation(
       id: '$normalizedDeviceId-${operation.sequence}',
       deviceId: normalizedDeviceId,
