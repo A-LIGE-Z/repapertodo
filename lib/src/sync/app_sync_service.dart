@@ -1,11 +1,13 @@
 import '../core/model/app_state.dart';
 import '../core/model/sync_settings.dart';
 import '../core/storage/state_store.dart';
+import 'sync_device_id_store.dart';
 import 'webdav/webdav_state_sync_service.dart';
 
 typedef WebDavStateSyncServiceFactory = WebDavStateSyncService Function(
-  WebDavSyncSettings settings,
-);
+  WebDavSyncSettings settings, {
+  String? deviceId,
+});
 
 enum AppSyncStatus {
   disabled,
@@ -30,9 +32,12 @@ class AppSyncResult {
 class AppSyncService {
   AppSyncService({
     WebDavStateSyncServiceFactory? webDavFactory,
-  }) : _webDavFactory = webDavFactory ?? WebDavStateSyncService.fromSettings;
+    SyncDeviceIdStore? deviceIdStore,
+  })  : _webDavFactory = webDavFactory ?? WebDavStateSyncService.fromSettings,
+        _deviceIdStore = deviceIdStore;
 
   final WebDavStateSyncServiceFactory _webDavFactory;
+  final SyncDeviceIdStore? _deviceIdStore;
 
   Future<AppSyncResult> syncNow({
     required AppState localState,
@@ -55,7 +60,13 @@ class AppSyncService {
       );
     }
 
-    final client = _webDavFactory(settings.webDav.copy());
+    final deviceId =
+        await (_deviceIdStore ?? SyncDeviceIdStore.forStateStore(store))
+            .loadOrCreate();
+    final client = _webDavFactory(
+      settings.webDav.copy(),
+      deviceId: deviceId,
+    );
     final result = await client.sync(
       localState: localState,
       localUpdatedAtUtc: localUpdatedAtUtc ?? await store.lastModifiedUtc(),

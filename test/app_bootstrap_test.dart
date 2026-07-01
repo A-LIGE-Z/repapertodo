@@ -25,7 +25,7 @@ void main() {
       sync: _configuredSyncSettings(autoSyncOnStart: true),
     );
     final syncService = AppSyncService(
-      webDavFactory: (_) => _FakeWebDavStateSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
         onSync: ({required localState, localUpdatedAtUtc}) async {
           return WebDavStateSyncResult(
             status: WebDavStateSyncStatus.downloaded,

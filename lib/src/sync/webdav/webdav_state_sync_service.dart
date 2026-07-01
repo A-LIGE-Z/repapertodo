@@ -19,20 +19,29 @@ class WebDavStateSyncPaths {
   const WebDavStateSyncPaths({
     this.rootPath = 'repapertodo',
     this.manifestFileName = 'manifest.json',
-    this.snapshotFileName = 'state.json',
+    this.snapshotDirectoryName = 'snapshots',
   });
 
   final String rootPath;
   final String manifestFileName;
-  final String snapshotFileName;
+  final String snapshotDirectoryName;
 
   String get rootCollectionPath => _normalizeRemotePath(rootPath);
 
   String get manifestPath =>
       _joinRemotePath(rootCollectionPath, manifestFileName);
 
-  String get snapshotPath =>
-      _joinRemotePath(rootCollectionPath, snapshotFileName);
+  String get snapshotCollectionPath =>
+      _joinRemotePath(rootCollectionPath, snapshotDirectoryName);
+
+  String snapshotPath(DateTime updatedAtUtc, String deviceId) {
+    final stamp = _formatSnapshotStamp(updatedAtUtc);
+    final safeDeviceId = _normalizeRemotePathSegment(deviceId);
+    return _joinRemotePath(
+      snapshotCollectionPath,
+      'snapshot-$stamp-$safeDeviceId.json',
+    );
+  }
 }
 
 class WebDavStateSyncResult {
@@ -52,14 +61,17 @@ class WebDavStateSyncService {
     required WebDavClient client,
     AppStateCodec codec = const AppStateCodec(),
     WebDavStateSyncPaths paths = const WebDavStateSyncPaths(),
+    String deviceId = 'local-device',
   })  : _client = client,
         _codec = codec,
-        _paths = paths;
+        _paths = paths,
+        _deviceId = _normalizeDeviceId(deviceId);
 
   factory WebDavStateSyncService.fromSettings(
     WebDavSyncSettings settings, {
     AppStateCodec codec = const AppStateCodec(),
     http.Client? httpClient,
+    String? deviceId,
   }) {
     settings.normalize();
     final endpoint = settings.endpointUri;
@@ -78,29 +90,37 @@ class WebDavStateSyncService {
       ),
       codec: codec,
       paths: WebDavStateSyncPaths(rootPath: settings.rootPath),
+      deviceId: deviceId ?? 'local-device',
     );
   }
 
   final WebDavClient _client;
   final AppStateCodec _codec;
   final WebDavStateSyncPaths _paths;
+  final String _deviceId;
 
   Future<WebDavStateSyncResult> push(
     AppState state, {
     DateTime? updatedAtUtc,
     String? expectedManifestEtag,
     bool manifestKnownMissing = false,
+    Map<String, int>? previousDeviceSequences,
   }) async {
     final stamp = (updatedAtUtc ?? DateTime.now().toUtc()).toUtc();
-    await _ensureRootCollection();
+    await _ensureCollections();
+    final snapshotPath = _paths.snapshotPath(stamp, _deviceId);
     await _client.putBytes(
-      _paths.snapshotPath,
+      snapshotPath,
       utf8.encode(_codec.encode(state)),
     );
+    final deviceSequences =
+        Map<String, int>.from(previousDeviceSequences ?? const {});
+    deviceSequences[_deviceId] = (deviceSequences[_deviceId] ?? 0) + 1;
     final manifest = SyncManifest(
       schemaVersion: 1,
       updatedAtUtc: stamp,
-      latestSnapshotPath: _paths.snapshotPath,
+      latestSnapshotPath: snapshotPath,
+      deviceSequences: deviceSequences,
     );
     final manifestUploaded = await _putManifest(
       manifest,
@@ -139,6 +159,7 @@ class WebDavStateSyncService {
         localState,
         updatedAtUtc: localUpdatedAtUtc,
         manifestKnownMissing: remoteManifest == null,
+        previousDeviceSequences: manifest?.deviceSequences,
       );
     }
 
@@ -152,6 +173,7 @@ class WebDavStateSyncService {
       localState,
       updatedAtUtc: localStamp,
       expectedManifestEtag: remoteManifest?.etag,
+      previousDeviceSequences: manifest.deviceSequences,
     );
   }
 
@@ -180,12 +202,12 @@ class WebDavStateSyncService {
     );
   }
 
-  Future<void> _ensureRootCollection() async {
+  Future<void> _ensureCollections() async {
     final root = _paths.rootCollectionPath;
-    if (root.isEmpty) {
-      return;
+    if (root.isNotEmpty) {
+      await _client.makeCollection(root);
     }
-    await _client.makeCollection(root);
+    await _client.makeCollection(_paths.snapshotCollectionPath);
   }
 
   Future<bool> _putManifest(
@@ -235,6 +257,35 @@ String _normalizeRemotePath(String path) {
       .split('/')
       .where((segment) => segment.trim().isNotEmpty)
       .join('/');
+}
+
+String _normalizeRemotePathSegment(String value) {
+  final normalized = _normalizeDeviceId(value);
+  return normalized.isEmpty ? 'local-device' : normalized;
+}
+
+String _normalizeDeviceId(String value) {
+  final normalized = value.trim().toLowerCase();
+  final cleaned = normalized.replaceAll(RegExp(r'[^a-z0-9_-]+'), '-');
+  final collapsed = cleaned.replaceAll(RegExp('-+'), '-');
+  final trimmed = collapsed.replaceAll(RegExp(r'^[-_]+|[-_]+$'), '');
+  if (trimmed.length < 8) {
+    return 'local-device';
+  }
+  return trimmed.length > 64 ? trimmed.substring(0, 64) : trimmed;
+}
+
+String _formatSnapshotStamp(DateTime value) {
+  final utc = value.toUtc();
+  String two(int number) => number.toString().padLeft(2, '0');
+  String three(int number) => number.toString().padLeft(3, '0');
+  return '${utc.year}'
+      '${two(utc.month)}'
+      '${two(utc.day)}T'
+      '${two(utc.hour)}'
+      '${two(utc.minute)}'
+      '${two(utc.second)}'
+      '${three(utc.millisecond)}Z';
 }
 
 class WebDavSyncConfigurationException implements Exception {

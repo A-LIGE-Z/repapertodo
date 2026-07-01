@@ -22,6 +22,7 @@ export 'src/platform/platform_services.dart';
 export 'src/platform/windows_platform_services.dart';
 export 'src/app_controller.dart';
 export 'src/sync/app_sync_service.dart';
+export 'src/sync/sync_device_id_store.dart';
 export 'src/sync/sync_manifest.dart';
 export 'src/sync/sync_operation.dart';
 export 'src/sync/webdav/webdav_client.dart';

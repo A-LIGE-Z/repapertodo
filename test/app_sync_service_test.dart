@@ -11,7 +11,8 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final store = StateStore(filePath: p.join(directory.path, 'data.json'));
     final service = AppSyncService(
-      webDavFactory: (_) => throw StateError('WebDAV should not be created'),
+      webDavFactory: (_, {deviceId}) =>
+          throw StateError('WebDAV should not be created'),
     );
 
     final result = await service.syncNow(
@@ -34,14 +35,21 @@ void main() {
       sync: _configuredSyncSettings(),
     );
     var uploadedStateTitle = '';
+    var forwardedDeviceId = '';
     final service = AppSyncService(
-      webDavFactory: (_) => _FakeWebDavStateSyncService(
-        onSync: ({required localState, localUpdatedAtUtc}) async {
-          uploadedStateTitle = localState.papers.single.title;
-          return const WebDavStateSyncResult(
-              status: WebDavStateSyncStatus.uploaded);
-        },
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
       ),
+      webDavFactory: (_, {deviceId}) {
+        forwardedDeviceId = deviceId ?? '';
+        return _FakeWebDavStateSyncService(
+          onSync: ({required localState, localUpdatedAtUtc}) async {
+            uploadedStateTitle = localState.papers.single.title;
+            return const WebDavStateSyncResult(
+                status: WebDavStateSyncStatus.uploaded);
+          },
+        );
+      },
     );
 
     final result = await service.syncNow(
@@ -52,7 +60,12 @@ void main() {
 
     expect(result.status, AppSyncStatus.uploaded);
     expect(uploadedStateTitle, 'Local');
+    expect(forwardedDeviceId, startsWith('device-'));
     expect((await store.load()).papers.single.title, 'Local');
+    expect(
+      await File(p.join(directory.path, 'sync-device-id')).readAsString(),
+      forwardedDeviceId,
+    );
   });
 
   test('saves downloaded remote state', () async {
@@ -67,7 +80,7 @@ void main() {
       sync: _configuredSyncSettings(),
     );
     final service = AppSyncService(
-      webDavFactory: (_) => _FakeWebDavStateSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
         onSync: ({required localState, localUpdatedAtUtc}) async {
           return WebDavStateSyncResult(
             status: WebDavStateSyncStatus.downloaded,
@@ -94,7 +107,7 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final store = StateStore(filePath: p.join(directory.path, 'data.json'));
     final service = AppSyncService(
-      webDavFactory: (_) => _FakeWebDavStateSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
         onSync: ({required localState, localUpdatedAtUtc}) async {
           return const WebDavStateSyncResult(
               status: WebDavStateSyncStatus.conflict);

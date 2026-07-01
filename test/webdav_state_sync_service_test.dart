@@ -20,7 +20,10 @@ void main() {
         };
       }),
     );
-    final service = WebDavStateSyncService(client: webDavClient);
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
 
     final result = await service.push(
       AppState(
@@ -36,10 +39,15 @@ void main() {
     );
 
     expect(result.status, WebDavStateSyncStatus.uploaded);
-    expect(requests.map((request) => request.method), ['MKCOL', 'PUT', 'PUT']);
+    expect(
+      requests.map((request) => request.method),
+      ['MKCOL', 'MKCOL', 'PUT', 'PUT'],
+    );
 
-    final snapshotRequest = requests
-        .firstWhere((request) => request.url.path.endsWith('/state.json'));
+    final snapshotRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' &&
+        request.url.path.endsWith(
+            '/snapshots/snapshot-20260630T100000000Z-test-device.json'));
     final snapshot = jsonDecode(utf8.decode(snapshotRequest.bodyBytes))
         as Map<String, Object?>;
     final papers = snapshot['papers'] as List<Object?>;
@@ -49,8 +57,12 @@ void main() {
         request.method == 'PUT' && request.url.path.endsWith('/manifest.json'));
     final manifest = jsonDecode(utf8.decode(manifestRequest.bodyBytes))
         as Map<String, Object?>;
-    expect(manifest['latestSnapshotPath'], 'repapertodo/state.json');
+    expect(
+      manifest['latestSnapshotPath'],
+      'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device.json',
+    );
     expect(manifest['updatedAtUtc'], '2026-06-30T10:00:00.000Z');
+    expect(manifest['deviceSequences'], {'test-device': 1});
   });
 
   test('pull downloads and decodes the remote snapshot', () async {
@@ -81,6 +93,7 @@ void main() {
                 schemaVersion: 1,
                 updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
                 latestSnapshotPath: 'repapertodo/state.json',
+                deviceSequences: {'other-device': 2, 'test-device': 4},
               ).toJson(),
             ),
             200,
@@ -94,7 +107,10 @@ void main() {
             'unexpected ${request.method} ${request.url}', 500);
       }),
     );
-    final service = WebDavStateSyncService(client: webDavClient);
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
 
     final result = await service.pull();
 
@@ -122,7 +138,10 @@ void main() {
         };
       }),
     );
-    final service = WebDavStateSyncService(client: webDavClient);
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
 
     final result = await service.sync(
       localState: AppState(),
@@ -155,6 +174,7 @@ void main() {
                 schemaVersion: 1,
                 updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
                 latestSnapshotPath: 'repapertodo/state.json',
+                deviceSequences: {'other-device': 2, 'test-device': 4},
               ).toJson(),
             ),
             200,
@@ -164,7 +184,7 @@ void main() {
           return http.Response('', 405);
         }
         if (request.method == 'PUT' &&
-            request.url.path.endsWith('/state.json')) {
+            request.url.path.contains('/snapshots/')) {
           return http.Response('', 201);
         }
         if (request.method == 'PUT' &&
@@ -176,7 +196,10 @@ void main() {
             'unexpected ${request.method} ${request.url}', 500);
       }),
     );
-    final service = WebDavStateSyncService(client: webDavClient);
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
 
     final result = await service.sync(
       localState: AppState(
@@ -188,6 +211,10 @@ void main() {
     );
 
     expect(result.status, WebDavStateSyncStatus.conflict);
+    expect(result.manifest?.deviceSequences, {
+      'other-device': 2,
+      'test-device': 5,
+    });
   });
 
   test('creates a sync service from Jianguoyun WebDAV settings', () async {
@@ -197,6 +224,7 @@ void main() {
         username: 'user@example.com',
         password: 'app-password',
       ),
+      deviceId: 'test-device',
       httpClient: MockClient((request) async {
         requests.add(request);
         return switch (request.method) {
