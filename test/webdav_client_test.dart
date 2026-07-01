@@ -72,6 +72,41 @@ void main() {
     expect(entries.map((entry) => entry.contentLength), [null, null]);
   });
 
+  test('normalizes WebDAV metadata headers', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'HEAD');
+        if (request.url.path.endsWith('/with-etag.json')) {
+          return http.Response(
+            '',
+            200,
+            headers: {
+              'etag': ' "manifest-v1" ',
+              'content-length': ' 42 ',
+              'last-modified': ' Wed, 01 Jul 2026 09:01:00 GMT ',
+            },
+          );
+        }
+        return http.Response(
+          '',
+          200,
+          headers: {'etag': '  '},
+        );
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/with-etag.json');
+    final blankEtagMetadata =
+        await client.metadata('repapertodo/blank-etag.json');
+
+    expect(metadata?.etag, '"manifest-v1"');
+    expect(metadata?.contentLength, 42);
+    expect(metadata?.lastModified, DateTime.utc(2026, 7, 1, 9, 1));
+    expect(blankEtagMetadata?.etag, isNull);
+  });
+
   test('omits blank WebDAV condition headers', () async {
     final requests = <http.Request>[];
     final client = WebDavClient(

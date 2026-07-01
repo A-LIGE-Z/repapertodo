@@ -108,7 +108,7 @@ class WebDavClient {
     }
     _throwIfUnexpected(response, expected: {200, 204});
     return WebDavResourceMetadata(
-      etag: response.headers['etag'],
+      etag: _nonBlankHeaderValue(response.headers['etag']),
       contentLength: _tryParseContentLength(
         response.headers['content-length'],
       ),
@@ -360,7 +360,7 @@ WebDavEntry _parseEntry(XmlElement element) {
 
 DateTime? _tryParseHttpDate(String value) {
   try {
-    return HttpDate.parse(value);
+    return HttpDate.parse(value.trim());
   } on FormatException {
     return null;
   }
