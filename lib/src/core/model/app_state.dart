@@ -294,8 +294,8 @@ class AppState {
     todoReminderBubbleDurationSeconds =
         todoReminderBubbleDurationSeconds.clamp(1, 600).toInt();
     maxTitleLength = _normalizeMaxTitleLength(maxTitleLength);
-    pinnedTodoHotKey = pinnedTodoHotKey.trim();
-    pinnedNoteHotKey = pinnedNoteHotKey.trim();
+    pinnedTodoHotKey = _normalizeHotKeyForSettings(pinnedTodoHotKey);
+    pinnedNoteHotKey = _normalizeHotKeyForSettings(pinnedNoteHotKey);
     fullscreenTopmostMode =
         FullscreenTopmostModes.normalize(fullscreenTopmostMode);
     if (!useCapsuleMode) {
@@ -471,6 +471,11 @@ int _normalizeMaxTitleLength(int value) {
     return 6;
   }
   return value.clamp(2, 20).toInt();
+}
+
+String _normalizeHotKeyForSettings(String value) {
+  final text = value.trim();
+  return text.length > 64 ? text.substring(0, 64) : text;
 }
 
 String _newUniqueId(Set<String> usedIds) {

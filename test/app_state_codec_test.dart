@@ -90,6 +90,18 @@ void main() {
     expect(clampedLow.maxTitleLength, 6);
   });
 
+  test('normalizes pinned hotkeys like PaperTodo', () {
+    final longHotKey = 'Ctrl+Alt+${List.filled(80, 'A').join()}';
+    final state = AppState.fromJson({
+      'pinnedTodoHotKey': '  Ctrl+Alt+T  ',
+      'pinnedNoteHotKey': longHotKey,
+    });
+
+    expect(state.pinnedTodoHotKey, 'Ctrl+Alt+T');
+    expect(state.pinnedNoteHotKey, hasLength(64));
+    expect(state.pinnedNoteHotKey, longHotKey.substring(0, 64));
+  });
+
   test('migrates retired PaperTodo settings', () {
     final state = AppState.fromJson({
       'showTopBarNewPaperButtons': false,
