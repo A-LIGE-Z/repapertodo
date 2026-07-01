@@ -177,7 +177,7 @@ class WebDavClient {
       body: body,
     );
     _throwIfUnexpected(response, expected: {207});
-    return _parseMultiStatus(utf8.decode(response.bodyBytes));
+    return _parseMultiStatusResponse(response);
   }
 
   Future<http.Response> _send(
@@ -285,6 +285,24 @@ class WebDavException implements Exception {
   @override
   String toString() {
     return 'WebDavException($statusCode): $message';
+  }
+}
+
+List<WebDavEntry> _parseMultiStatusResponse(http.Response response) {
+  try {
+    return _parseMultiStatus(utf8.decode(response.bodyBytes));
+  } on FormatException catch (error) {
+    throw WebDavException(
+      'Malformed WebDAV multistatus response: ${error.message}',
+      statusCode: response.statusCode,
+      responseBody: response.body,
+    );
+  } on XmlException catch (error) {
+    throw WebDavException(
+      'Malformed WebDAV multistatus response: ${error.message}',
+      statusCode: response.statusCode,
+      responseBody: response.body,
+    );
   }
 }
 
