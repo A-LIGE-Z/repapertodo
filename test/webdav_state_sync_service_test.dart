@@ -226,6 +226,91 @@ void main() {
     });
   });
 
+  test('lists remote snapshots for conflict recovery', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/repapertodo/snapshots')) {
+          return http.Response(
+            '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/</D:href>
+    <D:propstat>
+      <D:prop><D:resourcetype><D:collection /></D:resourcetype></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"phone-v1"</D:getetag>
+        <D:getcontentlength>2048</D:getcontentlength>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:01:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/snapshot-20260630T210000000Z-win-device.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"win-v1"</D:getetag>
+        <D:getcontentlength>1024</D:getcontentlength>
+        <D:getlastmodified>Tue, 30 Jun 2026 21:02:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/readme.txt</D:href>
+    <D:propstat><D:prop /></D:propstat>
+  </D:response>
+</D:multistatus>
+''',
+            207,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final snapshots = await service.listSnapshots();
+
+    expect(snapshots, hasLength(2));
+    expect(snapshots.map((snapshot) => snapshot.deviceId), [
+      'phone',
+      'win-device',
+    ]);
+    expect(snapshots.first.path,
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json');
+    expect(snapshots.first.updatedAtUtc, DateTime.utc(2026, 7, 1, 9));
+    expect(snapshots.first.etag, 'phone-v1');
+    expect(snapshots.first.contentLength, 2048);
+    expect(snapshots.first.lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 1));
+  });
+
+  test('lists no snapshots when the snapshot collection is missing', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/repapertodo/snapshots')) {
+          return http.Response('', 404);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    expect(await service.listSnapshots(), isEmpty);
+  });
+
   test('creates a sync service from Jianguoyun WebDAV settings', () async {
     final requests = <http.Request>[];
     final service = WebDavStateSyncService.fromSettings(

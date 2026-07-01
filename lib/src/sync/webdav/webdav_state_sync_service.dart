@@ -58,6 +58,24 @@ class WebDavStateSyncResult {
   final String snapshotPath;
 }
 
+class WebDavSnapshotRecord {
+  const WebDavSnapshotRecord({
+    required this.path,
+    required this.deviceId,
+    required this.updatedAtUtc,
+    this.etag,
+    this.contentLength,
+    this.lastModifiedUtc,
+  });
+
+  final String path;
+  final String deviceId;
+  final DateTime updatedAtUtc;
+  final String? etag;
+  final int? contentLength;
+  final DateTime? lastModifiedUtc;
+}
+
 class WebDavStateSyncService {
   WebDavStateSyncService({
     required WebDavClient client,
@@ -181,6 +199,24 @@ class WebDavStateSyncService {
     );
   }
 
+  Future<List<WebDavSnapshotRecord>> listSnapshots() async {
+    try {
+      final entries = await _client.list(_paths.snapshotCollectionPath);
+      final snapshots = entries
+          .where((entry) => !entry.isCollection)
+          .map(_snapshotRecordFromEntry)
+          .whereType<WebDavSnapshotRecord>()
+          .toList();
+      snapshots.sort((a, b) => b.updatedAtUtc.compareTo(a.updatedAtUtc));
+      return snapshots;
+    } on WebDavException catch (error) {
+      if (error.statusCode == 404) {
+        return const [];
+      }
+      rethrow;
+    }
+  }
+
   Future<SyncManifest?> _loadManifest() async {
     return (await _loadManifestWithMetadata())?.manifest;
   }
@@ -195,6 +231,47 @@ class WebDavStateSyncService {
       manifest: SyncManifest.fromJson(decodeJsonObject(utf8.decode(bytes))),
       etag: metadata.etag,
     );
+  }
+
+  WebDavSnapshotRecord? _snapshotRecordFromEntry(WebDavEntry entry) {
+    final path = _entryRemotePath(entry.href);
+    final fileName = path.split('/').last;
+    final match =
+        RegExp(r'^snapshot-(\d{8}T\d{9}Z)-(.+)\.json$').firstMatch(fileName);
+    if (match == null) {
+      return null;
+    }
+    final updatedAtUtc = _tryParseSnapshotStamp(match.group(1)!);
+    if (updatedAtUtc == null) {
+      return null;
+    }
+    return WebDavSnapshotRecord(
+      path: path,
+      deviceId: match.group(2)!,
+      updatedAtUtc: updatedAtUtc,
+      etag: entry.etag,
+      contentLength: entry.contentLength,
+      lastModifiedUtc: entry.lastModified?.toUtc(),
+    );
+  }
+
+  String _entryRemotePath(String href) {
+    var path = Uri.decodeComponent(href).replaceAll('\\', '/');
+    if (path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
+    final root = _paths.rootCollectionPath;
+    if (root.isNotEmpty) {
+      final marker = '/$root/';
+      final markerIndex = path.indexOf(marker);
+      if (markerIndex >= 0) {
+        return _normalizeRemotePath(path.substring(markerIndex + 1));
+      }
+      if (path.startsWith(root)) {
+        return _normalizeRemotePath(path);
+      }
+    }
+    return _normalizeRemotePath(path);
   }
 
   Future<WebDavStateSyncResult> _downloadSnapshot(SyncManifest manifest) async {
@@ -291,6 +368,25 @@ String _formatSnapshotStamp(DateTime value) {
       '${two(utc.minute)}'
       '${two(utc.second)}'
       '${three(utc.millisecond)}Z';
+}
+
+DateTime? _tryParseSnapshotStamp(String value) {
+  if (!RegExp(r'^\d{8}T\d{9}Z$').hasMatch(value)) {
+    return null;
+  }
+  try {
+    return DateTime.utc(
+      int.parse(value.substring(0, 4)),
+      int.parse(value.substring(4, 6)),
+      int.parse(value.substring(6, 8)),
+      int.parse(value.substring(9, 11)),
+      int.parse(value.substring(11, 13)),
+      int.parse(value.substring(13, 15)),
+      int.parse(value.substring(15, 18)),
+    );
+  } on FormatException {
+    return null;
+  }
 }
 
 class WebDavSyncConfigurationException implements Exception {
