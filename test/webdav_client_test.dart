@@ -259,6 +259,76 @@ void main() {
     );
   });
 
+  test('rejects non-WebDAV namespace response entries', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response('''
+<D:multistatus xmlns:D="DAV:" xmlns:x="urn:not-webdav">
+  <x:response>
+    <x:href>/remote.php/dav/files/user/repapertodo/manifest.json</x:href>
+  </x:response>
+</D:multistatus>
+''', 207);
+      }),
+    );
+
+    await expectLater(
+      client.list('repapertodo'),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.statusCode, 'statusCode', 207)
+            .having(
+              (error) => error.message,
+              'message',
+              contains('DAV: response elements'),
+            )
+            .having(
+              (error) => error.responseBody,
+              'responseBody',
+              contains('urn:not-webdav'),
+            ),
+      ),
+    );
+  });
+
+  test('rejects response entries without WebDAV href elements', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response('''
+<D:multistatus xmlns:D="DAV:" xmlns:x="urn:not-webdav">
+  <D:response>
+    <x:href>/remote.php/dav/files/user/repapertodo/manifest.json</x:href>
+  </D:response>
+</D:multistatus>
+''', 207);
+      }),
+    );
+
+    await expectLater(
+      client.list('repapertodo'),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.statusCode, 'statusCode', 207)
+            .having(
+              (error) => error.message,
+              'message',
+              contains('DAV: href element'),
+            )
+            .having(
+              (error) => error.responseBody,
+              'responseBody',
+              contains('urn:not-webdav'),
+            ),
+      ),
+    );
+  });
+
   test('rejects invalid Basic Auth usernames before sending', () async {
     for (final username in const [
       '',

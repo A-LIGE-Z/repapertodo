@@ -317,14 +317,27 @@ List<WebDavEntry> _parseMultiStatus(String xml) {
       'WebDAV multistatus response must contain a DAV: multistatus root element.',
     );
   }
-  return _descendantElements(document)
+  final responseElements = document.rootElement.children
+      .whereType<XmlElement>()
       .where((element) => element.name.local == 'response')
-      .map(_parseEntry)
       .toList(growable: false);
+  if (responseElements.any(
+    (element) => !_isWebDavElement(element, 'response'),
+  )) {
+    throw const FormatException(
+      'WebDAV multistatus response entries must use DAV: response elements.',
+    );
+  }
+  return responseElements.map(_parseEntry).toList(growable: false);
 }
 
 WebDavEntry _parseEntry(XmlElement element) {
-  final href = _firstElementText(element, 'href') ?? '';
+  final href = _firstElementText(element, 'href');
+  if (href == null || href.isEmpty) {
+    throw const FormatException(
+      'WebDAV response entries must include a DAV: href element.',
+    );
+  }
   final etag = _stripQuotes(_firstElementText(element, 'getetag'));
   final lengthText = _firstElementText(element, 'getcontentlength');
   final lastModifiedText = _firstElementText(element, 'getlastmodified');
@@ -335,7 +348,7 @@ WebDavEntry _parseEntry(XmlElement element) {
     lastModified:
         lastModifiedText == null ? null : _tryParseHttpDate(lastModifiedText),
     isCollection: _descendantElements(element)
-        .any((child) => child.name.local == 'collection'),
+        .any((child) => _isWebDavElement(child, 'collection')),
   );
 }
 
@@ -349,7 +362,7 @@ DateTime? _tryParseHttpDate(String value) {
 
 String? _firstElementText(XmlElement element, String localName) {
   final matches = _descendantElements(element)
-      .where((child) => child.name.local == localName);
+      .where((child) => _isWebDavElement(child, localName));
   if (matches.isEmpty) {
     return null;
   }
@@ -358,6 +371,11 @@ String? _firstElementText(XmlElement element, String localName) {
 
 Iterable<XmlElement> _descendantElements(XmlNode node) {
   return node.descendants.whereType<XmlElement>();
+}
+
+bool _isWebDavElement(XmlElement element, String localName) {
+  return element.name.local == localName &&
+      element.name.namespaceUri == _webDavNamespace;
 }
 
 String? _stripQuotes(String? value) {
