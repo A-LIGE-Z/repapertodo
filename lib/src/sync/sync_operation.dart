@@ -34,14 +34,15 @@ class SyncOperation {
       fallback: '',
     );
     final kind = _kindFromWire(stringValue(json['kind'], ''));
+    final createdAtUtc = _createdAtUtcFromWire(
+      stringValue(json['createdAtUtc'], ''),
+    );
     return SyncOperation(
       id: stringValue(json['id'], ''),
       deviceId: deviceId,
       sequence: intValue(json['sequence'], 0),
       kind: kind,
-      createdAtUtc:
-          DateTime.tryParse(stringValue(json['createdAtUtc'], ''))?.toUtc() ??
-              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      createdAtUtc: createdAtUtc,
       payload: json['payload'] is Map
           ? Map<String, Object?>.from(json['payload'] as Map)
           : <String, Object?>{},
@@ -67,6 +68,14 @@ SyncOperationKind _kindFromWire(String value) {
     }
   }
   throw FormatException('Unknown sync operation kind: $value');
+}
+
+DateTime _createdAtUtcFromWire(String value) {
+  final parsed = DateTime.tryParse(value.trim())?.toUtc();
+  if (parsed == null) {
+    throw FormatException('Sync operation createdAtUtc must be valid: $value');
+  }
+  return parsed;
 }
 
 String _kindToWire(SyncOperationKind kind) {

@@ -872,6 +872,46 @@ void main() {
     );
   });
 
+  test('rejects operation logs with invalid operation timestamps', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/repapertodo/ops/android-device-000000000001.jsonl')) {
+          return http.Response(
+            '${jsonEncode({
+                  'id': 'android-device-1',
+                  'deviceId': 'android-device',
+                  'sequence': 1,
+                  'kind': 'updateSettings',
+                  'createdAtUtc': 'not-a-date',
+                  'payload': const <String, Object?>{},
+                })}\n',
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    expect(
+      service.downloadOperationLog(
+        '/repapertodo/ops/android-device-000000000001.jsonl',
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('createdAtUtc must be valid'),
+        ),
+      ),
+    );
+  });
+
   test('uploads prepared operation logs and advances device sequences',
       () async {
     final requests = <http.Request>[];

@@ -56,4 +56,27 @@ void main() {
       );
     }
   });
+
+  test('rejects invalid operation timestamps', () {
+    for (final createdAtUtc in const ['', 'not-a-date']) {
+      expect(
+        () => SyncOperation.fromJson({
+          'id': 'invalid-timestamp',
+          'deviceId': 'device-a',
+          'sequence': 5,
+          'kind': 'updateSettings',
+          'createdAtUtc': createdAtUtc,
+          'payload': const <String, Object?>{},
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('createdAtUtc must be valid'),
+          ),
+        ),
+        reason: createdAtUtc,
+      );
+    }
+  });
 }
