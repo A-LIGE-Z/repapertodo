@@ -282,6 +282,12 @@ List<String> _normalizeRequestPathSegments(String path) {
   late final String decoded;
   try {
     decoded = Uri.decodeComponent(withForwardSlashes);
+  } on ArgumentError catch (error) {
+    throw ArgumentError.value(
+      path,
+      'path',
+      'WebDAV path contains invalid percent encoding: ${error.message}',
+    );
   } on FormatException catch (error) {
     throw ArgumentError.value(
       path,

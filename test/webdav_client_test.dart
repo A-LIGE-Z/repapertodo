@@ -58,6 +58,32 @@ void main() {
     expect(requestCount, 0);
   });
 
+  test('reports malformed request path encoding before sending', () async {
+    var requestCount = 0;
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requestCount += 1;
+        return http.Response('network should not be reached', 500);
+      }),
+    );
+
+    await expectLater(
+      client.getBytes('repapertodo/bad%'),
+      throwsA(
+        isA<ArgumentError>()
+            .having((error) => error.name, 'name', 'path')
+            .having(
+              (error) => error.invalidValue,
+              'invalidValue',
+              'repapertodo/bad%',
+            ),
+      ),
+    );
+    expect(requestCount, 0);
+  });
+
   test('rejects unsupported base URIs', () {
     for (final baseUri in [
       Uri.parse('ftp://dav.example.test/dav/'),
