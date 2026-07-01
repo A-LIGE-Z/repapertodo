@@ -50,6 +50,7 @@ void main() {
     final state = AppState.fromJson({
       'theme': 'mystery',
       'colorScheme': 'unknown',
+      'customThemeColorHex': '#not-a-color',
       'markdownRenderMode': 'rich',
       'todoVisualSize': 'giant',
       'externalMarkdownExtension': 'txt',
@@ -57,9 +58,21 @@ void main() {
 
     expect(state.theme, 'system');
     expect(state.colorScheme, ColorSchemes.warm);
+    expect(state.customThemeColorHex, isEmpty);
     expect(state.markdownRenderMode, MarkdownRenderModes.enhanced);
     expect(state.todoVisualSize, TodoVisualSizes.medium);
     expect(state.externalMarkdownExtension, '.txt');
+  });
+
+  test('normalizes custom theme color hex values', () {
+    expect(
+      AppState.fromJson({'customThemeColorHex': '336699'}).customThemeColorHex,
+      '#336699',
+    );
+    expect(
+      AppState.fromJson({'customThemeColorHex': '#aabbcc'}).customThemeColorHex,
+      '#AABBCC',
+    );
   });
 
   test('normalizes todo note links against existing notes', () {

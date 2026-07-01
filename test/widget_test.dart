@@ -22,6 +22,7 @@ void main() {
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
       initialState: AppState(
+        theme: 'light',
         papers: [
           PaperData(
             id: 'welcome-todo',
@@ -176,6 +177,7 @@ void main() {
     expect(find.text('Ink'), findsOneWidget);
     expect(find.text('Forest'), findsOneWidget);
     expect(find.text('Rose'), findsOneWidget);
+    expect(find.text('Custom theme color'), findsOneWidget);
     expect(find.text('Appearance'), findsOneWidget);
     expect(find.text('Markdown off'), findsOneWidget);
     expect(find.text('Basic'), findsOneWidget);
@@ -269,6 +271,52 @@ void main() {
     expect(find.text('Split'), findsOneWidget);
     expect(find.text('Research note'), findsOneWidget);
     expect(find.text('Extract claims'), findsOneWidget);
+  });
+
+  testWidgets('saves custom theme color', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'theme-paper',
+            type: PaperTypes.todo,
+            title: 'Theme color',
+            items: [
+              PaperItem(id: 'theme-item', text: 'Tune color'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-custom-theme.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Custom theme color'),
+      '336699',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.customThemeColorHex, '#336699');
+    final theme = Theme.of(tester.element(find.byType(Scaffold)));
+    expect(
+      theme.colorScheme.primary,
+      ColorScheme.fromSeed(seedColor: const Color(0xFF336699)).primary,
+    );
   });
 
   testWidgets('opens note markdown externally', (tester) async {

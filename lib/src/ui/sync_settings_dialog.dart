@@ -8,6 +8,7 @@ class SyncSettingsDialogResult {
     required this.sync,
     required this.theme,
     required this.colorScheme,
+    required this.customThemeColorHex,
     required this.markdownRenderMode,
     required this.todoVisualSize,
     required this.uiFontPreset,
@@ -57,6 +58,7 @@ class SyncSettingsDialogResult {
   final SyncSettings sync;
   final String theme;
   final String colorScheme;
+  final String customThemeColorHex;
   final String markdownRenderMode;
   final String todoVisualSize;
   final String uiFontPreset;
@@ -108,6 +110,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required SyncSettings initialSettings,
   required String initialTheme,
   required String initialColorScheme,
+  required String initialCustomThemeColorHex,
   required String initialMarkdownRenderMode,
   required String initialTodoVisualSize,
   required String initialUiFontPreset,
@@ -159,6 +162,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialSettings: initialSettings,
       initialTheme: initialTheme,
       initialColorScheme: initialColorScheme,
+      initialCustomThemeColorHex: initialCustomThemeColorHex,
       initialMarkdownRenderMode: initialMarkdownRenderMode,
       initialTodoVisualSize: initialTodoVisualSize,
       initialUiFontPreset: initialUiFontPreset,
@@ -216,6 +220,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialSettings,
     required this.initialTheme,
     required this.initialColorScheme,
+    required this.initialCustomThemeColorHex,
     required this.initialMarkdownRenderMode,
     required this.initialTodoVisualSize,
     required this.initialUiFontPreset,
@@ -266,6 +271,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final SyncSettings initialSettings;
   final String initialTheme;
   final String initialColorScheme;
+  final String initialCustomThemeColorHex;
   final String initialMarkdownRenderMode;
   final String initialTodoVisualSize;
   final String initialUiFontPreset;
@@ -364,6 +370,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _rootPathController;
   late final TextEditingController _intervalController;
   late final TextEditingController _fontFamilyController;
+  late final TextEditingController _customThemeColorController;
   late final TextEditingController _externalMarkdownExtensionController;
   late final TextEditingController _deepCapsuleTopMarginController;
   late final TextEditingController _deepCapsuleMonitorController;
@@ -437,6 +444,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         TextEditingController(text: webDav.autoSyncIntervalMinutes.toString());
     _fontFamilyController =
         TextEditingController(text: widget.initialSystemFontFamilyName);
+    _customThemeColorController = TextEditingController(
+      text: widget.initialCustomThemeColorHex,
+    );
     _externalMarkdownExtensionController = TextEditingController(
       text: widget.initialExternalMarkdownExtension,
     );
@@ -472,6 +482,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _rootPathController.dispose();
     _intervalController.dispose();
     _fontFamilyController.dispose();
+    _customThemeColorController.dispose();
     _externalMarkdownExtensionController.dispose();
     _deepCapsuleTopMarginController.dispose();
     _deepCapsuleMonitorController.dispose();
@@ -545,6 +556,15 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 selected: {_colorScheme},
                 onSelectionChanged: (selection) =>
                     setState(() => _colorScheme = selection.single),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _customThemeColorController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Custom theme color',
+                  prefixIcon: Icon(Icons.palette_outlined),
+                ),
               ),
               const SizedBox(height: 16),
               Text(
@@ -1281,6 +1301,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         sync: settings,
         theme: _theme,
         colorScheme: _colorScheme,
+        customThemeColorHex:
+            _normalizeColorHex(_customThemeColorController.text),
         markdownRenderMode: _markdownRenderMode,
         todoVisualSize: _todoVisualSize,
         uiFontPreset: _uiFontPreset,
@@ -1366,6 +1388,19 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       return '.md';
     }
     return value.toLowerCase();
+  }
+
+  String _normalizeColorHex(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final withoutPrefix =
+        trimmed.startsWith('#') ? trimmed.substring(1) : trimmed;
+    if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(withoutPrefix)) {
+      return '';
+    }
+    return '#${withoutPrefix.toUpperCase()}';
   }
 }
 

@@ -53,7 +53,7 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
   ThemeData _appTheme(Brightness brightness, AppState state) {
     final base = ThemeData(
       colorScheme: ColorScheme.fromSeed(
-        seedColor: _seedColor(state.colorScheme),
+        seedColor: _seedColor(state),
         brightness: brightness,
       ),
       useMaterial3: true,
@@ -79,13 +79,25 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
     };
   }
 
-  Color _seedColor(String colorSchemeId) {
-    return switch (ColorSchemes.normalize(colorSchemeId)) {
+  Color _seedColor(AppState state) {
+    final customThemeColor = _customThemeColor(state.customThemeColorHex);
+    if (customThemeColor != null) {
+      return customThemeColor;
+    }
+    return switch (ColorSchemes.normalize(state.colorScheme)) {
       ColorSchemes.ink => const Color(0xFF4F6D7A),
       ColorSchemes.forest => const Color(0xFF2E7D32),
       ColorSchemes.rose => const Color(0xFFC85A7C),
       _ => const Color(0xFFE07A5F),
     };
+  }
+
+  Color? _customThemeColor(String value) {
+    final match = RegExp(r'^#?([0-9A-Fa-f]{6})$').firstMatch(value.trim());
+    if (match == null) {
+      return null;
+    }
+    return Color(int.parse('FF${match.group(1)!}', radix: 16));
   }
 
   String? _fontFamily(AppState state) {
@@ -600,6 +612,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       initialSettings: controller.state.sync,
       initialTheme: controller.state.theme,
       initialColorScheme: controller.state.colorScheme,
+      initialCustomThemeColorHex: controller.state.customThemeColorHex,
       initialMarkdownRenderMode: controller.state.markdownRenderMode,
       initialTodoVisualSize: controller.state.todoVisualSize,
       initialUiFontPreset: controller.state.uiFontPreset,
@@ -668,6 +681,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       controller.state.sync = result.sync;
       controller.state.theme = result.theme;
       controller.state.colorScheme = result.colorScheme;
+      controller.state.customThemeColorHex = result.customThemeColorHex;
       controller.state.markdownRenderMode = result.markdownRenderMode;
       controller.state.todoVisualSize = result.todoVisualSize;
       controller.state.uiFontPreset = result.uiFontPreset;

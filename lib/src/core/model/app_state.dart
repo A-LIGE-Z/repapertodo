@@ -263,6 +263,7 @@ class AppState {
       'light' || 'dark' || 'system' => theme,
       _ => 'system',
     };
+    customThemeColorHex = _normalizeColorHex(customThemeColorHex);
     colorScheme = ColorSchemes.normalize(colorScheme);
     markdownRenderMode = MarkdownRenderModes.normalize(markdownRenderMode);
     todoVisualSize = TodoVisualSizes.normalize(todoVisualSize);
@@ -371,6 +372,19 @@ class AppState {
       'sync': sync.toJson(),
     };
   }
+}
+
+String _normalizeColorHex(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+  final withoutPrefix =
+      trimmed.startsWith('#') ? trimmed.substring(1) : trimmed;
+  if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(withoutPrefix)) {
+    return '';
+  }
+  return '#${withoutPrefix.toUpperCase()}';
 }
 
 double _normalizeLineSpacing(double value) {
