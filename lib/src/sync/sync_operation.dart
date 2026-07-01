@@ -1,4 +1,5 @@
 import '../core/model/json_helpers.dart';
+import 'sync_device_id.dart';
 
 enum SyncOperationKind {
   stateSnapshot,
@@ -28,9 +29,13 @@ class SyncOperation {
   final JsonMap payload;
 
   factory SyncOperation.fromJson(JsonMap json) {
+    final deviceId = normalizeSyncDeviceId(
+      stringValue(json['deviceId'], ''),
+      fallback: '',
+    );
     return SyncOperation(
       id: stringValue(json['id'], ''),
-      deviceId: stringValue(json['deviceId'], ''),
+      deviceId: deviceId,
       sequence: intValue(json['sequence'], 0),
       kind: _kindFromWire(stringValue(json['kind'], '')),
       createdAtUtc:

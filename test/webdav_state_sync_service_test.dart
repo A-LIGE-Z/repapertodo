@@ -423,19 +423,16 @@ void main() {
                 '/repapertodo/ops/android-device-000000000001.jsonl')) {
           return http.Response(
             [
-              jsonEncode(
-                SyncOperation(
-                  id: 'android-device-1',
-                  deviceId: 'android-device',
-                  sequence: 1,
-                  kind: SyncOperationKind.stateSnapshot,
-                  createdAtUtc: DateTime.utc(2026, 7, 1, 9),
-                  payload: {
-                    'snapshotPath':
-                        'repapertodo/snapshots/snapshot-android.json',
-                  },
-                ).toJson(),
-              ),
+              jsonEncode({
+                'id': 'legacy-android-op',
+                'deviceId': ' Android Device ',
+                'sequence': 1,
+                'kind': 'stateSnapshot',
+                'createdAtUtc': DateTime.utc(2026, 7, 1, 9).toIso8601String(),
+                'payload': {
+                  'snapshotPath': 'repapertodo/snapshots/snapshot-android.json',
+                },
+              }),
               '',
             ].join('\n'),
             200,
@@ -452,6 +449,8 @@ void main() {
     );
 
     expect(operations, hasLength(1));
+    expect(operations.single.id, 'legacy-android-op');
+    expect(operations.single.deviceId, 'android-device');
     expect(operations.single.kind, SyncOperationKind.stateSnapshot);
     expect(operations.single.payload['snapshotPath'],
         'repapertodo/snapshots/snapshot-android.json');
