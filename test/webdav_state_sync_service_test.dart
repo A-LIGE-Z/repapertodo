@@ -314,6 +314,57 @@ void main() {
     expect(result.state?.papers.single.content, 'From WebDAV');
   });
 
+  test('rejects manifests with invalid timestamps before snapshot download',
+      () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode({
+              'schemaVersion': 1,
+              'updatedAtUtc': 'not-a-date',
+              'latestSnapshotPath':
+                  'repapertodo/snapshots/snapshot-20260630T110000000Z-other-device-seq-000000000004.json',
+              'deviceSequences': {'other-device': 2},
+            }),
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    await expectLater(
+      service.pull(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('updatedAtUtc must be valid'),
+        ),
+      ),
+    );
+    expect(
+      requests
+          .where((request) =>
+              request.method == 'GET' &&
+              !request.url.path.endsWith('/manifest.json'))
+          .map((request) => request.url.path),
+      isEmpty,
+    );
+  });
+
   test('rejects manifest snapshots outside the snapshot collection', () async {
     final requests = <http.Request>[];
     final webDavClient = WebDavClient(

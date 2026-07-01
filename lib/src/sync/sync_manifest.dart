@@ -24,11 +24,12 @@ class SyncManifest {
 
   factory SyncManifest.fromJson(JsonMap json) {
     final rawSequences = json['deviceSequences'];
+    final updatedAtUtc = _updatedAtUtcFromWire(
+      stringValue(json['updatedAtUtc'], ''),
+    );
     return SyncManifest(
       schemaVersion: intValue(json['schemaVersion'], 1),
-      updatedAtUtc:
-          DateTime.tryParse(stringValue(json['updatedAtUtc'], ''))?.toUtc() ??
-              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      updatedAtUtc: updatedAtUtc,
       latestSnapshotPath: stringValue(json['latestSnapshotPath'], ''),
       deviceSequences: {
         if (rawSequences is Map)
@@ -47,4 +48,12 @@ class SyncManifest {
       'deviceSequences': deviceSequences,
     };
   }
+}
+
+DateTime _updatedAtUtcFromWire(String value) {
+  final parsed = DateTime.tryParse(value.trim())?.toUtc();
+  if (parsed == null) {
+    throw FormatException('Sync manifest updatedAtUtc must be valid: $value');
+  }
+  return parsed;
 }
