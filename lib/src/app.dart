@@ -145,7 +145,8 @@ class PaperBoardScreen extends StatefulWidget {
   State<PaperBoardScreen> createState() => _PaperBoardScreenState();
 }
 
-class _PaperBoardScreenState extends State<PaperBoardScreen> {
+class _PaperBoardScreenState extends State<PaperBoardScreen>
+    with WidgetsBindingObserver {
   bool _isSyncing = false;
   Future<void> _saveQueue = Future<void>.value();
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
@@ -163,6 +164,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _surfaceUpdateSubscription =
         controller.paperSurfaceUpdates.listen(_handleSurfaceUpdate);
     _paperOpenSubscription = controller.paperOpenRequests.listen((paperId) {
@@ -177,6 +179,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoSyncTimer?.cancel();
     _surfaceSaveDebounce?.cancel();
     _titleSurfaceDebounce?.cancel();
@@ -185,6 +188,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     unawaited(_paperOpenSubscription?.cancel());
     unawaited(_startupCommandSubscription?.cancel());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        unawaited(_syncSilentlyIfConfigured());
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        break;
+    }
   }
 
   @override
@@ -960,10 +976,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       minutes: controller.state.sync.webDav.autoSyncIntervalMinutes,
     );
     _autoSyncTimer = Timer.periodic(interval, (_) {
-      if (!_isSyncing) {
-        unawaited(_syncNow(showMessage: false));
-      }
+      unawaited(_syncSilentlyIfConfigured());
     });
+  }
+
+  Future<void> _syncSilentlyIfConfigured() async {
+    if (_isSyncing || !_canRunAutoSync()) {
+      return;
+    }
+    await _syncNow(showMessage: false);
   }
 
   bool _canRunAutoSync() {

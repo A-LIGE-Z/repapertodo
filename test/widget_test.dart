@@ -913,6 +913,100 @@ void main() {
     expect(find.textContaining('Merged 2 remote changes.'), findsNothing);
   });
 
+  testWidgets('auto sync runs silently on foreground and background changes',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: syncSettings.copy(),
+        papers: [
+          PaperData(
+            id: 'lifecycle-note',
+            type: PaperTypes.note,
+            title: 'Lifecycle local',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-lifecycle-sync.json');
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'lifecycle-note',
+          type: PaperTypes.note,
+          title: 'Lifecycle synced',
+          content: 'Synced on lifecycle',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Lifecycle synced');
+    expect(find.text('Remote data downloaded.'), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+
+    expect(syncService.calls, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+
+    expect(syncService.calls, 2);
+    expect(find.text('Remote data downloaded.'), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
+    await tester.pump();
+
+    expect(syncService.calls, 3);
+    expect(find.text('Remote data downloaded.'), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(syncService.calls, 4);
+    expect(find.text('Remote data downloaded.'), findsNothing);
+  });
+
   testWidgets('opens note markdown externally', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
