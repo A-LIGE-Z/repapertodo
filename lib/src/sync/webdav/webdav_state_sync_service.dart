@@ -827,7 +827,7 @@ DateTime? _tryParseSnapshotStamp(String value) {
     return null;
   }
   try {
-    return DateTime.utc(
+    final parsed = DateTime.utc(
       int.parse(value.substring(0, 4)),
       int.parse(value.substring(4, 6)),
       int.parse(value.substring(6, 8)),
@@ -836,6 +836,7 @@ DateTime? _tryParseSnapshotStamp(String value) {
       int.parse(value.substring(13, 15)),
       int.parse(value.substring(15, 18)),
     );
+    return _formatSnapshotStamp(parsed) == value ? parsed : null;
   } on FormatException {
     return null;
   }

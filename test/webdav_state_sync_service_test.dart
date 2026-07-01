@@ -772,6 +772,16 @@ void main() {
     <D:propstat><D:prop /></D:propstat>
   </D:response>
   <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/snapshot-20261301T090000000Z-bad-date-seq-000000000001.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"bad-date"</D:getetag>
+        <D:getcontentlength>2048</D:getcontentlength>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:01:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
     <D:href>/remote.php/dav/files/user/repapertodo/snapshots/../other/snapshot-20260702T090000000Z-escaped-seq-000000000001.json</D:href>
     <D:propstat>
       <D:prop>
