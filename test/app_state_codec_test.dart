@@ -726,6 +726,37 @@ Plain item
     expect(settings.endpointUri, isNull);
     expect(settings.isConfigured, false);
   });
+
+  test('accepts only HTTP WebDAV endpoint schemes', () {
+    for (final endpoint in const [
+      'https://dav.example.test/dav/',
+      'http://dav.example.test/dav/',
+    ]) {
+      final settings = WebDavSyncSettings(
+        endpoint: endpoint,
+        username: 'user',
+        password: 'pass',
+      )..normalize();
+
+      expect(settings.endpointUri, isNotNull);
+      expect(settings.isConfigured, true);
+    }
+
+    for (final endpoint in const [
+      'ftp://dav.example.test/dav/',
+      'file:///tmp/dav',
+      'dav.example.test/dav/',
+    ]) {
+      final settings = WebDavSyncSettings(
+        endpoint: endpoint,
+        username: 'user',
+        password: 'pass',
+      )..normalize();
+
+      expect(settings.endpointUri, isNull);
+      expect(settings.isConfigured, false);
+    }
+  });
 }
 
 TextEditingValue _markdownEnter(String text, {int? caret}) {

@@ -247,7 +247,10 @@ class WebDavSyncSettings {
 
   Uri? get endpointUri {
     final uri = Uri.tryParse(endpoint);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    final scheme = uri?.scheme.toLowerCase();
+    if (uri == null ||
+        (scheme != 'http' && scheme != 'https') ||
+        uri.host.isEmpty) {
       return null;
     }
     return uri;
