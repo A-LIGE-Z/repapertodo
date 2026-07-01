@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cctype>
 #include <cstdlib>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -15,6 +16,15 @@
 #include "resource.h"
 
 namespace {
+
+struct PersistentScriptProcess {
+  std::wstring key;
+  HANDLE process = nullptr;
+  HANDLE input = nullptr;
+};
+
+std::mutex g_persistent_script_processes_mutex;
+std::vector<PersistentScriptProcess> g_persistent_script_processes;
 
 double GetNumberArgument(const flutter::EncodableMap& map,
                          const std::string& key,
@@ -290,6 +300,144 @@ void RunScriptCapsuleProcess(std::wstring executable,
     CloseHandle(process_information.hProcess);
   }
   DeleteFileW(script_path.c_str());
+}
+
+void ClosePersistentScriptProcess(PersistentScriptProcess& entry) {
+  if (entry.input) {
+    CloseHandle(entry.input);
+    entry.input = nullptr;
+  }
+  if (entry.process) {
+    if (WaitForSingleObject(entry.process, 0) == WAIT_TIMEOUT) {
+      TerminateProcess(entry.process, 0);
+      WaitForSingleObject(entry.process, 1000);
+    }
+    CloseHandle(entry.process);
+    entry.process = nullptr;
+  }
+}
+
+PersistentScriptProcess* EnsurePersistentScriptProcess(
+    const std::wstring& executable,
+    bool hide_window) {
+  const std::wstring key =
+      executable + L"|" + (hide_window ? L"hidden" : L"visible");
+  std::lock_guard<std::mutex> lock(g_persistent_script_processes_mutex);
+  for (auto iterator = g_persistent_script_processes.begin();
+       iterator != g_persistent_script_processes.end();) {
+    if (iterator->key == key) {
+      if (iterator->process &&
+          WaitForSingleObject(iterator->process, 0) == WAIT_TIMEOUT) {
+        return &(*iterator);
+      }
+      ClosePersistentScriptProcess(*iterator);
+      iterator = g_persistent_script_processes.erase(iterator);
+      continue;
+    }
+    ++iterator;
+  }
+
+  SECURITY_ATTRIBUTES security_attributes = {};
+  security_attributes.nLength = sizeof(SECURITY_ATTRIBUTES);
+  security_attributes.bInheritHandle = TRUE;
+  HANDLE input_read = nullptr;
+  HANDLE input_write = nullptr;
+  if (!CreatePipe(&input_read, &input_write, &security_attributes, 0)) {
+    return nullptr;
+  }
+  SetHandleInformation(input_write, HANDLE_FLAG_INHERIT, 0);
+  HANDLE null_output =
+      CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                  &security_attributes, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                  nullptr);
+
+  std::wstring command_line =
+      QuoteCommandArgument(executable) +
+      L" -NoProfile -ExecutionPolicy Bypass -NoExit -Command -";
+  STARTUPINFOW startup_info = {};
+  startup_info.cb = sizeof(startup_info);
+  startup_info.dwFlags = STARTF_USESTDHANDLES;
+  startup_info.hStdInput = input_read;
+  startup_info.hStdOutput =
+      null_output == INVALID_HANDLE_VALUE ? nullptr : null_output;
+  startup_info.hStdError =
+      null_output == INVALID_HANDLE_VALUE ? nullptr : null_output;
+  if (hide_window) {
+    startup_info.dwFlags |= STARTF_USESHOWWINDOW;
+    startup_info.wShowWindow = SW_HIDE;
+  }
+  PROCESS_INFORMATION process_information = {};
+  const DWORD creation_flags = hide_window ? CREATE_NO_WINDOW : 0;
+  const BOOL created = CreateProcessW(
+      nullptr, command_line.data(), nullptr, nullptr, TRUE, creation_flags,
+      nullptr, nullptr, &startup_info, &process_information);
+  CloseHandle(input_read);
+  if (null_output != INVALID_HANDLE_VALUE) {
+    CloseHandle(null_output);
+  }
+  if (!created) {
+    CloseHandle(input_write);
+    return nullptr;
+  }
+  CloseHandle(process_information.hThread);
+  g_persistent_script_processes.push_back(
+      PersistentScriptProcess{key, process_information.hProcess, input_write});
+  return &g_persistent_script_processes.back();
+}
+
+bool WriteUtf8LineToPipe(HANDLE pipe, const std::wstring& line) {
+  const std::wstring with_newline = line + L"\r\n";
+  const int size = WideCharToMultiByte(CP_UTF8, 0, with_newline.c_str(), -1,
+                                       nullptr, 0, nullptr, nullptr);
+  if (size <= 1) {
+    return false;
+  }
+  std::string utf8(static_cast<size_t>(size - 1), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, with_newline.c_str(), -1, utf8.data(), size,
+                      nullptr, nullptr);
+  DWORD written = 0;
+  return WriteFile(pipe, utf8.data(), static_cast<DWORD>(utf8.size()),
+                   &written, nullptr) &&
+         written == static_cast<DWORD>(utf8.size());
+}
+
+bool SubmitPersistentScriptCapsule(const std::wstring& executable,
+                                   const std::wstring& script_path,
+                                   bool hide_window) {
+  PersistentScriptProcess* process =
+      EnsurePersistentScriptProcess(executable, hide_window);
+  if (!process || !process->input) {
+    return false;
+  }
+  const std::wstring escaped_path =
+      EscapePowerShellSingleQuotedString(script_path);
+  const std::wstring command =
+      std::wstring(L"[Console]::OutputEncoding = "
+                   L"[System.Text.Encoding]::UTF8; $OutputEncoding = "
+                   L"[System.Text.Encoding]::UTF8; try { & '") +
+      escaped_path + L"' } finally { Remove-Item -LiteralPath '" +
+      escaped_path + L"' -ErrorAction SilentlyContinue }";
+  const bool submitted = WriteUtf8LineToPipe(process->input, command);
+  if (!submitted) {
+    std::lock_guard<std::mutex> lock(g_persistent_script_processes_mutex);
+    for (auto iterator = g_persistent_script_processes.begin();
+         iterator != g_persistent_script_processes.end(); ++iterator) {
+      if (&(*iterator) == process) {
+        ClosePersistentScriptProcess(*iterator);
+        g_persistent_script_processes.erase(iterator);
+        break;
+      }
+    }
+  }
+  return submitted;
+}
+
+void StopPersistentScriptProcesses() {
+  std::lock_guard<std::mutex> lock(g_persistent_script_processes_mutex);
+  for (auto& process : g_persistent_script_processes) {
+    ClosePersistentScriptProcess(process);
+  }
+  g_persistent_script_processes.clear();
 }
 
 std::wstring TrayPaperLabel(const flutter::EncodableMap& map) {
@@ -775,6 +923,8 @@ bool FlutterWindow::OnCreate() {
         if (method == "runScriptCapsule") {
           std::string engine = "auto";
           std::string script;
+          bool use_persistent_process = false;
+          bool use_persistent_power_shell_process = false;
           bool prefer_power_shell7 = true;
           bool hide_script_run_window = true;
           if (call.arguments()) {
@@ -782,6 +932,10 @@ bool FlutterWindow::OnCreate() {
                     std::get_if<flutter::EncodableMap>(call.arguments())) {
               engine = GetStringArgument(*request, "engine", "auto");
               script = GetStringArgument(*request, "script", "");
+              use_persistent_process =
+                  GetBoolArgument(*request, "usePersistentProcess", false);
+              use_persistent_power_shell_process = GetBoolArgument(
+                  *request, "usePersistentPowerShellProcess", false);
               prefer_power_shell7 =
                   GetBoolArgument(*request, "preferPowerShell7", true);
               hide_script_run_window =
@@ -804,6 +958,17 @@ bool FlutterWindow::OnCreate() {
           if (script_path.empty()) {
             result->Error("script_capsule_file_failed",
                           "Unable to write the script capsule file.");
+            return;
+          }
+          if (use_persistent_process && use_persistent_power_shell_process) {
+            if (!SubmitPersistentScriptCapsule(executable, script_path,
+                                               hide_script_run_window)) {
+              DeleteFileW(script_path.c_str());
+              result->Error("persistent_script_capsule_failed",
+                            "Unable to submit the script capsule.");
+              return;
+            }
+            result->Success();
             return;
           }
           std::thread(RunScriptCapsuleProcess, executable, script_path,
@@ -1064,6 +1229,7 @@ void FlutterWindow::SendWindowEvent(const char* method) {
 
 void FlutterWindow::OnDestroy() {
   StopSingleInstanceListener();
+  StopPersistentScriptProcesses();
   HWND window = GetHandle();
   if (window) {
     UnregisterHotKey(window, kPinnedTodoHotkeyId);
