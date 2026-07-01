@@ -132,6 +132,7 @@ void main() {
       'useCapsuleCollapseAll': true,
       'capsuleCollapseAllActive': false,
       'capsuleCollapseAllActiveQueues': {
+        'left': true,
         'Primary|left': true,
         'Primary|right': false,
       },
@@ -140,6 +141,7 @@ void main() {
     expect(activeQueue.useCapsuleCollapseAll, true);
     expect(activeQueue.capsuleCollapseAllActive, true);
     expect(activeQueue.capsuleCollapseAllActiveQueues, {
+      '|left': true,
       'Primary|left': true,
     });
   });
@@ -381,20 +383,38 @@ void main() {
 
   test('normalizes deep capsule top margins', () {
     final state = AppState.fromJson({
+      'useCapsuleMode': true,
+      'useDeepCapsuleMode': true,
+      'useCapsuleCollapseAll': true,
       'deepCapsuleStartTopMargin': 2,
       'deepCapsuleQueueStartTopMargins': {
-        'top': 4,
-        'middle': 64,
-        'bottom': 20000,
+        'left': 16,
+        'Primary|right': 4,
+        'Secondary|right': 64,
+        'Tertiary|left': 20000,
       },
     });
 
     expect(state.deepCapsuleStartTopMargin, 8);
     expect(state.deepCapsuleQueueStartTopMargins, {
-      'top': 8,
-      'middle': 64,
-      'bottom': 10000,
+      '|left': 16,
+      'Primary|right': 8,
+      'Secondary|right': 64,
+      'Tertiary|left': 10000,
     });
+
+    final disabled = AppState.fromJson({
+      'useCapsuleMode': false,
+      'useDeepCapsuleMode': true,
+      'useCapsuleCollapseAll': true,
+      'deepCapsuleStartTopMargin': 72,
+      'deepCapsuleQueueStartTopMargins': {
+        'Primary|left': 64,
+      },
+    });
+
+    expect(disabled.deepCapsuleStartTopMargin, 48);
+    expect(disabled.deepCapsuleQueueStartTopMargins, isEmpty);
   });
 
   test('decodes and normalizes WebDAV sync settings', () {

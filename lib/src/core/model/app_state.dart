@@ -308,22 +308,25 @@ class AppState {
       capsuleCollapseAllActive = false;
       capsuleCollapseAllActiveQueues = <String, bool>{};
     } else {
-      capsuleCollapseAllActiveQueues = {
-        for (final entry in capsuleCollapseAllActiveQueues.entries)
-          if (entry.value) entry.key: true,
-      };
+      capsuleCollapseAllActiveQueues =
+          _normalizeCollapseAllActiveQueues(capsuleCollapseAllActiveQueues);
       if (capsuleCollapseAllActiveQueues.isNotEmpty) {
         capsuleCollapseAllActive = true;
       }
     }
-    deepCapsuleStartTopMargin =
-        deepCapsuleStartTopMargin.clamp(8, 10000).toDouble();
-    deepCapsuleQueueStartTopMargins = {
-      for (final entry in deepCapsuleQueueStartTopMargins.entries)
-        entry.key: entry.value.clamp(8, 10000).toDouble(),
-    };
     deepCapsuleSide = DeepCapsuleSides.normalize(deepCapsuleSide);
     deepCapsuleMonitorDeviceName = deepCapsuleMonitorDeviceName.trim();
+    final keepDeepCapsuleStartTopMargins =
+        useCapsuleMode && useDeepCapsuleMode && useCapsuleCollapseAll;
+    if (storageCompatibility && !keepDeepCapsuleStartTopMargins) {
+      deepCapsuleStartTopMargin = 48;
+      deepCapsuleQueueStartTopMargins = <String, double>{};
+    } else {
+      deepCapsuleStartTopMargin =
+          deepCapsuleStartTopMargin.clamp(8, 10000).toDouble();
+      deepCapsuleQueueStartTopMargins =
+          _normalizeQueueStartTopMargins(deepCapsuleQueueStartTopMargins);
+    }
     externalMarkdownExtension = _normalizeExtension(externalMarkdownExtension);
     sync.normalize();
     final usedPaperIds = <String>{};
@@ -476,6 +479,46 @@ String _newUniqueId(Set<String> usedIds) {
     id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
   } while (!usedIds.add(id));
   return id;
+}
+
+Map<String, bool> _normalizeCollapseAllActiveQueues(Map<String, bool> source) {
+  final normalized = <String, bool>{};
+  for (final entry in source.entries) {
+    if (!entry.value) {
+      continue;
+    }
+    normalized.putIfAbsent(_normalizeQueueKey(entry.key), () => true);
+  }
+  return normalized;
+}
+
+Map<String, double> _normalizeQueueStartTopMargins(Map<String, double> source) {
+  final normalized = <String, double>{};
+  for (final entry in source.entries) {
+    final normalizedKey = _normalizeQueueKey(entry.key);
+    if (!normalized.containsKey(normalizedKey) || entry.key == normalizedKey) {
+      normalized[normalizedKey] = entry.value.clamp(8, 10000).toDouble();
+    }
+  }
+  return normalized;
+}
+
+String _normalizeQueueKey(String? key) {
+  final value = (key ?? '').trim();
+  final separator = value.lastIndexOf('|');
+  if (separator < 0) {
+    return _queueKey('', value);
+  }
+  return _queueKey(
+      value.substring(0, separator), value.substring(separator + 1));
+}
+
+String _queueKey(String? monitorDeviceName, String? side) {
+  final monitor = (monitorDeviceName ?? '').trim();
+  final normalizedSide = side == DeepCapsuleSides.left
+      ? DeepCapsuleSides.left
+      : DeepCapsuleSides.right;
+  return '$monitor|$normalizedSide';
 }
 
 String _normalizeExtension(String extension) {
