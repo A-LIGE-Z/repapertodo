@@ -1014,6 +1014,34 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (method == "preparePersistentScriptCapsule") {
+          bool prefer_power_shell7 = true;
+          bool hide_script_run_window = true;
+          if (call.arguments()) {
+            if (const auto* request =
+                    std::get_if<flutter::EncodableMap>(call.arguments())) {
+              prefer_power_shell7 =
+                  GetBoolArgument(*request, "preferPowerShell7", true);
+              hide_script_run_window =
+                  GetBoolArgument(*request, "hideScriptRunWindow", true);
+            }
+          }
+          const std::wstring executable =
+              ResolvePowerShellExecutable("auto", prefer_power_shell7);
+          if (executable.empty()) {
+            result->Error("powershell_not_found",
+                          "PowerShell 7 (pwsh.exe) was not found.");
+            return;
+          }
+          if (!EnsurePersistentScriptProcess(executable,
+                                             hide_script_run_window)) {
+            result->Error("persistent_script_capsule_failed",
+                          "Unable to prepare the script capsule process.");
+            return;
+          }
+          result->Success();
+          return;
+        }
         if (method == "stopPersistentScriptCapsules") {
           StopPersistentScriptProcesses();
           result->Success();

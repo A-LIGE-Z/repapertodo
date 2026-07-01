@@ -111,6 +111,12 @@ class NoopExternalFileHost implements ExternalFileHost {
 
 class NoopScriptCapsuleHost implements ScriptCapsuleHost {
   @override
+  Future<void> preparePersistentProcess({
+    required bool preferPowerShell7,
+    required bool hideScriptRunWindow,
+  }) async {}
+
+  @override
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {}
 
   @override

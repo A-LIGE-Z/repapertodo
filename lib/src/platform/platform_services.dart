@@ -52,6 +52,10 @@ abstract interface class ExternalFileHost {
 }
 
 abstract interface class ScriptCapsuleHost {
+  Future<void> preparePersistentProcess({
+    required bool preferPowerShell7,
+    required bool hideScriptRunWindow,
+  });
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request);
   Future<void> stopPersistentProcesses();
 }

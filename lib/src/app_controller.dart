@@ -38,6 +38,9 @@ class RePaperTodoController {
         .setHideFromWindowSwitcher(state.hidePapersFromWindowSwitcher);
     await _platform.systemIntegration
         .setFullscreenTopmostMode(state.fullscreenTopmostMode);
+    if (state.usePersistentPowerShellProcess) {
+      await preparePersistentScriptCapsules();
+    }
 
     if (state.papers.isEmpty && !startupCommand.createsPaper) {
       createPaper(PaperTypes.todo);
@@ -134,6 +137,13 @@ class RePaperTodoController {
 
   Future<void> stopPersistentScriptCapsules() async {
     await _platform.scriptCapsules.stopPersistentProcesses();
+  }
+
+  Future<void> preparePersistentScriptCapsules() async {
+    await _platform.scriptCapsules.preparePersistentProcess(
+      preferPowerShell7: state.preferPowerShell7,
+      hideScriptRunWindow: state.hideScriptRunWindow,
+    );
   }
 
   Future<void> showPaper(PaperData paper) async {

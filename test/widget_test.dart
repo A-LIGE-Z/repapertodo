@@ -1308,6 +1308,9 @@ void main() {
 
     expect(controller.state.preferPowerShell7, false);
     expect(platform.scriptCapsules.stopCount, 1);
+    expect(platform.scriptCapsules.preparedSettings, [
+      (preferPowerShell7: false, hideScriptRunWindow: true),
+    ]);
   });
 
   testWidgets('saves pinned hotkeys and re-registers global hotkeys',
@@ -1704,7 +1707,20 @@ class _RecordingExternalFileHost implements ExternalFileHost {
 
 class _RecordingScriptCapsuleHost implements ScriptCapsuleHost {
   final requests = <ScriptCapsuleRunRequest>[];
+  final preparedSettings =
+      <({bool preferPowerShell7, bool hideScriptRunWindow})>[];
   var stopCount = 0;
+
+  @override
+  Future<void> preparePersistentProcess({
+    required bool preferPowerShell7,
+    required bool hideScriptRunWindow,
+  }) async {
+    preparedSettings.add((
+      preferPowerShell7: preferPowerShell7,
+      hideScriptRunWindow: hideScriptRunWindow,
+    ));
+  }
 
   @override
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {

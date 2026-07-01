@@ -773,6 +773,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     )) {
       await controller.stopPersistentScriptCapsules();
     }
+    if (_shouldPreparePersistentScriptCapsules(
+      previousUsePersistentPowerShellProcess,
+      previousPreferPowerShell7,
+      previousHideScriptRunWindow,
+      result,
+    )) {
+      await controller.preparePersistentScriptCapsules();
+    }
     widget.onAppThemeChanged?.call();
     _restartTodoReminderTimer();
     await _saveState();
@@ -788,6 +796,20 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       return false;
     }
     return !result.usePersistentPowerShellProcess ||
+        previousPreferPowerShell7 != result.preferPowerShell7 ||
+        previousHideScriptRunWindow != result.hideScriptRunWindow;
+  }
+
+  bool _shouldPreparePersistentScriptCapsules(
+    bool previousUsePersistentPowerShellProcess,
+    bool previousPreferPowerShell7,
+    bool previousHideScriptRunWindow,
+    SyncSettingsDialogResult result,
+  ) {
+    if (!result.usePersistentPowerShellProcess) {
+      return false;
+    }
+    return !previousUsePersistentPowerShellProcess ||
         previousPreferPowerShell7 != result.preferPowerShell7 ||
         previousHideScriptRunWindow != result.hideScriptRunWindow;
   }

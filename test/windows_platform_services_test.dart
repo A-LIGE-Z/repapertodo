@@ -139,6 +139,10 @@ void main() {
         hideScriptRunWindow: true,
       ),
     );
+    await services.scriptCapsules.preparePersistentProcess(
+      preferPowerShell7: false,
+      hideScriptRunWindow: false,
+    );
     await services.scriptCapsules.stopPersistentProcesses();
 
     expect(
@@ -162,6 +166,7 @@ void main() {
         'isForegroundFullscreen',
         'openExternalFile',
         'runScriptCapsule',
+        'preparePersistentScriptCapsule',
         'stopPersistentScriptCapsules',
       ],
     );
@@ -209,6 +214,10 @@ void main() {
       'usePersistentPowerShellProcess': true,
       'preferPowerShell7': true,
       'hideScriptRunWindow': true,
+    });
+    expect(calls[18].arguments, {
+      'preferPowerShell7': false,
+      'hideScriptRunWindow': false,
     });
     expect(calls.last.arguments, isNull);
   });

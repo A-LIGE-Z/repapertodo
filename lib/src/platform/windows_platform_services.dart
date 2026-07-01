@@ -328,6 +328,17 @@ class WindowsScriptCapsuleHost implements ScriptCapsuleHost {
   final MethodChannel _channel;
 
   @override
+  Future<void> preparePersistentProcess({
+    required bool preferPowerShell7,
+    required bool hideScriptRunWindow,
+  }) async {
+    await _channel.invokeMethod<void>('preparePersistentScriptCapsule', {
+      'preferPowerShell7': preferPowerShell7,
+      'hideScriptRunWindow': hideScriptRunWindow,
+    });
+  }
+
+  @override
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {
     await _channel.invokeMethod<void>('runScriptCapsule', request.toJson());
   }
