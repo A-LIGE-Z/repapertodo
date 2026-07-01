@@ -330,6 +330,9 @@ String _normalizeRootPath(String value) {
 }
 
 bool _hasUnsafeEndpointPath(String endpoint) {
+  if (endpoint.contains('\\')) {
+    return true;
+  }
   final schemeSeparator = endpoint.indexOf('://');
   if (schemeSeparator < 0) {
     return false;

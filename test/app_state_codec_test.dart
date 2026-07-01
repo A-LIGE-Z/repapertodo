@@ -752,6 +752,9 @@ Plain item
       'https://dav.example.test/dav/./files/',
       'https://dav.example.test/dav/../files/',
       'https://dav.example.test/dav/%2e%2e/files/',
+      r'https://dav.example.test\dav\files\',
+      r'https://dav.example.test/dav\..\files/',
+      'https://dav.example.test/dav/%5C..%5Cfiles/',
       'https://dav.example.test/dav/bad%/',
     ]) {
       final settings = WebDavSyncSettings(

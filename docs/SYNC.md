@@ -13,6 +13,7 @@ endpoint shapes are treated as incomplete settings.
 Endpoint paths with dot-segments or malformed percent encoding are also treated
 as incomplete settings so the configured WebDAV base folder is not silently
 rewritten by URI normalization.
+Backslashes are not accepted in configured endpoints for the same reason.
 
 Initial recommended preset:
 
