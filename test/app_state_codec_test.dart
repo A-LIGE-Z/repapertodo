@@ -172,6 +172,23 @@ Plain item
     );
   });
 
+  test('clips oversized markdown pastes like PaperTodo', () {
+    final longLine = List.filled(6500, 'a').join();
+    final sanitized = MarkdownPasteText.sanitize('$longLine\r\nshort\rnext');
+
+    expect(sanitized.split('\n'), [
+      List.filled(6000, 'a').join(),
+      'short',
+      'next',
+    ]);
+
+    final oversized = MarkdownPasteText.sanitize(
+      List.filled(7, List.filled(5000, 'b').join()).join('\n'),
+    );
+
+    expect(oversized, hasLength(30000));
+  });
+
   test('normalizes pinned hotkeys like PaperTodo', () {
     final longHotKey = 'Ctrl+Alt+${List.filled(80, 'A').join()}';
     final state = AppState.fromJson({

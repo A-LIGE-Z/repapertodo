@@ -466,6 +466,45 @@ void main() {
     expect(find.text('12 chars | 1 line | 4 elements'), findsOneWidget);
   });
 
+  testWidgets('clips oversized markdown note input', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'markdown-paste-note',
+            type: PaperTypes.note,
+            title: 'Markdown paste',
+            content: 'Old body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-markdown-paste.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('markdown-paste-note-content')),
+      '${List.filled(6500, 'x').join()}\r\n'
+      '${List.filled(24000, 'y').join()}',
+    );
+    await tester.pump();
+
+    final content = controller.state.papers.single.content;
+    expect(content.length, lessThanOrEqualTo(30000));
+    expect(content.split('\n').first, hasLength(6000));
+    expect(content.contains('\r'), isFalse);
+  });
+
   testWidgets('saves custom theme color', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

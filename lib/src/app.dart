@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import 'app_controller.dart';
 import 'core/model/app_state.dart';
+import 'core/model/markdown_paste.dart';
 import 'core/model/note_canvas_element.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
@@ -1583,6 +1584,9 @@ class _NoteEditorState extends State<_NoteEditor> {
             fontSizeFactor: widget.textZoom,
           )
           .copyWith(height: widget.lineSpacing),
+      inputFormatters: const [
+        _MarkdownPasteTextInputFormatter(),
+      ],
       onChanged: (value) {
         setState(() => widget.paper.content = value);
         unawaited(widget.onChanged());
@@ -3299,6 +3303,27 @@ class _TodoPasteTextInputFormatter extends TextInputFormatter {
     }
     scheduleMicrotask(() => onPaste(newValue.text));
     return oldValue;
+  }
+}
+
+class _MarkdownPasteTextInputFormatter extends TextInputFormatter {
+  const _MarkdownPasteTextInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final sanitized = MarkdownPasteText.sanitize(newValue.text);
+    if (sanitized == newValue.text) {
+      return newValue;
+    }
+    return TextEditingValue(
+      text: sanitized,
+      selection: TextSelection.collapsed(
+        offset: sanitized.length,
+      ),
+    );
   }
 }
 
