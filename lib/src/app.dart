@@ -1424,6 +1424,8 @@ class _NoteEditorState extends State<_NoteEditor> {
           _editor(context, minLines: 4, maxLines: 12),
           const SizedBox(height: 12),
           _canvasSection(),
+          const SizedBox(height: 8),
+          _noteStatusBar(context, _viewEdit),
         ],
       );
     }
@@ -1483,6 +1485,8 @@ class _NoteEditorState extends State<_NoteEditor> {
         ],
         const SizedBox(height: 12),
         _addCanvasButton(),
+        const SizedBox(height: 8),
+        _noteStatusBar(context, _safeView(mode)),
       ],
     );
   }
@@ -1509,10 +1513,97 @@ class _NoteEditorState extends State<_NoteEditor> {
           )
           .copyWith(height: widget.lineSpacing),
       onChanged: (value) {
-        widget.paper.content = value;
+        setState(() => widget.paper.content = value);
         unawaited(widget.onChanged());
       },
     );
+  }
+
+  Widget _noteStatusBar(BuildContext context, String view) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        );
+    return DecoratedBox(
+      key: const ValueKey('note-status-bar'),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLowest,
+        border: Border(
+          top: BorderSide(color: colorScheme.outlineVariant),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Row(
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                child: Text(
+                  _noteViewLabel(view),
+                  key: const ValueKey('note-status-mode'),
+                  style: textStyle?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _noteStatsText(),
+                key: const ValueKey('note-status-stats'),
+                overflow: TextOverflow.ellipsis,
+                style: textStyle,
+              ),
+            ),
+            Text(
+              '${(widget.textZoom * 100).round()}%',
+              key: const ValueKey('note-status-zoom'),
+              style: textStyle,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _noteStatsText() {
+    final characterCount = _countNoteTextCharacters(widget.paper.content);
+    final lineCount = _countNoteLines(widget.paper.content);
+    final elementCount = widget.paper.noteCanvasElements.length;
+    return [
+      '$characterCount ${characterCount == 1 ? 'char' : 'chars'}',
+      '$lineCount ${lineCount == 1 ? 'line' : 'lines'}',
+      '$elementCount ${elementCount == 1 ? 'element' : 'elements'}',
+    ].join(' | ');
+  }
+
+  int _countNoteTextCharacters(String text) {
+    return text.runes.where((rune) {
+      final character = String.fromCharCode(rune);
+      return rune >= 32 && rune != 127 && character.trim().isNotEmpty;
+    }).length;
+  }
+
+  int _countNoteLines(String text) {
+    if (text.isEmpty) {
+      return 1;
+    }
+    return '\n'.allMatches(text).length + 1;
+  }
+
+  String _noteViewLabel(String view) {
+    return switch (view) {
+      _viewPreview => 'Preview',
+      _viewSplit => 'Split',
+      _ => 'Edit',
+    };
   }
 
   Widget _preview(BuildContext context) {

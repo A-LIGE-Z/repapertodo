@@ -269,7 +269,7 @@ void main() {
 
     expect(find.text('Edit'), findsOneWidget);
     expect(find.text('Preview'), findsOneWidget);
-    expect(find.text('Split'), findsOneWidget);
+    expect(find.text('Split'), findsWidgets);
     expect(find.text('Research note'), findsOneWidget);
     expect(find.text('Extract claims'), findsOneWidget);
   });
@@ -319,6 +319,11 @@ void main() {
         store: store,
       ),
     );
+
+    expect(find.byKey(const ValueKey('note-status-bar')), findsOneWidget);
+    expect(find.text('Split'), findsNWidgets(2));
+    expect(find.text('12 chars | 1 line | 2 elements'), findsOneWidget);
+    expect(find.byKey(const ValueKey('note-status-zoom')), findsOneWidget);
 
     expect(find.byKey(const ValueKey('note-canvas-preview')), findsOneWidget);
     expect(
@@ -423,11 +428,13 @@ void main() {
         controller.state.papers.single.noteCanvasElements.last;
     expect(addedTextBlock.type, NoteCanvasElementTypes.text);
     expect(addedTextBlock.text, 'Canvas text 5');
+    expect(find.text('12 chars | 1 line | 5 elements'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Delete canvas block').last);
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.noteCanvasElements, hasLength(4));
+    expect(find.text('12 chars | 1 line | 4 elements'), findsOneWidget);
   });
 
   testWidgets('saves custom theme color', (tester) async {
