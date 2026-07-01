@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cctype>
 #include <cstdlib>
@@ -96,6 +97,199 @@ std::wstring Utf8ToWide(const std::string& value) {
   std::wstring wide_value(size - 1, L'\0');
   MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, wide_value.data(), size);
   return wide_value;
+}
+
+std::string Base64Encode(const unsigned char* data, size_t size) {
+  constexpr char kAlphabet[] =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  std::string encoded;
+  encoded.reserve(((size + 2) / 3) * 4);
+  for (size_t index = 0; index < size; index += 3) {
+    const unsigned int octet_a = data[index];
+    const unsigned int octet_b = index + 1 < size ? data[index + 1] : 0;
+    const unsigned int octet_c = index + 2 < size ? data[index + 2] : 0;
+    const unsigned int triple = (octet_a << 16) | (octet_b << 8) | octet_c;
+    encoded.push_back(kAlphabet[(triple >> 18) & 0x3F]);
+    encoded.push_back(kAlphabet[(triple >> 12) & 0x3F]);
+    encoded.push_back(index + 1 < size ? kAlphabet[(triple >> 6) & 0x3F]
+                                       : '=');
+    encoded.push_back(index + 2 < size ? kAlphabet[triple & 0x3F] : '=');
+  }
+  return encoded;
+}
+
+std::wstring QuoteCommandArgument(const std::wstring& value) {
+  std::wstring quoted = L"\"";
+  for (const wchar_t character : value) {
+    if (character == L'"') {
+      quoted += L"\\\"";
+    } else {
+      quoted.push_back(character);
+    }
+  }
+  quoted += L"\"";
+  return quoted;
+}
+
+std::wstring EscapePowerShellSingleQuotedString(const std::wstring& value) {
+  std::wstring escaped;
+  escaped.reserve(value.size());
+  for (const wchar_t character : value) {
+    if (character == L'\'') {
+      escaped += L"''";
+    } else {
+      escaped.push_back(character);
+    }
+  }
+  return escaped;
+}
+
+std::string EncodedPowerShellLaunchCommand(const std::wstring& path) {
+  const std::wstring command =
+      std::wstring(L"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+                   L"$OutputEncoding = [System.Text.Encoding]::UTF8; & '") +
+      EscapePowerShellSingleQuotedString(path) + L"'";
+  return Base64Encode(reinterpret_cast<const unsigned char*>(command.data()),
+                      command.size() * sizeof(wchar_t));
+}
+
+bool FileExists(const std::wstring& path) {
+  const DWORD attributes = GetFileAttributesW(path.c_str());
+  return attributes != INVALID_FILE_ATTRIBUTES &&
+         (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+std::wstring FindExecutableOnPath(const std::wstring& file_name) {
+  std::array<wchar_t, 32767> environment = {};
+  const DWORD path_length =
+      GetEnvironmentVariableW(L"PATH", environment.data(),
+                              static_cast<DWORD>(environment.size()));
+  if (path_length > 0 && path_length < environment.size()) {
+    std::wstring path_value(environment.data(), path_length);
+    size_t start = 0;
+    while (start <= path_value.size()) {
+      const size_t end = path_value.find(L';', start);
+      std::wstring directory =
+          path_value.substr(start, end == std::wstring::npos
+                                       ? std::wstring::npos
+                                       : end - start);
+      while (!directory.empty() &&
+             (directory.back() == L' ' || directory.back() == L'\t')) {
+        directory.pop_back();
+      }
+      if (!directory.empty()) {
+        std::wstring candidate = directory;
+        if (candidate.back() != L'\\' && candidate.back() != L'/') {
+          candidate += L"\\";
+        }
+        candidate += file_name;
+        if (FileExists(candidate)) {
+          return candidate;
+        }
+      }
+      if (end == std::wstring::npos) {
+        break;
+      }
+      start = end + 1;
+    }
+  }
+
+  std::array<wchar_t, MAX_PATH> program_files = {};
+  if (GetEnvironmentVariableW(L"ProgramFiles", program_files.data(),
+                              static_cast<DWORD>(program_files.size())) > 0) {
+    const std::wstring candidate =
+        std::wstring(program_files.data()) + L"\\PowerShell\\7\\" + file_name;
+    if (FileExists(candidate)) {
+      return candidate;
+    }
+  }
+  return std::wstring();
+}
+
+std::wstring ResolvePowerShellExecutable(const std::string& engine,
+                                         bool prefer_power_shell7) {
+  if (engine == "pwsh") {
+    return FindExecutableOnPath(L"pwsh.exe");
+  }
+  if (engine == "powershell") {
+    return L"powershell.exe";
+  }
+  if (prefer_power_shell7) {
+    const std::wstring pwsh = FindExecutableOnPath(L"pwsh.exe");
+    if (!pwsh.empty()) {
+      return pwsh;
+    }
+  }
+  return L"powershell.exe";
+}
+
+std::wstring ScriptCapsuleTempDirectory() {
+  std::array<wchar_t, MAX_PATH + 1> temp_path = {};
+  const DWORD length =
+      GetTempPathW(static_cast<DWORD>(temp_path.size()), temp_path.data());
+  std::wstring directory =
+      length > 0 && length < temp_path.size() ? std::wstring(temp_path.data())
+                                              : L".\\";
+  if (!directory.empty() && directory.back() != L'\\' &&
+      directory.back() != L'/') {
+    directory += L"\\";
+  }
+  directory += L"RePaperTodo\\Scripts";
+  CreateDirectoryW((directory.substr(0, directory.find_last_of(L"\\/"))).c_str(),
+                   nullptr);
+  CreateDirectoryW(directory.c_str(), nullptr);
+  return directory;
+}
+
+std::wstring WriteScriptCapsuleFile(const std::string& script) {
+  const std::wstring directory = ScriptCapsuleTempDirectory();
+  std::array<wchar_t, MAX_PATH> path = {};
+  if (GetTempFileNameW(directory.c_str(), L"sc", 0, path.data()) == 0) {
+    return std::wstring();
+  }
+  const std::wstring script_path = std::wstring(path.data()) + L".ps1";
+  MoveFileExW(path.data(), script_path.c_str(), MOVEFILE_REPLACE_EXISTING);
+
+  HANDLE file = CreateFileW(script_path.c_str(), GENERIC_WRITE, 0, nullptr,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
+    return std::wstring();
+  }
+  constexpr unsigned char kUtf8Bom[] = {0xEF, 0xBB, 0xBF};
+  DWORD written = 0;
+  WriteFile(file, kUtf8Bom, static_cast<DWORD>(sizeof(kUtf8Bom)), &written,
+            nullptr);
+  WriteFile(file, script.data(), static_cast<DWORD>(script.size()), &written,
+            nullptr);
+  CloseHandle(file);
+  return script_path;
+}
+
+void RunScriptCapsuleProcess(std::wstring executable,
+                             std::wstring script_path,
+                             bool hide_window) {
+  const std::string encoded_command =
+      EncodedPowerShellLaunchCommand(script_path);
+  std::wstring command_line = QuoteCommandArgument(executable) +
+                              L" -NoProfile -NonInteractive "
+                              L"-ExecutionPolicy Bypass -EncodedCommand " +
+                              Utf8ToWide(encoded_command);
+  STARTUPINFOW startup_info = {};
+  startup_info.cb = sizeof(startup_info);
+  if (hide_window) {
+    startup_info.dwFlags = STARTF_USESHOWWINDOW;
+    startup_info.wShowWindow = SW_HIDE;
+  }
+  PROCESS_INFORMATION process_information = {};
+  const DWORD creation_flags = hide_window ? CREATE_NO_WINDOW : 0;
+  if (CreateProcessW(nullptr, command_line.data(), nullptr, nullptr, FALSE,
+                     creation_flags, nullptr, nullptr, &startup_info,
+                     &process_information)) {
+    WaitForSingleObject(process_information.hProcess, INFINITE);
+    CloseHandle(process_information.hThread);
+    CloseHandle(process_information.hProcess);
+  }
+  DeleteFileW(script_path.c_str());
 }
 
 std::wstring TrayPaperLabel(const flutter::EncodableMap& map) {
@@ -579,6 +773,42 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "runScriptCapsule") {
+          std::string engine = "auto";
+          std::string script;
+          bool prefer_power_shell7 = true;
+          bool hide_script_run_window = true;
+          if (call.arguments()) {
+            if (const auto* request =
+                    std::get_if<flutter::EncodableMap>(call.arguments())) {
+              engine = GetStringArgument(*request, "engine", "auto");
+              script = GetStringArgument(*request, "script", "");
+              prefer_power_shell7 =
+                  GetBoolArgument(*request, "preferPowerShell7", true);
+              hide_script_run_window =
+                  GetBoolArgument(*request, "hideScriptRunWindow", true);
+            }
+          }
+          if (TrimAscii(script).empty()) {
+            result->Error("script_capsule_empty",
+                          "The script capsule content is empty.");
+            return;
+          }
+          const std::wstring executable =
+              ResolvePowerShellExecutable(engine, prefer_power_shell7);
+          if (executable.empty()) {
+            result->Error("powershell_not_found",
+                          "PowerShell 7 (pwsh.exe) was not found.");
+            return;
+          }
+          const std::wstring script_path = WriteScriptCapsuleFile(script);
+          if (script_path.empty()) {
+            result->Error("script_capsule_file_failed",
+                          "Unable to write the script capsule file.");
+            return;
+          }
+          std::thread(RunScriptCapsuleProcess, executable, script_path,
+                      hide_script_run_window)
+              .detach();
           result->Success();
           return;
         }
