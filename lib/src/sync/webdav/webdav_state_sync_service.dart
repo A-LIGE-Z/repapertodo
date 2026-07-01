@@ -109,6 +109,16 @@ class WebDavOperationLogRecord {
   final DateTime? lastModifiedUtc;
 }
 
+class WebDavOperationLogUploadResult {
+  const WebDavOperationLogUploadResult({
+    required this.deviceSequences,
+    required this.uploadedCount,
+  });
+
+  final Map<String, int> deviceSequences;
+  final int uploadedCount;
+}
+
 class WebDavStateSyncService {
   WebDavStateSyncService({
     required WebDavClient client,
@@ -302,6 +312,43 @@ class WebDavStateSyncService {
     ];
   }
 
+  Future<WebDavOperationLogUploadResult> uploadOperationLogs(
+    Iterable<SyncOperation> operations, {
+    Map<String, int>? previousDeviceSequences,
+  }) async {
+    final deviceSequences =
+        Map<String, int>.from(previousDeviceSequences ?? const {});
+    final pendingOperations = operations
+        .map(_normalizeOperationForUpload)
+        .whereType<SyncOperation>()
+        .where((operation) {
+      return operation.sequence > (deviceSequences[operation.deviceId] ?? 0);
+    }).toList()
+      ..sort((a, b) {
+        final deviceComparison = a.deviceId.compareTo(b.deviceId);
+        if (deviceComparison != 0) {
+          return deviceComparison;
+        }
+        return a.sequence.compareTo(b.sequence);
+      });
+    if (pendingOperations.isEmpty) {
+      return WebDavOperationLogUploadResult(
+        deviceSequences: deviceSequences,
+        uploadedCount: 0,
+      );
+    }
+
+    await _ensureCollections();
+    for (final operation in pendingOperations) {
+      await _putOperationLog(operation);
+      deviceSequences[operation.deviceId] = operation.sequence;
+    }
+    return WebDavOperationLogUploadResult(
+      deviceSequences: deviceSequences,
+      uploadedCount: pendingOperations.length,
+    );
+  }
+
   Future<SyncManifest?> _loadManifest() async {
     return (await _loadManifestWithMetadata())?.manifest;
   }
@@ -460,9 +507,28 @@ class WebDavStateSyncService {
         'paperCount': state.papers.length,
       },
     );
+    await _putOperationLog(operation);
+  }
+
+  Future<void> _putOperationLog(SyncOperation operation) async {
     await _client.putBytes(
-      _paths.operationLogPath(_deviceId, sequence),
+      _paths.operationLogPath(operation.deviceId, operation.sequence),
       utf8.encode('${jsonEncode(operation.toJson())}\n'),
+    );
+  }
+
+  SyncOperation? _normalizeOperationForUpload(SyncOperation operation) {
+    if (operation.sequence <= 0 || operation.deviceId.trim().isEmpty) {
+      return null;
+    }
+    final normalizedDeviceId = _normalizeDeviceId(operation.deviceId);
+    return SyncOperation(
+      id: '$normalizedDeviceId-${operation.sequence}',
+      deviceId: normalizedDeviceId,
+      sequence: operation.sequence,
+      kind: operation.kind,
+      createdAtUtc: operation.createdAtUtc,
+      payload: Map<String, Object?>.from(operation.payload),
     );
   }
 

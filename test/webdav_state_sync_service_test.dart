@@ -457,6 +457,105 @@ void main() {
         'repapertodo/snapshots/snapshot-android.json');
   });
 
+  test('uploads prepared operation logs and advances device sequences',
+      () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return switch (request.method) {
+          'MKCOL' => http.Response('', 201),
+          'PUT' => http.Response('', 201),
+          _ => http.Response('unexpected ${request.method}', 500),
+        };
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final result = await service.uploadOperationLogs(
+      [
+        SyncOperation(
+          id: 'covered',
+          deviceId: 'Device A',
+          sequence: 1,
+          kind: SyncOperationKind.updateNoteContent,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+          payload: {'paperId': 'note', 'content': 'Covered'},
+        ),
+        SyncOperation(
+          id: 'new-note',
+          deviceId: 'Device A',
+          sequence: 2,
+          kind: SyncOperationKind.updateNoteContent,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 1),
+          payload: {'paperId': 'note', 'content': 'Fresh'},
+        ),
+        SyncOperation(
+          id: 'android-1',
+          deviceId: 'android-device',
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 2),
+          payload: {
+            'paper': PaperData(
+              id: 'paper-android',
+              type: PaperTypes.note,
+              title: 'Android',
+            ).toJson(),
+          },
+        ),
+        SyncOperation(
+          id: 'invalid',
+          deviceId: '',
+          sequence: 3,
+          kind: SyncOperationKind.deletePaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 3),
+          payload: {'paperId': 'ignored'},
+        ),
+      ],
+      previousDeviceSequences: {'device-a': 1},
+    );
+
+    expect(result.uploadedCount, 2);
+    expect(result.deviceSequences, {
+      'device-a': 2,
+      'android-device': 1,
+    });
+    expect(
+      requests.map((request) => request.method),
+      ['MKCOL', 'MKCOL', 'MKCOL', 'PUT', 'PUT'],
+    );
+
+    final operationRequests =
+        requests.where((request) => request.method == 'PUT').toList();
+    expect(operationRequests.map((request) => request.url.path), [
+      '/remote.php/dav/files/user/repapertodo/ops/android-device-000000000001.jsonl',
+      '/remote.php/dav/files/user/repapertodo/ops/device-a-000000000002.jsonl',
+    ]);
+
+    final androidOperation = jsonDecode(
+      utf8.decode(operationRequests.first.bodyBytes).trim(),
+    ) as Map<String, Object?>;
+    expect(androidOperation['id'], 'android-device-1');
+    expect(androidOperation['kind'], 'upsertPaper');
+    expect(androidOperation['deviceId'], 'android-device');
+    expect(androidOperation['sequence'], 1);
+
+    final noteOperation = jsonDecode(
+      utf8.decode(operationRequests.last.bodyBytes).trim(),
+    ) as Map<String, Object?>;
+    expect(noteOperation['id'], 'device-a-2');
+    expect(noteOperation['kind'], 'updateNoteContent');
+    expect(noteOperation['deviceId'], 'device-a');
+    expect(noteOperation['sequence'], 2);
+    expect(noteOperation['payload'], {
+      'paperId': 'note',
+      'content': 'Fresh',
+    });
+  });
+
   test('downloads a selected snapshot for recovery', () async {
     const codec = AppStateCodec();
     final snapshotState = AppState(
