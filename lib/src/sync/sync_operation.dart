@@ -33,11 +33,12 @@ class SyncOperation {
       stringValue(json['deviceId'], ''),
       fallback: '',
     );
+    final kind = _kindFromWire(stringValue(json['kind'], ''));
     return SyncOperation(
       id: stringValue(json['id'], ''),
       deviceId: deviceId,
       sequence: intValue(json['sequence'], 0),
-      kind: _kindFromWire(stringValue(json['kind'], '')),
+      kind: kind,
       createdAtUtc:
           DateTime.tryParse(stringValue(json['createdAtUtc'], ''))?.toUtc() ??
               DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -60,10 +61,12 @@ class SyncOperation {
 }
 
 SyncOperationKind _kindFromWire(String value) {
-  return SyncOperationKind.values.firstWhere(
-    (kind) => _kindToWire(kind) == value,
-    orElse: () => SyncOperationKind.updateSettings,
-  );
+  for (final kind in SyncOperationKind.values) {
+    if (_kindToWire(kind) == value) {
+      return kind;
+    }
+  }
+  throw FormatException('Unknown sync operation kind: $value');
 }
 
 String _kindToWire(SyncOperationKind kind) {

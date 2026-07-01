@@ -33,4 +33,27 @@ void main() {
     expect(operation.deviceId, isEmpty);
     expect(operation.kind, SyncOperationKind.deletePaper);
   });
+
+  test('rejects unknown operation kinds', () {
+    for (final kind in const ['', 'futureOperation']) {
+      expect(
+        () => SyncOperation.fromJson({
+          'id': 'future-operation',
+          'deviceId': 'device-a',
+          'sequence': 4,
+          'kind': kind,
+          'createdAtUtc': '2026-07-01T09:00:00Z',
+          'payload': const <String, Object?>{},
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('Unknown sync operation kind'),
+          ),
+        ),
+        reason: kind,
+      );
+    }
+  });
 }
