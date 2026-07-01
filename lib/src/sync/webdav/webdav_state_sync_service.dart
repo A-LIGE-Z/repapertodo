@@ -312,14 +312,22 @@ class WebDavStateSyncService {
       );
     }
     final bytes = await _client.getBytes(normalizedPath);
-    final lines = utf8.decode(bytes).split('\n');
+    final lines = utf8
+        .decode(bytes)
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
+    if (lines.length != 1) {
+      throw const FormatException(
+        'Operation log must contain exactly one operation.',
+      );
+    }
     return [
-      for (final line in lines)
-        if (line.trim().isNotEmpty)
-          _normalizeDownloadedOperation(
-            _decodeOperation(line.trim()),
-            identity,
-          ),
+      _normalizeDownloadedOperation(
+        _decodeOperation(lines.single),
+        identity,
+      ),
     ];
   }
 

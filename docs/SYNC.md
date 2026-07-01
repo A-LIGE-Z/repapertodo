@@ -42,6 +42,7 @@ items before saving the merged local state.
 When downloading an operation log, the `<deviceId>-<sequence>` file name is
 treated as the authoritative operation identity so stale or hand-edited payload
 metadata cannot advance the wrong device sequence.
+Each operation log file must contain exactly one non-empty JSON operation.
 
 Delete operations also write local tombstones into sync state. These tombstones
 prevent stale paper or todo-item upserts from older devices from recreating
