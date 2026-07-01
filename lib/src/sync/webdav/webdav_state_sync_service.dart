@@ -217,6 +217,16 @@ class WebDavStateSyncService {
     }
   }
 
+  Future<WebDavStateSyncResult> downloadSnapshot(String snapshotPath) async {
+    final normalizedPath = _normalizeSnapshotPath(snapshotPath);
+    final bytes = await _client.getBytes(normalizedPath);
+    return WebDavStateSyncResult(
+      status: WebDavStateSyncStatus.downloaded,
+      state: _codec.decode(utf8.decode(bytes)),
+      snapshotPath: normalizedPath,
+    );
+  }
+
   Future<SyncManifest?> _loadManifest() async {
     return (await _loadManifestWithMetadata())?.manifest;
   }
@@ -272,6 +282,24 @@ class WebDavStateSyncService {
       }
     }
     return _normalizeRemotePath(path);
+  }
+
+  String _normalizeSnapshotPath(String snapshotPath) {
+    final normalizedPath = _normalizeRemotePath(snapshotPath);
+    final snapshotCollectionPath = _paths.snapshotCollectionPath;
+    final expectedPrefix = '$snapshotCollectionPath/';
+    if (!normalizedPath.startsWith(expectedPrefix)) {
+      throw WebDavSyncConfigurationException(
+        'Snapshot path must be inside $snapshotCollectionPath.',
+      );
+    }
+    final fileName = normalizedPath.split('/').last;
+    if (!RegExp(r'^snapshot-\d{8}T\d{9}Z-.+\.json$').hasMatch(fileName)) {
+      throw const WebDavSyncConfigurationException(
+        'Snapshot path must reference a RePaperTodo snapshot file.',
+      );
+    }
+    return normalizedPath;
   }
 
   Future<WebDavStateSyncResult> _downloadSnapshot(SyncManifest manifest) async {

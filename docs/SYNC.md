@@ -31,6 +31,7 @@ If a manifest conditional write fails, the uploaded local snapshot remains in
 `snapshots/` so a later conflict recovery flow can inspect or restore it.
 The sync core can enumerate this directory and expose snapshot metadata such as
 device ID, timestamp, ETag, size, and last-modified time.
+Selected snapshot files can also be downloaded and decoded for recovery.
 
 ## Target Remote Layout
 

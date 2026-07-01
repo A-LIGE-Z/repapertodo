@@ -311,6 +311,58 @@ void main() {
     expect(await service.listSnapshots(), isEmpty);
   });
 
+  test('downloads a selected snapshot for recovery', () async {
+    const codec = AppStateCodec();
+    final snapshotState = AppState(
+      papers: [
+        PaperData(
+          id: 'snapshot-paper',
+          type: PaperTypes.note,
+          title: 'Recovered snapshot',
+        ),
+      ],
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json')) {
+          return http.Response(codec.encode(snapshotState), 200);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final result = await service.downloadSnapshot(
+      '/repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json',
+    );
+
+    expect(result.status, WebDavStateSyncStatus.downloaded);
+    expect(result.snapshotPath,
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json');
+    expect(result.state?.papers.single.title, 'Recove');
+  });
+
+  test('rejects snapshot downloads outside the snapshot collection', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        return http.Response('network should not be reached', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    expect(
+      service.downloadSnapshot('repapertodo/manifest.json'),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+  });
+
   test('creates a sync service from Jianguoyun WebDAV settings', () async {
     final requests = <http.Request>[];
     final service = WebDavStateSyncService.fromSettings(
