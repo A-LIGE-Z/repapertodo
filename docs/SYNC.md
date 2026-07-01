@@ -17,8 +17,8 @@ Initial recommended preset:
 ## Current Remote Layout
 
 The current implementation stores plain JSON snapshots first, with each device
-uploading a distinct snapshot path and updating `manifest.json` conditionally
-with WebDAV ETags.
+uploading a distinct snapshot path using `If-None-Match: *` and updating
+`manifest.json` conditionally with WebDAV ETags.
 
 ```text
 /RePaperTodo/
@@ -78,6 +78,7 @@ Planned encrypted operation-log layout:
 - Merge operation logs instead of replacing the whole state file.
 - Apply operation logs in per-device sequence order without skipping gaps.
 - Upload operation logs in per-device sequence order without creating gaps.
+- Create snapshot files only when the target path does not already exist.
 - Create operation log files only when the target path does not already exist.
 - Use ETag/If-Match when supported.
 - Preserve conflicts as recoverable user content.

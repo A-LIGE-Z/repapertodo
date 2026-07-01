@@ -176,6 +176,7 @@ class WebDavStateSyncService {
     await _client.putBytes(
       snapshotPath,
       utf8.encode(_codec.encode(state)),
+      createOnly: true,
     );
     final deviceSequences =
         normalizeSyncDeviceSequences(previousDeviceSequences);

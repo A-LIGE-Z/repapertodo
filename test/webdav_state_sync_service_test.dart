@@ -48,6 +48,7 @@ void main() {
         request.method == 'PUT' &&
         request.url.path.endsWith(
             '/snapshots/snapshot-20260630T100000000Z-test-device.json'));
+    expect(snapshotRequest.headers['if-none-match'], '*');
     final snapshot = jsonDecode(utf8.decode(snapshotRequest.bodyBytes))
         as Map<String, Object?>;
     final papers = snapshot['papers'] as List<Object?>;
@@ -241,6 +242,9 @@ void main() {
       result.snapshotPath,
       'repapertodo/snapshots/snapshot-20260701T000000000Z-test-device.json',
     );
+    final snapshotRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' && request.url.path.contains('/snapshots/'));
+    expect(snapshotRequest.headers['if-none-match'], '*');
     expect(result.manifest?.deviceSequences, {
       'other-device': 2,
       'test-device': 5,
