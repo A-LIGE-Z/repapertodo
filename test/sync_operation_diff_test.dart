@@ -57,7 +57,11 @@ void main() {
       'content': 'New body',
     });
 
-    final result = applier.apply(before, operations);
+    final result = applier.apply(
+      before,
+      operations,
+      deviceSequences: {'device-a': 7},
+    );
 
     expect(result.appliedCount, 2);
     expect(result.deviceSequences, {'device-a': 9});

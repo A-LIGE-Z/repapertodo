@@ -301,6 +301,55 @@ void main() {
     expect(result.deviceSequences, {'device-a': 3});
     expect(result.state.papers.single.title, 'Fresh');
   });
+
+  test('stops applying a device after a sequence gap', () {
+    final result = applier.apply(
+      AppState(),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'device-a-first',
+              type: PaperTypes.note,
+              title: 'Device A first',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 3,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'device-a-third',
+              type: PaperTypes.note,
+              title: 'Device A third',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          deviceId: 'device-b',
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'device-b-first',
+              type: PaperTypes.note,
+              title: 'Device B first',
+            ).toJson(),
+          },
+        ),
+      ],
+    );
+
+    expect(result.appliedCount, 2);
+    expect(result.deviceSequences, {'device-a': 1, 'device-b': 1});
+    expect(result.state.papers.map((paper) => paper.id), [
+      'device-a-first',
+      'device-b-first',
+    ]);
+  });
 }
 
 SyncOperation _operation({

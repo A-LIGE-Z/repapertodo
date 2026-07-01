@@ -43,10 +43,10 @@ When downloading an operation log, the `<deviceId>-<sequence>` file name is
 treated as the authoritative operation identity so stale or hand-edited payload
 metadata cannot advance the wrong device sequence.
 Each operation log file must contain exactly one non-empty JSON operation.
-During merge, operation logs are applied per device only while their sequence
-numbers are contiguous from the locally recorded progress. If sequence `2` is
-missing, sequence `3` is left untouched until the gap is filled so later syncs
-can still apply the missing operation in order.
+During merge, operation logs are selected and applied per device only while
+their sequence numbers are contiguous from the locally recorded progress. If
+sequence `2` is missing, sequence `3` is left untouched until the gap is filled
+so later syncs can still apply the missing operation in order.
 
 Delete operations also write local tombstones into sync state. These tombstones
 prevent stale paper or todo-item upserts from older devices from recreating

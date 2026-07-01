@@ -38,13 +38,26 @@ class SyncOperationApplier {
           });
 
     var appliedCount = 0;
+    final expectedSequences = <String, int>{};
+    final blockedDevices = <String>{};
     for (final operation in sortedOperations) {
-      final previousSequence = sequences[operation.deviceId] ?? 0;
-      if (operation.sequence <= previousSequence) {
+      if (blockedDevices.contains(operation.deviceId)) {
+        continue;
+      }
+      final expectedSequence = expectedSequences.putIfAbsent(
+        operation.deviceId,
+        () => (sequences[operation.deviceId] ?? 0) + 1,
+      );
+      if (operation.sequence < expectedSequence) {
+        continue;
+      }
+      if (operation.sequence > expectedSequence) {
+        blockedDevices.add(operation.deviceId);
         continue;
       }
       _applyOperation(state, operation);
       sequences[operation.deviceId] = operation.sequence;
+      expectedSequences[operation.deviceId] = expectedSequence + 1;
       appliedCount++;
     }
     state.normalize();
