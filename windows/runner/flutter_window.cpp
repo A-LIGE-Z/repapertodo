@@ -251,6 +251,42 @@ std::wstring ScriptCapsuleTempDirectory() {
   return directory;
 }
 
+unsigned long long FileTimeValue(const FILETIME& file_time) {
+  ULARGE_INTEGER value = {};
+  value.LowPart = file_time.dwLowDateTime;
+  value.HighPart = file_time.dwHighDateTime;
+  return value.QuadPart;
+}
+
+void CleanupOldScriptCapsuleTempFiles() {
+  const std::wstring directory = ScriptCapsuleTempDirectory();
+  FILETIME now_file_time = {};
+  GetSystemTimeAsFileTime(&now_file_time);
+  constexpr unsigned long long kOneDayInFileTimeTicks =
+      24ull * 60ull * 60ull * 1000ull * 1000ull * 10ull;
+  const unsigned long long cutoff =
+      FileTimeValue(now_file_time) > kOneDayInFileTimeTicks
+          ? FileTimeValue(now_file_time) - kOneDayInFileTimeTicks
+          : 0;
+
+  WIN32_FIND_DATAW find_data = {};
+  HANDLE find_handle =
+      FindFirstFileW((directory + L"\\*.ps1").c_str(), &find_data);
+  if (find_handle == INVALID_HANDLE_VALUE) {
+    return;
+  }
+  do {
+    if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+      continue;
+    }
+    if (FileTimeValue(find_data.ftLastWriteTime) >= cutoff) {
+      continue;
+    }
+    DeleteFileW((directory + L"\\" + find_data.cFileName).c_str());
+  } while (FindNextFileW(find_handle, &find_data));
+  FindClose(find_handle);
+}
+
 std::wstring WriteScriptCapsuleFile(const std::string& script) {
   const std::wstring directory = ScriptCapsuleTempDirectory();
   std::array<wchar_t, MAX_PATH> path = {};
@@ -711,6 +747,7 @@ bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
   }
+  CleanupOldScriptCapsuleTempFiles();
 
   RECT frame = GetClientArea();
 
