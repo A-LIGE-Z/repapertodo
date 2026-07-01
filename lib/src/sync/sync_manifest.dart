@@ -23,7 +23,6 @@ class SyncManifest {
   }
 
   factory SyncManifest.fromJson(JsonMap json) {
-    final rawSequences = json['deviceSequences'];
     final updatedAtUtc = _updatedAtUtcFromWire(
       stringValue(json['updatedAtUtc'], ''),
     );
@@ -32,12 +31,7 @@ class SyncManifest {
       updatedAtUtc: updatedAtUtc,
       latestSnapshotPath:
           _latestSnapshotPathFromWire(json['latestSnapshotPath']),
-      deviceSequences: {
-        if (rawSequences is Map)
-          for (final entry in rawSequences.entries)
-            if (entry.key is String && entry.value is num)
-              entry.key as String: (entry.value as num).round(),
-      },
+      deviceSequences: _deviceSequencesFromWire(json['deviceSequences']),
     );
   }
 
@@ -69,6 +63,47 @@ String _latestSnapshotPathFromWire(Object? value) {
   }
   throw FormatException(
     'Sync manifest latestSnapshotPath must be a string: $value',
+  );
+}
+
+Map<String, int> _deviceSequencesFromWire(Object? value) {
+  if (value is! Map) {
+    throw FormatException(
+      'Sync manifest deviceSequences must be a JSON object: $value',
+    );
+  }
+  final deviceSequences = <String, int>{};
+  for (final entry in value.entries) {
+    final key = entry.key;
+    if (key is! String) {
+      throw FormatException(
+        'Sync manifest deviceSequences keys must be strings: $key',
+      );
+    }
+    final deviceId = normalizeSyncDeviceId(key, fallback: '');
+    if (deviceId.isEmpty) {
+      throw FormatException(
+        'Sync manifest deviceSequences contains invalid device id: $key',
+      );
+    }
+    final sequence = _deviceSequenceFromWire(entry.value);
+    final previous = deviceSequences[deviceId] ?? 0;
+    if (sequence > previous) {
+      deviceSequences[deviceId] = sequence;
+    }
+  }
+  return deviceSequences;
+}
+
+int _deviceSequenceFromWire(Object? value) {
+  if (value is num && value.isFinite && value % 1 == 0) {
+    final sequence = value.toInt();
+    if (sequence > 0) {
+      return sequence;
+    }
+  }
+  throw FormatException(
+    'Sync manifest device sequence must be a positive integer: $value',
   );
 }
 

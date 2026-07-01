@@ -7,11 +7,18 @@ void main() {
       'schemaVersion': 1,
       'updatedAtUtc': '2026-07-01T10:30:00+08:00',
       'latestSnapshotPath': 'repapertodo/snapshots/local.json',
-      'deviceSequences': {'win-device': 2},
+      'deviceSequences': {
+        'win-device': 2,
+        ' Device A ': 1,
+        'device-a': 3,
+      },
     });
 
     expect(manifest.updatedAtUtc, DateTime.utc(2026, 7, 1, 2, 30));
-    expect(manifest.deviceSequences, {'win-device': 2});
+    expect(manifest.deviceSequences, {
+      'win-device': 2,
+      'device-a': 3,
+    });
   });
 
   test('allows empty manifest snapshot paths', () {
@@ -67,6 +74,30 @@ void main() {
           ),
         ),
         reason: '$latestSnapshotPath',
+      );
+    }
+  });
+
+  test('rejects invalid manifest device sequence maps', () {
+    for (final deviceSequences in const <Object?>[
+      null,
+      ['device-a'],
+      {7: 1},
+      {'bad': 1},
+      {'device-a': 0},
+      {'device-a': -1},
+      {'device-a': 1.2},
+      {'device-a': '1'},
+    ]) {
+      expect(
+        () => SyncManifest.fromJson({
+          'schemaVersion': 1,
+          'updatedAtUtc': '2026-07-01T10:30:00Z',
+          'latestSnapshotPath': 'repapertodo/snapshots/local.json',
+          'deviceSequences': deviceSequences,
+        }),
+        throwsA(isA<FormatException>()),
+        reason: '$deviceSequences',
       );
     }
   });
