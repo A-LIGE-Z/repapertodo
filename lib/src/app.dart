@@ -508,12 +508,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   }
 
   File _writeExternalMarkdownFile(PaperData paper) {
-    final directory = Directory.systemTemp.createTempSync('repapertodo_md_');
-    final title = paper.title.trim().isEmpty ? 'Untitled' : paper.title.trim();
+    final directory =
+        Directory(p.join(Directory.systemTemp.path, 'RePaperTodo'))
+          ..createSync(recursive: true);
+    final safePaperId = _safeFilename(paper.id);
+    final paperId = safePaperId.isEmpty
+        ? DateTime.now().microsecondsSinceEpoch.toRadixString(16)
+        : safePaperId;
     final file = File(
       p.join(
         directory.path,
-        '${_safeFilename(title)}${controller.state.externalMarkdownExtension}',
+        'paper-$paperId${controller.state.externalMarkdownExtension}',
       ),
     );
     file.writeAsStringSync(paper.content);

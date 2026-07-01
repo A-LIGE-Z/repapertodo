@@ -550,6 +550,12 @@ void main() {
     expect(platform.externalFiles.openedPaths, hasLength(1));
     final openedFile = File(platform.externalFiles.openedPaths.single);
     expect(openedFile.path.endsWith('.txt'), true);
+    expect(
+      openedFile.path,
+      contains(
+        '${Platform.pathSeparator}RePaperTodo${Platform.pathSeparator}paper-external-note.txt',
+      ),
+    );
     expect(openedFile.readAsStringSync(), '# Exported note\n\nMarkdown body.');
     expect(find.textContaining('Opened markdown file:'), findsOneWidget);
   });
