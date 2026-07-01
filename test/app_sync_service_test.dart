@@ -45,9 +45,15 @@ void main() {
         return _FakeWebDavStateSyncService(
           onSync: ({required localState, localUpdatedAtUtc}) async {
             uploadedStateTitle = localState.papers.single.title;
-            return const WebDavStateSyncResult(
+            return WebDavStateSyncResult(
               status: WebDavStateSyncStatus.uploaded,
               snapshotPath: 'repapertodo/snapshots/local.json',
+              manifest: SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 6, 30),
+                latestSnapshotPath: 'repapertodo/snapshots/local.json',
+                deviceSequences: {'remote-device': 4, 'local-device': 1},
+              ),
             );
           },
         );
@@ -64,7 +70,12 @@ void main() {
     expect(result.snapshotPath, 'repapertodo/snapshots/local.json');
     expect(uploadedStateTitle, 'Local');
     expect(forwardedDeviceId, startsWith('device-'));
-    expect((await store.load()).papers.single.title, 'Local');
+    final stored = await store.load();
+    expect(stored.papers.single.title, 'Local');
+    expect(stored.sync.operationDeviceSequences, {
+      'remote-device': 4,
+      'local-device': 1,
+    });
     expect(
       await File(p.join(directory.path, 'sync-device-id')).readAsString(),
       forwardedDeviceId,
@@ -89,6 +100,12 @@ void main() {
             status: WebDavStateSyncStatus.downloaded,
             state: remoteState,
             snapshotPath: 'repapertodo/snapshots/remote.json',
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
+              latestSnapshotPath: 'repapertodo/snapshots/remote.json',
+              deviceSequences: {'remote-device': 7},
+            ),
           );
         },
       ),
@@ -103,7 +120,9 @@ void main() {
     expect(result.status, AppSyncStatus.downloaded);
     expect(result.snapshotPath, 'repapertodo/snapshots/remote.json');
     expect(result.state?.papers.single.title, 'Remote');
-    expect((await store.load()).papers.single.title, 'Remote');
+    final stored = await store.load();
+    expect(stored.papers.single.title, 'Remote');
+    expect(stored.sync.operationDeviceSequences, {'remote-device': 7});
   });
 
   test('reports WebDAV conflicts without saving local state', () async {

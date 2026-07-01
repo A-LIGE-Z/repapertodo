@@ -94,6 +94,7 @@ class AppSyncService {
     switch (result.status) {
       case WebDavStateSyncStatus.uploaded:
       case WebDavStateSyncStatus.remoteMissing:
+        _applyManifestDeviceSequences(localState, result);
         await store.save(localState);
         return AppSyncResult(
           status: AppSyncStatus.uploaded,
@@ -108,6 +109,7 @@ class AppSyncService {
             message: 'Remote snapshot is empty.',
           );
         }
+        _applyManifestDeviceSequences(remoteState, result);
         await store.save(remoteState);
         return AppSyncResult(
           status: AppSyncStatus.downloaded,
@@ -269,5 +271,17 @@ class AppSyncService {
       settings.webDav.copy(),
       deviceId: deviceId,
     );
+  }
+
+  void _applyManifestDeviceSequences(
+    AppState state,
+    WebDavStateSyncResult result,
+  ) {
+    final manifest = result.manifest;
+    if (manifest == null) {
+      return;
+    }
+    state.sync.operationDeviceSequences = manifest.deviceSequences;
+    state.normalize();
   }
 }
