@@ -305,11 +305,21 @@ class WebDavStateSyncService {
   Future<List<SyncOperation>> downloadOperationLog(
       String operationLogPath) async {
     final normalizedPath = _normalizeOperationLogPath(operationLogPath);
+    final identity = _operationLogIdentityFromPath(normalizedPath);
+    if (identity == null) {
+      throw const WebDavSyncConfigurationException(
+        'Operation log path must contain a valid device and sequence.',
+      );
+    }
     final bytes = await _client.getBytes(normalizedPath);
     final lines = utf8.decode(bytes).split('\n');
     return [
       for (final line in lines)
-        if (line.trim().isNotEmpty) _decodeOperation(line.trim()),
+        if (line.trim().isNotEmpty)
+          _normalizeDownloadedOperation(
+            _decodeOperation(line.trim()),
+            identity,
+          ),
     ];
   }
 
@@ -390,23 +400,14 @@ class WebDavStateSyncService {
 
   WebDavOperationLogRecord? _operationLogRecordFromEntry(WebDavEntry entry) {
     final path = _entryRemotePath(entry.href);
-    final fileName = path.split('/').last;
-    final match = RegExp(r'^(.+)-(\d{12})\.jsonl$').firstMatch(fileName);
-    if (match == null) {
-      return null;
-    }
-    final sequence = int.tryParse(match.group(2)!);
-    if (sequence == null) {
-      return null;
-    }
-    final deviceId = normalizeSyncDeviceId(match.group(1)!, fallback: '');
-    if (deviceId.isEmpty) {
+    final identity = _operationLogIdentityFromPath(path);
+    if (identity == null) {
       return null;
     }
     return WebDavOperationLogRecord(
       path: path,
-      deviceId: deviceId,
-      sequence: sequence,
+      deviceId: identity.deviceId,
+      sequence: identity.sequence,
       etag: entry.etag,
       contentLength: entry.contentLength,
       lastModifiedUtc: entry.lastModified?.toUtc(),
@@ -474,6 +475,20 @@ class WebDavStateSyncService {
       throw const FormatException('Sync operation must be a JSON object.');
     }
     return SyncOperation.fromJson(Map<String, Object?>.from(decoded));
+  }
+
+  SyncOperation _normalizeDownloadedOperation(
+    SyncOperation operation,
+    _OperationLogIdentity identity,
+  ) {
+    return SyncOperation(
+      id: '${identity.deviceId}-${identity.sequence}',
+      deviceId: identity.deviceId,
+      sequence: identity.sequence,
+      kind: operation.kind,
+      createdAtUtc: operation.createdAtUtc,
+      payload: Map<String, Object?>.from(operation.payload),
+    );
   }
 
   Future<WebDavStateSyncResult> _downloadSnapshot(SyncManifest manifest) async {
@@ -567,6 +582,33 @@ class _RemoteManifest {
 
   final SyncManifest manifest;
   final String? etag;
+}
+
+class _OperationLogIdentity {
+  const _OperationLogIdentity({
+    required this.deviceId,
+    required this.sequence,
+  });
+
+  final String deviceId;
+  final int sequence;
+}
+
+_OperationLogIdentity? _operationLogIdentityFromPath(String path) {
+  final fileName = path.split('/').last;
+  final match = RegExp(r'^(.+)-(\d{12})\.jsonl$').firstMatch(fileName);
+  if (match == null) {
+    return null;
+  }
+  final sequence = int.tryParse(match.group(2)!);
+  if (sequence == null) {
+    return null;
+  }
+  final deviceId = normalizeSyncDeviceId(match.group(1)!, fallback: '');
+  if (deviceId.isEmpty) {
+    return null;
+  }
+  return _OperationLogIdentity(deviceId: deviceId, sequence: sequence);
 }
 
 String _joinRemotePath(String base, String child) {

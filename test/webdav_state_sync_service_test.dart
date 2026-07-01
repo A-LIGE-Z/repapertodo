@@ -425,8 +425,8 @@ void main() {
             [
               jsonEncode({
                 'id': 'legacy-android-op',
-                'deviceId': ' Android Device ',
-                'sequence': 1,
+                'deviceId': ' Wrong Device ',
+                'sequence': 99,
                 'kind': 'stateSnapshot',
                 'createdAtUtc': DateTime.utc(2026, 7, 1, 9).toIso8601String(),
                 'payload': {
@@ -449,8 +449,9 @@ void main() {
     );
 
     expect(operations, hasLength(1));
-    expect(operations.single.id, 'legacy-android-op');
+    expect(operations.single.id, 'android-device-1');
     expect(operations.single.deviceId, 'android-device');
+    expect(operations.single.sequence, 1);
     expect(operations.single.kind, SyncOperationKind.stateSnapshot);
     expect(operations.single.payload['snapshotPath'],
         'repapertodo/snapshots/snapshot-android.json');

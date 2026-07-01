@@ -39,6 +39,9 @@ points at the uploaded snapshot and advances that device's manifest sequence.
 The sync core can enumerate and download these operation logs as merge inputs.
 It applies operation-level merges for settings, papers, note content, and todo
 items before saving the merged local state.
+When downloading an operation log, the `<deviceId>-<sequence>` file name is
+treated as the authoritative operation identity so stale or hand-edited payload
+metadata cannot advance the wrong device sequence.
 
 Delete operations also write local tombstones into sync state. These tombstones
 prevent stale paper or todo-item upserts from older devices from recreating
