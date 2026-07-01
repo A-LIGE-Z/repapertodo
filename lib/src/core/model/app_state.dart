@@ -537,8 +537,21 @@ String _normalizeExtension(String extension) {
   if (!value.startsWith('.')) {
     value = '.$value';
   }
-  if (value.length < 2 || value.length > 32 || value.contains('..')) {
+  if (value.length < 2 ||
+      value.length > 32 ||
+      value.contains('..') ||
+      _hasInvalidFileNameCharacter(value)) {
     return '.md';
   }
   return value.toLowerCase();
+}
+
+bool _hasInvalidFileNameCharacter(String value) {
+  const invalid = {'<', '>', ':', '"', '/', '\\', '|', '?', '*'};
+  return value.runes.any((rune) {
+    if (rune < 0x20) {
+      return true;
+    }
+    return invalid.contains(String.fromCharCode(rune));
+  });
 }

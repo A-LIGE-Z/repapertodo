@@ -64,6 +64,35 @@ void main() {
     expect(state.externalMarkdownExtension, '.txt');
   });
 
+  test('normalizes external markdown extensions like PaperTodo', () {
+    expect(
+      AppState.fromJson({'externalMarkdownExtension': '*.MD'})
+          .externalMarkdownExtension,
+      '.md',
+    );
+    expect(
+      AppState.fromJson({'externalMarkdownExtension': 'md:bad'})
+          .externalMarkdownExtension,
+      '.md',
+    );
+    expect(
+      AppState.fromJson({'externalMarkdownExtension': 'md?bad'})
+          .externalMarkdownExtension,
+      '.md',
+    );
+    expect(
+      AppState.fromJson({'externalMarkdownExtension': 'a..b'})
+          .externalMarkdownExtension,
+      '.md',
+    );
+    expect(
+      AppState.fromJson({
+        'externalMarkdownExtension': '.${List.filled(40, 'x').join()}',
+      }).externalMarkdownExtension,
+      '.md',
+    );
+  });
+
   test('normalizes PaperTodo display ranges', () {
     final clampedHigh = AppState.fromJson({
       'zoom': 2,
