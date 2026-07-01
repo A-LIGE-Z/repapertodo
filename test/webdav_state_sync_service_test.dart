@@ -112,7 +112,8 @@ void main() {
               SyncManifest(
                 schemaVersion: 1,
                 updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
-                latestSnapshotPath: 'repapertodo/state.json',
+                latestSnapshotPath:
+                    'repapertodo/snapshots/snapshot-20260630T110000000Z-other-device-seq-000000000004.json',
                 deviceSequences: {'other-device': 2, 'test-device': 4},
               ).toJson(),
             ),
@@ -120,7 +121,8 @@ void main() {
           );
         }
         if (request.method == 'GET' &&
-            request.url.path.endsWith('/state.json')) {
+            request.url.path.endsWith(
+                '/snapshots/snapshot-20260630T110000000Z-other-device-seq-000000000004.json')) {
           return http.Response(codec.encode(remoteState), 200);
         }
         return http.Response(
@@ -136,9 +138,57 @@ void main() {
 
     expect(result.status, WebDavStateSyncStatus.downloaded);
     expect(result.manifest?.updatedAtUtc, DateTime.utc(2026, 6, 30, 11));
-    expect(result.snapshotPath, 'repapertodo/state.json');
+    expect(
+      result.snapshotPath,
+      'repapertodo/snapshots/snapshot-20260630T110000000Z-other-device-seq-000000000004.json',
+    );
     expect(result.state?.papers.single.title, 'Remote');
     expect(result.state?.papers.single.content, 'From WebDAV');
+  });
+
+  test('rejects manifest snapshots outside the snapshot collection', () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode(
+              SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
+                latestSnapshotPath: 'repapertodo/manifest.json',
+                deviceSequences: {'other-device': 2},
+              ).toJson(),
+            ),
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    await expectLater(
+      service.pull(),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+    expect(
+      requests
+          .where((request) =>
+              request.method == 'GET' &&
+              !request.url.path.endsWith('/manifest.json'))
+          .map((request) => request.url.path),
+      isEmpty,
+    );
   });
 
   test('sync creates the manifest only when it is still missing', () async {

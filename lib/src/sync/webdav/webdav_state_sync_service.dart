@@ -517,12 +517,13 @@ class WebDavStateSyncService {
   }
 
   Future<WebDavStateSyncResult> _downloadSnapshot(SyncManifest manifest) async {
-    final bytes = await _client.getBytes(manifest.latestSnapshotPath);
+    final snapshotPath = _normalizeSnapshotPath(manifest.latestSnapshotPath);
+    final bytes = await _client.getBytes(snapshotPath);
     return WebDavStateSyncResult(
       status: WebDavStateSyncStatus.downloaded,
       state: _codec.decode(utf8.decode(bytes)),
       manifest: manifest,
-      snapshotPath: manifest.latestSnapshotPath,
+      snapshotPath: snapshotPath,
     );
   }
 

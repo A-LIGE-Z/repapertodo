@@ -38,6 +38,8 @@ device ID, timestamp, ETag, size, and last-modified time.
 Selected snapshot files can also be downloaded and decoded for recovery.
 Legacy snapshot names without the `-seq-<sequence>` suffix remain accepted for
 recovery.
+Snapshot paths referenced by `manifest.json` are validated with the same
+snapshot-directory and filename rules before download.
 Each push also writes a one-line plain JSON operation record in `ops/` that
 points at the uploaded snapshot and advances that device's manifest sequence.
 The sync core can enumerate and download these operation logs as merge inputs.
