@@ -1,0 +1,60 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:repapertodo/repapertodo.dart';
+
+void main() {
+  test('resolves sanitized paths below the configured endpoint', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response('', 204, headers: {'etag': '"manifest-v1"'});
+      }),
+    );
+
+    final metadata = await client.metadata('/repapertodo/./manifest.json');
+
+    expect(metadata?.etag, '"manifest-v1"');
+    expect(requests, hasLength(1));
+    expect(requests.single.method, 'HEAD');
+    expect(
+      requests.single.url.toString(),
+      'https://dav.example.test/remote.php/dav/files/user/repapertodo/manifest.json',
+    );
+    expect(
+      requests.single.headers['authorization'],
+      const WebDavCredentials(username: 'user', password: 'pass')
+          .authorizationHeader,
+    );
+  });
+
+  test('rejects unsafe request paths before sending', () async {
+    var requestCount = 0;
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requestCount += 1;
+        return http.Response('network should not be reached', 500);
+      }),
+    );
+
+    for (final path in const [
+      '../manifest.json',
+      'repapertodo/%2e%2e/manifest.json',
+      r'repapertodo\..\manifest.json',
+      'https://evil.example.test/manifest.json',
+      '//evil.example.test/manifest.json',
+      '%2F%2Fevil.example.test/manifest.json',
+    ]) {
+      await expectLater(
+        client.getBytes(path),
+        throwsA(isA<ArgumentError>()),
+      );
+    }
+    expect(requestCount, 0);
+  });
+}

@@ -165,8 +165,8 @@ class WebDavClient {
   }
 
   Uri _resolve(String path) {
-    final cleanPath = path.startsWith('/') ? path.substring(1) : path;
-    return _baseUri.resolve(cleanPath);
+    final segments = _normalizeRequestPathSegments(path);
+    return _baseUri.resolveUri(Uri(pathSegments: segments));
   }
 }
 
@@ -253,4 +253,41 @@ String? _stripQuotes(String? value) {
     return null;
   }
   return value.replaceAll('"', '');
+}
+
+List<String> _normalizeRequestPathSegments(String path) {
+  final withForwardSlashes = path.trim().replaceAll('\\', '/');
+  late final String decoded;
+  try {
+    decoded = Uri.decodeComponent(withForwardSlashes);
+  } on FormatException catch (error) {
+    throw ArgumentError.value(
+      path,
+      'path',
+      'WebDAV path contains invalid percent encoding: ${error.message}',
+    );
+  }
+  if (decoded.startsWith('//') || (Uri.tryParse(decoded)?.hasScheme ?? false)) {
+    throw ArgumentError.value(
+      path,
+      'path',
+      'WebDAV path must be relative to the configured endpoint.',
+    );
+  }
+  final segments = <String>[];
+  for (final segment in decoded.split('/')) {
+    final trimmed = segment.trim();
+    if (trimmed.isEmpty || trimmed == '.') {
+      continue;
+    }
+    if (trimmed == '..') {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'WebDAV path must not contain parent-directory segments.',
+      );
+    }
+    segments.add(segment);
+  }
+  return segments;
 }

@@ -44,6 +44,8 @@ Snapshot paths referenced by `manifest.json` are validated with the same
 snapshot-directory and filename rules before download.
 Remote paths with parent-directory segments are rejected before any HTTP
 download so WebDAV responses cannot escape the RePaperTodo sync folders.
+The WebDAV client itself also refuses absolute or parent-traversing request
+paths and resolves all accepted paths beneath the configured endpoint.
 Each push also writes a one-line plain JSON operation record in `ops/` that
 points at the uploaded snapshot and advances that device's manifest sequence.
 The sync core can enumerate and download these operation logs as merge inputs.
