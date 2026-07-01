@@ -100,7 +100,7 @@ void main() {
 
     expect(result.status, WebDavStateSyncStatus.downloaded);
     expect(result.manifest?.updatedAtUtc, DateTime.utc(2026, 6, 30, 11));
-    expect(result.state?.papers.single.title, 'Remote note');
+    expect(result.state?.papers.single.title, 'Remote');
     expect(result.state?.papers.single.content, 'From WebDAV');
   });
 

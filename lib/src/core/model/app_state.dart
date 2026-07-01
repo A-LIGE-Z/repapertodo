@@ -268,10 +268,10 @@ class AppState {
               Map<String, Object?>.from(json['sync'] as Map))
           : null,
       extra: preserveUnknown(json, _knownKeys),
-    )..normalize();
+    )..normalize(storageCompatibility: true);
   }
 
-  void normalize() {
+  void normalize({bool storageCompatibility = false}) {
     theme = switch (theme) {
       'light' || 'dark' || 'system' => theme,
       _ => 'system',
@@ -326,14 +326,35 @@ class AppState {
     deepCapsuleMonitorDeviceName = deepCapsuleMonitorDeviceName.trim();
     externalMarkdownExtension = _normalizeExtension(externalMarkdownExtension);
     sync.normalize();
+    final usedPaperIds = <String>{};
     for (final paper in papers) {
-      paper.normalize();
-      if (useCapsuleMode && useDeepCapsuleMode && paper.capsuleSide.isEmpty) {
+      if (paper.id.trim().isEmpty || !usedPaperIds.add(paper.id)) {
+        paper.id = _newUniqueId(usedPaperIds);
+      }
+      if (paper.isPinnedToDesktop) {
+        paper.isVisible = true;
+        paper.isCollapsed = false;
+        useCapsuleMode = true;
+        useDeepCapsuleMode = true;
+        showDeepCapsuleWhileExpanded = true;
+      }
+      paper.normalize(
+        maxTitleLength: maxTitleLength,
+        storageCompatibility: storageCompatibility,
+      );
+      if (paper.capsuleSide.isEmpty) {
         paper.capsuleSide = deepCapsuleSide;
+      }
+      if (paper.capsuleMonitorDeviceName.isEmpty) {
+        paper.capsuleMonitorDeviceName = deepCapsuleMonitorDeviceName;
+      }
+      if (!useCapsuleMode) {
+        paper.isCollapsed = false;
       }
     }
     final noteIds =
         papers.where((paper) => paper.isNote).map((paper) => paper.id).toSet();
+    final linkedNoteIds = <String>{};
     for (final paper in papers) {
       if (!paper.isTodo) {
         continue;
@@ -342,6 +363,15 @@ class AppState {
         final linkedNoteId = item.linkedNoteId;
         if (linkedNoteId != null && !noteIds.contains(linkedNoteId)) {
           item.linkedNoteId = null;
+        } else if (linkedNoteId != null && linkedNoteId.trim().isNotEmpty) {
+          linkedNoteIds.add(linkedNoteId);
+        }
+      }
+    }
+    if (enableTodoNoteLinks && hideLinkedNotesFromCapsules) {
+      for (final paper in papers) {
+        if (paper.isNote && linkedNoteIds.contains(paper.id)) {
+          paper.isCollapsed = false;
         }
       }
     }
@@ -438,6 +468,14 @@ int _normalizeMaxTitleLength(int value) {
     return 6;
   }
   return value.clamp(2, 20).toInt();
+}
+
+String _newUniqueId(Set<String> usedIds) {
+  String id;
+  do {
+    id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+  } while (!usedIds.add(id));
+  return id;
 }
 
 String _normalizeExtension(String extension) {

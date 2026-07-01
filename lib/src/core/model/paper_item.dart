@@ -74,6 +74,8 @@ class PaperItem {
     if (id.trim().isEmpty) {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
+    todoExtraColumns = [...todoExtraColumns];
+    todoColumnWidths = [...todoColumnWidths];
     todoColumnCount = todoColumnCount.clamp(1, 8).toInt();
     while (todoExtraColumns.length < todoColumnCount - 1) {
       todoExtraColumns.add('');
@@ -81,9 +83,16 @@ class PaperItem {
     if (todoExtraColumns.length > todoColumnCount - 1) {
       todoExtraColumns = todoExtraColumns.sublist(0, todoColumnCount - 1);
     }
-    if (todoColumnWidths.any((width) => width <= 0 || !width.isFinite)) {
-      todoColumnWidths = <double>[];
+    while (todoColumnWidths.length < todoColumnCount) {
+      todoColumnWidths.add(1);
     }
+    if (todoColumnWidths.length > todoColumnCount) {
+      todoColumnWidths = todoColumnWidths.sublist(0, todoColumnCount);
+    }
+    todoColumnWidths = [
+      for (final width in todoColumnWidths) _normalizeColumnWidth(width),
+    ];
+    dueAtLocal = _normalizeDueAtLocal(dueAtLocal);
     if (reminderIntervalValue != null && reminderIntervalValue! <= 0) {
       reminderIntervalValue = null;
       reminderIntervalUnit = null;
@@ -112,4 +121,36 @@ class PaperItem {
         'reminderIntervalUnit': reminderIntervalUnit,
     };
   }
+}
+
+double _normalizeColumnWidth(double value) {
+  if (!value.isFinite || value <= 0) {
+    return 1;
+  }
+  final rounded = (value * 1000).roundToDouble() / 1000;
+  return rounded.clamp(0.2, 8).toDouble();
+}
+
+String? _normalizeDueAtLocal(String? value) {
+  final trimmed = value?.trim() ?? '';
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  final dueAt = DateTime.tryParse(trimmed)?.toLocal();
+  if (dueAt == null) {
+    return null;
+  }
+  return [
+    dueAt.year.toString().padLeft(4, '0'),
+    '-',
+    dueAt.month.toString().padLeft(2, '0'),
+    '-',
+    dueAt.day.toString().padLeft(2, '0'),
+    'T',
+    dueAt.hour.toString().padLeft(2, '0'),
+    ':',
+    dueAt.minute.toString().padLeft(2, '0'),
+    ':',
+    dueAt.second.toString().padLeft(2, '0'),
+  ].join();
 }

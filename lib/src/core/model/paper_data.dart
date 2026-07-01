@@ -96,43 +96,60 @@ class PaperData {
     )..normalize();
   }
 
-  void normalize() {
+  void normalize({
+    int maxTitleLength = 40,
+    bool storageCompatibility = false,
+  }) {
     if (id.trim().isEmpty) {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
     type = PaperTypes.normalize(type);
-    width = width
-        .clamp(
-          PaperLayoutDefaults.minWidth,
-          10000,
-        )
-        .toDouble();
-    height = height
-        .clamp(
-          PaperLayoutDefaults.minHeight,
-          10000,
-        )
-        .toDouble();
-    textZoom = textZoom.clamp(0.5, 1.5).toDouble();
+    if (storageCompatibility) {
+      title = _cleanTitle(title, maxTitleLength);
+    }
+    x = _normalizeCoordinate(x, 120);
+    y = _normalizeCoordinate(y, 120);
+    width = _normalizePaperDimension(
+      width,
+      isNote
+          ? PaperLayoutDefaults.noteDefaultWidth
+          : PaperLayoutDefaults.todoDefaultWidth,
+      PaperLayoutDefaults.minWidth,
+    );
+    height = _normalizePaperDimension(
+      height,
+      isNote
+          ? PaperLayoutDefaults.noteDefaultHeight
+          : PaperLayoutDefaults.todoDefaultHeight,
+      PaperLayoutDefaults.minHeight,
+    );
+    textZoom = _normalizeTextZoom(
+      textZoom,
+      storageCompatibility: storageCompatibility,
+    );
     capsuleSide = capsuleSide.trim().isEmpty
         ? ''
         : DeepCapsuleSides.normalize(capsuleSide);
     capsuleMonitorDeviceName = capsuleMonitorDeviceName.trim();
+    final usedItemIds = <String>{};
     for (final item in items) {
+      if (item.id.trim().isEmpty || !usedItemIds.add(item.id)) {
+        item.id = _newUniqueId(usedItemIds);
+      }
       item.normalize();
     }
-    items.sort((a, b) {
-      final byOrder = a.order.compareTo(b.order);
-      return byOrder != 0 ? byOrder : a.id.compareTo(b.id);
-    });
     for (var index = 0; index < items.length; index++) {
       items[index].order = index;
     }
     if (isTodo && items.isEmpty) {
       items.add(PaperItem(id: '${id}_item0'));
     }
+    final usedElementIds = <String>{};
     for (var index = 0; index < noteCanvasElements.length; index++) {
       final element = noteCanvasElements[index];
+      if (element.id.trim().isEmpty || !usedElementIds.add(element.id)) {
+        element.id = _newUniqueId(usedElementIds);
+      }
       element.normalize();
       if (element.zIndex <= 0) {
         element.zIndex = (index + 1) * 10;
@@ -163,4 +180,44 @@ class PaperData {
           noteCanvasElements.map((element) => element.toJson()).toList(),
     };
   }
+}
+
+String _cleanTitle(String title, int maxLength) {
+  final normalizedMaxLength = maxLength.clamp(1, 40).toInt();
+  final withoutControls = title
+      .trim()
+      .runes
+      .where((rune) => rune >= 0x20 && (rune < 0x7F || rune > 0x9F));
+  return String.fromCharCodes(withoutControls.take(normalizedMaxLength));
+}
+
+double _normalizeCoordinate(double value, double fallback) {
+  return value.isFinite ? value : fallback;
+}
+
+double _normalizePaperDimension(double value, double fallback, double min) {
+  if (!value.isFinite || value < min) {
+    return fallback;
+  }
+  return value;
+}
+
+double _normalizeTextZoom(
+  double value, {
+  required bool storageCompatibility,
+}) {
+  if (!value.isFinite || value <= 0) {
+    return 1;
+  }
+  final normalized =
+      storageCompatibility ? (value * 10).roundToDouble() / 10 : value;
+  return normalized.clamp(0.5, 1.5).toDouble();
+}
+
+String _newUniqueId(Set<String> usedIds) {
+  String id;
+  do {
+    id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+  } while (!usedIds.add(id));
+  return id;
 }

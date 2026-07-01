@@ -172,13 +172,89 @@ void main() {
           title: 'Keep me',
         ),
       ],
-    )..normalize();
+    )..normalize(storageCompatibility: true);
 
     final itemsById = {
       for (final item in state.papers.first.items) item.id: item,
     };
     expect(itemsById['item-valid']?.linkedNoteId, 'note-paper');
     expect(itemsById['item-missing']?.linkedNoteId, isNull);
+  });
+
+  test('normalizes paper identity and surface fields like PaperTodo', () {
+    final state = AppState(
+      maxTitleLength: 6,
+      deepCapsuleSide: DeepCapsuleSides.left,
+      deepCapsuleMonitorDeviceName: 'Primary monitor',
+      useCapsuleMode: false,
+      papers: [
+        PaperData(
+          id: 'duplicate-paper',
+          type: PaperTypes.todo,
+          title: '  Long\u0000Title  ',
+          x: double.nan,
+          y: double.infinity,
+          width: 12,
+          height: double.nan,
+          textZoom: 1.26,
+          isCollapsed: true,
+          items: [
+            PaperItem(id: 'duplicate-item', text: 'First'),
+            PaperItem(id: 'duplicate-item', text: 'Second', order: -4),
+          ],
+        ),
+        PaperData(
+          id: 'duplicate-paper',
+          type: PaperTypes.note,
+          title: 'Note',
+          noteCanvasElements: [
+            NoteCanvasElement(id: 'duplicate-element'),
+            NoteCanvasElement(id: 'duplicate-element'),
+          ],
+        ),
+      ],
+    )..normalize(storageCompatibility: true);
+
+    expect(state.papers.map((paper) => paper.id).toSet(), hasLength(2));
+    final todo = state.papers.first;
+    expect(todo.title, 'LongTi');
+    expect(todo.x, 120);
+    expect(todo.y, 120);
+    expect(todo.width, PaperLayoutDefaults.todoDefaultWidth);
+    expect(todo.height, PaperLayoutDefaults.todoDefaultHeight);
+    expect(todo.textZoom, 1.3);
+    expect(todo.isCollapsed, false);
+    expect(todo.capsuleSide, DeepCapsuleSides.left);
+    expect(todo.capsuleMonitorDeviceName, 'Primary monitor');
+    expect(todo.items.map((item) => item.id).toSet(), hasLength(2));
+    expect(todo.items.map((item) => item.order), [0, 1]);
+    expect(
+      state.papers.last.noteCanvasElements.map((element) => element.id).toSet(),
+      hasLength(2),
+    );
+  });
+
+  test('expands hidden linked note capsules like PaperTodo', () {
+    final state = AppState(
+      enableTodoNoteLinks: true,
+      hideLinkedNotesFromCapsules: true,
+      papers: [
+        PaperData(
+          id: 'todo-paper',
+          type: PaperTypes.todo,
+          items: [
+            PaperItem(id: 'todo-item', linkedNoteId: 'note-paper'),
+          ],
+        ),
+        PaperData(
+          id: 'note-paper',
+          type: PaperTypes.note,
+          isCollapsed: true,
+        ),
+      ],
+    )..normalize();
+
+    expect(state.papers.last.isCollapsed, false);
   });
 
   test('normalizes todo reminder intervals like PaperTodo', () {
@@ -213,6 +289,39 @@ void main() {
     );
     expect(itemsById['disabled']?.reminderIntervalValue, isNull);
     expect(itemsById['disabled']?.reminderIntervalUnit, isNull);
+  });
+
+  test('normalizes todo columns and due dates like PaperTodo', () {
+    final state = AppState.fromJson({
+      'papers': [
+        {
+          'id': 'todo-paper',
+          'type': PaperTypes.todo,
+          'items': [
+            {
+              'id': 'columns',
+              'todoColumnCount': 3,
+              'todoExtraColumns': ['A'],
+              'todoColumnWidths': [0.1, 1.23456, 99, 7],
+              'dueAtLocal': ' 2026-06-30T09:08:07.999 ',
+            },
+            {
+              'id': 'invalid-due',
+              'dueAtLocal': 'not a date',
+            },
+          ],
+        },
+      ],
+    });
+
+    final itemsById = {
+      for (final item in state.papers.single.items) item.id: item,
+    };
+    expect(itemsById['columns']?.todoColumnCount, 3);
+    expect(itemsById['columns']?.todoExtraColumns, ['A', '']);
+    expect(itemsById['columns']?.todoColumnWidths, [0.2, 1.235, 8]);
+    expect(itemsById['columns']?.dueAtLocal, '2026-06-30T09:08:07');
+    expect(itemsById['invalid-due']?.dueAtLocal, isNull);
   });
 
   test('normalizes note canvas element types', () {
