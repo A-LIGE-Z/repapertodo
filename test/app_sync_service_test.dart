@@ -246,6 +246,130 @@ void main() {
         'repapertodo/ops/device-000000000001.jsonl');
   });
 
+  test('merges remote operation logs and saves applied state', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('repapertodo_app_sync_merge_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000002.jsonl',
+              deviceId: 'device-a',
+              sequence: 2,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          if (operationLogPath.endsWith('000000000001.jsonl')) {
+            return [
+              SyncOperation(
+                id: 'device-a-1',
+                deviceId: 'device-a',
+                sequence: 1,
+                kind: SyncOperationKind.upsertPaper,
+                createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+                payload: {
+                  'paper': PaperData(
+                    id: 'remote-note',
+                    type: PaperTypes.note,
+                    title: 'Remote',
+                    content: 'Old',
+                  ).toJson(),
+                },
+              ),
+            ];
+          }
+          return [
+            SyncOperation(
+              id: 'device-a-2',
+              deviceId: 'device-a',
+              sequence: 2,
+              kind: SyncOperationKind.updateNoteContent,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9, 1),
+              payload: {
+                'paperId': 'remote-note',
+                'content': 'Merged body',
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+    );
+
+    expect(result.appliedCount, 2);
+    expect(result.deviceSequences, {'device-a': 2});
+    expect(result.state.papers.single.title, 'Remote');
+    expect(result.state.papers.single.content, 'Merged body');
+    expect((await store.load()).papers.single.content, 'Merged body');
+  });
+
+  test('merge skips operation logs covered by device sequences', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_skip_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote',
+                  type: PaperTypes.todo,
+                  title: 'Stale',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(
+        papers: [
+          PaperData(id: 'local', type: PaperTypes.todo, title: 'Local'),
+        ],
+        sync: _configuredSyncSettings(),
+      ),
+      store: store,
+      deviceSequences: {'device-a': 1},
+    );
+
+    expect(result.appliedCount, 0);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.papers.single.title, 'Local');
+    expect(await File(store.filePath).exists(), isFalse);
+  });
+
   test('restores a selected recovery snapshot', () async {
     final directory =
         await Directory.systemTemp.createTemp('repapertodo_app_sync_restore_');
