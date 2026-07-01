@@ -16,7 +16,8 @@ rewritten by URI normalization.
 Backslashes are not accepted in configured endpoints for the same reason.
 WebDAV Basic Auth usernames must be non-empty and must not contain colons or
 control characters, because the wire format separates the username and password
-with the first colon. Passwords are preserved as entered.
+with the first colon. Passwords are preserved as entered, may contain colons,
+and must contain a non-whitespace character and no control characters.
 
 Initial recommended preset:
 

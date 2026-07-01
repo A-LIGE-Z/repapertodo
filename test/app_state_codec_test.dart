@@ -754,6 +754,33 @@ Plain item
     }
   });
 
+  test('rejects invalid WebDAV Basic Auth passwords', () {
+    final passwordWithSpacesAndColon = WebDavSyncSettings(
+      endpoint: 'https://dav.example.test/dav/',
+      username: 'user@example.com',
+      password: ' app:password ',
+    )..normalize();
+
+    expect(passwordWithSpacesAndColon.password, ' app:password ');
+    expect(passwordWithSpacesAndColon.isConfigured, true);
+
+    for (final password in const [
+      '',
+      '   ',
+      'app\npassword',
+      'app\u007Fpassword',
+    ]) {
+      final settings = WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/dav/',
+        username: 'user',
+        password: password,
+      )..normalize();
+
+      expect(settings.endpointUri, isNotNull);
+      expect(settings.isConfigured, false);
+    }
+  });
+
   test('accepts only HTTP WebDAV endpoint schemes', () {
     for (final endpoint in const [
       'https://dav.example.test/dav/',

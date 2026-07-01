@@ -117,6 +117,39 @@ void main() {
     }
   });
 
+  test('rejects invalid Basic Auth passwords before sending', () async {
+    for (final password in const [
+      '',
+      '   ',
+      'app\npassword',
+      'app\u007Fpassword',
+    ]) {
+      var requestCount = 0;
+      final client = WebDavClient(
+        baseUri:
+            Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+        credentials: WebDavCredentials(username: 'user', password: password),
+        httpClient: MockClient((request) async {
+          requestCount += 1;
+          return http.Response('network should not be reached', 500);
+        }),
+      );
+
+      await expectLater(
+        client.metadata('repapertodo/manifest.json'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.name,
+            'name',
+            'password',
+          ),
+        ),
+        reason: password,
+      );
+      expect(requestCount, 0, reason: password);
+    }
+  });
+
   test('rejects unsupported base URIs', () {
     for (final baseUri in [
       Uri.parse('ftp://dav.example.test/dav/'),

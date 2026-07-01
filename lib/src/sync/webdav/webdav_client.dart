@@ -21,6 +21,13 @@ class WebDavCredentials {
         'WebDAV Basic Auth username must not be empty, contain colons, or contain control characters.',
       );
     }
+    if (!_isValidBasicAuthPassword(password)) {
+      throw ArgumentError.value(
+        password,
+        'password',
+        'WebDAV Basic Auth password must not be blank or contain control characters.',
+      );
+    }
     final token = base64Encode(utf8.encode('$username:$password'));
     return 'Basic $token';
   }
@@ -29,6 +36,11 @@ class WebDavCredentials {
 bool _isValidBasicAuthUsername(String value) {
   return value.isNotEmpty &&
       !value.contains(':') &&
+      !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
+}
+
+bool _isValidBasicAuthPassword(String value) {
+  return value.trim().isNotEmpty &&
       !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
 }
 

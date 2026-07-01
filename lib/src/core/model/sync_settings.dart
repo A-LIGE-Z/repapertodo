@@ -241,7 +241,7 @@ class WebDavSyncSettings {
   bool get isConfigured {
     return endpointUri != null &&
         _isValidBasicAuthUsername(username) &&
-        password.isNotEmpty &&
+        _isValidBasicAuthPassword(password) &&
         rootPath.isNotEmpty;
   }
 
@@ -365,6 +365,11 @@ bool _hasUnsafeEndpointPath(String endpoint) {
 bool _isValidBasicAuthUsername(String value) {
   return value.isNotEmpty &&
       !value.contains(':') &&
+      !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
+}
+
+bool _isValidBasicAuthPassword(String value) {
+  return value.trim().isNotEmpty &&
       !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
 }
 
