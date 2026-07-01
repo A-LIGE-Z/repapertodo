@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../core/model/app_state.dart';
 import '../core/model/paper_constants.dart';
 import '../core/model/paper_data.dart';
+import '../core/script/script_capsule.dart';
 import '../core/startup/startup_command.dart';
 import 'platform_services.dart';
 
@@ -20,7 +21,8 @@ class WindowsPlatformServices implements PlatformServices {
         tray = WindowsTrayHost(channel),
         startup = startupHost,
         systemIntegration = WindowsSystemIntegrationHost(channel),
-        externalFiles = WindowsExternalFileHost(channel);
+        externalFiles = WindowsExternalFileHost(channel),
+        scriptCapsules = WindowsScriptCapsuleHost(channel);
 
   @override
   final PaperWindowHost paperWindows;
@@ -36,6 +38,9 @@ class WindowsPlatformServices implements PlatformServices {
 
   @override
   final ExternalFileHost externalFiles;
+
+  @override
+  final ScriptCapsuleHost scriptCapsules;
 }
 
 class WindowsPaperWindowHost implements PaperWindowHost {
@@ -314,5 +319,16 @@ class WindowsExternalFileHost implements ExternalFileHost {
   @override
   Future<void> openFile(String path) async {
     await _channel.invokeMethod<void>('openExternalFile', path);
+  }
+}
+
+class WindowsScriptCapsuleHost implements ScriptCapsuleHost {
+  WindowsScriptCapsuleHost(this._channel);
+
+  final MethodChannel _channel;
+
+  @override
+  Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {
+    await _channel.invokeMethod<void>('runScriptCapsule', request.toJson());
   }
 }

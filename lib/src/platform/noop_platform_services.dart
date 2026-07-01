@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../core/model/app_state.dart';
 import '../core/model/paper_data.dart';
+import '../core/script/script_capsule.dart';
 import '../core/startup/startup_command.dart';
 import 'platform_services.dart';
 
@@ -11,7 +12,8 @@ class NoopPlatformServices implements PlatformServices {
         tray = NoopTrayHost(),
         startup = NoopStartupHost(),
         systemIntegration = NoopSystemIntegrationHost(),
-        externalFiles = NoopExternalFileHost();
+        externalFiles = NoopExternalFileHost(),
+        scriptCapsules = NoopScriptCapsuleHost();
 
   @override
   final PaperWindowHost paperWindows;
@@ -27,6 +29,9 @@ class NoopPlatformServices implements PlatformServices {
 
   @override
   final ExternalFileHost externalFiles;
+
+  @override
+  final ScriptCapsuleHost scriptCapsules;
 }
 
 class NoopPaperWindowHost implements PaperWindowHost {
@@ -102,4 +107,9 @@ class NoopExternalFileHost implements ExternalFileHost {
   Future<void> openFile(String path) async {
     throw UnsupportedError('External file opening is not supported here.');
   }
+}
+
+class NoopScriptCapsuleHost implements ScriptCapsuleHost {
+  @override
+  Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {}
 }

@@ -578,6 +578,10 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (method == "runScriptCapsule") {
+          result->Success();
+          return;
+        }
         if (method == "setBounds") {
           RECT current_bounds;
           GetWindowRect(window, &current_bounds);

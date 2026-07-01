@@ -4,6 +4,7 @@ import 'core/model/app_state.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/model/paper_item.dart';
+import 'core/script/script_capsule.dart';
 import 'core/startup/startup_command.dart';
 import 'platform/platform_services.dart';
 
@@ -116,6 +117,19 @@ class RePaperTodoController {
 
   Future<void> openExternalFile(String path) async {
     await _platform.externalFiles.openFile(path);
+  }
+
+  Future<void> runScriptCapsule(ScriptCapsuleSpec spec) async {
+    await _platform.scriptCapsules.runScriptCapsule(
+      ScriptCapsuleRunRequest(
+        engine: spec.engine,
+        script: spec.script,
+        usePersistentProcess: spec.usePersistentProcess,
+        usePersistentPowerShellProcess: state.usePersistentPowerShellProcess,
+        preferPowerShell7: state.preferPowerShell7,
+        hideScriptRunWindow: state.hideScriptRunWindow,
+      ),
+    );
   }
 
   Future<void> showPaper(PaperData paper) async {

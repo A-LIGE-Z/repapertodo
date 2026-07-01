@@ -10,6 +10,7 @@ import 'package:repapertodo/src/core/model/note_canvas_element.dart';
 import 'package:repapertodo/src/core/model/paper_constants.dart';
 import 'package:repapertodo/src/core/model/paper_data.dart';
 import 'package:repapertodo/src/core/model/paper_item.dart';
+import 'package:repapertodo/src/core/script/script_capsule.dart';
 import 'package:repapertodo/src/core/storage/state_store.dart';
 import 'package:repapertodo/src/core/startup/startup_command.dart';
 import 'package:repapertodo/src/platform/noop_platform_services.dart';
@@ -1445,6 +1446,61 @@ void main() {
     expect(find.text('Note Resear'), findsNothing);
   });
 
+  testWidgets('runs linked script capsules from todo note chips',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        maxTitleLength: 20,
+        runLinkedScriptCapsulesOnClick: true,
+        showLinkedNoteName: true,
+        papers: [
+          PaperData(
+            id: 'todo-paper',
+            type: PaperTypes.todo,
+            title: 'Scripts',
+            items: [
+              PaperItem(
+                id: 'todo-1',
+                text: 'Run automation',
+                linkedNoteId: 'script-note',
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'script-note',
+            type: PaperTypes.note,
+            title: 'Build script',
+            content: '!pf\n  Write-Output ok',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store = StateStore(filePath: 'build/test-widget-script-chip.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.text('Run Build script'));
+    await tester.pumpAndSettle();
+
+    expect(platform.paperWindows.shownTitles, isNot(contains('Build script')));
+    expect(platform.scriptCapsules.requests, hasLength(1));
+    final request = platform.scriptCapsules.requests.single;
+    expect(request.engine, 'auto');
+    expect(request.script, 'Write-Output ok');
+    expect(request.usePersistentProcess, true);
+    expect(request.preferPowerShell7, true);
+  });
+
   testWidgets('shortens linked note titles with max title length',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -1566,6 +1622,10 @@ class _RecordingPlatformServices implements PlatformServices {
 
   @override
   final _RecordingExternalFileHost externalFiles = _RecordingExternalFileHost();
+
+  @override
+  final _RecordingScriptCapsuleHost scriptCapsules =
+      _RecordingScriptCapsuleHost();
 }
 
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
@@ -1589,6 +1649,15 @@ class _RecordingExternalFileHost implements ExternalFileHost {
   @override
   Future<void> openFile(String path) async {
     openedPaths.add(path);
+  }
+}
+
+class _RecordingScriptCapsuleHost implements ScriptCapsuleHost {
+  final requests = <ScriptCapsuleRunRequest>[];
+
+  @override
+  Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {
+    requests.add(request);
   }
 }
 

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../core/model/app_state.dart';
 import '../core/model/paper_data.dart';
+import '../core/script/script_capsule.dart';
 import '../core/startup/startup_command.dart';
 
 abstract interface class PlatformServices {
@@ -10,6 +11,7 @@ abstract interface class PlatformServices {
   StartupHost get startup;
   SystemIntegrationHost get systemIntegration;
   ExternalFileHost get externalFiles;
+  ScriptCapsuleHost get scriptCapsules;
 }
 
 abstract interface class PaperWindowHost {
@@ -47,4 +49,8 @@ abstract interface class SystemIntegrationHost {
 
 abstract interface class ExternalFileHost {
   Future<void> openFile(String path);
+}
+
+abstract interface class ScriptCapsuleHost {
+  Future<void> runScriptCapsule(ScriptCapsuleRunRequest request);
 }

@@ -11,6 +11,7 @@ import 'core/model/note_canvas_element.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/model/paper_item.dart';
+import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
 import 'core/startup/startup_command.dart';
 import 'sync/app_sync_service.dart';
@@ -325,6 +326,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       enableTodoNoteLinks: controller.state.enableTodoNoteLinks,
       showLinkedNoteName: controller.state.showLinkedNoteName,
       allowLongLinkedNoteTitles: controller.state.allowLongLinkedNoteTitles,
+      runLinkedScriptCapsulesOnClick:
+          controller.state.runLinkedScriptCapsulesOnClick,
       maxTitleLength: controller.state.maxTitleLength,
       enableToolTips: controller.state.enableToolTips,
       enableAnimations: controller.state.enableAnimations,
@@ -340,6 +343,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       onChanged: _refreshAndSaveState,
       onTitleChanged: _updatePaperTitle,
       onOpen: _openPaper,
+      onRunScriptCapsule: _runScriptCapsule,
       onOpenExternalMarkdown: _openNoteMarkdownExternally,
       onHide: _hidePaper,
       onDelete: _deletePaper,
@@ -499,6 +503,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
         SnackBar(content: Text('External markdown open failed: $error')),
       );
     }
+  }
+
+  Future<void> _runScriptCapsule(ScriptCapsuleSpec spec) async {
+    await controller.runScriptCapsule(spec);
   }
 
   File _writeExternalMarkdownFile(PaperData paper) {
@@ -1077,6 +1085,7 @@ class PaperPreview extends StatelessWidget {
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
+    required this.runLinkedScriptCapsulesOnClick,
     required this.maxTitleLength,
     required this.enableToolTips,
     required this.enableAnimations,
@@ -1090,6 +1099,7 @@ class PaperPreview extends StatelessWidget {
     required this.onChanged,
     required this.onTitleChanged,
     required this.onOpen,
+    required this.onRunScriptCapsule,
     required this.onOpenExternalMarkdown,
     required this.onHide,
     required this.onDelete,
@@ -1103,6 +1113,7 @@ class PaperPreview extends StatelessWidget {
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
+  final bool runLinkedScriptCapsulesOnClick;
   final int maxTitleLength;
   final bool enableToolTips;
   final bool enableAnimations;
@@ -1116,6 +1127,7 @@ class PaperPreview extends StatelessWidget {
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
   final Future<void> Function(PaperData paper) onOpen;
+  final Future<void> Function(ScriptCapsuleSpec spec) onRunScriptCapsule;
   final Future<void> Function(PaperData paper) onOpenExternalMarkdown;
   final Future<void> Function(PaperData paper) onHide;
   final Future<void> Function(PaperData paper) onDelete;
@@ -1315,6 +1327,8 @@ class PaperPreview extends StatelessWidget {
                   enableTodoNoteLinks: enableTodoNoteLinks,
                   showLinkedNoteName: showLinkedNoteName,
                   allowLongLinkedNoteTitles: allowLongLinkedNoteTitles,
+                  runLinkedScriptCapsulesOnClick:
+                      runLinkedScriptCapsulesOnClick,
                   maxTitleLength: maxTitleLength,
                   enableToolTips: enableToolTips,
                   visualSize: todoVisualSize,
@@ -1323,6 +1337,7 @@ class PaperPreview extends StatelessWidget {
                   showDueRelativeTime: showTodoDueRelativeTime,
                   dueYearDisplayMode: todoDueYearDisplayMode,
                   onOpen: onOpen,
+                  onRunScriptCapsule: onRunScriptCapsule,
                   onChanged: onChanged,
                 )
               else
@@ -2404,6 +2419,7 @@ class _TodoEditor extends StatefulWidget {
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
+    required this.runLinkedScriptCapsulesOnClick,
     required this.maxTitleLength,
     required this.enableToolTips,
     required this.visualSize,
@@ -2412,6 +2428,7 @@ class _TodoEditor extends StatefulWidget {
     required this.showDueRelativeTime,
     required this.dueYearDisplayMode,
     required this.onOpen,
+    required this.onRunScriptCapsule,
     required this.onChanged,
   });
 
@@ -2420,6 +2437,7 @@ class _TodoEditor extends StatefulWidget {
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
+  final bool runLinkedScriptCapsulesOnClick;
   final int maxTitleLength;
   final bool enableToolTips;
   final String visualSize;
@@ -2428,6 +2446,7 @@ class _TodoEditor extends StatefulWidget {
   final bool showDueRelativeTime;
   final String dueYearDisplayMode;
   final Future<void> Function(PaperData paper) onOpen;
+  final Future<void> Function(ScriptCapsuleSpec spec) onRunScriptCapsule;
   final Future<void> Function() onChanged;
 
   @override
@@ -2501,17 +2520,10 @@ class _TodoEditorState extends State<_TodoEditor> {
                             ),
                           if (widget.enableTodoNoteLinks)
                             if (_linkedNoteFor(item) case final linkedNote?)
-                              InputChip(
-                                avatar: Icon(Icons.notes_outlined,
-                                    size: visualSpec.chipIconSize),
-                                label: Text(_noteChipLabel(linkedNote)),
-                                onPressed: () =>
-                                    unawaited(widget.onOpen(linkedNote)),
-                                onDeleted: () => _clearLinkedNote(item),
-                                deleteIcon: Icon(Icons.close_outlined,
-                                    size: visualSpec.chipIconSize),
-                                deleteButtonTooltipMessage: _tooltipLabel(
-                                    widget.enableToolTips, 'Unlink note'),
+                              _linkedNoteChip(
+                                linkedNote,
+                                item,
+                                visualSpec,
                               ),
                         ],
                       ),
@@ -2925,6 +2937,43 @@ class _TodoEditorState extends State<_TodoEditor> {
     return null;
   }
 
+  InputChip _linkedNoteChip(
+    PaperData linkedNote,
+    PaperItem item,
+    _TodoVisualSpec visualSpec,
+  ) {
+    final scriptSpec = widget.runLinkedScriptCapsulesOnClick
+        ? ScriptCapsuleSpec.tryParse(linkedNote.content)
+        : null;
+    final isScriptCapsule = scriptSpec != null;
+    return InputChip(
+      avatar: Icon(
+        isScriptCapsule ? Icons.bolt_outlined : Icons.notes_outlined,
+        size: visualSpec.chipIconSize,
+      ),
+      label: Text(
+        isScriptCapsule
+            ? _scriptChipLabel(linkedNote)
+            : _noteChipLabel(linkedNote),
+      ),
+      tooltip: _tooltipLabel(
+        widget.enableToolTips,
+        isScriptCapsule ? 'Run linked script capsule' : 'Open linked note',
+      ),
+      onPressed: () {
+        if (scriptSpec != null) {
+          unawaited(widget.onRunScriptCapsule(scriptSpec));
+          return;
+        }
+        unawaited(widget.onOpen(linkedNote));
+      },
+      onDeleted: () => _clearLinkedNote(item),
+      deleteIcon: Icon(Icons.close_outlined, size: visualSpec.chipIconSize),
+      deleteButtonTooltipMessage:
+          _tooltipLabel(widget.enableToolTips, 'Unlink note'),
+    );
+  }
+
   String _noteChipLabel(PaperData note) {
     if (!widget.showLinkedNoteName) {
       return 'Note';
@@ -2933,6 +2982,16 @@ class _TodoEditorState extends State<_TodoEditor> {
         ? _displayPaperTitle(note)
         : _shortenTitle(_displayPaperTitle(note), widget.maxTitleLength);
     return 'Note $title';
+  }
+
+  String _scriptChipLabel(PaperData note) {
+    if (!widget.showLinkedNoteName) {
+      return 'Script';
+    }
+    final title = widget.allowLongLinkedNoteTitles
+        ? _displayPaperTitle(note)
+        : _shortenTitle(_displayPaperTitle(note), widget.maxTitleLength);
+    return 'Run $title';
   }
 
   String _displayPaperTitle(PaperData paper) {
