@@ -430,7 +430,9 @@ bool _propStatIsSuccessful(XmlElement propStat) {
 }
 
 int? _webDavStatusCode(String value) {
-  final match = RegExp(r'\b(\d{3})\b').firstMatch(value);
+  final match = RegExp(
+    r'^HTTP/\d+(?:\.\d+)?\s+(\d{3})(?:\s|$)',
+  ).firstMatch(value.trim());
   return match == null ? null : int.tryParse(match.group(1)!);
 }
 

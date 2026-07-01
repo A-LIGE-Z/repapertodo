@@ -408,6 +408,41 @@ void main() {
     expect(entries.single.isCollection, true);
   });
 
+  test('ignores properties from malformed WebDAV propstat statuses', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"malformed-status"</D:getetag>
+      </D:prop>
+      <D:status>status text says 200 but is not an HTTP status line</D:status>
+    </D:propstat>
+    <D:propstat>
+      <D:prop>
+        <D:getcontentlength>42</D:getcontentlength>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries, hasLength(1));
+    expect(entries.single.etag, isNull);
+    expect(entries.single.contentLength, 42);
+  });
+
   test('ignores WebDAV-looking values outside prop containers', () async {
     final client = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
