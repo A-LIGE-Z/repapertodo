@@ -10,7 +10,7 @@ class AndroidPlatformServices implements PlatformServices {
         tray = NoopTrayHost(),
         startup = NoopStartupHost(),
         systemIntegration = NoopSystemIntegrationHost(),
-        externalFiles = NoopExternalFileHost(),
+        externalFiles = AndroidExternalFileHost(channel),
         uriOpener = AndroidUriOpenHost(channel),
         scriptCapsules = NoopScriptCapsuleHost();
 
@@ -44,5 +44,16 @@ class AndroidUriOpenHost implements UriOpenHost {
   @override
   Future<void> openUri(String uri) async {
     await _channel.invokeMethod<void>('openUri', uri);
+  }
+}
+
+class AndroidExternalFileHost implements ExternalFileHost {
+  AndroidExternalFileHost(this._channel);
+
+  final MethodChannel _channel;
+
+  @override
+  Future<void> openFile(String path) async {
+    await _channel.invokeMethod<void>('openExternalFile', path);
   }
 }
