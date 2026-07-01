@@ -795,7 +795,7 @@ String _normalizeDecodedRemotePath(String path) {
         'Remote path must not contain parent-directory segments.',
       );
     }
-    segments.add(segment);
+    segments.add(trimmed);
   }
   return segments.join('/');
 }

@@ -101,7 +101,8 @@ void main() {
     );
     final service = WebDavStateSyncService(
       client: webDavClient,
-      paths: const WebDavStateSyncPaths(rootPath: 'Team Space/RePaperTodo'),
+      paths:
+          const WebDavStateSyncPaths(rootPath: '/ Team Space / RePaperTodo /'),
       deviceId: 'test-device',
     );
 
@@ -127,6 +128,10 @@ void main() {
       'Team Space/RePaperTodo/ops',
     ]);
     expect(putPaths, contains('Team Space/RePaperTodo/manifest.json'));
+    expect(
+      result.snapshotPath,
+      'Team Space/RePaperTodo/snapshots/snapshot-20260630T100000000Z-test-device-seq-000000000001.json',
+    );
   });
 
   test('accepts matching existing snapshots during push retry', () async {
