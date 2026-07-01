@@ -30,7 +30,8 @@ class SyncManifest {
     return SyncManifest(
       schemaVersion: _schemaVersionFromWire(json['schemaVersion']),
       updatedAtUtc: updatedAtUtc,
-      latestSnapshotPath: stringValue(json['latestSnapshotPath'], ''),
+      latestSnapshotPath:
+          _latestSnapshotPathFromWire(json['latestSnapshotPath']),
       deviceSequences: {
         if (rawSequences is Map)
           for (final entry in rawSequences.entries)
@@ -59,6 +60,15 @@ int _schemaVersionFromWire(Object? value) {
   }
   throw FormatException(
     'Unsupported sync manifest schemaVersion: $value',
+  );
+}
+
+String _latestSnapshotPathFromWire(Object? value) {
+  if (value is String) {
+    return value;
+  }
+  throw FormatException(
+    'Sync manifest latestSnapshotPath must be a string: $value',
   );
 }
 

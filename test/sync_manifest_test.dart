@@ -14,6 +14,17 @@ void main() {
     expect(manifest.deviceSequences, {'win-device': 2});
   });
 
+  test('allows empty manifest snapshot paths', () {
+    final manifest = SyncManifest.fromJson({
+      'schemaVersion': 1,
+      'updatedAtUtc': '1970-01-01T00:00:00.000Z',
+      'latestSnapshotPath': '',
+      'deviceSequences': const <String, Object?>{},
+    });
+
+    expect(manifest.latestSnapshotPath, isEmpty);
+  });
+
   test('rejects unsupported manifest schema versions', () {
     for (final schemaVersion in const <Object?>[null, 0, 2, 1.2, '1']) {
       expect(
@@ -31,6 +42,31 @@ void main() {
           ),
         ),
         reason: '$schemaVersion',
+      );
+    }
+  });
+
+  test('rejects invalid manifest snapshot paths', () {
+    for (final latestSnapshotPath in const <Object?>[
+      null,
+      7,
+      ['snapshot.json'],
+    ]) {
+      expect(
+        () => SyncManifest.fromJson({
+          'schemaVersion': 1,
+          'updatedAtUtc': '2026-07-01T10:30:00Z',
+          'latestSnapshotPath': latestSnapshotPath,
+          'deviceSequences': const <String, Object?>{},
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('latestSnapshotPath must be a string'),
+          ),
+        ),
+        reason: '$latestSnapshotPath',
       );
     }
   });

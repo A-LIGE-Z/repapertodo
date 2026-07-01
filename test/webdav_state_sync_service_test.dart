@@ -417,6 +417,56 @@ void main() {
     );
   });
 
+  test('rejects manifests with invalid snapshot path types before download',
+      () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode({
+              'schemaVersion': 1,
+              'updatedAtUtc': '2026-06-30T11:00:00Z',
+              'latestSnapshotPath': ['bad-snapshot.json'],
+              'deviceSequences': {'other-device': 2},
+            }),
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    await expectLater(
+      service.pull(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('latestSnapshotPath must be a string'),
+        ),
+      ),
+    );
+    expect(
+      requests
+          .where((request) =>
+              request.method == 'GET' &&
+              !request.url.path.endsWith('/manifest.json'))
+          .map((request) => request.url.path),
+      isEmpty,
+    );
+  });
+
   test('rejects manifest snapshots outside the snapshot collection', () async {
     final requests = <http.Request>[];
     final webDavClient = WebDavClient(
