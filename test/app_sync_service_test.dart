@@ -431,6 +431,68 @@ void main() {
     expect(stored.sync.operationDeviceSequences, {'device-a': 2});
   });
 
+  test('merge waits at gaps in remote operation sequences', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_gap_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final downloadedPaths = <String>[];
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000003.jsonl',
+              deviceId: 'device-a',
+              sequence: 3,
+            ),
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          downloadedPaths.add(operationLogPath);
+          if (operationLogPath.endsWith('000000000003.jsonl')) {
+            throw StateError('Gapped operation logs should not be downloaded.');
+          }
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote-note',
+                  type: PaperTypes.note,
+                  title: 'First',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+    );
+
+    expect(result.appliedCount, 1);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.sync.operationDeviceSequences, {'device-a': 1});
+    expect(result.state.papers.single.title, 'First');
+    expect(downloadedPaths, ['repapertodo/ops/device-a-000000000001.jsonl']);
+    final stored = await store.load();
+    expect(stored.sync.operationDeviceSequences, {'device-a': 1});
+    expect(stored.papers.single.title, 'First');
+  });
+
   test('uploads local operation diffs and saves sequence progress', () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_upload_ops_');

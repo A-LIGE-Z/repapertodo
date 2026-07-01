@@ -260,13 +260,10 @@ class AppSyncService {
       );
     }
 
-    final records = (await client.listOperationLogs()).where((record) {
-      final deviceId = normalizeSyncDeviceId(record.deviceId, fallback: '');
-      if (deviceId.isEmpty) {
-        return false;
-      }
-      return record.sequence > (previousSequences[deviceId] ?? 0);
-    });
+    final records = _contiguousOperationRecords(
+      await client.listOperationLogs(),
+      previousSequences,
+    );
     final operations = <SyncOperation>[];
     for (final record in records) {
       operations.addAll(await client.downloadOperationLog(record.path));
@@ -484,5 +481,62 @@ class _ConfiguredWebDavClient {
   });
 
   final WebDavStateSyncService client;
+  final String deviceId;
+}
+
+List<WebDavOperationLogRecord> _contiguousOperationRecords(
+  Iterable<WebDavOperationLogRecord> records,
+  Map<String, int> previousSequences,
+) {
+  final candidates = <_OperationLogCandidate>[];
+  for (final record in records) {
+    final deviceId = normalizeSyncDeviceId(record.deviceId, fallback: '');
+    if (deviceId.isEmpty) {
+      continue;
+    }
+    if (record.sequence <= (previousSequences[deviceId] ?? 0)) {
+      continue;
+    }
+    candidates.add(_OperationLogCandidate(record: record, deviceId: deviceId));
+  }
+  candidates.sort((a, b) {
+    final deviceComparison = a.deviceId.compareTo(b.deviceId);
+    if (deviceComparison != 0) {
+      return deviceComparison;
+    }
+    return a.record.sequence.compareTo(b.record.sequence);
+  });
+
+  final selected = <WebDavOperationLogRecord>[];
+  final expectedSequences = <String, int>{};
+  final blockedDevices = <String>{};
+  for (final candidate in candidates) {
+    if (blockedDevices.contains(candidate.deviceId)) {
+      continue;
+    }
+    final expectedSequence = expectedSequences.putIfAbsent(
+      candidate.deviceId,
+      () => (previousSequences[candidate.deviceId] ?? 0) + 1,
+    );
+    if (candidate.record.sequence < expectedSequence) {
+      continue;
+    }
+    if (candidate.record.sequence > expectedSequence) {
+      blockedDevices.add(candidate.deviceId);
+      continue;
+    }
+    selected.add(candidate.record);
+    expectedSequences[candidate.deviceId] = expectedSequence + 1;
+  }
+  return selected;
+}
+
+class _OperationLogCandidate {
+  const _OperationLogCandidate({
+    required this.record,
+    required this.deviceId,
+  });
+
+  final WebDavOperationLogRecord record;
   final String deviceId;
 }
