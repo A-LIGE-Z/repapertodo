@@ -684,8 +684,30 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     }
     _localEditSyncDebounce?.cancel();
     _localEditSyncDebounce = null;
-    _pendingLocalEditBaseState = null;
-    _pendingLocalEditLatestState = null;
+    try {
+      if (_canRunAutoSync()) {
+        final uploadedPendingEdits = await _uploadPendingLocalEdits(
+          reportFailures: showMessage,
+        );
+        if (!uploadedPendingEdits) {
+          return;
+        }
+      } else {
+        _pendingLocalEditBaseState = null;
+        _pendingLocalEditLatestState = null;
+      }
+    } catch (error) {
+      if (!mounted || !showMessage) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sync failed: $error')),
+      );
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
     setState(() => _isSyncing = true);
     try {
       final result = await widget.syncService.syncAndMergeNow(
@@ -1073,33 +1095,45 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       _reschedulePendingLocalEditSync();
       return;
     }
+    final uploadedPendingEdits = await _uploadPendingLocalEdits();
+    if (!uploadedPendingEdits) {
+      return;
+    }
+    await _syncSilentlyIfConfigured();
+  }
+
+  Future<bool> _uploadPendingLocalEdits({bool reportFailures = false}) async {
     final beforeState = _pendingLocalEditBaseState;
     final afterState = _pendingLocalEditLatestState;
     _pendingLocalEditBaseState = null;
     _pendingLocalEditLatestState = null;
-    if (beforeState != null && afterState != null) {
-      try {
-        final uploadResult = await widget.syncService.uploadLocalOperations(
-          beforeState: beforeState,
-          afterState: afterState,
-          store: widget.store,
-        );
-        if (!mounted) {
-          return;
-        }
-        if (uploadResult.uploadedCount > 0) {
-          setState(() {
-            controller.replaceState(uploadResult.state);
-          });
-          await controller.rebuildTrayMenu();
-        }
-      } catch (_) {
-        _pendingLocalEditBaseState = beforeState;
-        _pendingLocalEditLatestState = afterState;
-        return;
-      }
+    if (beforeState == null || afterState == null) {
+      return true;
     }
-    await _syncSilentlyIfConfigured();
+    try {
+      final uploadResult = await widget.syncService.uploadLocalOperations(
+        beforeState: beforeState,
+        afterState: afterState,
+        store: widget.store,
+      );
+      if (!mounted) {
+        return false;
+      }
+      if (uploadResult.uploadedCount > 0) {
+        setState(() {
+          controller.replaceState(uploadResult.state);
+        });
+        await controller.rebuildTrayMenu();
+      }
+      return true;
+    } catch (error) {
+      _pendingLocalEditBaseState = beforeState;
+      _pendingLocalEditLatestState = afterState;
+      if (reportFailures) {
+        rethrow;
+      }
+      return false;
+    }
   }
 
   void _reschedulePendingLocalEditSync() {

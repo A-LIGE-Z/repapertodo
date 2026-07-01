@@ -848,6 +848,98 @@ void main() {
     );
   });
 
+  testWidgets('manual sync uploads pending local edits before merging',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'manual-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'manual-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        papers: [
+          PaperData(
+            id: 'manual-note',
+            type: PaperTypes.note,
+            title: 'Draft',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('manual-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(find.text('Remote data downloaded.'), findsOneWidget);
+  });
+
   testWidgets('auto sync runs silently on the configured interval',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -2592,6 +2684,7 @@ class _ManualSyncService extends AppSyncService {
   final AppState? localUploadState;
   var calls = 0;
   var localUploadCalls = 0;
+  final events = <String>[];
   final localUploadBeforeTitles = <String>[];
   final localUploadAfterTitles = <String>[];
 
@@ -2602,6 +2695,7 @@ class _ManualSyncService extends AppSyncService {
     DateTime? localUpdatedAtUtc,
   }) async {
     calls += 1;
+    events.add('sync');
     final gate = firstSyncGate;
     if (calls == 1 && gate != null) {
       await gate;
@@ -2617,6 +2711,7 @@ class _ManualSyncService extends AppSyncService {
     DateTime? createdAtUtc,
   }) async {
     localUploadCalls += 1;
+    events.add('upload');
     localUploadBeforeTitles.add(beforeState.papers.single.title);
     localUploadAfterTitles.add(afterState.papers.single.title);
     final state = localUploadState ?? afterState;
