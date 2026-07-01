@@ -162,6 +162,35 @@ void main() {
     );
   });
 
+  test('rejects non-multistatus PROPFIND responses', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response('<html>not webdav</html>', 207);
+      }),
+    );
+
+    await expectLater(
+      client.list('repapertodo'),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.statusCode, 'statusCode', 207)
+            .having(
+              (error) => error.message,
+              'message',
+              contains('multistatus root element'),
+            )
+            .having(
+              (error) => error.responseBody,
+              'responseBody',
+              '<html>not webdav</html>',
+            ),
+      ),
+    );
+  });
+
   test('rejects invalid Basic Auth usernames before sending', () async {
     for (final username in const [
       '',

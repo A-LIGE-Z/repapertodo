@@ -308,6 +308,11 @@ List<WebDavEntry> _parseMultiStatusResponse(http.Response response) {
 
 List<WebDavEntry> _parseMultiStatus(String xml) {
   final document = XmlDocument.parse(xml);
+  if (document.rootElement.name.local != 'multistatus') {
+    throw const FormatException(
+      'WebDAV multistatus response must contain a multistatus root element.',
+    );
+  }
   return _descendantElements(document)
       .where((element) => element.name.local == 'response')
       .map(_parseEntry)
