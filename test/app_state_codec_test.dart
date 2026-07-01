@@ -88,6 +88,24 @@ void main() {
     expect(itemsById['item-missing']?.linkedNoteId, isNull);
   });
 
+  test('normalizes deep capsule top margins', () {
+    final state = AppState.fromJson({
+      'deepCapsuleStartTopMargin': 2,
+      'deepCapsuleQueueStartTopMargins': {
+        'top': 4,
+        'middle': 64,
+        'bottom': 20000,
+      },
+    });
+
+    expect(state.deepCapsuleStartTopMargin, 8);
+    expect(state.deepCapsuleQueueStartTopMargins, {
+      'top': 8,
+      'middle': 64,
+      'bottom': 10000,
+    });
+  });
+
   test('decodes and normalizes WebDAV sync settings', () {
     final state = AppState.fromJson({
       'sync': {

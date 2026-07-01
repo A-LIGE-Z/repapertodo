@@ -7,6 +7,7 @@ void main() {
       initialState: AppState(
         deepCapsuleSide: DeepCapsuleSides.left,
         deepCapsuleMonitorDeviceName: '  Primary monitor  ',
+        deepCapsuleStartTopMargin: 72,
       ),
       platform: NoopPlatformServices(),
     );
@@ -15,6 +16,7 @@ void main() {
 
     expect(paper.capsuleSide, DeepCapsuleSides.left);
     expect(paper.capsuleMonitorDeviceName, 'Primary monitor');
+    expect(paper.y, 72);
   });
 
   test('new papers skip deep capsule defaults when disabled', () {
@@ -30,5 +32,6 @@ void main() {
 
     expect(paper.capsuleSide, isEmpty);
     expect(paper.capsuleMonitorDeviceName, isEmpty);
+    expect(paper.y, 120);
   });
 }

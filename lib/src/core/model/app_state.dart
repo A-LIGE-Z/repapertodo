@@ -286,6 +286,10 @@ class AppState {
         FullscreenTopmostModes.normalize(fullscreenTopmostMode);
     deepCapsuleStartTopMargin =
         deepCapsuleStartTopMargin.clamp(8, 10000).toDouble();
+    deepCapsuleQueueStartTopMargins = {
+      for (final entry in deepCapsuleQueueStartTopMargins.entries)
+        entry.key: entry.value.clamp(8, 10000).toDouble(),
+    };
     deepCapsuleSide = DeepCapsuleSides.normalize(deepCapsuleSide);
     deepCapsuleMonitorDeviceName = deepCapsuleMonitorDeviceName.trim();
     externalMarkdownExtension = _normalizeExtension(externalMarkdownExtension);

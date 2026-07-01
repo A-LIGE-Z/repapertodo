@@ -69,6 +69,7 @@ class RePaperTodoController {
     if (state.useCapsuleMode && state.useDeepCapsuleMode) {
       paper.capsuleSide = state.deepCapsuleSide;
       paper.capsuleMonitorDeviceName = state.deepCapsuleMonitorDeviceName;
+      paper.y = state.deepCapsuleStartTopMargin;
     }
     state.papers.add(paper);
     return paper;
