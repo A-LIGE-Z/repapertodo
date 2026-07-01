@@ -1,4 +1,5 @@
 import 'json_helpers.dart';
+import 'sync_device_id.dart';
 
 abstract final class SyncProviderIds {
   static const none = 'none';
@@ -28,7 +29,8 @@ class SyncSettings {
     Map<String, Map<String, String>>? deletedTodoItemTombstones,
     JsonMap? extra,
   })  : webDav = webDav ?? WebDavSyncSettings(),
-        operationDeviceSequences = operationDeviceSequences ?? <String, int>{},
+        operationDeviceSequences =
+            normalizeSyncDeviceSequences(operationDeviceSequences),
         deletedPaperTombstones = deletedPaperTombstones ?? <String, String>{},
         deletedTodoItemTombstones =
             deletedTodoItemTombstones ?? <String, Map<String, String>>{},
@@ -71,7 +73,7 @@ class SyncSettings {
   void normalize() {
     provider = SyncProviderIds.normalize(provider);
     webDav.normalize();
-    operationDeviceSequences = _normalizeDeviceSequences(
+    operationDeviceSequences = normalizeSyncDeviceSequences(
       operationDeviceSequences,
     );
     deletedPaperTombstones = _normalizeTombstoneMap(deletedPaperTombstones);
@@ -297,18 +299,6 @@ String _normalizeRootPath(String value) {
       .where((segment) => segment.trim().isNotEmpty)
       .join('/');
   return normalized.isEmpty ? 'repapertodo' : normalized;
-}
-
-Map<String, int> _normalizeDeviceSequences(Map<String, int> source) {
-  final normalized = <String, int>{};
-  for (final entry in source.entries) {
-    final key = entry.key.trim();
-    if (key.isEmpty || entry.value <= 0) {
-      continue;
-    }
-    normalized[key] = entry.value;
-  }
-  return normalized;
 }
 
 Map<String, String> _normalizeTombstoneMap(Object? value) {

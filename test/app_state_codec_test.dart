@@ -629,7 +629,9 @@ Plain item
         'futureSyncField': 'keep-sync',
         'operationDeviceSequences': {
           ' win-device ': 3,
+          'Win Device': 4,
           'android-device': 2.4,
+          'bad': 9,
           'stale-device': 0,
           '': 7,
         },
@@ -662,7 +664,7 @@ Plain item
     expect(state.sync.provider, SyncProviderIds.webDav);
     expect(state.sync.extra['futureSyncField'], 'keep-sync');
     expect(state.sync.operationDeviceSequences, {
-      'win-device': 3,
+      'win-device': 4,
       'android-device': 2,
     });
     expect(state.sync.deletedPaperTombstones, {
