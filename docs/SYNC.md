@@ -48,6 +48,9 @@ RePaperTodo sync folders. Malformed percent-encoded paths are rejected at the
 same boundary.
 The WebDAV client itself also refuses absolute or parent-traversing request
 paths and resolves all accepted paths beneath the configured endpoint.
+Configured WebDAV root folders use the same decoded path rules; unsafe or
+malformed roots are treated as incomplete sync settings instead of falling back
+to another remote folder.
 Each push also writes a one-line plain JSON operation record in `ops/` that
 points at the uploaded snapshot and advances that device's manifest sequence.
 The sync core can enumerate and download these operation logs as merge inputs.

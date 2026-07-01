@@ -292,12 +292,30 @@ class WebDavSyncSettings {
 }
 
 String _normalizeRootPath(String value) {
-  final normalized = value
-      .trim()
-      .replaceAll('\\', '/')
-      .split('/')
-      .where((segment) => segment.trim().isNotEmpty)
-      .join('/');
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return 'repapertodo';
+  }
+  late final String decoded;
+  try {
+    decoded = Uri.decodeComponent(trimmed);
+  } on ArgumentError {
+    return '';
+  } on FormatException {
+    return '';
+  }
+  final segments = <String>[];
+  for (final segment in decoded.replaceAll('\\', '/').split('/')) {
+    final trimmedSegment = segment.trim();
+    if (trimmedSegment.isEmpty || trimmedSegment == '.') {
+      continue;
+    }
+    if (trimmedSegment == '..') {
+      return '';
+    }
+    segments.add(segment);
+  }
+  final normalized = segments.join('/');
   return normalized.isEmpty ? 'repapertodo' : normalized;
 }
 

@@ -687,6 +687,35 @@ Plain item
     expect(state.sync.webDav.isConfigured, true);
   });
 
+  test('normalizes unsafe WebDAV root paths as incomplete settings', () {
+    final safe = WebDavSyncSettings(
+      endpoint: 'https://dav.example.test/dav/',
+      username: 'user',
+      password: 'pass',
+      rootPath: '/Team%20Space/./RePaperTodo//',
+    )..normalize();
+
+    expect(safe.rootPath, 'Team Space/RePaperTodo');
+    expect(safe.isConfigured, true);
+
+    for (final rootPath in const [
+      '../Other',
+      r'RePaperTodo\..\Other',
+      'RePaperTodo/%2e%2e/Other',
+      'RePaperTodo/bad%',
+    ]) {
+      final unsafe = WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/dav/',
+        username: 'user',
+        password: 'pass',
+        rootPath: rootPath,
+      )..normalize();
+
+      expect(unsafe.rootPath, isEmpty);
+      expect(unsafe.isConfigured, false);
+    }
+  });
+
   test('rejects incomplete WebDAV endpoint settings', () {
     final settings = WebDavSyncSettings(
       endpoint: 'dav.jianguoyun.com/dav',
