@@ -337,7 +337,7 @@ class WebDavStateSyncService {
   }) async {
     final deviceSequences =
         normalizeSyncDeviceSequences(previousDeviceSequences);
-    final pendingOperations = operations
+    final candidates = operations
         .map(_normalizeOperationForUpload)
         .whereType<SyncOperation>()
         .where((operation) {
@@ -350,6 +350,10 @@ class WebDavStateSyncService {
         }
         return a.sequence.compareTo(b.sequence);
       });
+    final pendingOperations = _contiguousOperationsForUpload(
+      candidates,
+      deviceSequences,
+    );
     if (pendingOperations.isEmpty) {
       return WebDavOperationLogUploadResult(
         deviceSequences: deviceSequences,
@@ -580,6 +584,34 @@ class WebDavStateSyncService {
       rethrow;
     }
   }
+}
+
+List<SyncOperation> _contiguousOperationsForUpload(
+  Iterable<SyncOperation> operations,
+  Map<String, int> previousSequences,
+) {
+  final selected = <SyncOperation>[];
+  final expectedSequences = <String, int>{};
+  final blockedDevices = <String>{};
+  for (final operation in operations) {
+    if (blockedDevices.contains(operation.deviceId)) {
+      continue;
+    }
+    final expectedSequence = expectedSequences.putIfAbsent(
+      operation.deviceId,
+      () => (previousSequences[operation.deviceId] ?? 0) + 1,
+    );
+    if (operation.sequence < expectedSequence) {
+      continue;
+    }
+    if (operation.sequence > expectedSequence) {
+      blockedDevices.add(operation.deviceId);
+      continue;
+    }
+    selected.add(operation);
+    expectedSequences[operation.deviceId] = expectedSequence + 1;
+  }
+  return selected;
 }
 
 class _RemoteManifest {

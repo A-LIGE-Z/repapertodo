@@ -601,6 +601,79 @@ void main() {
     });
   });
 
+  test('uploads only contiguous operation logs per device', () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return switch (request.method) {
+          'MKCOL' => http.Response('', 201),
+          'PUT' => http.Response('', 201),
+          _ => http.Response('unexpected ${request.method}', 500),
+        };
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final result = await service.uploadOperationLogs(
+      [
+        SyncOperation(
+          id: 'device-a-1',
+          deviceId: 'device-a',
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+          payload: {
+            'paper': PaperData(
+              id: 'device-a-first',
+              type: PaperTypes.note,
+              title: 'Device A first',
+            ).toJson(),
+          },
+        ),
+        SyncOperation(
+          id: 'device-a-3',
+          deviceId: 'device-a',
+          sequence: 3,
+          kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 1),
+          payload: {
+            'paper': PaperData(
+              id: 'device-a-third',
+              type: PaperTypes.note,
+              title: 'Device A third',
+            ).toJson(),
+          },
+        ),
+        SyncOperation(
+          id: 'device-b-1',
+          deviceId: 'device-b',
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 2),
+          payload: {
+            'paper': PaperData(
+              id: 'device-b-first',
+              type: PaperTypes.note,
+              title: 'Device B first',
+            ).toJson(),
+          },
+        ),
+      ],
+    );
+
+    expect(result.uploadedCount, 2);
+    expect(result.deviceSequences, {'device-a': 1, 'device-b': 1});
+    final operationRequests =
+        requests.where((request) => request.method == 'PUT').toList();
+    expect(operationRequests.map((request) => request.url.path), [
+      '/remote.php/dav/files/user/repapertodo/ops/device-a-000000000001.jsonl',
+      '/remote.php/dav/files/user/repapertodo/ops/device-b-000000000001.jsonl',
+    ]);
+  });
+
   test('downloads a selected snapshot for recovery', () async {
     const codec = AppStateCodec();
     final snapshotState = AppState(
