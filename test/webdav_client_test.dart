@@ -72,6 +72,45 @@ void main() {
     expect(entries.map((entry) => entry.contentLength), [null, null]);
   });
 
+  test('omits blank WebDAV condition headers', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response('', 204);
+      }),
+    );
+
+    await client.putBytes(
+      'repapertodo/manifest.json',
+      const [1],
+      ifMatch: '  ',
+    );
+    await client.delete('repapertodo/manifest.json', ifMatch: '\t');
+    await client.putBytes(
+      'repapertodo/manifest.json',
+      const [2],
+      ifMatch: ' "manifest-v1" ',
+    );
+    await client.delete(
+      'repapertodo/manifest.json',
+      ifMatch: '"manifest-v2"',
+    );
+
+    expect(requests.map((request) => request.method), [
+      'PUT',
+      'DELETE',
+      'PUT',
+      'DELETE',
+    ]);
+    expect(requests[0].headers.containsKey('if-match'), false);
+    expect(requests[1].headers.containsKey('if-match'), false);
+    expect(requests[2].headers['if-match'], '"manifest-v1"');
+    expect(requests[3].headers['if-match'], '"manifest-v2"');
+  });
+
   test('rejects unsafe request paths before sending', () async {
     var requestCount = 0;
     final client = WebDavClient(

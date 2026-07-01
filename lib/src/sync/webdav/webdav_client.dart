@@ -130,9 +130,10 @@ class WebDavClient {
     String? ifMatch,
     bool createOnly = false,
   }) async {
+    final normalizedIfMatch = _nonBlankHeaderValue(ifMatch);
     final headers = <String, String>{
       'content-type': 'application/octet-stream',
-      if (ifMatch != null) 'if-match': ifMatch,
+      if (normalizedIfMatch != null) 'if-match': normalizedIfMatch,
       if (createOnly) 'if-none-match': '*',
     };
     final response = await _send('PUT', path, headers: headers, body: bytes);
@@ -148,10 +149,11 @@ class WebDavClient {
   }
 
   Future<void> delete(String path, {String? ifMatch}) async {
+    final normalizedIfMatch = _nonBlankHeaderValue(ifMatch);
     final response = await _send(
       'DELETE',
       path,
-      headers: {if (ifMatch != null) 'if-match': ifMatch},
+      headers: {if (normalizedIfMatch != null) 'if-match': normalizedIfMatch},
     );
     if (response.statusCode == 404) {
       return;
@@ -456,6 +458,14 @@ String? _stripQuotes(String? value) {
   if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
     final unquoted = trimmed.substring(1, trimmed.length - 1);
     return unquoted.isEmpty ? null : unquoted;
+  }
+  return trimmed;
+}
+
+String? _nonBlankHeaderValue(String? value) {
+  final trimmed = value?.trim();
+  if (trimmed == null || trimmed.isEmpty) {
+    return null;
   }
   return trimmed;
 }
