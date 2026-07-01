@@ -21,6 +21,7 @@ import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
 import 'core/startup/startup_command.dart';
 import 'sync/app_sync_service.dart';
+import 'sync/webdav/webdav_state_sync_service.dart';
 import 'ui/sync_settings_dialog.dart';
 
 class RePaperTodoApp extends StatefulWidget {
@@ -256,6 +257,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.sync_outlined),
+          ),
+          IconButton(
+            tooltip: _tooltipLabel(enableToolTips, 'Recovery snapshots'),
+            onPressed: _isSyncing ? null : _openRecoverySnapshots,
+            icon: const Icon(Icons.restore_outlined),
           ),
           IconButton(
             tooltip: _tooltipLabel(enableToolTips, 'Show hidden papers'),
@@ -623,6 +629,90 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Sync failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
+  Future<void> _openRecoverySnapshots() async {
+    final snapshot = await showDialog<WebDavSnapshotRecord>(
+      context: context,
+      builder: (context) {
+        return _RecoverySnapshotsDialog(
+          loadSnapshots: () => widget.syncService.listRecoverySnapshots(
+            localState: controller.state,
+            store: widget.store,
+          ),
+        );
+      },
+    );
+    if (!mounted || snapshot == null) {
+      return;
+    }
+    final confirmed = await _confirmRestoreSnapshot(snapshot);
+    if (!mounted || !confirmed) {
+      return;
+    }
+    await _restoreRecoverySnapshot(snapshot);
+  }
+
+  Future<bool> _confirmRestoreSnapshot(WebDavSnapshotRecord snapshot) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Restore snapshot?'),
+              content: Text(_snapshotSummary(snapshot)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  key: const ValueKey('confirm-restore-snapshot'),
+                  onPressed: () => Navigator.of(context).pop(true),
+                  icon: const Icon(Icons.restore_outlined),
+                  label: const Text('Restore'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
+  Future<void> _restoreRecoverySnapshot(WebDavSnapshotRecord snapshot) async {
+    setState(() => _isSyncing = true);
+    try {
+      final result = await widget.syncService.restoreRecoverySnapshot(
+        localState: controller.state,
+        store: widget.store,
+        snapshotPath: snapshot.path,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (result.state != null) {
+        setState(() {
+          controller.replaceState(result.state!);
+        });
+        await controller.rebuildTrayMenu();
+      }
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_syncMessage(result))),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Restore failed: $error')),
       );
     } finally {
       if (mounted) {
@@ -1137,6 +1227,113 @@ class _LinkedNoteRestore {
   final String paperId;
   final String itemId;
   final String noteId;
+}
+
+class _RecoverySnapshotsDialog extends StatelessWidget {
+  const _RecoverySnapshotsDialog({
+    required this.loadSnapshots,
+  });
+
+  final Future<List<WebDavSnapshotRecord>> Function() loadSnapshots;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Recovery snapshots'),
+      content: SizedBox(
+        width: 520,
+        child: FutureBuilder<List<WebDavSnapshotRecord>>(
+          future: loadSnapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const SizedBox(
+                height: 96,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (snapshot.hasError) {
+              return Text('Unable to load snapshots: ${snapshot.error}');
+            }
+            final snapshots = snapshot.data ?? const <WebDavSnapshotRecord>[];
+            if (snapshots.isEmpty) {
+              return const SizedBox(
+                height: 96,
+                child: Center(child: Text('No recovery snapshots found.')),
+              );
+            }
+            return ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 360),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: snapshots.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final record = snapshots[index];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.history_outlined),
+                    title: Text(_snapshotSummary(record)),
+                    subtitle: Text(
+                      '${record.path}\n${_snapshotSizeLabel(record)}',
+                    ),
+                    isThreeLine: true,
+                    trailing: FilledButton.icon(
+                      key: ValueKey('restore-snapshot-${record.path}'),
+                      onPressed: () => Navigator.of(context).pop(record),
+                      icon: const Icon(Icons.restore_outlined),
+                      label: const Text('Restore'),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+String _snapshotSummary(WebDavSnapshotRecord snapshot) {
+  return '${_formatSnapshotTime(snapshot.updatedAtUtc)} - ${snapshot.deviceId}';
+}
+
+String _snapshotSizeLabel(WebDavSnapshotRecord snapshot) {
+  final parts = <String>[];
+  final contentLength = snapshot.contentLength;
+  if (contentLength != null) {
+    parts.add(_formatByteCount(contentLength));
+  }
+  final lastModified = snapshot.lastModifiedUtc;
+  if (lastModified != null) {
+    parts.add('Modified ${_formatSnapshotTime(lastModified)}');
+  }
+  return parts.isEmpty ? 'Snapshot' : parts.join(' - ');
+}
+
+String _formatSnapshotTime(DateTime value) {
+  final utc = value.toUtc();
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${utc.year}-${two(utc.month)}-${two(utc.day)} '
+      '${two(utc.hour)}:${two(utc.minute)} UTC';
+}
+
+String _formatByteCount(int value) {
+  if (value < 1024) {
+    return '$value B';
+  }
+  final kib = value / 1024;
+  if (kib < 1024) {
+    return '${kib.toStringAsFixed(kib < 10 ? 1 : 0)} KiB';
+  }
+  final mib = kib / 1024;
+  return '${mib.toStringAsFixed(mib < 10 ? 1 : 0)} MiB';
 }
 
 class PaperPreview extends StatelessWidget {

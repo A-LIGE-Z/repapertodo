@@ -16,6 +16,8 @@ import 'package:repapertodo/src/core/storage/state_store.dart';
 import 'package:repapertodo/src/core/startup/startup_command.dart';
 import 'package:repapertodo/src/platform/noop_platform_services.dart';
 import 'package:repapertodo/src/platform/platform_services.dart';
+import 'package:repapertodo/src/sync/app_sync_service.dart';
+import 'package:repapertodo/src/sync/webdav/webdav_state_sync_service.dart';
 
 void main() {
   testWidgets('renders the initial paper board', (tester) async {
@@ -666,6 +668,92 @@ void main() {
       theme.colorScheme.primary,
       ColorScheme.fromSeed(seedColor: const Color(0xFF336699)).primary,
     );
+  });
+
+  testWidgets('restores a WebDAV recovery snapshot from the toolbar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'local-paper',
+            type: PaperTypes.todo,
+            title: 'Local',
+            items: [
+              PaperItem(id: 'local-item', text: 'Local item'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-recovery-snapshot.json');
+    final syncService = _RecoverySnapshotSyncService(
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: 'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json',
+          deviceId: 'phone',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+          contentLength: 2048,
+          lastModifiedUtc: DateTime.utc(2026, 7, 1, 9, 1),
+        ),
+      ],
+      restoredState: AppState(
+        papers: [
+          PaperData(
+            id: 'snapshot-paper',
+            type: PaperTypes.note,
+            title: 'Snap',
+            content: 'Recovered body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recovery snapshots'), findsOneWidget);
+    expect(find.textContaining('phone'), findsWidgets);
+    expect(find.textContaining('2.0 KiB'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey(
+        'restore-snapshot-repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Restore snapshot?'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.runAsync(() async {
+      for (var attempt = 0; attempt < 20; attempt++) {
+        if (controller.state.papers.single.title == 'Snap') {
+          return;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    });
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.restoredPaths, [
+      'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json',
+    ]);
+    expect(find.textContaining('Restore failed:'), findsNothing);
+    expect(controller.state.papers.single.title, 'Snap');
+    expect(controller.state.papers.single.content, 'Recovered body');
+    expect(find.text('Snapshot restored.'), findsOneWidget);
   });
 
   testWidgets('opens note markdown externally', (tester) async {
@@ -1898,6 +1986,40 @@ Future<void> _pressControlShortcut(
   await tester.sendKeyDownEvent(key);
   await tester.sendKeyUpEvent(key);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+}
+
+class _RecoverySnapshotSyncService extends AppSyncService {
+  _RecoverySnapshotSyncService({
+    required this.snapshots,
+    required this.restoredState,
+  });
+
+  final List<WebDavSnapshotRecord> snapshots;
+  final AppState restoredState;
+  final restoredPaths = <String>[];
+
+  @override
+  Future<List<WebDavSnapshotRecord>> listRecoverySnapshots({
+    required AppState localState,
+    required StateStore store,
+  }) async {
+    return snapshots;
+  }
+
+  @override
+  Future<AppSyncResult> restoreRecoverySnapshot({
+    required AppState localState,
+    required StateStore store,
+    required String snapshotPath,
+  }) async {
+    restoredPaths.add(snapshotPath);
+    return AppSyncResult(
+      status: AppSyncStatus.downloaded,
+      state: restoredState,
+      message: 'Snapshot restored.',
+      snapshotPath: snapshotPath,
+    );
+  }
 }
 
 class _RecordingPlatformServices implements PlatformServices {
