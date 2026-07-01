@@ -356,22 +356,7 @@ void main() {
           ];
         },
         onDownloadOperationLog: (operationLogPath) async {
-          return [
-            SyncOperation(
-              id: 'device-a-1',
-              deviceId: 'device-a',
-              sequence: 1,
-              kind: SyncOperationKind.upsertPaper,
-              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
-              payload: {
-                'paper': PaperData(
-                  id: 'remote',
-                  type: PaperTypes.todo,
-                  title: 'Stale',
-                ).toJson(),
-              },
-            ),
-          ];
+          throw StateError('Covered operation logs should not be downloaded.');
         },
       ),
     );
@@ -411,22 +396,7 @@ void main() {
           ];
         },
         onDownloadOperationLog: (operationLogPath) async {
-          return [
-            SyncOperation(
-              id: 'device-a-1',
-              deviceId: 'device-a',
-              sequence: 1,
-              kind: SyncOperationKind.upsertPaper,
-              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
-              payload: {
-                'paper': PaperData(
-                  id: 'remote',
-                  type: PaperTypes.todo,
-                  title: 'Stale',
-                ).toJson(),
-              },
-            ),
-          ];
+          throw StateError('Covered operation logs should not be downloaded.');
         },
       ),
     );

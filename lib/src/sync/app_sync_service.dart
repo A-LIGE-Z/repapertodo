@@ -191,7 +191,9 @@ class AppSyncService {
       );
     }
 
-    final records = await client.listOperationLogs();
+    final records = (await client.listOperationLogs()).where((record) {
+      return record.sequence > (previousSequences[record.deviceId] ?? 0);
+    });
     final operations = <SyncOperation>[];
     for (final record in records) {
       operations.addAll(await client.downloadOperationLog(record.path));
