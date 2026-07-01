@@ -1625,12 +1625,12 @@ class _NoteEditorState extends State<_NoteEditor> {
           type: normalizedType,
           text: normalizedType == NoteCanvasElementTypes.text
               ? 'Canvas text $nextIndex'
-              : 'Canvas block $nextIndex',
+              : 'Console.WriteLine("PaperTodo");',
           x: 32.0 + elements.length * 16.0,
           y: 32.0 + elements.length * 16.0,
-          width: 220,
-          height: 112,
-          zIndex: maxLayer + 1,
+          width: 230,
+          height: 116,
+          zIndex: maxLayer + 10,
         ),
       );
       _selectedCanvasElementId = elementId;
@@ -1653,9 +1653,9 @@ class _NoteEditorState extends State<_NoteEditor> {
     );
     final duplicate = element.copyWith(
       id: _newCanvasElementId(),
-      x: element.x + 24,
-      y: element.y + 24,
-      zIndex: maxLayer + 1,
+      x: element.x + 18,
+      y: element.y + 18,
+      zIndex: maxLayer + 10,
     )..normalize();
     setState(() {
       elements.add(duplicate);
@@ -1669,6 +1669,13 @@ class _NoteEditorState extends State<_NoteEditor> {
     _CanvasLayerAction action,
   ) {
     final elements = widget.paper.noteCanvasElements;
+    final orderedElements = [...elements]..sort((a, b) {
+        final byLayer = a.zIndex.compareTo(b.zIndex);
+        return byLayer != 0 ? byLayer : a.id.compareTo(b.id);
+      });
+    final elementIndex = orderedElements.indexWhere(
+      (candidate) => candidate.id == element.id,
+    );
     final minLayer = elements.fold<int>(
       element.zIndex,
       (min, candidate) => candidate.zIndex < min ? candidate.zIndex : min,
@@ -1678,14 +1685,30 @@ class _NoteEditorState extends State<_NoteEditor> {
       (max, candidate) => candidate.zIndex > max ? candidate.zIndex : max,
     );
     setState(() {
-      element.zIndex = switch (action) {
-        _CanvasLayerAction.bringForward => element.zIndex + 1,
-        _CanvasLayerAction.sendBackward => element.zIndex - 1,
-        _CanvasLayerAction.bringToFront => maxLayer + 1,
-        _CanvasLayerAction.sendToBack => minLayer - 1,
+      switch (action) {
+        case _CanvasLayerAction.bringForward:
+          if (elementIndex >= 0 && elementIndex < orderedElements.length - 1) {
+            final nextElement = orderedElements[elementIndex + 1];
+            final currentLayer = element.zIndex;
+            element.zIndex = nextElement.zIndex;
+            nextElement.zIndex = currentLayer;
+          }
+          break;
+        case _CanvasLayerAction.sendBackward:
+          if (elementIndex > 0) {
+            final previousElement = orderedElements[elementIndex - 1];
+            final currentLayer = element.zIndex;
+            element.zIndex = previousElement.zIndex;
+            previousElement.zIndex = currentLayer;
+          }
+          break;
+        case _CanvasLayerAction.bringToFront:
+          element.zIndex = (maxLayer + 10).clamp(-10000, 10000).toInt();
+          break;
+        case _CanvasLayerAction.sendToBack:
+          element.zIndex = (minLayer - 10).clamp(-10000, 10000).toInt();
+          break;
       }
-          .clamp(-10000, 10000)
-          .toInt();
       _selectedCanvasElementId = element.id;
     });
     unawaited(widget.onChanged());

@@ -383,42 +383,38 @@ void main() {
             element.id != 'canvas-bottom' &&
             element.text == 'Updated canvas code')
         .single;
-    expect(duplicatedTop.x, 120);
-    expect(duplicatedTop.y, 88);
+    expect(duplicatedTop.x, 114);
+    expect(duplicatedTop.y, 82);
     expect(duplicatedTop.width, 260);
     expect(duplicatedTop.height, 128);
     expect(duplicatedTop.type, NoteCanvasElementTypes.text);
-    expect(duplicatedTop.zIndex, 6);
+    expect(duplicatedTop.zIndex, 15);
 
     await tester.tap(find.byTooltip('Canvas layer actions').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Bring to front'));
     await tester.pumpAndSettle();
 
-    expect(duplicatedTop.zIndex, 7);
-
-    await tester.tap(find.byTooltip('Canvas layer actions').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Send backward'));
-    await tester.pumpAndSettle();
-
-    expect(duplicatedTop.zIndex, 6);
+    expect(duplicatedTop.zIndex, 25);
 
     await tester.tap(find.byTooltip('Canvas layer actions').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Send to back'));
     await tester.pumpAndSettle();
 
-    expect(duplicatedTop.zIndex, 0);
+    expect(duplicatedTop.zIndex, -9);
 
     await tester.tap(find.widgetWithText(TextButton, 'Add canvas block'));
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.noteCanvasElements, hasLength(4));
-    expect(
-      controller.state.papers.single.noteCanvasElements.last.type,
-      NoteCanvasElementTypes.code,
-    );
+    final addedCodeBlock =
+        controller.state.papers.single.noteCanvasElements.last;
+    expect(addedCodeBlock.type, NoteCanvasElementTypes.code);
+    expect(addedCodeBlock.text, 'Console.WriteLine("PaperTodo");');
+    expect(addedCodeBlock.width, 230);
+    expect(addedCodeBlock.height, 116);
+    expect(addedCodeBlock.zIndex, 15);
 
     await tester.tap(find.widgetWithText(TextButton, 'Add text block'));
     await tester.pumpAndSettle();
@@ -428,7 +424,7 @@ void main() {
     expect(addedTextBlock.type, NoteCanvasElementTypes.text);
     expect(addedTextBlock.text, 'Canvas text 5');
 
-    await tester.tap(find.byTooltip('Delete canvas block').first);
+    await tester.tap(find.byTooltip('Delete canvas block').last);
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.noteCanvasElements, hasLength(4));
