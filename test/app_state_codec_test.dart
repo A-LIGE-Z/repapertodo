@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/repapertodo.dart';
 
@@ -187,6 +188,32 @@ Plain item
     );
 
     expect(oversized, hasLength(30000));
+  });
+
+  test('continues markdown lists on enter like PaperTodo', () {
+    expect(_markdownEnter('- Read').text, '- Read\n- ');
+    expect(_markdownEnter('  * Read').text, '  * Read\n  * ');
+    expect(_markdownEnter('3) Read').text, '3) Read\n4) ');
+    expect(_markdownEnter('  9. Read').text, '  9. Read\n  10. ');
+    expect(_markdownEnter('- [x] Done').text, '- [x] Done\n- [ ] ');
+    expect(_markdownEnter('1. [X] Done').text, '1. [X] Done\n2. [ ] ');
+
+    final unchanged = _markdownEnter('Plain line');
+    expect(unchanged.text, 'Plain line\n');
+  });
+
+  test('removes empty markdown list markers on enter like PaperTodo', () {
+    var result = _markdownEnter('- ');
+    expect(result.text, '');
+    expect(result.selection.baseOffset, 0);
+
+    result = _markdownEnter('  - [ ] ');
+    expect(result.text, '  ');
+    expect(result.selection.baseOffset, 2);
+
+    result = _markdownEnter('1. ');
+    expect(result.text, '');
+    expect(result.selection.baseOffset, 0);
   });
 
   test('normalizes pinned hotkeys like PaperTodo', () {
@@ -569,4 +596,17 @@ Plain item
     expect(settings.endpointUri, isNull);
     expect(settings.isConfigured, false);
   });
+}
+
+TextEditingValue _markdownEnter(String text, {int? caret}) {
+  final offset = caret ?? text.length;
+  final oldValue = TextEditingValue(
+    text: text,
+    selection: TextSelection.collapsed(offset: offset),
+  );
+  final newValue = TextEditingValue(
+    text: text.replaceRange(offset, offset, '\n'),
+    selection: TextSelection.collapsed(offset: offset + 1),
+  );
+  return MarkdownListContinuation.formatEnter(oldValue, newValue);
 }

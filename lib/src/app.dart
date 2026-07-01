@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import 'app_controller.dart';
 import 'core/model/app_state.dart';
+import 'core/model/markdown_list_continuation.dart';
 import 'core/model/markdown_paste.dart';
 import 'core/model/note_canvas_element.dart';
 import 'core/model/paper_constants.dart';
@@ -1586,6 +1587,7 @@ class _NoteEditorState extends State<_NoteEditor> {
           .copyWith(height: widget.lineSpacing),
       inputFormatters: const [
         _MarkdownPasteTextInputFormatter(),
+        _MarkdownListContinuationTextInputFormatter(),
       ],
       onChanged: (value) {
         setState(() => widget.paper.content = value);
@@ -3324,6 +3326,18 @@ class _MarkdownPasteTextInputFormatter extends TextInputFormatter {
         offset: sanitized.length,
       ),
     );
+  }
+}
+
+class _MarkdownListContinuationTextInputFormatter extends TextInputFormatter {
+  const _MarkdownListContinuationTextInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return MarkdownListContinuation.formatEnter(oldValue, newValue);
   }
 }
 
