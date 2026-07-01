@@ -18,7 +18,9 @@ Initial recommended preset:
 
 The current implementation stores plain JSON snapshots first, with each device
 uploading a distinct snapshot path using `If-None-Match: *` and updating
-`manifest.json` conditionally with WebDAV ETags.
+`manifest.json` conditionally with WebDAV ETags. If a retry finds the same
+snapshot bytes already present, the upload is treated as idempotently accepted;
+if the existing snapshot differs, sync fails instead of overwriting it.
 
 ```text
 /RePaperTodo/

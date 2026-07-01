@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
 import 'package:collection/collection.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/model/app_state.dart';
 import '../../core/model/sync_settings.dart';
@@ -189,11 +189,8 @@ class WebDavStateSyncService {
       _deviceId,
       sequence: nextSequence,
     );
-    await _client.putBytes(
-      snapshotPath,
-      utf8.encode(_codec.encode(state)),
-      createOnly: true,
-    );
+    final snapshotBytes = utf8.encode(_codec.encode(state));
+    await _putSnapshot(snapshotPath, snapshotBytes);
     final operationLogPath = _paths.operationLogPath(_deviceId, nextSequence);
     final snapshotOperationUploaded = await _putSnapshotOperation(
       state: state,
@@ -537,6 +534,26 @@ class WebDavStateSyncService {
     }
     await _client.makeCollection(_paths.snapshotCollectionPath);
     await _client.makeCollection(_paths.operationCollectionPath);
+  }
+
+  Future<bool> _putSnapshot(String snapshotPath, List<int> bytes) async {
+    try {
+      await _client.putBytes(
+        snapshotPath,
+        bytes,
+        createOnly: true,
+      );
+      return true;
+    } on WebDavException catch (error) {
+      if (error.statusCode != 412) {
+        rethrow;
+      }
+      final existingBytes = await _client.getBytes(snapshotPath);
+      if (!const ListEquality<int>().equals(existingBytes, bytes)) {
+        rethrow;
+      }
+      return false;
+    }
   }
 
   Future<bool> _putSnapshotOperation({

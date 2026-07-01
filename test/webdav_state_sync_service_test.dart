@@ -85,6 +85,130 @@ void main() {
     expect(manifest['deviceSequences'], {'test-device': 1});
   });
 
+  test('accepts matching existing snapshots during push retry', () async {
+    const codec = AppStateCodec();
+    final requests = <http.Request>[];
+    final pushedState = AppState(
+      papers: [
+        PaperData(
+          id: 'paper-1',
+          type: PaperTypes.todo,
+          title: 'Sync me',
+        ),
+      ],
+    );
+    List<int>? existingSnapshotBytes;
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'MKCOL') {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.contains('/snapshots/')) {
+          existingSnapshotBytes = request.bodyBytes;
+          return http.Response('already exists', 412);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.contains('/snapshots/')) {
+          return http.Response.bytes(existingSnapshotBytes ?? const [], 200);
+        }
+        if (request.method == 'PUT') {
+          return http.Response('', 201);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      codec: codec,
+      deviceId: 'test-device',
+    );
+
+    final result = await service.push(
+      pushedState,
+      updatedAtUtc: DateTime.utc(2026, 6, 30, 10),
+    );
+
+    expect(result.status, WebDavStateSyncStatus.uploaded);
+    expect(
+      requests
+          .where((request) => request.url.path.contains('/snapshots/'))
+          .map((request) => request.method),
+      ['PUT', 'GET'],
+    );
+    expect(
+      requests.any((request) =>
+          request.method == 'PUT' && request.url.path.contains('/ops/')),
+      true,
+    );
+    expect(
+      requests.any((request) =>
+          request.method == 'PUT' &&
+          request.url.path.endsWith('/manifest.json')),
+      true,
+    );
+  });
+
+  test('rejects conflicting existing snapshots during push retry', () async {
+    const codec = AppStateCodec();
+    final requests = <http.Request>[];
+    final pushedState = AppState(
+      papers: [
+        PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'Sync me'),
+      ],
+    );
+    final existingState = AppState(
+      papers: [
+        PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'Different'),
+      ],
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'MKCOL') {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.contains('/snapshots/')) {
+          return http.Response('already exists', 412);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.contains('/snapshots/')) {
+          return http.Response(codec.encode(existingState), 200);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      codec: codec,
+      deviceId: 'test-device',
+    );
+
+    await expectLater(
+      service.push(
+        pushedState,
+        updatedAtUtc: DateTime.utc(2026, 6, 30, 10),
+      ),
+      throwsA(isA<WebDavException>()),
+    );
+    expect(
+      requests.any((request) => request.url.path.contains('/ops/')),
+      false,
+    );
+    expect(
+      requests.any((request) => request.url.path.endsWith('/manifest.json')),
+      false,
+    );
+  });
+
   test('pull downloads and decodes the remote snapshot', () async {
     const codec = AppStateCodec();
     final remoteState = AppState(
