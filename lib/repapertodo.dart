@@ -16,6 +16,7 @@ export 'src/core/startup/startup_command.dart';
 export 'src/core/storage/state_store.dart';
 export 'src/core/state/app_state_codec.dart';
 export 'src/bootstrap/app_bootstrap.dart';
+export 'src/platform/android_platform_services.dart';
 export 'src/platform/noop_platform_services.dart';
 export 'src/platform/platform_services.dart';
 export 'src/platform/windows_platform_services.dart';

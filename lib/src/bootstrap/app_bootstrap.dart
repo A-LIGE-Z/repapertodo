@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../app_controller.dart';
 import '../core/storage/state_store.dart';
 import '../core/startup/startup_command.dart';
+import '../platform/android_platform_services.dart';
 import '../platform/noop_platform_services.dart';
 import '../platform/platform_services.dart';
 import '../platform/windows_platform_services.dart';
@@ -73,6 +74,9 @@ class AppBootstrap {
   static PlatformServices _defaultPlatformServices() {
     if (Platform.isWindows) {
       return WindowsPlatformServices();
+    }
+    if (Platform.isAndroid) {
+      return AndroidPlatformServices();
     }
     return NoopPlatformServices();
   }
