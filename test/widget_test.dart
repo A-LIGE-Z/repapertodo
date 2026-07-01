@@ -372,15 +372,30 @@ void main() {
     expect(updatedTop.height, 128);
     expect(updatedTop.zIndex, 5);
 
+    await tester.tap(find.byTooltip('Duplicate canvas block').last);
+    await tester.pumpAndSettle();
+
+    final duplicatedTop = controller.state.papers.single.noteCanvasElements
+        .where((element) =>
+            element.id != 'canvas-top' &&
+            element.id != 'canvas-bottom' &&
+            element.text == 'Updated canvas code')
+        .single;
+    expect(duplicatedTop.x, 120);
+    expect(duplicatedTop.y, 88);
+    expect(duplicatedTop.width, 260);
+    expect(duplicatedTop.height, 128);
+    expect(duplicatedTop.zIndex, 6);
+
     await tester.tap(find.widgetWithText(TextButton, 'Add canvas block'));
     await tester.pumpAndSettle();
 
-    expect(controller.state.papers.single.noteCanvasElements, hasLength(3));
+    expect(controller.state.papers.single.noteCanvasElements, hasLength(4));
 
     await tester.tap(find.byTooltip('Delete canvas block').first);
     await tester.pumpAndSettle();
 
-    expect(controller.state.papers.single.noteCanvasElements, hasLength(2));
+    expect(controller.state.papers.single.noteCanvasElements, hasLength(3));
   });
 
   testWidgets('saves custom theme color', (tester) async {

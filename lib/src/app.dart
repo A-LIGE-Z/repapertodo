@@ -1398,12 +1398,19 @@ class _NoteEditorState extends State<_NoteEditor> {
   static const _viewSplit = 'split';
 
   late String _view = _defaultView(widget.markdownRenderMode);
+  String? _selectedCanvasElementId;
 
   @override
   void didUpdateWidget(covariant _NoteEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.markdownRenderMode != widget.markdownRenderMode) {
       _view = _defaultView(widget.markdownRenderMode);
+    }
+    if (_selectedCanvasElementId != null &&
+        !widget.paper.noteCanvasElements.any(
+          (element) => element.id == _selectedCanvasElementId,
+        )) {
+      _selectedCanvasElementId = null;
     }
   }
 
@@ -1572,9 +1579,12 @@ class _NoteEditorState extends State<_NoteEditor> {
   Widget _canvasPreview() {
     return _NoteCanvasPreview(
       elements: widget.paper.noteCanvasElements,
+      selectedElementId: _selectedCanvasElementId,
       textZoom: widget.textZoom,
       onChanged: widget.onChanged,
+      onSelect: _selectCanvasElement,
       onEdit: _editCanvasElement,
+      onDuplicate: _duplicateCanvasElement,
       onDelete: _deleteCanvasElement,
     );
   }
@@ -1595,9 +1605,10 @@ class _NoteEditorState extends State<_NoteEditor> {
       (max, element) => element.zIndex > max ? element.zIndex : max,
     );
     setState(() {
+      final elementId = _newCanvasElementId();
       elements.add(
         NoteCanvasElement(
-          id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
+          id: elementId,
           text: 'Canvas block $nextIndex',
           x: 32.0 + elements.length * 16.0,
           y: 32.0 + elements.length * 16.0,
@@ -1606,6 +1617,33 @@ class _NoteEditorState extends State<_NoteEditor> {
           zIndex: maxLayer + 1,
         ),
       );
+      _selectedCanvasElementId = elementId;
+    });
+    unawaited(widget.onChanged());
+  }
+
+  void _selectCanvasElement(NoteCanvasElement element) {
+    if (_selectedCanvasElementId == element.id) {
+      return;
+    }
+    setState(() => _selectedCanvasElementId = element.id);
+  }
+
+  void _duplicateCanvasElement(NoteCanvasElement element) {
+    final elements = widget.paper.noteCanvasElements;
+    final maxLayer = elements.fold<int>(
+      0,
+      (max, candidate) => candidate.zIndex > max ? candidate.zIndex : max,
+    );
+    final duplicate = element.copyWith(
+      id: _newCanvasElementId(),
+      x: element.x + 24,
+      y: element.y + 24,
+      zIndex: maxLayer + 1,
+    )..normalize();
+    setState(() {
+      elements.add(duplicate);
+      _selectedCanvasElementId = duplicate.id;
     });
     unawaited(widget.onChanged());
   }
@@ -1615,6 +1653,9 @@ class _NoteEditorState extends State<_NoteEditor> {
       widget.paper.noteCanvasElements.removeWhere(
         (candidate) => candidate.id == element.id,
       );
+      if (_selectedCanvasElementId == element.id) {
+        _selectedCanvasElementId = null;
+      }
     });
     unawaited(widget.onChanged());
   }
@@ -1638,21 +1679,39 @@ class _NoteEditorState extends State<_NoteEditor> {
     });
     await widget.onChanged();
   }
+
+  String _newCanvasElementId() {
+    final existingIds =
+        widget.paper.noteCanvasElements.map((element) => element.id).toSet();
+    var id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+    var suffix = 1;
+    while (existingIds.contains(id)) {
+      id = '${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}-$suffix';
+      suffix += 1;
+    }
+    return id;
+  }
 }
 
 class _NoteCanvasPreview extends StatelessWidget {
   const _NoteCanvasPreview({
     required this.elements,
+    required this.selectedElementId,
     required this.textZoom,
     required this.onChanged,
+    required this.onSelect,
     required this.onEdit,
+    required this.onDuplicate,
     required this.onDelete,
   });
 
   final List<NoteCanvasElement> elements;
+  final String? selectedElementId;
   final double textZoom;
   final Future<void> Function() onChanged;
+  final void Function(NoteCanvasElement element) onSelect;
   final Future<void> Function(NoteCanvasElement element) onEdit;
+  final void Function(NoteCanvasElement element) onDuplicate;
   final void Function(NoteCanvasElement element) onDelete;
 
   @override
@@ -1695,10 +1754,13 @@ class _NoteCanvasPreview extends StatelessWidget {
                     child: _NoteCanvasElementPreview(
                       key: ValueKey('note-canvas-element-${element.id}'),
                       element: element,
+                      isSelected: element.id == selectedElementId,
                       scale: scale,
                       textZoom: textZoom,
                       onChanged: onChanged,
+                      onSelect: onSelect,
                       onEdit: onEdit,
+                      onDuplicate: onDuplicate,
                       onDelete: onDelete,
                     ),
                   ),
@@ -1726,19 +1788,25 @@ class _NoteCanvasPreview extends StatelessWidget {
 class _NoteCanvasElementPreview extends StatelessWidget {
   const _NoteCanvasElementPreview({
     required this.element,
+    required this.isSelected,
     required this.scale,
     required this.textZoom,
     required this.onChanged,
+    required this.onSelect,
     required this.onEdit,
+    required this.onDuplicate,
     required this.onDelete,
     super.key,
   });
 
   final NoteCanvasElement element;
+  final bool isSelected;
   final double scale;
   final double textZoom;
   final Future<void> Function() onChanged;
+  final void Function(NoteCanvasElement element) onSelect;
   final Future<void> Function(NoteCanvasElement element) onEdit;
+  final void Function(NoteCanvasElement element) onDuplicate;
   final void Function(NoteCanvasElement element) onDelete;
 
   @override
@@ -1753,8 +1821,20 @@ class _NoteCanvasElementPreview extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHigh,
-        border: Border.all(color: colorScheme.outlineVariant),
+        border: Border.all(
+          color: isSelected ? colorScheme.primary : colorScheme.outlineVariant,
+          width: isSelected ? 2 : 1,
+        ),
         borderRadius: BorderRadius.circular(6),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: colorScheme.primary.withValues(alpha: 0.18),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
       ),
       child: Padding(
         padding: EdgeInsets.all((8 * scale).clamp(4, 8).toDouble()),
@@ -1767,7 +1847,10 @@ class _NoteCanvasElementPreview extends StatelessWidget {
                   dimension: (28 * scale).clamp(24, 28).toDouble(),
                   child: IconButton(
                     tooltip: 'Edit canvas geometry',
-                    onPressed: () => unawaited(onEdit(element)),
+                    onPressed: () {
+                      onSelect(element);
+                      unawaited(onEdit(element));
+                    },
                     iconSize: (18 * scale).clamp(16, 18).toDouble(),
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.tune_outlined),
@@ -1776,8 +1859,24 @@ class _NoteCanvasElementPreview extends StatelessWidget {
                 SizedBox.square(
                   dimension: (28 * scale).clamp(24, 28).toDouble(),
                   child: IconButton(
+                    tooltip: 'Duplicate canvas block',
+                    onPressed: () {
+                      onSelect(element);
+                      onDuplicate(element);
+                    },
+                    iconSize: (18 * scale).clamp(16, 18).toDouble(),
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.content_copy_outlined),
+                  ),
+                ),
+                SizedBox.square(
+                  dimension: (28 * scale).clamp(24, 28).toDouble(),
+                  child: IconButton(
                     tooltip: 'Delete canvas block',
-                    onPressed: () => onDelete(element),
+                    onPressed: () {
+                      onSelect(element);
+                      onDelete(element);
+                    },
                     iconSize: (18 * scale).clamp(16, 18).toDouble(),
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.close_outlined),
@@ -1800,6 +1899,7 @@ class _NoteCanvasElementPreview extends StatelessWidget {
                   color: colorScheme.onSurface,
                   height: 1.35,
                 ),
+                onTap: () => onSelect(element),
                 onChanged: (value) {
                   element.text = value;
                   unawaited(onChanged());

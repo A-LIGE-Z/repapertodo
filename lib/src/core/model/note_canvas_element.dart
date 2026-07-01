@@ -35,6 +35,30 @@ class NoteCanvasElement {
   int zIndex;
   JsonMap extra;
 
+  NoteCanvasElement copyWith({
+    String? id,
+    String? type,
+    String? text,
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    int? zIndex,
+    JsonMap? extra,
+  }) {
+    return NoteCanvasElement(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      text: text ?? this.text,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      zIndex: zIndex ?? this.zIndex,
+      extra: extra ?? <String, Object?>{...this.extra},
+    );
+  }
+
   factory NoteCanvasElement.fromJson(JsonMap json) {
     return NoteCanvasElement(
       id: stringValue(json['id'], ''),
