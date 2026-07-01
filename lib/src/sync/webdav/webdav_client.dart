@@ -332,23 +332,29 @@ List<WebDavEntry> _parseMultiStatus(String xml) {
 }
 
 WebDavEntry _parseEntry(XmlElement element) {
-  final href = _firstElementText(element, 'href');
+  final href = _firstDirectElementText(element, 'href');
   if (href == null || href.isEmpty) {
     throw const FormatException(
       'WebDAV response entries must include a DAV: href element.',
     );
   }
-  final etag = _stripQuotes(_firstElementText(element, 'getetag'));
-  final lengthText = _firstElementText(element, 'getcontentlength');
-  final lastModifiedText = _firstElementText(element, 'getlastmodified');
+  final etag = _stripQuotes(_firstSuccessfulPropText(element, 'getetag'));
+  final lengthText = _firstSuccessfulPropText(element, 'getcontentlength');
+  final lastModifiedText = _firstSuccessfulPropText(
+    element,
+    'getlastmodified',
+  );
   return WebDavEntry(
     href: href,
     etag: etag,
     contentLength: lengthText == null ? null : int.tryParse(lengthText),
     lastModified:
         lastModifiedText == null ? null : _tryParseHttpDate(lastModifiedText),
-    isCollection: _descendantElements(element)
-        .any((child) => _isWebDavElement(child, 'collection')),
+    isCollection: _successfulPropStatElements(element).any(
+      (propStat) => _descendantElements(propStat).any(
+        (child) => _isWebDavElement(child, 'collection'),
+      ),
+    ),
   );
 }
 
@@ -360,13 +366,46 @@ DateTime? _tryParseHttpDate(String value) {
   }
 }
 
-String? _firstElementText(XmlElement element, String localName) {
-  final matches = _descendantElements(element)
+String? _firstDirectElementText(XmlElement element, String localName) {
+  final matches = element.children
+      .whereType<XmlElement>()
       .where((child) => _isWebDavElement(child, localName));
   if (matches.isEmpty) {
     return null;
   }
   return matches.first.innerText.trim();
+}
+
+String? _firstSuccessfulPropText(XmlElement element, String localName) {
+  for (final propStat in _successfulPropStatElements(element)) {
+    final matches = _descendantElements(propStat)
+        .where((child) => _isWebDavElement(child, localName));
+    if (matches.isNotEmpty) {
+      return matches.first.innerText.trim();
+    }
+  }
+  return null;
+}
+
+Iterable<XmlElement> _successfulPropStatElements(XmlElement element) {
+  return element.children
+      .whereType<XmlElement>()
+      .where((child) => _isWebDavElement(child, 'propstat'))
+      .where(_propStatIsSuccessful);
+}
+
+bool _propStatIsSuccessful(XmlElement propStat) {
+  final statusText = _firstDirectElementText(propStat, 'status');
+  if (statusText == null || statusText.isEmpty) {
+    return true;
+  }
+  final statusCode = _webDavStatusCode(statusText);
+  return statusCode != null && statusCode >= 200 && statusCode < 300;
+}
+
+int? _webDavStatusCode(String value) {
+  final match = RegExp(r'\b(\d{3})\b').firstMatch(value);
+  return match == null ? null : int.tryParse(match.group(1)!);
 }
 
 Iterable<XmlElement> _descendantElements(XmlNode node) {
