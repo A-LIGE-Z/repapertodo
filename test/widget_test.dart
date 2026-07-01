@@ -597,6 +597,76 @@ void main() {
     expect(platform.paperWindows.updatedTitles, contains('Zoom paper'));
   });
 
+  testWidgets('edits todo extra columns', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'columns-paper',
+            type: PaperTypes.todo,
+            title: 'Columns paper',
+            items: [
+              PaperItem(id: 'columns-item', text: 'Track reading'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-columns.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Todo columns'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) => widget is PopupMenuItem<String> && widget.value == 'add',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final firstItem = controller.state.papers.single.items.first;
+    expect(firstItem.todoColumnCount, 2);
+    expect(firstItem.todoExtraColumns, ['']);
+    expect(find.text('Column 2'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('columns-paper-columns-item-column-2')),
+      'Status: reading',
+    );
+    await tester.pump();
+
+    expect(firstItem.todoExtraColumns.single, 'Status: reading');
+
+    await tester.tap(find.widgetWithText(TextButton, 'Add item'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items, hasLength(2));
+    expect(controller.state.papers.single.items.last.todoColumnCount, 2);
+    expect(controller.state.papers.single.items.last.todoExtraColumns, ['']);
+
+    await tester.tap(find.byTooltip('Todo columns').first);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) => widget is PopupMenuItem<String> && widget.value == 'remove',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(firstItem.todoColumnCount, 1);
+    expect(firstItem.todoExtraColumns, isEmpty);
+  });
+
   testWidgets('toggles desktop pin and always-on-top as exclusive modes',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

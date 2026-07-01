@@ -1635,6 +1635,8 @@ class _TodoEditorState extends State<_TodoEditor> {
                         },
                         onFieldSubmitted: (_) => _addItem(),
                       ),
+                      if (item.todoColumnCount > 1)
+                        _extraColumnFields(context, item, itemTextStyle),
                       Wrap(
                         spacing: 6,
                         runSpacing: 4,
@@ -1706,6 +1708,34 @@ class _TodoEditorState extends State<_TodoEditor> {
                   icon: const Icon(Icons.notifications_none_outlined),
                 ),
                 PopupMenuButton<String>(
+                  tooltip: _tooltipLabel(widget.enableToolTips, 'Todo columns'),
+                  iconSize: visualSpec.iconSize,
+                  icon: const Icon(Icons.table_chart_outlined),
+                  onSelected: (value) => _updateColumns(item, value),
+                  itemBuilder: (context) {
+                    return [
+                      PopupMenuItem(
+                        value: _columnActionAdd,
+                        enabled: item.todoColumnCount < 8,
+                        child: const ListTile(
+                          leading: Icon(Icons.add),
+                          title: Text('Add column'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: _columnActionRemove,
+                        enabled: item.todoColumnCount > 1,
+                        child: const ListTile(
+                          leading: Icon(Icons.remove),
+                          title: Text('Remove last column'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ];
+                  },
+                ),
+                PopupMenuButton<String>(
                   tooltip: _tooltipLabel(widget.enableToolTips, 'Link note'),
                   enabled: widget.enableTodoNoteLinks &&
                       widget.notePapers.isNotEmpty,
@@ -1751,12 +1781,91 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
   }
 
+  static const _columnActionAdd = 'add';
+  static const _columnActionRemove = 'remove';
+
+  Widget _extraColumnFields(
+    BuildContext context,
+    PaperItem item,
+    TextStyle? itemTextStyle,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 6),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final useRows = constraints.maxWidth < 520;
+          final fields = [
+            for (var index = 0; index < item.todoExtraColumns.length; index++)
+              TextFormField(
+                key: ValueKey(
+                  '${widget.paper.id}-${item.id}-column-${index + 2}',
+                ),
+                initialValue: item.todoExtraColumns[index],
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: 'Column ${index + 2}',
+                  isDense: true,
+                ),
+                style: itemTextStyle?.copyWith(
+                  color:
+                      item.done ? colorScheme.outline : colorScheme.onSurface,
+                  decoration: item.done ? TextDecoration.lineThrough : null,
+                ),
+                onChanged: (value) {
+                  item.todoExtraColumns[index] = value;
+                  unawaited(widget.onChanged());
+                },
+              ),
+          ];
+          if (useRows) {
+            return Column(
+              children: [
+                for (final field in fields)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: field,
+                  ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              for (var index = 0; index < fields.length; index++) ...[
+                if (index > 0) const SizedBox(width: 8),
+                Expanded(child: fields[index]),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _updateColumns(PaperItem item, String action) {
+    setState(() {
+      if (action == _columnActionAdd && item.todoColumnCount < 8) {
+        item.todoColumnCount += 1;
+      } else if (action == _columnActionRemove && item.todoColumnCount > 1) {
+        item.todoColumnCount -= 1;
+      }
+      item.normalize();
+    });
+    unawaited(widget.onChanged());
+  }
+
   void _addItem() {
+    final inheritedColumnCount = widget.paper.items.isEmpty
+        ? 1
+        : widget.paper.items.last.todoColumnCount;
     setState(() {
       widget.paper.items.add(
         PaperItem(
           id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
           order: widget.paper.items.length,
+          todoColumnCount: inheritedColumnCount,
+          todoExtraColumns: List.filled(inheritedColumnCount - 1, ''),
         ),
       );
       widget.paper.normalize();
