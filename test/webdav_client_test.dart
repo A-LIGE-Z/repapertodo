@@ -84,6 +84,34 @@ void main() {
     expect(requestCount, 0);
   });
 
+  test('does not close injected HTTP clients', () async {
+    var requestCount = 0;
+    var closeCount = 0;
+    final httpClient = _CloseTrackingClient(
+      (request) async {
+        requestCount += 1;
+        return http.Response('', 204, headers: {'etag': '"manifest-v1"'});
+      },
+      onClose: () => closeCount += 1,
+    );
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: httpClient,
+    );
+
+    client.close();
+    client.close();
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(metadata?.etag, '"manifest-v1"');
+    expect(requestCount, 1);
+    expect(closeCount, 0);
+
+    httpClient.close();
+    expect(closeCount, 1);
+  });
+
   test('rejects invalid Basic Auth usernames before sending', () async {
     for (final username in const [
       '',
@@ -170,4 +198,31 @@ void main() {
       );
     }
   });
+}
+
+class _CloseTrackingClient extends http.BaseClient {
+  _CloseTrackingClient(
+    this._handler, {
+    required this.onClose,
+  });
+
+  final Future<http.Response> Function(http.Request request) _handler;
+  final void Function() onClose;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final response = await _handler(request as http.Request);
+    return http.StreamedResponse(
+      Stream.value(response.bodyBytes),
+      response.statusCode,
+      headers: response.headers,
+      reasonPhrase: response.reasonPhrase,
+      request: request,
+    );
+  }
+
+  @override
+  void close() {
+    onClose();
+  }
 }

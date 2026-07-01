@@ -86,9 +86,11 @@ class WebDavClient {
   final WebDavCredentials _credentials;
   final bool _ownsHttpClient;
   final http.Client _httpClient;
+  bool _closed = false;
 
   void close() {
-    if (_ownsHttpClient) {
+    if (_ownsHttpClient && !_closed) {
+      _closed = true;
       _httpClient.close();
     }
   }
