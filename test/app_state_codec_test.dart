@@ -119,6 +119,25 @@ void main() {
     expect(clampedLow.maxTitleLength, 6);
   });
 
+  test('normalizes PaperTodo titles by visible text elements', () {
+    const accented = 'e\u0301';
+    const familyEmoji =
+        '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}';
+
+    expect(PaperTitles.normalizeMaxTitleLength(99), 20);
+    expect(PaperTitles.normalizeMaxTitleLength(0), 6);
+    expect(
+      PaperTitles.cleanCustomTitle(
+        ' $accented$accented\u0000$familyEmoji! ',
+        maxLength: 3,
+      ),
+      '$accented$accented$familyEmoji',
+    );
+    expect(PaperTitles.shorten('$familyEmoji$accented!', 2),
+        '$familyEmoji$accented');
+    expect(PaperTitles.defaultTitle(PaperTypes.note, 0), 'Note1');
+  });
+
   test('normalizes pinned hotkeys like PaperTodo', () {
     final longHotKey = 'Ctrl+Alt+${List.filled(80, 'A').join()}';
     final state = AppState.fromJson({

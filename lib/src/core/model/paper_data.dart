@@ -2,6 +2,7 @@ import 'json_helpers.dart';
 import 'note_canvas_element.dart';
 import 'paper_constants.dart';
 import 'paper_item.dart';
+import 'paper_titles.dart';
 
 class PaperData {
   PaperData({
@@ -105,7 +106,7 @@ class PaperData {
     }
     type = PaperTypes.normalize(type);
     if (storageCompatibility) {
-      title = _cleanTitle(title, maxTitleLength);
+      title = PaperTitles.cleanCustomTitle(title, maxLength: maxTitleLength);
     }
     x = _normalizeCoordinate(x, 120);
     y = _normalizeCoordinate(y, 120);
@@ -180,15 +181,6 @@ class PaperData {
           noteCanvasElements.map((element) => element.toJson()).toList(),
     };
   }
-}
-
-String _cleanTitle(String title, int maxLength) {
-  final normalizedMaxLength = maxLength.clamp(1, 40).toInt();
-  final withoutControls = title
-      .trim()
-      .runes
-      .where((rune) => rune >= 0x20 && (rune < 0x7F || rune > 0x9F));
-  return String.fromCharCodes(withoutControls.take(normalizedMaxLength));
 }
 
 double _normalizeCoordinate(double value, double fallback) {

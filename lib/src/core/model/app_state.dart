@@ -1,6 +1,7 @@
 import 'json_helpers.dart';
 import 'paper_constants.dart';
 import 'paper_data.dart';
+import 'paper_titles.dart';
 import 'sync_settings.dart';
 
 class AppState {
@@ -293,7 +294,7 @@ class AppState {
     todoReminderScope = TodoReminderScopes.normalize(todoReminderScope);
     todoReminderBubbleDurationSeconds =
         todoReminderBubbleDurationSeconds.clamp(1, 600).toInt();
-    maxTitleLength = _normalizeMaxTitleLength(maxTitleLength);
+    maxTitleLength = PaperTitles.normalizeMaxTitleLength(maxTitleLength);
     pinnedTodoHotKey = _normalizeHotKeyForSettings(pinnedTodoHotKey);
     pinnedNoteHotKey = _normalizeHotKeyForSettings(pinnedNoteHotKey);
     fullscreenTopmostMode =
@@ -464,13 +465,6 @@ double _normalizeZoom(double value) {
     return 1;
   }
   return value.clamp(0.5, 1.5).toDouble();
-}
-
-int _normalizeMaxTitleLength(int value) {
-  if (value <= 0) {
-    return 6;
-  }
-  return value.clamp(2, 20).toInt();
 }
 
 String _normalizeHotKeyForSettings(String value) {

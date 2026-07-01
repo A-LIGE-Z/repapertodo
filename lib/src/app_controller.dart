@@ -4,6 +4,7 @@ import 'core/model/app_state.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/model/paper_item.dart';
+import 'core/model/paper_titles.dart';
 import 'core/script/script_capsule.dart';
 import 'core/startup/startup_command.dart';
 import 'platform/platform_services.dart';
@@ -191,8 +192,6 @@ class RePaperTodoController {
   String _defaultTitle(String type) {
     final sameTypeCount =
         state.papers.where((paper) => paper.type == type).length + 1;
-    return type == PaperTypes.note
-        ? 'Note$sameTypeCount'
-        : 'Todo$sameTypeCount';
+    return PaperTitles.defaultTitle(type, sameTypeCount);
   }
 }

@@ -11,6 +11,7 @@ import 'core/model/note_canvas_element.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/model/paper_item.dart';
+import 'core/model/paper_titles.dart';
 import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
 import 'core/startup/startup_command.dart';
@@ -114,12 +115,7 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
 }
 
 String _shortenTitle(String title, int maxLength) {
-  final normalizedMaxLength = maxLength.clamp(1, 40).toInt();
-  final characters = title.runes.toList();
-  if (characters.length <= normalizedMaxLength) {
-    return title;
-  }
-  return String.fromCharCodes(characters.take(normalizedMaxLength));
+  return PaperTitles.shorten(title, maxLength);
 }
 
 String? _tooltipLabel(bool enabled, String label) => enabled ? label : null;
