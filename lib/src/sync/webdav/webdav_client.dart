@@ -193,8 +193,33 @@ Uri _normalizeBaseUri(Uri uri) {
       'WebDAV base URI must not contain query or fragment components.',
     );
   }
+  if (_hasUnsafeBaseUriPath(uri)) {
+    throw ArgumentError.value(
+      uri,
+      'baseUri',
+      'WebDAV base URI path must not contain dot-segments or backslashes.',
+    );
+  }
   final text = uri.toString();
   return text.endsWith('/') ? uri : Uri.parse('$text/');
+}
+
+bool _hasUnsafeBaseUriPath(Uri uri) {
+  if (uri.toString().contains('\\')) {
+    return true;
+  }
+  late final String decodedPath;
+  try {
+    decodedPath = Uri.decodeComponent(uri.path);
+  } on ArgumentError {
+    return true;
+  } on FormatException {
+    return true;
+  }
+  return decodedPath.replaceAll('\\', '/').split('/').any((segment) {
+    final trimmed = segment.trim();
+    return trimmed == '.' || trimmed == '..';
+  });
 }
 
 void _throwIfUnexpected(http.Response response, {required Set<int> expected}) {

@@ -91,6 +91,7 @@ void main() {
       Uri.parse('https://user:pass@dav.example.test/dav/'),
       Uri.parse('https://dav.example.test/dav/?token=secret'),
       Uri.parse('https://dav.example.test/dav/#sync-root'),
+      Uri.parse('https://dav.example.test/dav/%5C..%5Cfiles/'),
     ]) {
       expect(
         () => WebDavClient(
@@ -99,6 +100,7 @@ void main() {
               const WebDavCredentials(username: 'user', password: 'pass'),
         ),
         throwsA(isA<ArgumentError>()),
+        reason: baseUri.toString(),
       );
     }
   });

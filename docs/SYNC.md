@@ -54,7 +54,8 @@ are rejected before any HTTP download so WebDAV responses cannot escape the
 RePaperTodo sync folders. Malformed percent-encoded paths are rejected at the
 same boundary.
 The WebDAV client itself also refuses absolute or parent-traversing request
-paths and resolves all accepted paths beneath the configured endpoint.
+paths, refuses unsafe base URI paths, and resolves all accepted paths beneath
+the configured endpoint.
 Configured WebDAV root folders use the same decoded path rules; unsafe or
 malformed roots are treated as incomplete sync settings instead of falling back
 to another remote folder.
