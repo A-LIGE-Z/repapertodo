@@ -449,7 +449,15 @@ String? _stripQuotes(String? value) {
   if (value == null) {
     return null;
   }
-  return value.replaceAll('"', '');
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    final unquoted = trimmed.substring(1, trimmed.length - 1);
+    return unquoted.isEmpty ? null : unquoted;
+  }
+  return trimmed;
 }
 
 List<String> _normalizeRequestPathSegments(String path) {

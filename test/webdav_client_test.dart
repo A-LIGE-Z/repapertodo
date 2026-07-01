@@ -265,6 +265,53 @@ void main() {
     expect(entries.single.contentLength, 42);
   });
 
+  test('normalizes WebDAV etags without deleting internal quotes', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/strong.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"strong-v1"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/weak.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>W/"weak-v1"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/internal-quote.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>bad"etag</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/empty.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>""</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries.map((entry) => entry.etag), [
+      'strong-v1',
+      'W/"weak-v1"',
+      'bad"etag',
+      null,
+    ]);
+  });
+
   test('rejects non-WebDAV namespace multistatus responses', () async {
     final client = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
