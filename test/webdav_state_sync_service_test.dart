@@ -214,6 +214,9 @@ void main() {
           expect(request.headers['if-match'], '"manifest-v1"');
           return http.Response('precondition failed', 412);
         }
+        if (request.method == 'DELETE' && request.url.path.contains('/ops/')) {
+          return http.Response('', 204);
+        }
         return http.Response(
             'unexpected ${request.method} ${request.url}', 500);
       }),
@@ -240,6 +243,15 @@ void main() {
     expect(result.manifest?.deviceSequences, {
       'other-device': 2,
       'test-device': 5,
+    });
+    final operationRequests =
+        requests.where((request) => request.url.path.contains('/ops/'));
+    expect(operationRequests.map((request) => request.method), [
+      'PUT',
+      'DELETE',
+    ]);
+    expect(operationRequests.map((request) => request.url.path).toSet(), {
+      '/remote.php/dav/files/user/repapertodo/ops/test-device-000000000005.jsonl',
     });
   });
 

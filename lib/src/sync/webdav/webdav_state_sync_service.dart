@@ -181,6 +181,7 @@ class WebDavStateSyncService {
         normalizeSyncDeviceSequences(previousDeviceSequences);
     final nextSequence = (deviceSequences[_deviceId] ?? 0) + 1;
     deviceSequences[_deviceId] = nextSequence;
+    final operationLogPath = _paths.operationLogPath(_deviceId, nextSequence);
     await _putSnapshotOperation(
       state: state,
       updatedAtUtc: stamp,
@@ -199,6 +200,7 @@ class WebDavStateSyncService {
       createOnly: manifestKnownMissing,
     );
     if (!manifestUploaded) {
+      await _deleteOperationLogQuietly(operationLogPath);
       return WebDavStateSyncResult(
         status: WebDavStateSyncStatus.conflict,
         manifest: manifest,
@@ -547,6 +549,14 @@ class WebDavStateSyncService {
       _paths.operationLogPath(operation.deviceId, operation.sequence),
       utf8.encode('${jsonEncode(operation.toJson())}\n'),
     );
+  }
+
+  Future<void> _deleteOperationLogQuietly(String operationLogPath) async {
+    try {
+      await _client.delete(operationLogPath);
+    } on Object {
+      // Preserve the original sync conflict result even if cleanup fails.
+    }
   }
 
   SyncOperation? _normalizeOperationForUpload(SyncOperation operation) {
