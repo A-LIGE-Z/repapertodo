@@ -53,4 +53,5 @@ abstract interface class ExternalFileHost {
 
 abstract interface class ScriptCapsuleHost {
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request);
+  Future<void> stopPersistentProcesses();
 }

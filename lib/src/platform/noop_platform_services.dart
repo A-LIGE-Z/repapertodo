@@ -112,4 +112,7 @@ class NoopExternalFileHost implements ExternalFileHost {
 class NoopScriptCapsuleHost implements ScriptCapsuleHost {
   @override
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {}
+
+  @override
+  Future<void> stopPersistentProcesses() async {}
 }

@@ -331,4 +331,9 @@ class WindowsScriptCapsuleHost implements ScriptCapsuleHost {
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {
     await _channel.invokeMethod<void>('runScriptCapsule', request.toJson());
   }
+
+  @override
+  Future<void> stopPersistentProcesses() async {
+    await _channel.invokeMethod<void>('stopPersistentScriptCapsules');
+  }
 }

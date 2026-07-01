@@ -977,6 +977,11 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (method == "stopPersistentScriptCapsules") {
+          StopPersistentScriptProcesses();
+          result->Success();
+          return;
+        }
         if (method == "setBounds") {
           RECT current_bounds;
           GetWindowRect(window, &current_bounds);

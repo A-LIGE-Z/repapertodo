@@ -1260,6 +1260,56 @@ void main() {
     expect(controller.state.hideScriptRunWindow, false);
   });
 
+  testWidgets('stops persistent script process when script settings change',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        runLinkedScriptCapsulesOnClick: true,
+        usePersistentPowerShellProcess: true,
+        preferPowerShell7: true,
+        hideScriptRunWindow: true,
+        papers: [
+          PaperData(
+            id: 'script-reset-paper',
+            type: PaperTypes.todo,
+            title: 'Script reset',
+            items: [
+              PaperItem(id: 'script-reset-item', text: 'Tune scripts'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store = StateStore(filePath: 'build/test-widget-script-reset.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Prefer PowerShell 7'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Prefer PowerShell 7'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.preferPowerShell7, false);
+    expect(platform.scriptCapsules.stopCount, 1);
+  });
+
   testWidgets('saves pinned hotkeys and re-registers global hotkeys',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -1654,10 +1704,16 @@ class _RecordingExternalFileHost implements ExternalFileHost {
 
 class _RecordingScriptCapsuleHost implements ScriptCapsuleHost {
   final requests = <ScriptCapsuleRunRequest>[];
+  var stopCount = 0;
 
   @override
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {
     requests.add(request);
+  }
+
+  @override
+  Future<void> stopPersistentProcesses() async {
+    stopCount += 1;
   }
 }
 

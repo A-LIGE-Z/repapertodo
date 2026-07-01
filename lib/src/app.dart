@@ -621,6 +621,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   }
 
   Future<void> _openSettings() async {
+    final previousUsePersistentPowerShellProcess =
+        controller.state.usePersistentPowerShellProcess;
+    final previousPreferPowerShell7 = controller.state.preferPowerShell7;
+    final previousHideScriptRunWindow = controller.state.hideScriptRunWindow;
     final result = await showSyncSettingsDialog(
       context: context,
       initialSettings: controller.state.sync,
@@ -761,9 +765,31 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
     await controller.setFullscreenTopmostMode(result.fullscreenTopmostMode);
     await controller.registerGlobalHotkeys();
+    if (_shouldStopPersistentScriptCapsules(
+      previousUsePersistentPowerShellProcess,
+      previousPreferPowerShell7,
+      previousHideScriptRunWindow,
+      result,
+    )) {
+      await controller.stopPersistentScriptCapsules();
+    }
     widget.onAppThemeChanged?.call();
     _restartTodoReminderTimer();
     await _saveState();
+  }
+
+  bool _shouldStopPersistentScriptCapsules(
+    bool previousUsePersistentPowerShellProcess,
+    bool previousPreferPowerShell7,
+    bool previousHideScriptRunWindow,
+    SyncSettingsDialogResult result,
+  ) {
+    if (!previousUsePersistentPowerShellProcess) {
+      return false;
+    }
+    return !result.usePersistentPowerShellProcess ||
+        previousPreferPowerShell7 != result.preferPowerShell7 ||
+        previousHideScriptRunWindow != result.hideScriptRunWindow;
   }
 
   String _syncMessage(AppSyncResult result) {

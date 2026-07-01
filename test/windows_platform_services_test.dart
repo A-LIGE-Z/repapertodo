@@ -139,6 +139,7 @@ void main() {
         hideScriptRunWindow: true,
       ),
     );
+    await services.scriptCapsules.stopPersistentProcesses();
 
     expect(
       calls.map((call) => call.method),
@@ -161,6 +162,7 @@ void main() {
         'isForegroundFullscreen',
         'openExternalFile',
         'runScriptCapsule',
+        'stopPersistentScriptCapsules',
       ],
     );
     expect(foregroundFullscreen, true);
@@ -200,7 +202,7 @@ void main() {
     expect(calls[14].arguments, isNull);
     expect(calls[15].arguments, isNull);
     expect(calls[16].arguments, 'C:\\Temp\\note.md');
-    expect(calls.last.arguments, {
+    expect(calls[17].arguments, {
       'engine': 'pwsh',
       'script': 'Write-Output ok',
       'usePersistentProcess': true,
@@ -208,5 +210,6 @@ void main() {
       'preferPowerShell7': true,
       'hideScriptRunWindow': true,
     });
+    expect(calls.last.arguments, isNull);
   });
 }

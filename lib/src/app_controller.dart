@@ -132,6 +132,10 @@ class RePaperTodoController {
     );
   }
 
+  Future<void> stopPersistentScriptCapsules() async {
+    await _platform.scriptCapsules.stopPersistentProcesses();
+  }
+
   Future<void> showPaper(PaperData paper) async {
     paper.isVisible = true;
     await _platform.paperWindows.showPaper(paper);
