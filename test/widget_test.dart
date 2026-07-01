@@ -321,22 +321,47 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('note-canvas-preview')), findsOneWidget);
-    expect(find.text('Background idea'), findsOneWidget);
-    expect(find.text('Top layer code'), findsOneWidget);
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('note-canvas-element-canvas-bottom')),
-        matching: find.text('Background idea'),
+        matching: find.byKey(
+          const ValueKey('note-canvas-element-text-canvas-bottom'),
+        ),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('note-canvas-element-canvas-top')),
-        matching: find.text('Top layer code'),
+        matching: find.byKey(
+          const ValueKey('note-canvas-element-text-canvas-top'),
+        ),
       ),
       findsOneWidget,
     );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('note-canvas-element-text-canvas-top')),
+      'Updated canvas code',
+    );
+    await tester.pump();
+
+    expect(
+      controller.state.papers.single.noteCanvasElements
+          .firstWhere((element) => element.id == 'canvas-top')
+          .text,
+      'Updated canvas code',
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Add canvas block'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.noteCanvasElements, hasLength(3));
+
+    await tester.tap(find.byTooltip('Delete canvas block').first);
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.noteCanvasElements, hasLength(2));
   });
 
   testWidgets('saves custom theme color', (tester) async {

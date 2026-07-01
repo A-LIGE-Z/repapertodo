@@ -1415,13 +1415,8 @@ class _NoteEditorState extends State<_NoteEditor> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _editor(context, minLines: 4, maxLines: 12),
-          if (widget.paper.noteCanvasElements.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _NoteCanvasPreview(
-              elements: widget.paper.noteCanvasElements,
-              textZoom: widget.textZoom,
-            ),
-          ],
+          const SizedBox(height: 12),
+          _canvasSection(),
         ],
       );
     }
@@ -1477,11 +1472,10 @@ class _NoteEditorState extends State<_NoteEditor> {
         ),
         if (widget.paper.noteCanvasElements.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _NoteCanvasPreview(
-            elements: widget.paper.noteCanvasElements,
-            textZoom: widget.textZoom,
-          ),
+          _canvasPreview(),
         ],
+        const SizedBox(height: 12),
+        _addCanvasButton(),
       ],
     );
   }
@@ -1558,16 +1552,85 @@ class _NoteEditorState extends State<_NoteEditor> {
         ? _viewSplit
         : _viewEdit;
   }
+
+  Widget _canvasSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.paper.noteCanvasElements.isNotEmpty) ...[
+          _canvasPreview(),
+          const SizedBox(height: 12),
+        ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _addCanvasButton(),
+        ),
+      ],
+    );
+  }
+
+  Widget _canvasPreview() {
+    return _NoteCanvasPreview(
+      elements: widget.paper.noteCanvasElements,
+      textZoom: widget.textZoom,
+      onChanged: widget.onChanged,
+      onDelete: _deleteCanvasElement,
+    );
+  }
+
+  Widget _addCanvasButton() {
+    return TextButton.icon(
+      onPressed: _addCanvasElement,
+      icon: const Icon(Icons.add_box_outlined),
+      label: const Text('Add canvas block'),
+    );
+  }
+
+  void _addCanvasElement() {
+    final elements = widget.paper.noteCanvasElements;
+    final nextIndex = elements.length + 1;
+    final maxLayer = elements.fold<int>(
+      0,
+      (max, element) => element.zIndex > max ? element.zIndex : max,
+    );
+    setState(() {
+      elements.add(
+        NoteCanvasElement(
+          id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
+          text: 'Canvas block $nextIndex',
+          x: 32.0 + elements.length * 16.0,
+          y: 32.0 + elements.length * 16.0,
+          width: 220,
+          height: 112,
+          zIndex: maxLayer + 1,
+        ),
+      );
+    });
+    unawaited(widget.onChanged());
+  }
+
+  void _deleteCanvasElement(NoteCanvasElement element) {
+    setState(() {
+      widget.paper.noteCanvasElements.removeWhere(
+        (candidate) => candidate.id == element.id,
+      );
+    });
+    unawaited(widget.onChanged());
+  }
 }
 
 class _NoteCanvasPreview extends StatelessWidget {
   const _NoteCanvasPreview({
     required this.elements,
     required this.textZoom,
+    required this.onChanged,
+    required this.onDelete,
   });
 
   final List<NoteCanvasElement> elements;
   final double textZoom;
+  final Future<void> Function() onChanged;
+  final void Function(NoteCanvasElement element) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1611,6 +1674,8 @@ class _NoteCanvasPreview extends StatelessWidget {
                       element: element,
                       scale: scale,
                       textZoom: textZoom,
+                      onChanged: onChanged,
+                      onDelete: onDelete,
                     ),
                   ),
               ],
@@ -1639,12 +1704,16 @@ class _NoteCanvasElementPreview extends StatelessWidget {
     required this.element,
     required this.scale,
     required this.textZoom,
+    required this.onChanged,
+    required this.onDelete,
     super.key,
   });
 
   final NoteCanvasElement element;
   final double scale;
   final double textZoom;
+  final Future<void> Function() onChanged;
+  final void Function(NoteCanvasElement element) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1663,14 +1732,43 @@ class _NoteCanvasElementPreview extends StatelessWidget {
       ),
       child: Padding(
         padding: EdgeInsets.all((8 * scale).clamp(4, 8).toDouble()),
-        child: SingleChildScrollView(
-          child: Text(
-            element.text.trim().isEmpty ? 'Canvas element' : element.text,
-            style: style?.copyWith(
-              color: colorScheme.onSurface,
-              height: 1.35,
+        child: Column(
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox.square(
+                dimension: (28 * scale).clamp(24, 28).toDouble(),
+                child: IconButton(
+                  tooltip: 'Delete canvas block',
+                  onPressed: () => onDelete(element),
+                  iconSize: (18 * scale).clamp(16, 18).toDouble(),
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.close_outlined),
+                ),
+              ),
             ),
-          ),
+            Expanded(
+              child: TextFormField(
+                key: ValueKey('note-canvas-element-text-${element.id}'),
+                initialValue: element.text,
+                expands: true,
+                maxLines: null,
+                minLines: null,
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  isDense: true,
+                ),
+                style: style?.copyWith(
+                  color: colorScheme.onSurface,
+                  height: 1.35,
+                ),
+                onChanged: (value) {
+                  element.text = value;
+                  unawaited(onChanged());
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
