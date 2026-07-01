@@ -123,6 +123,39 @@ void main() {
     expect(elementsById['unknown-block']?.type, NoteCanvasElementTypes.code);
   });
 
+  test('normalizes note canvas geometry like PaperTodo', () {
+    final state = AppState(
+      papers: [
+        PaperData(
+          id: 'canvas-note',
+          type: PaperTypes.note,
+          noteCanvasElements: [
+            NoteCanvasElement(
+              id: 'wide',
+              x: -5000,
+              y: 9000,
+              width: 4000,
+              height: 4,
+            ),
+            NoteCanvasElement(
+              id: 'layered',
+              zIndex: -3,
+            ),
+          ],
+        ),
+      ],
+    )..normalize();
+
+    final wide = state.papers.single.noteCanvasElements.first;
+    final layered = state.papers.single.noteCanvasElements.last;
+    expect(wide.x, -2000);
+    expect(wide.y, 8000);
+    expect(wide.width, 1600);
+    expect(wide.height, 110);
+    expect(wide.zIndex, 10);
+    expect(layered.zIndex, 20);
+  });
+
   test('normalizes deep capsule top margins', () {
     final state = AppState.fromJson({
       'deepCapsuleStartTopMargin': 2,

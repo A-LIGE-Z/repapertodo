@@ -78,8 +78,10 @@ class NoteCanvasElement {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
     type = NoteCanvasElementTypes.normalize(type);
-    width = width.clamp(64, 4000).toDouble();
-    height = height.clamp(48, 4000).toDouble();
+    x = x.clamp(-2000, 8000).toDouble();
+    y = y.clamp(-2000, 8000).toDouble();
+    width = width < 72 ? 220 : width.clamp(72, 1600).toDouble();
+    height = height < 48 ? 110 : height.clamp(48, 1600).toDouble();
   }
 
   JsonMap toJson() {

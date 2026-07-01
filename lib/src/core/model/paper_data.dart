@@ -77,18 +77,21 @@ class PaperData {
       x: doubleValue(json['x'], 120),
       y: doubleValue(json['y'], 120),
       width: doubleValue(json['width'], PaperLayoutDefaults.todoDefaultWidth),
-      height: doubleValue(json['height'], PaperLayoutDefaults.todoDefaultHeight),
+      height:
+          doubleValue(json['height'], PaperLayoutDefaults.todoDefaultHeight),
       isVisible: boolValue(json['isVisible'], true),
       alwaysOnTop: boolValue(json['alwaysOnTop'], false),
       isCollapsed: boolValue(json['isCollapsed'], false),
       isPinnedToDesktop: boolValue(json['isPinnedToDesktop'], false),
       textZoom: doubleValue(json['textZoom'], 1),
       capsuleSide: stringValue(json['capsuleSide'], ''),
-      capsuleMonitorDeviceName: stringValue(json['capsuleMonitorDeviceName'], ''),
+      capsuleMonitorDeviceName:
+          stringValue(json['capsuleMonitorDeviceName'], ''),
       items: jsonMapList(json['items']).map(PaperItem.fromJson).toList(),
       content: stringValue(json['content'], ''),
-      noteCanvasElements:
-          jsonMapList(json['noteCanvasElements']).map(NoteCanvasElement.fromJson).toList(),
+      noteCanvasElements: jsonMapList(json['noteCanvasElements'])
+          .map(NoteCanvasElement.fromJson)
+          .toList(),
       extra: preserveUnknown(json, _knownKeys),
     )..normalize();
   }
@@ -98,16 +101,22 @@ class PaperData {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
     type = PaperTypes.normalize(type);
-    width = width.clamp(
-      PaperLayoutDefaults.minWidth,
-      10000,
-    ).toDouble();
-    height = height.clamp(
-      PaperLayoutDefaults.minHeight,
-      10000,
-    ).toDouble();
+    width = width
+        .clamp(
+          PaperLayoutDefaults.minWidth,
+          10000,
+        )
+        .toDouble();
+    height = height
+        .clamp(
+          PaperLayoutDefaults.minHeight,
+          10000,
+        )
+        .toDouble();
     textZoom = textZoom.clamp(0.5, 1.5).toDouble();
-    capsuleSide = capsuleSide.trim().isEmpty ? '' : DeepCapsuleSides.normalize(capsuleSide);
+    capsuleSide = capsuleSide.trim().isEmpty
+        ? ''
+        : DeepCapsuleSides.normalize(capsuleSide);
     capsuleMonitorDeviceName = capsuleMonitorDeviceName.trim();
     for (final item in items) {
       item.normalize();
@@ -122,8 +131,12 @@ class PaperData {
     if (isTodo && items.isEmpty) {
       items.add(PaperItem(id: '${id}_item0'));
     }
-    for (final element in noteCanvasElements) {
+    for (var index = 0; index < noteCanvasElements.length; index++) {
+      final element = noteCanvasElements[index];
       element.normalize();
+      if (element.zIndex <= 0) {
+        element.zIndex = (index + 1) * 10;
+      }
     }
   }
 
@@ -146,7 +159,8 @@ class PaperData {
       'capsuleMonitorDeviceName': capsuleMonitorDeviceName,
       'items': items.map((item) => item.toJson()).toList(),
       'content': content,
-      'noteCanvasElements': noteCanvasElements.map((element) => element.toJson()).toList(),
+      'noteCanvasElements':
+          noteCanvasElements.map((element) => element.toJson()).toList(),
     };
   }
 }
