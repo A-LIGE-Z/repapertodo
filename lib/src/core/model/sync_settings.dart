@@ -240,7 +240,7 @@ class WebDavSyncSettings {
 
   bool get isConfigured {
     return endpointUri != null &&
-        username.isNotEmpty &&
+        _isValidBasicAuthUsername(username) &&
         password.isNotEmpty &&
         rootPath.isNotEmpty;
   }
@@ -360,6 +360,12 @@ bool _hasUnsafeEndpointPath(String endpoint) {
     final trimmed = segment.trim();
     return trimmed == '.' || trimmed == '..';
   });
+}
+
+bool _isValidBasicAuthUsername(String value) {
+  return value.isNotEmpty &&
+      !value.contains(':') &&
+      !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
 }
 
 Map<String, String> _normalizeTombstoneMap(Object? value) {

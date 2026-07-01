@@ -84,6 +84,39 @@ void main() {
     expect(requestCount, 0);
   });
 
+  test('rejects invalid Basic Auth usernames before sending', () async {
+    for (final username in const [
+      '',
+      'user:name',
+      'user\nname',
+      'user\u007Fname',
+    ]) {
+      var requestCount = 0;
+      final client = WebDavClient(
+        baseUri:
+            Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+        credentials: WebDavCredentials(username: username, password: 'pass'),
+        httpClient: MockClient((request) async {
+          requestCount += 1;
+          return http.Response('network should not be reached', 500);
+        }),
+      );
+
+      await expectLater(
+        client.metadata('repapertodo/manifest.json'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.name,
+            'name',
+            'username',
+          ),
+        ),
+        reason: username,
+      );
+      expect(requestCount, 0, reason: username);
+    }
+  });
+
   test('rejects unsupported base URIs', () {
     for (final baseUri in [
       Uri.parse('ftp://dav.example.test/dav/'),

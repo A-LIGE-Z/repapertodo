@@ -14,9 +14,22 @@ class WebDavCredentials {
   final String password;
 
   String get authorizationHeader {
+    if (!_isValidBasicAuthUsername(username)) {
+      throw ArgumentError.value(
+        username,
+        'username',
+        'WebDAV Basic Auth username must not be empty, contain colons, or contain control characters.',
+      );
+    }
     final token = base64Encode(utf8.encode('$username:$password'));
     return 'Basic $token';
   }
+}
+
+bool _isValidBasicAuthUsername(String value) {
+  return value.isNotEmpty &&
+      !value.contains(':') &&
+      !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
 }
 
 class WebDavEntry {

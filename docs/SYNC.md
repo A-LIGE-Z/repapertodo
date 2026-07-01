@@ -14,6 +14,9 @@ Endpoint paths with dot-segments or malformed percent encoding are also treated
 as incomplete settings so the configured WebDAV base folder is not silently
 rewritten by URI normalization.
 Backslashes are not accepted in configured endpoints for the same reason.
+WebDAV Basic Auth usernames must be non-empty and must not contain colons or
+control characters, because the wire format separates the username and password
+with the first colon. Passwords are preserved as entered.
 
 Initial recommended preset:
 

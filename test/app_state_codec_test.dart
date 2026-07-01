@@ -727,6 +727,33 @@ Plain item
     expect(settings.isConfigured, false);
   });
 
+  test('rejects invalid WebDAV Basic Auth usernames', () {
+    final passwordWithColon = WebDavSyncSettings(
+      endpoint: 'https://dav.example.test/dav/',
+      username: ' user@example.com ',
+      password: 'app:password',
+    )..normalize();
+
+    expect(passwordWithColon.username, 'user@example.com');
+    expect(passwordWithColon.isConfigured, true);
+
+    for (final username in const [
+      '',
+      'user:name',
+      'user\nname',
+      'user\u007Fname',
+    ]) {
+      final settings = WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/dav/',
+        username: username,
+        password: 'pass',
+      )..normalize();
+
+      expect(settings.endpointUri, isNotNull);
+      expect(settings.isConfigured, false);
+    }
+  });
+
   test('accepts only HTTP WebDAV endpoint schemes', () {
     for (final endpoint in const [
       'https://dav.example.test/dav/',
