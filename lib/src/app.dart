@@ -1121,6 +1121,7 @@ class PaperPreview extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isCollapsed = collapseAllActive || paper.isCollapsed;
+    final textZoom = paper.textZoom.clamp(0.5, 1.5).toDouble();
     return Semantics(
       label: '${paper.title} ${paper.type} paper',
       child: DecoratedBox(
@@ -1160,7 +1161,9 @@ class PaperPreview extends StatelessWidget {
                         hintText: 'Untitled',
                         isDense: true,
                       ),
-                      style: theme.textTheme.titleMedium,
+                      style: theme.textTheme.titleMedium?.apply(
+                        fontSizeFactor: textZoom,
+                      ),
                       onChanged: (value) {
                         paper.title = value;
                         unawaited(onTitleChanged(paper));
@@ -1209,6 +1212,22 @@ class PaperPreview extends StatelessWidget {
                             },
                       icon: Icon(
                           isCollapsed ? Icons.expand_more : Icons.expand_less),
+                    ),
+                    PopupMenuButton<double>(
+                      tooltip: _tooltipLabel(enableToolTips, 'Paper text zoom'),
+                      icon: const Icon(Icons.text_fields),
+                      initialValue: textZoom,
+                      onSelected: (value) => _setTextZoom(value),
+                      itemBuilder: (context) {
+                        return [
+                          for (final option in _TextZoomOption.values)
+                            CheckedPopupMenuItem<double>(
+                              value: option.value,
+                              checked: option.value == textZoom,
+                              child: Text(option.label),
+                            ),
+                        ];
+                      },
                     ),
                     IconButton(
                       tooltip: _tooltipLabel(
@@ -1272,6 +1291,7 @@ class PaperPreview extends StatelessWidget {
                   enableToolTips: enableToolTips,
                   visualSize: todoVisualSize,
                   lineSpacing: todoLineSpacing,
+                  textZoom: paper.textZoom,
                   showDueRelativeTime: showTodoDueRelativeTime,
                   dueYearDisplayMode: todoDueYearDisplayMode,
                   onOpen: onOpen,
@@ -1282,6 +1302,7 @@ class PaperPreview extends StatelessWidget {
                   paper: paper,
                   markdownRenderMode: markdownRenderMode,
                   lineSpacing: noteLineSpacing,
+                  textZoom: paper.textZoom,
                   onChanged: onChanged,
                 ),
             ],
@@ -1307,6 +1328,26 @@ class PaperPreview extends StatelessWidget {
       child: body,
     );
   }
+
+  void _setTextZoom(double value) {
+    paper.textZoom = value.clamp(0.5, 1.5).toDouble();
+    unawaited(onSurfaceChanged(paper));
+    unawaited(onChanged());
+  }
+}
+
+class _TextZoomOption {
+  const _TextZoomOption(this.value, this.label);
+
+  final double value;
+  final String label;
+
+  static const values = [
+    _TextZoomOption(0.75, '75%'),
+    _TextZoomOption(1, '100%'),
+    _TextZoomOption(1.25, '125%'),
+    _TextZoomOption(1.5, '150%'),
+  ];
 }
 
 class _NoteEditor extends StatefulWidget {
@@ -1314,12 +1355,14 @@ class _NoteEditor extends StatefulWidget {
     required this.paper,
     required this.markdownRenderMode,
     required this.lineSpacing,
+    required this.textZoom,
     required this.onChanged,
   });
 
   final PaperData paper;
   final String markdownRenderMode;
   final double lineSpacing;
+  final double textZoom;
   final Future<void> Function() onChanged;
 
   @override
@@ -1415,9 +1458,13 @@ class _NoteEditorState extends State<_NoteEditor> {
         border: OutlineInputBorder(),
         hintText: 'Write a note...',
       ),
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            height: widget.lineSpacing,
-          ),
+      style: Theme.of(context)
+          .textTheme
+          .bodyMedium
+          ?.apply(
+            fontSizeFactor: widget.textZoom,
+          )
+          .copyWith(height: widget.lineSpacing),
       onChanged: (value) {
         widget.paper.content = value;
         unawaited(widget.onChanged());
@@ -1442,9 +1489,14 @@ class _NoteEditorState extends State<_NoteEditor> {
                 : widget.paper.content,
             styleSheet:
                 MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                    p: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          height: widget.lineSpacing,
-                        )),
+              p: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.apply(
+                    fontSizeFactor: widget.textZoom,
+                  )
+                  .copyWith(height: widget.lineSpacing),
+            ),
             selectable: true,
           ),
         ),
@@ -1477,6 +1529,7 @@ class _TodoEditor extends StatefulWidget {
     required this.enableToolTips,
     required this.visualSize,
     required this.lineSpacing,
+    required this.textZoom,
     required this.showDueRelativeTime,
     required this.dueYearDisplayMode,
     required this.onOpen,
@@ -1492,6 +1545,7 @@ class _TodoEditor extends StatefulWidget {
   final bool enableToolTips;
   final String visualSize;
   final double lineSpacing;
+  final double textZoom;
   final bool showDueRelativeTime;
   final String dueYearDisplayMode;
   final Future<void> Function(PaperData paper) onOpen;
@@ -1508,7 +1562,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     final colorScheme = theme.colorScheme;
     final visualSpec = _TodoVisualSpec.from(widget.visualSize);
     final itemTextStyle = theme.textTheme.bodyMedium
-        ?.apply(fontSizeFactor: visualSpec.textScale)
+        ?.apply(fontSizeFactor: visualSpec.textScale * widget.textZoom)
         .copyWith(
           height: widget.lineSpacing,
         );

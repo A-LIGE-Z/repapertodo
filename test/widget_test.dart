@@ -544,6 +544,59 @@ void main() {
     expect(dueButton.constraints?.minHeight, 52);
   });
 
+  testWidgets('adjusts per-paper text zoom', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'zoom-paper',
+            type: PaperTypes.todo,
+            title: 'Zoom paper',
+            items: [
+              PaperItem(id: 'zoom-item', text: 'Readable task'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store = StateStore(filePath: 'build/test-widget-paper-zoom.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    final itemFinder = find.byKey(const ValueKey('zoom-paper-zoom-item-text'));
+    final beforeText = tester.widget<EditableText>(
+      find.descendant(of: itemFinder, matching: find.byType(EditableText)),
+    );
+    final beforeFontSize = beforeText.style.fontSize ?? 0;
+
+    await tester.tap(find.byTooltip('Paper text zoom'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is CheckedPopupMenuItem<double> && widget.value == 1.25,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final afterText = tester.widget<EditableText>(
+      find.descendant(of: itemFinder, matching: find.byType(EditableText)),
+    );
+    expect(controller.state.papers.single.textZoom, 1.25);
+    expect(afterText.style.fontSize, greaterThan(beforeFontSize));
+    expect(platform.paperWindows.updatedTitles, contains('Zoom paper'));
+  });
+
   testWidgets('hides disabled top bar creation buttons', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
