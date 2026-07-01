@@ -31,6 +31,47 @@ void main() {
     );
   });
 
+  test('ignores invalid WebDAV content lengths', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD') {
+          return http.Response(
+            '',
+            200,
+            headers: {'content-length': '-1'},
+          );
+        }
+        if (request.method == 'PROPFIND') {
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/negative.json</D:href>
+    <D:propstat>
+      <D:prop><D:getcontentlength>-42</D:getcontentlength></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/malformed.json</D:href>
+    <D:propstat>
+      <D:prop><D:getcontentlength>not-a-number</D:getcontentlength></D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+    final entries = await client.list('repapertodo');
+
+    expect(metadata?.contentLength, isNull);
+    expect(entries.map((entry) => entry.contentLength), [null, null]);
+  });
+
   test('rejects unsafe request paths before sending', () async {
     var requestCount = 0;
     final client = WebDavClient(

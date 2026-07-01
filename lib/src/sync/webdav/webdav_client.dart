@@ -109,7 +109,9 @@ class WebDavClient {
     _throwIfUnexpected(response, expected: {200, 204});
     return WebDavResourceMetadata(
       etag: response.headers['etag'],
-      contentLength: int.tryParse(response.headers['content-length'] ?? ''),
+      contentLength: _tryParseContentLength(
+        response.headers['content-length'],
+      ),
       lastModified: response.headers['last-modified'] == null
           ? null
           : _tryParseHttpDate(response.headers['last-modified']!),
@@ -347,7 +349,7 @@ WebDavEntry _parseEntry(XmlElement element) {
   return WebDavEntry(
     href: href,
     etag: etag,
-    contentLength: lengthText == null ? null : int.tryParse(lengthText),
+    contentLength: _tryParseContentLength(lengthText),
     lastModified:
         lastModifiedText == null ? null : _tryParseHttpDate(lastModifiedText),
     isCollection: _hasSuccessfulCollectionResourceType(element),
@@ -360,6 +362,14 @@ DateTime? _tryParseHttpDate(String value) {
   } on FormatException {
     return null;
   }
+}
+
+int? _tryParseContentLength(String? value) {
+  final parsed = int.tryParse(value?.trim() ?? '');
+  if (parsed == null || parsed < 0) {
+    return null;
+  }
+  return parsed;
 }
 
 String? _firstDirectElementText(XmlElement element, String localName) {
