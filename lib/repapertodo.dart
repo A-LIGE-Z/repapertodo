@@ -26,6 +26,7 @@ export 'src/sync/sync_device_id_store.dart';
 export 'src/sync/sync_manifest.dart';
 export 'src/sync/sync_operation.dart';
 export 'src/sync/sync_operation_applier.dart';
+export 'src/sync/sync_operation_diff.dart';
 export 'src/sync/webdav/webdav_client.dart';
 export 'src/sync/webdav/webdav_presets.dart';
 export 'src/sync/webdav/webdav_state_sync_service.dart';
