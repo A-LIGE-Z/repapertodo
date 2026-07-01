@@ -627,6 +627,12 @@ Plain item
         'enabled': true,
         'provider': 'webDav',
         'futureSyncField': 'keep-sync',
+        'operationDeviceSequences': {
+          ' win-device ': 3,
+          'android-device': 2.4,
+          'stale-device': 0,
+          '': 7,
+        },
         'webDav': {
           'presetId': 'jianguoyun',
           'endpoint': '',
@@ -643,6 +649,10 @@ Plain item
     expect(state.sync.enabled, true);
     expect(state.sync.provider, SyncProviderIds.webDav);
     expect(state.sync.extra['futureSyncField'], 'keep-sync');
+    expect(state.sync.operationDeviceSequences, {
+      'win-device': 3,
+      'android-device': 2,
+    });
     expect(state.sync.webDav.presetId, WebDavPresetIds.jianguoyun);
     expect(state.sync.webDav.endpoint, 'https://dav.jianguoyun.com/dav/');
     expect(state.sync.webDav.username, 'user@example.com');

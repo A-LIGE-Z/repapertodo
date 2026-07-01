@@ -23,19 +23,23 @@ class SyncSettings {
     this.enabled = false,
     this.provider = SyncProviderIds.none,
     WebDavSyncSettings? webDav,
+    Map<String, int>? operationDeviceSequences,
     JsonMap? extra,
   })  : webDav = webDav ?? WebDavSyncSettings(),
+        operationDeviceSequences = operationDeviceSequences ?? <String, int>{},
         extra = extra ?? <String, Object?>{};
 
   static const _knownKeys = {
     'enabled',
     'provider',
     'webDav',
+    'operationDeviceSequences',
   };
 
   bool enabled;
   String provider;
   WebDavSyncSettings webDav;
+  Map<String, int> operationDeviceSequences;
   JsonMap extra;
 
   factory SyncSettings.fromJson(JsonMap json) {
@@ -46,6 +50,7 @@ class SyncSettings {
       webDav: webDavJson is Map
           ? WebDavSyncSettings.fromJson(Map<String, Object?>.from(webDavJson))
           : null,
+      operationDeviceSequences: intMap(json['operationDeviceSequences']),
       extra: preserveUnknown(json, _knownKeys),
     )..normalize();
   }
@@ -53,6 +58,9 @@ class SyncSettings {
   void normalize() {
     provider = SyncProviderIds.normalize(provider);
     webDav.normalize();
+    operationDeviceSequences = _normalizeDeviceSequences(
+      operationDeviceSequences,
+    );
     if (enabled && provider == SyncProviderIds.none) {
       provider = SyncProviderIds.webDav;
     }
@@ -63,6 +71,7 @@ class SyncSettings {
       enabled: enabled,
       provider: provider,
       webDav: webDav.copy(),
+      operationDeviceSequences: Map<String, int>.from(operationDeviceSequences),
       extra: Map<String, Object?>.from(extra),
     );
   }
@@ -73,6 +82,7 @@ class SyncSettings {
       'enabled': enabled,
       'provider': provider,
       'webDav': webDav.toJson(),
+      'operationDeviceSequences': operationDeviceSequences,
     };
   }
 }
@@ -195,4 +205,16 @@ String _normalizeRootPath(String value) {
       .where((segment) => segment.trim().isNotEmpty)
       .join('/');
   return normalized.isEmpty ? 'repapertodo' : normalized;
+}
+
+Map<String, int> _normalizeDeviceSequences(Map<String, int> source) {
+  final normalized = <String, int>{};
+  for (final entry in source.entries) {
+    final key = entry.key.trim();
+    if (key.isEmpty || entry.value <= 0) {
+      continue;
+    }
+    normalized[key] = entry.value;
+  }
+  return normalized;
 }

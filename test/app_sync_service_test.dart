@@ -311,12 +311,16 @@ void main() {
 
     expect(result.appliedCount, 2);
     expect(result.deviceSequences, {'device-a': 2});
+    expect(result.state.sync.operationDeviceSequences, {'device-a': 2});
     expect(result.state.papers.single.title, 'Remote');
     expect(result.state.papers.single.content, 'Merged body');
-    expect((await store.load()).papers.single.content, 'Merged body');
+    final stored = await store.load();
+    expect(stored.papers.single.content, 'Merged body');
+    expect(stored.sync.operationDeviceSequences, {'device-a': 2});
   });
 
-  test('merge skips operation logs covered by device sequences', () async {
+  test('merge skips operation logs covered by explicit device sequences',
+      () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_merge_skip_');
     addTearDown(() => directory.delete(recursive: true));
@@ -362,6 +366,70 @@ void main() {
       ),
       store: store,
       deviceSequences: {'device-a': 1},
+    );
+
+    expect(result.appliedCount, 0);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.papers.single.title, 'Local');
+    expect(await File(store.filePath).exists(), isFalse);
+  });
+
+  test('merge skips operation logs covered by stored device sequences',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_stored_skip_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote',
+                  type: PaperTypes.todo,
+                  title: 'Stale',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(
+        papers: [
+          PaperData(id: 'local', type: PaperTypes.todo, title: 'Local'),
+        ],
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            rootPath: 'repapertodo',
+          ),
+          operationDeviceSequences: {'device-a': 1},
+        ),
+      ),
+      store: store,
     );
 
     expect(result.appliedCount, 0);

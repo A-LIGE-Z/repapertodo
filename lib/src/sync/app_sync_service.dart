@@ -179,10 +179,12 @@ class AppSyncService {
       localState: localState,
       store: store,
     );
+    final previousSequences =
+        deviceSequences ?? localState.sync.operationDeviceSequences;
     if (client == null) {
       return AppSyncOperationMergeResult(
         state: localState,
-        deviceSequences: Map<String, int>.from(deviceSequences ?? const {}),
+        deviceSequences: Map<String, int>.from(previousSequences),
         appliedCount: 0,
       );
     }
@@ -195,8 +197,10 @@ class AppSyncService {
     final result = _operationApplier.apply(
       localState,
       operations,
-      deviceSequences: deviceSequences,
+      deviceSequences: previousSequences,
     );
+    result.state.sync.operationDeviceSequences = result.deviceSequences;
+    result.state.normalize();
     if (result.appliedCount > 0) {
       await store.save(result.state);
     }

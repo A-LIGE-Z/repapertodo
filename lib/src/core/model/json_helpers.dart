@@ -61,7 +61,19 @@ Map<String, bool> boolMap(Object? value) {
   }
   return {
     for (final entry in value.entries)
-      if (entry.key is String && entry.value is bool) entry.key as String: entry.value as bool,
+      if (entry.key is String && entry.value is bool)
+        entry.key as String: entry.value as bool,
+  };
+}
+
+Map<String, int> intMap(Object? value) {
+  if (value is! Map) {
+    return const {};
+  }
+  return {
+    for (final entry in value.entries)
+      if (entry.key is String && entry.value is num)
+        entry.key as String: (entry.value as num).round(),
   };
 }
 
@@ -71,7 +83,9 @@ Map<String, double> doubleMap(Object? value) {
   }
   return {
     for (final entry in value.entries)
-      if (entry.key is String && entry.value is num && (entry.value as num).isFinite)
+      if (entry.key is String &&
+          entry.value is num &&
+          (entry.value as num).isFinite)
         entry.key as String: (entry.value as num).toDouble(),
   };
 }
@@ -82,4 +96,3 @@ JsonMap preserveUnknown(JsonMap source, Set<String> knownKeys) {
       if (!knownKeys.contains(entry.key)) entry.key: entry.value,
   };
 }
-
