@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
+const _webDavNamespace = 'DAV:';
+
 class WebDavCredentials {
   const WebDavCredentials({
     required this.username,
@@ -308,9 +310,11 @@ List<WebDavEntry> _parseMultiStatusResponse(http.Response response) {
 
 List<WebDavEntry> _parseMultiStatus(String xml) {
   final document = XmlDocument.parse(xml);
-  if (document.rootElement.name.local != 'multistatus') {
+  final rootName = document.rootElement.name;
+  if (rootName.local != 'multistatus' ||
+      rootName.namespaceUri != _webDavNamespace) {
     throw const FormatException(
-      'WebDAV multistatus response must contain a multistatus root element.',
+      'WebDAV multistatus response must contain a DAV: multistatus root element.',
     );
   }
   return _descendantElements(document)
