@@ -1222,6 +1222,98 @@ void main() {
     expect(syncService.calls, 2);
   });
 
+  testWidgets('exit command flushes local edits before platform cleanup',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final startup = _RecordingStartupHost();
+    final platform = _RecordingPlatformServices(startup: startup);
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'exit-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: platform,
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'exit-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        papers: [
+          PaperData(
+            id: 'exit-note',
+            type: PaperTypes.note,
+            title: 'Draft',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    controller.state.papers.single.title = 'Draft';
+    startup.addCommand(const StartupCommand(StartupCommandKind.exit));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.localUploadCalls, 1);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(platform.systemIntegration.unregisterGlobalHotkeysCount, 1);
+    expect(platform.tray.disposeCount, 1);
+    expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
   testWidgets('opens note markdown externally', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -2568,7 +2660,7 @@ class _RecordingPlatformServices implements PlatformServices {
   final _RecordingPaperWindowHost paperWindows = _RecordingPaperWindowHost();
 
   @override
-  final TrayHost tray = NoopTrayHost();
+  final _RecordingTrayHost tray = _RecordingTrayHost();
 
   @override
   final StartupHost startup;
@@ -2586,6 +2678,15 @@ class _RecordingPlatformServices implements PlatformServices {
   @override
   final _RecordingScriptCapsuleHost scriptCapsules =
       _RecordingScriptCapsuleHost();
+}
+
+class _RecordingTrayHost extends NoopTrayHost {
+  var disposeCount = 0;
+
+  @override
+  Future<void> dispose() async {
+    disposeCount += 1;
+  }
 }
 
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
@@ -2662,9 +2763,15 @@ class _RecordingStartupHost extends NoopStartupHost {
 
 class _RecordingSystemIntegrationHost extends NoopSystemIntegrationHost {
   final registeredHotkeys = <(String todo, String note)>[];
+  var unregisterGlobalHotkeysCount = 0;
 
   @override
   Future<void> registerGlobalHotkeys(AppState state) async {
     registeredHotkeys.add((state.pinnedTodoHotKey, state.pinnedNoteHotKey));
+  }
+
+  @override
+  Future<void> unregisterGlobalHotkeys() async {
+    unregisterGlobalHotkeysCount += 1;
   }
 }

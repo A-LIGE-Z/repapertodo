@@ -629,11 +629,31 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       await _openSettings();
       return;
     }
+    if (command.kind == StartupCommandKind.exit) {
+      await _saveAndSyncBeforeExit();
+      await controller.executeStartupCommand(command);
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
     await controller.executeStartupCommand(command);
     if (mounted) {
       setState(() {});
     }
     await _saveState();
+  }
+
+  Future<void> _saveAndSyncBeforeExit() async {
+    _surfaceSaveDebounce?.cancel();
+    _surfaceSaveDebounce = null;
+    await _saveState();
+    _localEditSyncDebounce?.cancel();
+    _localEditSyncDebounce = null;
+    if (_isSyncing) {
+      return;
+    }
+    await _uploadLocalEditsThenSync();
   }
 
   void _handleSurfaceUpdate(PaperData paper) {
