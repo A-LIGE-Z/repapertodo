@@ -2,6 +2,7 @@ import '../core/model/app_state.dart';
 import '../core/model/json_helpers.dart';
 import '../core/model/paper_data.dart';
 import '../core/model/paper_item.dart';
+import 'sync_device_id.dart';
 import 'sync_operation.dart';
 
 class SyncOperationApplyResult {
@@ -25,15 +26,16 @@ class SyncOperationApplier {
     Map<String, int>? deviceSequences,
   }) {
     final state = AppState.fromJson(baseState.toJson());
-    final sequences = Map<String, int>.from(deviceSequences ?? const {});
-    final sortedOperations = operations.toList()
-      ..sort((a, b) {
-        final deviceComparison = a.deviceId.compareTo(b.deviceId);
-        if (deviceComparison != 0) {
-          return deviceComparison;
-        }
-        return a.sequence.compareTo(b.sequence);
-      });
+    final sequences = normalizeSyncDeviceSequences(deviceSequences);
+    final sortedOperations =
+        operations.map(_normalizeOperation).whereType<SyncOperation>().toList()
+          ..sort((a, b) {
+            final deviceComparison = a.deviceId.compareTo(b.deviceId);
+            if (deviceComparison != 0) {
+              return deviceComparison;
+            }
+            return a.sequence.compareTo(b.sequence);
+          });
 
     var appliedCount = 0;
     for (final operation in sortedOperations) {
@@ -50,6 +52,21 @@ class SyncOperationApplier {
       state: state,
       deviceSequences: sequences,
       appliedCount: appliedCount,
+    );
+  }
+
+  SyncOperation? _normalizeOperation(SyncOperation operation) {
+    final deviceId = normalizeSyncDeviceId(operation.deviceId, fallback: '');
+    if (deviceId.isEmpty || operation.sequence <= 0) {
+      return null;
+    }
+    return SyncOperation(
+      id: '$deviceId-${operation.sequence}',
+      deviceId: deviceId,
+      sequence: operation.sequence,
+      kind: operation.kind,
+      createdAtUtc: operation.createdAtUtc,
+      payload: Map<String, Object?>.from(operation.payload),
     );
   }
 

@@ -437,10 +437,10 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final store = StateStore(filePath: p.join(directory.path, 'data.json'));
     await File(p.join(directory.path, 'sync-device-id'))
-        .writeAsString('device-local');
+        .writeAsString(' Device Local ');
     final beforeState = AppState(
       sync: _configuredSyncSettings()
-        ..operationDeviceSequences = {'device-local': 4},
+        ..operationDeviceSequences = {' Device Local ': 4},
       papers: [
         PaperData(
           id: 'note',
@@ -452,7 +452,7 @@ void main() {
     );
     final afterState = AppState(
       sync: _configuredSyncSettings()
-        ..operationDeviceSequences = {'device-local': 4},
+        ..operationDeviceSequences = {' Device Local ': 4},
       papers: [
         PaperData(
           id: 'note',
@@ -642,7 +642,7 @@ void main() {
         sync: _configuredSyncSettings(),
       ),
       store: store,
-      deviceSequences: {'device-a': 1},
+      deviceSequences: {' Device A ': 1},
     );
 
     expect(result.appliedCount, 0);
@@ -688,7 +688,7 @@ void main() {
             password: 'pass',
             rootPath: 'repapertodo',
           ),
-          operationDeviceSequences: {'device-a': 1},
+          operationDeviceSequences: {' Device A ': 1},
         ),
       ),
       store: store,

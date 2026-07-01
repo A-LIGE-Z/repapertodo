@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../core/storage/state_store.dart';
+import 'sync_device_id.dart';
 
 class SyncDeviceIdStore {
   const SyncDeviceIdStore({required this.filePath});
@@ -14,8 +15,6 @@ class SyncDeviceIdStore {
     );
   }
 
-  static final _validDeviceId = RegExp(r'^[a-z0-9][a-z0-9_-]{7,63}$');
-
   final String filePath;
 
   Future<String> loadOrCreate() async {
@@ -23,6 +22,7 @@ class SyncDeviceIdStore {
     if (await file.exists()) {
       final stored = _normalize(await file.readAsString());
       if (stored != null) {
+        await file.writeAsString(stored);
         return stored;
       }
     }
@@ -34,7 +34,7 @@ class SyncDeviceIdStore {
   }
 
   String? _normalize(String value) {
-    final normalized = value.trim().toLowerCase();
-    return _validDeviceId.hasMatch(normalized) ? normalized : null;
+    final normalized = normalizeSyncDeviceId(value, fallback: '');
+    return normalized.isEmpty ? null : normalized;
   }
 }

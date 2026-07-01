@@ -515,7 +515,7 @@ void main() {
           payload: {'paperId': 'ignored'},
         ),
       ],
-      previousDeviceSequences: {'device-a': 1},
+      previousDeviceSequences: {' Device A ': 1},
     );
 
     expect(result.uploadedCount, 2);

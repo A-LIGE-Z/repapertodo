@@ -1,4 +1,5 @@
 import '../core/model/json_helpers.dart';
+import 'sync_device_id.dart';
 
 class SyncManifest {
   SyncManifest({
@@ -6,7 +7,7 @@ class SyncManifest {
     required this.updatedAtUtc,
     required this.latestSnapshotPath,
     Map<String, int>? deviceSequences,
-  }) : deviceSequences = deviceSequences ?? <String, int>{};
+  }) : deviceSequences = normalizeSyncDeviceSequences(deviceSequences);
 
   final int schemaVersion;
   final DateTime updatedAtUtc;
@@ -25,8 +26,9 @@ class SyncManifest {
     final rawSequences = json['deviceSequences'];
     return SyncManifest(
       schemaVersion: intValue(json['schemaVersion'], 1),
-      updatedAtUtc: DateTime.tryParse(stringValue(json['updatedAtUtc'], ''))?.toUtc() ??
-          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      updatedAtUtc:
+          DateTime.tryParse(stringValue(json['updatedAtUtc'], ''))?.toUtc() ??
+              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       latestSnapshotPath: stringValue(json['latestSnapshotPath'], ''),
       deviceSequences: {
         if (rawSequences is Map)
@@ -46,4 +48,3 @@ class SyncManifest {
     };
   }
 }
-

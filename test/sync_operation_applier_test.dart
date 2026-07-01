@@ -182,6 +182,7 @@ void main() {
       [
         _operation(
           sequence: 1,
+          deviceId: ' Device A ',
           kind: SyncOperationKind.upsertPaper,
           createdAtUtc: DateTime.utc(2026, 7, 1, 9, 5),
           payload: {
@@ -276,11 +277,13 @@ void main() {
         ),
         _operation(
           sequence: 2,
+          deviceId: ' Device A ',
           kind: SyncOperationKind.stateSnapshot,
           payload: {'snapshotPath': 'repapertodo/snapshots/snapshot.json'},
         ),
         _operation(
           sequence: 3,
+          deviceId: ' Device A ',
           kind: SyncOperationKind.upsertPaper,
           payload: {
             'paper': PaperData(
@@ -291,7 +294,7 @@ void main() {
           },
         ),
       ],
-      deviceSequences: {'device-a': 1},
+      deviceSequences: {' Device A ': 1},
     );
 
     expect(result.appliedCount, 2);
@@ -304,11 +307,12 @@ SyncOperation _operation({
   required int sequence,
   required SyncOperationKind kind,
   required Map<String, Object?> payload,
+  String deviceId = 'device-a',
   DateTime? createdAtUtc,
 }) {
   return SyncOperation(
-    id: 'device-a-$sequence',
-    deviceId: 'device-a',
+    id: '$deviceId-$sequence',
+    deviceId: deviceId,
     sequence: sequence,
     kind: kind,
     createdAtUtc: createdAtUtc ?? DateTime.utc(2026, 7, 1, 9, 0, sequence),

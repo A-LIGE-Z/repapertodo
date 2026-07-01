@@ -1,6 +1,7 @@
 import '../core/model/app_state.dart';
 import '../core/model/sync_settings.dart';
 import '../core/storage/state_store.dart';
+import 'sync_device_id.dart';
 import 'sync_device_id_store.dart';
 import 'sync_operation.dart';
 import 'sync_operation_applier.dart';
@@ -248,18 +249,23 @@ class AppSyncService {
       localState: localState,
       store: store,
     );
-    final previousSequences =
-        deviceSequences ?? localState.sync.operationDeviceSequences;
+    final previousSequences = normalizeSyncDeviceSequences(
+      deviceSequences ?? localState.sync.operationDeviceSequences,
+    );
     if (client == null) {
       return AppSyncOperationMergeResult(
         state: localState,
-        deviceSequences: Map<String, int>.from(previousSequences),
+        deviceSequences: previousSequences,
         appliedCount: 0,
       );
     }
 
     final records = (await client.listOperationLogs()).where((record) {
-      return record.sequence > (previousSequences[record.deviceId] ?? 0);
+      final deviceId = normalizeSyncDeviceId(record.deviceId, fallback: '');
+      if (deviceId.isEmpty) {
+        return false;
+      }
+      return record.sequence > (previousSequences[deviceId] ?? 0);
     });
     final operations = <SyncOperation>[];
     for (final record in records) {
@@ -290,7 +296,10 @@ class AppSyncService {
   }) async {
     beforeState.normalize();
     afterState.normalize();
-    final previousSequences = afterState.sync.operationDeviceSequences;
+    final previousSequences = normalizeSyncDeviceSequences(
+      afterState.sync.operationDeviceSequences,
+    );
+    afterState.sync.operationDeviceSequences = previousSequences;
     final context = await _configuredClientContextOrNull(
       localState: afterState,
       store: store,
@@ -298,7 +307,7 @@ class AppSyncService {
     if (context == null) {
       return AppSyncLocalOperationUploadResult(
         state: afterState,
-        deviceSequences: Map<String, int>.from(previousSequences),
+        deviceSequences: previousSequences,
         generatedCount: 0,
         uploadedCount: 0,
       );
@@ -314,7 +323,7 @@ class AppSyncService {
     if (operations.isEmpty) {
       return AppSyncLocalOperationUploadResult(
         state: afterState,
-        deviceSequences: Map<String, int>.from(previousSequences),
+        deviceSequences: previousSequences,
         generatedCount: 0,
         uploadedCount: 0,
       );
@@ -423,7 +432,9 @@ class AppSyncService {
     if (manifest == null) {
       return;
     }
-    state.sync.operationDeviceSequences = manifest.deviceSequences;
+    state.sync.operationDeviceSequences = normalizeSyncDeviceSequences(
+      manifest.deviceSequences,
+    );
     state.normalize();
   }
 

@@ -178,6 +178,31 @@ void main() {
     );
   });
 
+  test('normalizes device ids before building operations', () {
+    final before = AppState(
+      papers: [
+        PaperData(id: 'note', type: PaperTypes.note, content: 'Before'),
+      ],
+    );
+    final after = AppState(
+      papers: [
+        PaperData(id: 'note', type: PaperTypes.note, content: 'After'),
+      ],
+    );
+
+    final operations = builder.build(
+      before: before,
+      after: after,
+      deviceId: ' Device A ',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 13),
+    );
+
+    expect(operations, hasLength(1));
+    expect(operations.single.id, 'device-a-1');
+    expect(operations.single.deviceId, 'device-a');
+  });
+
   test('returns no operations for empty device ids or unchanged state', () {
     final state = AppState(
       papers: [

@@ -4,6 +4,7 @@ import '../core/model/app_state.dart';
 import '../core/model/json_helpers.dart';
 import '../core/model/paper_data.dart';
 import '../core/model/paper_item.dart';
+import 'sync_device_id.dart';
 import 'sync_operation.dart';
 
 class SyncOperationDiffBuilder {
@@ -16,7 +17,7 @@ class SyncOperationDiffBuilder {
     required int startSequence,
     DateTime? createdAtUtc,
   }) {
-    final normalizedDeviceId = deviceId.trim();
+    final normalizedDeviceId = normalizeSyncDeviceId(deviceId, fallback: '');
     if (normalizedDeviceId.isEmpty) {
       return const [];
     }

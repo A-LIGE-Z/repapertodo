@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../core/model/app_state.dart';
 import '../../core/model/sync_settings.dart';
 import '../../core/state/app_state_codec.dart';
+import '../sync_device_id.dart';
 import '../sync_manifest.dart';
 import '../sync_operation.dart';
 import 'webdav_client.dart';
@@ -177,7 +178,7 @@ class WebDavStateSyncService {
       utf8.encode(_codec.encode(state)),
     );
     final deviceSequences =
-        Map<String, int>.from(previousDeviceSequences ?? const {});
+        normalizeSyncDeviceSequences(previousDeviceSequences);
     final nextSequence = (deviceSequences[_deviceId] ?? 0) + 1;
     deviceSequences[_deviceId] = nextSequence;
     await _putSnapshotOperation(
@@ -317,7 +318,7 @@ class WebDavStateSyncService {
     Map<String, int>? previousDeviceSequences,
   }) async {
     final deviceSequences =
-        Map<String, int>.from(previousDeviceSequences ?? const {});
+        normalizeSyncDeviceSequences(previousDeviceSequences);
     final pendingOperations = operations
         .map(_normalizeOperationForUpload)
         .whereType<SyncOperation>()
@@ -398,9 +399,13 @@ class WebDavStateSyncService {
     if (sequence == null) {
       return null;
     }
+    final deviceId = normalizeSyncDeviceId(match.group(1)!, fallback: '');
+    if (deviceId.isEmpty) {
+      return null;
+    }
     return WebDavOperationLogRecord(
       path: path,
-      deviceId: match.group(1)!,
+      deviceId: deviceId,
       sequence: sequence,
       etag: entry.etag,
       contentLength: entry.contentLength,
@@ -582,19 +587,12 @@ String _normalizeRemotePath(String path) {
 }
 
 String _normalizeRemotePathSegment(String value) {
-  final normalized = _normalizeDeviceId(value);
+  final normalized = normalizeSyncDeviceId(value, fallback: '');
   return normalized.isEmpty ? 'local-device' : normalized;
 }
 
 String _normalizeDeviceId(String value) {
-  final normalized = value.trim().toLowerCase();
-  final cleaned = normalized.replaceAll(RegExp(r'[^a-z0-9_-]+'), '-');
-  final collapsed = cleaned.replaceAll(RegExp('-+'), '-');
-  final trimmed = collapsed.replaceAll(RegExp(r'^[-_]+|[-_]+$'), '');
-  if (trimmed.length < 8) {
-    return 'local-device';
-  }
-  return trimmed.length > 64 ? trimmed.substring(0, 64) : trimmed;
+  return normalizeSyncDeviceId(value);
 }
 
 String _formatSnapshotStamp(DateTime value) {
