@@ -315,7 +315,8 @@ void main() {
     );
   });
 
-  test('rejects manifest snapshots with parent-directory segments', () async {
+  test('rejects manifest snapshots with encoded parent-directory segments',
+      () async {
     final requests = <http.Request>[];
     final webDavClient = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
@@ -334,7 +335,7 @@ void main() {
                 schemaVersion: 1,
                 updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
                 latestSnapshotPath:
-                    'repapertodo/snapshots/../other/snapshot-20260630T110000000Z-other-device-seq-000000000004.json',
+                    'repapertodo/snapshots/%2e%2e/other/snapshot-20260630T110000000Z-other-device-seq-000000000004.json',
                 deviceSequences: {'other-device': 2},
               ).toJson(),
             ),
@@ -531,6 +532,20 @@ void main() {
       </D:prop>
     </D:propstat>
   </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/%2e%2e/other/snapshot-20260702T100000000Z-encoded-seq-000000000001.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"encoded"</D:getetag>
+        <D:getcontentlength>4096</D:getcontentlength>
+        <D:getlastmodified>Thu, 02 Jul 2026 10:00:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/bad%/snapshot-20260702T110000000Z-bad-seq-000000000001.json</D:href>
+    <D:propstat><D:prop /></D:propstat>
+  </D:response>
 </D:multistatus>
 ''',
             207,
@@ -625,6 +640,20 @@ void main() {
         <D:getlastmodified>Thu, 02 Jul 2026 09:00:00 GMT</D:getlastmodified>
       </D:prop>
     </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/%2e%2e/snapshots/encoded-device-000000000001.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"encoded-op"</D:getetag>
+        <D:getcontentlength>512</D:getcontentlength>
+        <D:getlastmodified>Thu, 02 Jul 2026 10:00:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/bad%/bad-device-000000000001.jsonl</D:href>
+    <D:propstat><D:prop /></D:propstat>
   </D:response>
 </D:multistatus>
 ''',
@@ -1084,6 +1113,18 @@ void main() {
       ),
       throwsA(isA<WebDavSyncConfigurationException>()),
     );
+    expect(
+      service.downloadSnapshot(
+        'repapertodo/snapshots/%2e%2e/other/snapshot-20260701T090000000Z-phone.json',
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+    expect(
+      service.downloadSnapshot(
+        'repapertodo/snapshots/bad%/snapshot-20260701T090000000Z-phone.json',
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
   });
 
   test('rejects operation log downloads outside the operation collection',
@@ -1104,6 +1145,18 @@ void main() {
     expect(
       service.downloadOperationLog(
         'repapertodo/ops/../snapshots/android-device-000000000001.jsonl',
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+    expect(
+      service.downloadOperationLog(
+        'repapertodo/ops/%2e%2e/snapshots/android-device-000000000001.jsonl',
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+    expect(
+      service.downloadOperationLog(
+        'repapertodo/ops/bad%/android-device-000000000001.jsonl',
       ),
       throwsA(isA<WebDavSyncConfigurationException>()),
     );

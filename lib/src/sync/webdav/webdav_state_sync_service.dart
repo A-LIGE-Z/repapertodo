@@ -446,7 +446,7 @@ class WebDavStateSyncService {
   }
 
   String _entryRemotePath(String href) {
-    var path = Uri.decodeComponent(href).replaceAll('\\', '/');
+    var path = _decodeRemotePath(href).replaceAll('\\', '/');
     if (path.endsWith('/')) {
       path = path.substring(0, path.length - 1);
     }
@@ -455,13 +455,13 @@ class WebDavStateSyncService {
       final marker = '/$root/';
       final markerIndex = path.indexOf(marker);
       if (markerIndex >= 0) {
-        return _normalizeRemotePath(path.substring(markerIndex + 1));
+        return _normalizeDecodedRemotePath(path.substring(markerIndex + 1));
       }
       if (path.startsWith(root)) {
-        return _normalizeRemotePath(path);
+        return _normalizeDecodedRemotePath(path);
       }
     }
-    return _normalizeRemotePath(path);
+    return _normalizeDecodedRemotePath(path);
   }
 
   String? _tryNormalizeEntryPath(
@@ -750,6 +750,24 @@ String _joinRemotePath(String base, String child) {
 }
 
 String _normalizeRemotePath(String path) {
+  return _normalizeDecodedRemotePath(_decodeRemotePath(path));
+}
+
+String _decodeRemotePath(String path) {
+  try {
+    return Uri.decodeComponent(path.trim());
+  } on ArgumentError {
+    throw const WebDavSyncConfigurationException(
+      'Remote path contains invalid percent encoding.',
+    );
+  } on FormatException {
+    throw const WebDavSyncConfigurationException(
+      'Remote path contains invalid percent encoding.',
+    );
+  }
+}
+
+String _normalizeDecodedRemotePath(String path) {
   final segments = <String>[];
   for (final segment in path.trim().replaceAll('\\', '/').split('/')) {
     final trimmed = segment.trim();
