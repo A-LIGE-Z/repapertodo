@@ -743,7 +743,7 @@ _OperationLogIdentity? _operationLogIdentityFromPath(String path) {
     return null;
   }
   final sequence = int.tryParse(match.group(2)!);
-  if (sequence == null) {
+  if (sequence == null || sequence <= 0) {
     return null;
   }
   final deviceId = normalizeSyncDeviceId(match.group(1)!, fallback: '');

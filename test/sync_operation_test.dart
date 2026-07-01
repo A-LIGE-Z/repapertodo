@@ -57,6 +57,29 @@ void main() {
     }
   });
 
+  test('rejects invalid operation sequences', () {
+    for (final sequence in const <Object?>[null, 0, -1, 1.2, '1']) {
+      expect(
+        () => SyncOperation.fromJson({
+          'id': 'invalid-sequence',
+          'deviceId': 'device-a',
+          'sequence': sequence,
+          'kind': 'updateSettings',
+          'createdAtUtc': '2026-07-01T09:00:00Z',
+          'payload': const <String, Object?>{},
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('sequence must be a positive integer'),
+          ),
+        ),
+        reason: '$sequence',
+      );
+    }
+  });
+
   test('rejects invalid operation timestamps', () {
     for (final createdAtUtc in const ['', 'not-a-date']) {
       expect(

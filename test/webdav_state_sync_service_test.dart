@@ -1335,6 +1335,12 @@ void main() {
       ),
       throwsA(isA<WebDavSyncConfigurationException>()),
     );
+    expect(
+      service.downloadOperationLog(
+        'repapertodo/ops/android-device-000000000000.jsonl',
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
   });
 
   test('creates a sync service from Jianguoyun WebDAV settings', () async {

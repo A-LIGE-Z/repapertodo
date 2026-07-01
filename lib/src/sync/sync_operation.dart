@@ -40,7 +40,7 @@ class SyncOperation {
     return SyncOperation(
       id: stringValue(json['id'], ''),
       deviceId: deviceId,
-      sequence: intValue(json['sequence'], 0),
+      sequence: _sequenceFromWire(json['sequence']),
       kind: kind,
       createdAtUtc: createdAtUtc,
       payload: json['payload'] is Map
@@ -68,6 +68,18 @@ SyncOperationKind _kindFromWire(String value) {
     }
   }
   throw FormatException('Unknown sync operation kind: $value');
+}
+
+int _sequenceFromWire(Object? value) {
+  if (value is num && value.isFinite && value % 1 == 0) {
+    final sequence = value.toInt();
+    if (sequence > 0) {
+      return sequence;
+    }
+  }
+  throw FormatException(
+    'Sync operation sequence must be a positive integer: $value',
+  );
 }
 
 DateTime _createdAtUtcFromWire(String value) {
