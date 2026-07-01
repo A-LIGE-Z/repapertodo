@@ -12,6 +12,7 @@ enum AppSyncStatus {
   configurationMissing,
   uploaded,
   downloaded,
+  conflict,
 }
 
 class AppSyncResult {
@@ -81,6 +82,11 @@ class AppSyncService {
           status: AppSyncStatus.downloaded,
           state: remoteState,
           message: 'Remote data downloaded.',
+        );
+      case WebDavStateSyncStatus.conflict:
+        return const AppSyncResult(
+          status: AppSyncStatus.conflict,
+          message: 'Remote data changed during sync. Pull again before upload.',
         );
     }
   }

@@ -12,6 +12,7 @@ enum WebDavStateSyncStatus {
   uploaded,
   downloaded,
   remoteMissing,
+  conflict,
 }
 
 class WebDavStateSyncPaths {
@@ -87,6 +88,8 @@ class WebDavStateSyncService {
   Future<WebDavStateSyncResult> push(
     AppState state, {
     DateTime? updatedAtUtc,
+    String? expectedManifestEtag,
+    bool manifestKnownMissing = false,
   }) async {
     final stamp = (updatedAtUtc ?? DateTime.now().toUtc()).toUtc();
     await _ensureRootCollection();
@@ -99,10 +102,17 @@ class WebDavStateSyncService {
       updatedAtUtc: stamp,
       latestSnapshotPath: _paths.snapshotPath,
     );
-    await _client.putBytes(
-      _paths.manifestPath,
-      utf8.encode(jsonEncode(manifest.toJson())),
+    final manifestUploaded = await _putManifest(
+      manifest,
+      expectedManifestEtag: expectedManifestEtag,
+      createOnly: manifestKnownMissing,
     );
+    if (!manifestUploaded) {
+      return WebDavStateSyncResult(
+        status: WebDavStateSyncStatus.conflict,
+        manifest: manifest,
+      );
+    }
     return WebDavStateSyncResult(
       status: WebDavStateSyncStatus.uploaded,
       manifest: manifest,
@@ -122,9 +132,14 @@ class WebDavStateSyncService {
     required AppState localState,
     DateTime? localUpdatedAtUtc,
   }) async {
-    final manifest = await _loadManifest();
+    final remoteManifest = await _loadManifestWithMetadata();
+    final manifest = remoteManifest?.manifest;
     if (manifest == null || manifest.latestSnapshotPath.isEmpty) {
-      return push(localState, updatedAtUtc: localUpdatedAtUtc);
+      return push(
+        localState,
+        updatedAtUtc: localUpdatedAtUtc,
+        manifestKnownMissing: remoteManifest == null,
+      );
     }
 
     final localStamp = localUpdatedAtUtc?.toUtc() ??
@@ -133,15 +148,27 @@ class WebDavStateSyncService {
       return _downloadSnapshot(manifest);
     }
 
-    return push(localState, updatedAtUtc: localStamp);
+    return push(
+      localState,
+      updatedAtUtc: localStamp,
+      expectedManifestEtag: remoteManifest?.etag,
+    );
   }
 
   Future<SyncManifest?> _loadManifest() async {
-    if (!await _client.exists(_paths.manifestPath)) {
+    return (await _loadManifestWithMetadata())?.manifest;
+  }
+
+  Future<_RemoteManifest?> _loadManifestWithMetadata() async {
+    final metadata = await _client.metadata(_paths.manifestPath);
+    if (metadata == null) {
       return null;
     }
     final bytes = await _client.getBytes(_paths.manifestPath);
-    return SyncManifest.fromJson(decodeJsonObject(utf8.decode(bytes)));
+    return _RemoteManifest(
+      manifest: SyncManifest.fromJson(decodeJsonObject(utf8.decode(bytes))),
+      etag: metadata.etag,
+    );
   }
 
   Future<WebDavStateSyncResult> _downloadSnapshot(SyncManifest manifest) async {
@@ -160,6 +187,37 @@ class WebDavStateSyncService {
     }
     await _client.makeCollection(root);
   }
+
+  Future<bool> _putManifest(
+    SyncManifest manifest, {
+    String? expectedManifestEtag,
+    bool createOnly = false,
+  }) async {
+    try {
+      await _client.putBytes(
+        _paths.manifestPath,
+        utf8.encode(jsonEncode(manifest.toJson())),
+        ifMatch: expectedManifestEtag,
+        createOnly: createOnly,
+      );
+      return true;
+    } on WebDavException catch (error) {
+      if (error.statusCode == 412) {
+        return false;
+      }
+      rethrow;
+    }
+  }
+}
+
+class _RemoteManifest {
+  const _RemoteManifest({
+    required this.manifest,
+    this.etag,
+  });
+
+  final SyncManifest manifest;
+  final String? etag;
 }
 
 String _joinRemotePath(String base, String child) {

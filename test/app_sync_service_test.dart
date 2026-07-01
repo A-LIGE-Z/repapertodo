@@ -87,6 +87,35 @@ void main() {
     expect(result.state?.papers.single.title, 'Remote');
     expect((await store.load()).papers.single.title, 'Remote');
   });
+
+  test('reports WebDAV conflicts without saving local state', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('repapertodo_app_sync_conflict_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return const WebDavStateSyncResult(
+              status: WebDavStateSyncStatus.conflict);
+        },
+      ),
+    );
+
+    final result = await service.syncNow(
+      localState: AppState(
+        papers: [
+          PaperData(id: 'paper-local', type: PaperTypes.todo, title: 'Local'),
+        ],
+        sync: _configuredSyncSettings(),
+      ),
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.status, AppSyncStatus.conflict);
+    expect(await File(store.filePath).exists(), isFalse);
+  });
 }
 
 SyncSettings _configuredSyncSettings() {

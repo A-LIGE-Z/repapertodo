@@ -35,6 +35,18 @@ class WebDavEntry {
   final bool isCollection;
 }
 
+class WebDavResourceMetadata {
+  const WebDavResourceMetadata({
+    this.etag,
+    this.contentLength,
+    this.lastModified,
+  });
+
+  final String? etag;
+  final int? contentLength;
+  final DateTime? lastModified;
+}
+
 class WebDavClient {
   WebDavClient({
     required Uri baseUri,
@@ -49,12 +61,22 @@ class WebDavClient {
   final http.Client _httpClient;
 
   Future<bool> exists(String path) async {
+    return await metadata(path) != null;
+  }
+
+  Future<WebDavResourceMetadata?> metadata(String path) async {
     final response = await _send('HEAD', path);
     if (response.statusCode == 404) {
-      return false;
+      return null;
     }
     _throwIfUnexpected(response, expected: {200, 204});
-    return true;
+    return WebDavResourceMetadata(
+      etag: response.headers['etag'],
+      contentLength: int.tryParse(response.headers['content-length'] ?? ''),
+      lastModified: response.headers['last-modified'] == null
+          ? null
+          : _tryParseHttpDate(response.headers['last-modified']!),
+    );
   }
 
   Future<List<int>> getBytes(String path) async {
@@ -198,8 +220,10 @@ WebDavEntry _parseEntry(XmlElement element) {
     href: href,
     etag: etag,
     contentLength: lengthText == null ? null : int.tryParse(lengthText),
-    lastModified: lastModifiedText == null ? null : _tryParseHttpDate(lastModifiedText),
-    isCollection: _descendantElements(element).any((child) => child.name.local == 'collection'),
+    lastModified:
+        lastModifiedText == null ? null : _tryParseHttpDate(lastModifiedText),
+    isCollection: _descendantElements(element)
+        .any((child) => child.name.local == 'collection'),
   );
 }
 
@@ -212,7 +236,8 @@ DateTime? _tryParseHttpDate(String value) {
 }
 
 String? _firstElementText(XmlElement element, String localName) {
-  final matches = _descendantElements(element).where((child) => child.name.local == localName);
+  final matches = _descendantElements(element)
+      .where((child) => child.name.local == localName);
   if (matches.isEmpty) {
     return null;
   }

@@ -835,6 +835,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
         'Complete WebDAV sync settings first.',
       AppSyncStatus.uploaded => 'Local data uploaded.',
       AppSyncStatus.downloaded => 'Remote data downloaded.',
+      AppSyncStatus.conflict =>
+        'Remote data changed during sync. Pull again before upload.',
     };
   }
 

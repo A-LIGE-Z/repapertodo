@@ -45,8 +45,8 @@ void main() {
     final papers = snapshot['papers'] as List<Object?>;
     expect((papers.single as Map<String, Object?>)['title'], 'Sync me');
 
-    final manifestRequest = requests
-        .firstWhere((request) => request.url.path.endsWith('/manifest.json'));
+    final manifestRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' && request.url.path.endsWith('/manifest.json'));
     final manifest = jsonDecode(utf8.decode(manifestRequest.bodyBytes))
         as Map<String, Object?>;
     expect(manifest['latestSnapshotPath'], 'repapertodo/state.json');
@@ -102,6 +102,92 @@ void main() {
     expect(result.manifest?.updatedAtUtc, DateTime.utc(2026, 6, 30, 11));
     expect(result.state?.papers.single.title, 'Remote');
     expect(result.state?.papers.single.content, 'From WebDAV');
+  });
+
+  test('sync creates the manifest only when it is still missing', () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 404);
+        }
+        return switch (request.method) {
+          'MKCOL' => http.Response('', 201),
+          'PUT' => http.Response('', 201),
+          _ => http.Response('unexpected ${request.method}', 500),
+        };
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final result = await service.sync(
+      localState: AppState(),
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.status, WebDavStateSyncStatus.uploaded);
+    final manifestRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' && request.url.path.endsWith('/manifest.json'));
+    expect(manifestRequest.headers['if-none-match'], '*');
+  });
+
+  test('sync reports a conflict when manifest conditional write fails',
+      () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200, headers: {'etag': '"manifest-v1"'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode(
+              SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
+                latestSnapshotPath: 'repapertodo/state.json',
+              ).toJson(),
+            ),
+            200,
+          );
+        }
+        if (request.method == 'MKCOL') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.endsWith('/state.json')) {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.endsWith('/manifest.json')) {
+          expect(request.headers['if-match'], '"manifest-v1"');
+          return http.Response('precondition failed', 412);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final result = await service.sync(
+      localState: AppState(
+        papers: [
+          PaperData(id: 'paper-local', type: PaperTypes.todo, title: 'Local'),
+        ],
+      ),
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.status, WebDavStateSyncStatus.conflict);
   });
 
   test('creates a sync service from Jianguoyun WebDAV settings', () async {
