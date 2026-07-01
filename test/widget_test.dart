@@ -756,6 +756,84 @@ void main() {
     expect(find.text('Snapshot restored.'), findsOneWidget);
   });
 
+  testWidgets('manual sync merges remote operation logs from the toolbar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'local-note',
+            type: PaperTypes.note,
+            title: 'Local',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-manual-sync.json');
+    final snapshotState = AppState(
+      papers: [
+        PaperData(
+          id: 'remote-note',
+          type: PaperTypes.note,
+          title: 'Remote',
+          content: 'Snapshot body',
+        ),
+      ],
+    );
+    final mergedState = AppState(
+      papers: [
+        PaperData(
+          id: 'remote-note',
+          type: PaperTypes.note,
+          title: 'Remote',
+          content: 'Merged body',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: snapshotState,
+          message: 'Remote data downloaded.',
+        ),
+        state: mergedState,
+        operationMergeResult: AppSyncOperationMergeResult(
+          state: mergedState,
+          deviceSequences: const {'device-a': 1},
+          appliedCount: 1,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    expect(controller.state.papers.single.title, 'Local');
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Remote');
+    expect(controller.state.papers.single.content, 'Merged body');
+    expect(
+      find.text('Remote data downloaded. Merged 1 remote change.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('opens note markdown externally', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -2019,6 +2097,23 @@ class _RecoverySnapshotSyncService extends AppSyncService {
       message: 'Snapshot restored.',
       snapshotPath: snapshotPath,
     );
+  }
+}
+
+class _ManualSyncService extends AppSyncService {
+  _ManualSyncService({required this.result});
+
+  final AppSyncRunResult result;
+  var calls = 0;
+
+  @override
+  Future<AppSyncRunResult> syncAndMergeNow({
+    required AppState localState,
+    required StateStore store,
+    DateTime? localUpdatedAtUtc,
+  }) async {
+    calls += 1;
+    return result;
   }
 }
 

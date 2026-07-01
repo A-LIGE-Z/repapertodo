@@ -608,20 +608,18 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   Future<void> _syncNow() async {
     setState(() => _isSyncing = true);
     try {
-      final result = await widget.syncService.syncNow(
+      final result = await widget.syncService.syncAndMergeNow(
         localState: controller.state,
         store: widget.store,
       );
-      if (result.state != null) {
-        setState(() {
-          controller.replaceState(result.state!);
-        });
-      }
+      setState(() {
+        controller.replaceState(result.state);
+      });
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_syncMessage(result))),
+        SnackBar(content: Text(_syncRunMessage(result))),
       );
     } catch (error) {
       if (!mounted) {
@@ -928,6 +926,16 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       AppSyncStatus.conflict =>
         'Remote data changed during sync. Pull again before upload.',
     };
+  }
+
+  String _syncRunMessage(AppSyncRunResult result) {
+    final baseMessage = _syncMessage(result.syncResult);
+    final appliedCount = result.operationAppliedCount;
+    if (appliedCount == 0) {
+      return baseMessage;
+    }
+    final changeLabel = appliedCount == 1 ? 'change' : 'changes';
+    return '$baseMessage Merged $appliedCount remote $changeLabel.';
   }
 
   Future<bool> _confirmDeletePaper(PaperData paper) async {
