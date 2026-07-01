@@ -431,6 +431,92 @@ void main() {
     expect(stored.sync.operationDeviceSequences, {'device-a': 2});
   });
 
+  test('uploads local operation diffs and saves sequence progress', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_upload_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await File(p.join(directory.path, 'sync-device-id'))
+        .writeAsString('device-local');
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'Before',
+        ),
+      ],
+    );
+    final afterState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'After',
+        ),
+      ],
+    );
+    var forwardedDeviceId = '';
+    Map<String, int>? previousSequences;
+    final uploadedOperations = <SyncOperation>[];
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) {
+        forwardedDeviceId = deviceId ?? '';
+        return _FakeWebDavStateSyncService(
+          onUploadOperationLogs: (
+            operations, {
+            previousDeviceSequences,
+          }) async {
+            previousSequences = previousDeviceSequences;
+            uploadedOperations.addAll(operations);
+            return WebDavOperationLogUploadResult(
+              deviceSequences: {
+                ...?previousDeviceSequences,
+                forwardedDeviceId: operations.last.sequence,
+              },
+              uploadedCount: operations.length,
+            );
+          },
+        );
+      },
+    );
+
+    final result = await service.uploadLocalOperations(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(forwardedDeviceId, 'device-local');
+    expect(previousSequences, {'device-local': 4});
+    expect(uploadedOperations, hasLength(1));
+    expect(uploadedOperations.single.id, 'device-local-5');
+    expect(uploadedOperations.single.deviceId, 'device-local');
+    expect(uploadedOperations.single.sequence, 5);
+    expect(uploadedOperations.single.kind, SyncOperationKind.updateNoteContent);
+    expect(uploadedOperations.single.payload, {
+      'paperId': 'note',
+      'content': 'After',
+    });
+    expect(result.generatedCount, 1);
+    expect(result.uploadedCount, 1);
+    expect(result.deviceSequences, {'device-local': 5});
+    expect(result.state.sync.operationDeviceSequences, {'device-local': 5});
+    expect((await store.load()).sync.operationDeviceSequences, {
+      'device-local': 5,
+    });
+  });
+
   test('merge skips operation logs covered by explicit device sequences',
       () async {
     final directory = await Directory.systemTemp
@@ -629,6 +715,12 @@ typedef _FakeDownloadOperationLog = Future<List<SyncOperation>> Function(
   String operationLogPath,
 );
 
+typedef _FakeUploadOperationLogs = Future<WebDavOperationLogUploadResult>
+    Function(
+  Iterable<SyncOperation> operations, {
+  Map<String, int>? previousDeviceSequences,
+});
+
 class _FakeWebDavStateSyncService extends WebDavStateSyncService {
   _FakeWebDavStateSyncService({
     _FakeSync? onSync,
@@ -636,11 +728,13 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
     _FakeDownloadSnapshot? onDownloadSnapshot,
     _FakeListOperationLogs? onListOperationLogs,
     _FakeDownloadOperationLog? onDownloadOperationLog,
+    _FakeUploadOperationLogs? onUploadOperationLogs,
   })  : _onSync = onSync,
         _onListSnapshots = onListSnapshots,
         _onDownloadSnapshot = onDownloadSnapshot,
         _onListOperationLogs = onListOperationLogs,
         _onDownloadOperationLog = onDownloadOperationLog,
+        _onUploadOperationLogs = onUploadOperationLogs,
         super(
           client: WebDavClient(
             baseUri: Uri.parse('https://unused.example.test/'),
@@ -654,6 +748,7 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
   final _FakeDownloadSnapshot? _onDownloadSnapshot;
   final _FakeListOperationLogs? _onListOperationLogs;
   final _FakeDownloadOperationLog? _onDownloadOperationLog;
+  final _FakeUploadOperationLogs? _onUploadOperationLogs;
 
   @override
   Future<WebDavStateSyncResult> sync({
@@ -704,5 +799,20 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
       throw StateError('Unexpected downloadOperationLog call.');
     }
     return onDownloadOperationLog(operationLogPath);
+  }
+
+  @override
+  Future<WebDavOperationLogUploadResult> uploadOperationLogs(
+    Iterable<SyncOperation> operations, {
+    Map<String, int>? previousDeviceSequences,
+  }) {
+    final onUploadOperationLogs = _onUploadOperationLogs;
+    if (onUploadOperationLogs == null) {
+      throw StateError('Unexpected uploadOperationLogs call.');
+    }
+    return onUploadOperationLogs(
+      operations,
+      previousDeviceSequences: previousDeviceSequences,
+    );
   }
 }

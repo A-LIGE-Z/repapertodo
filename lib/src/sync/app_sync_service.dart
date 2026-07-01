@@ -4,6 +4,7 @@ import '../core/storage/state_store.dart';
 import 'sync_device_id_store.dart';
 import 'sync_operation.dart';
 import 'sync_operation_applier.dart';
+import 'sync_operation_diff.dart';
 import 'webdav/webdav_state_sync_service.dart';
 
 typedef WebDavStateSyncServiceFactory = WebDavStateSyncService Function(
@@ -59,18 +60,36 @@ class AppSyncRunResult {
   int get operationAppliedCount => operationMergeResult?.appliedCount ?? 0;
 }
 
+class AppSyncLocalOperationUploadResult {
+  const AppSyncLocalOperationUploadResult({
+    required this.state,
+    required this.deviceSequences,
+    required this.generatedCount,
+    required this.uploadedCount,
+  });
+
+  final AppState state;
+  final Map<String, int> deviceSequences;
+  final int generatedCount;
+  final int uploadedCount;
+}
+
 class AppSyncService {
   AppSyncService({
     WebDavStateSyncServiceFactory? webDavFactory,
     SyncDeviceIdStore? deviceIdStore,
     SyncOperationApplier operationApplier = const SyncOperationApplier(),
+    SyncOperationDiffBuilder operationDiffBuilder =
+        const SyncOperationDiffBuilder(),
   })  : _webDavFactory = webDavFactory ?? WebDavStateSyncService.fromSettings,
         _deviceIdStore = deviceIdStore,
-        _operationApplier = operationApplier;
+        _operationApplier = operationApplier,
+        _operationDiffBuilder = operationDiffBuilder;
 
   final WebDavStateSyncServiceFactory _webDavFactory;
   final SyncDeviceIdStore? _deviceIdStore;
   final SyncOperationApplier _operationApplier;
+  final SyncOperationDiffBuilder _operationDiffBuilder;
 
   Future<AppSyncResult> syncNow({
     required AppState localState,
@@ -263,6 +282,61 @@ class AppSyncService {
     );
   }
 
+  Future<AppSyncLocalOperationUploadResult> uploadLocalOperations({
+    required AppState beforeState,
+    required AppState afterState,
+    required StateStore store,
+    DateTime? createdAtUtc,
+  }) async {
+    beforeState.normalize();
+    afterState.normalize();
+    final previousSequences = afterState.sync.operationDeviceSequences;
+    final context = await _configuredClientContextOrNull(
+      localState: afterState,
+      store: store,
+    );
+    if (context == null) {
+      return AppSyncLocalOperationUploadResult(
+        state: afterState,
+        deviceSequences: Map<String, int>.from(previousSequences),
+        generatedCount: 0,
+        uploadedCount: 0,
+      );
+    }
+
+    final operations = _operationDiffBuilder.build(
+      before: beforeState,
+      after: afterState,
+      deviceId: context.deviceId,
+      startSequence: previousSequences[context.deviceId] ?? 0,
+      createdAtUtc: createdAtUtc,
+    );
+    if (operations.isEmpty) {
+      return AppSyncLocalOperationUploadResult(
+        state: afterState,
+        deviceSequences: Map<String, int>.from(previousSequences),
+        generatedCount: 0,
+        uploadedCount: 0,
+      );
+    }
+
+    final uploadResult = await context.client.uploadOperationLogs(
+      operations,
+      previousDeviceSequences: previousSequences,
+    );
+    afterState.sync.operationDeviceSequences = uploadResult.deviceSequences;
+    afterState.normalize();
+    if (uploadResult.uploadedCount > 0) {
+      await store.save(afterState);
+    }
+    return AppSyncLocalOperationUploadResult(
+      state: afterState,
+      deviceSequences: uploadResult.deviceSequences,
+      generatedCount: operations.length,
+      uploadedCount: uploadResult.uploadedCount,
+    );
+  }
+
   Future<AppSyncResult> restoreRecoverySnapshot({
     required AppState localState,
     required StateStore store,
@@ -307,6 +381,17 @@ class AppSyncService {
     required AppState localState,
     required StateStore store,
   }) async {
+    return (await _configuredClientContextOrNull(
+      localState: localState,
+      store: store,
+    ))
+        ?.client;
+  }
+
+  Future<_ConfiguredWebDavClient?> _configuredClientContextOrNull({
+    required AppState localState,
+    required StateStore store,
+  }) async {
     localState.normalize();
     final settings = localState.sync;
     if (!settings.enabled ||
@@ -317,8 +402,11 @@ class AppSyncService {
     final deviceId =
         await (_deviceIdStore ?? SyncDeviceIdStore.forStateStore(store))
             .loadOrCreate();
-    return _webDavFactory(
-      settings.webDav.copy(),
+    return _ConfiguredWebDavClient(
+      client: _webDavFactory(
+        settings.webDav.copy(),
+        deviceId: deviceId,
+      ),
       deviceId: deviceId,
     );
   }
@@ -334,4 +422,14 @@ class AppSyncService {
     state.sync.operationDeviceSequences = manifest.deviceSequences;
     state.normalize();
   }
+}
+
+class _ConfiguredWebDavClient {
+  const _ConfiguredWebDavClient({
+    required this.client,
+    required this.deviceId,
+  });
+
+  final WebDavStateSyncService client;
+  final String deviceId;
 }
