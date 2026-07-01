@@ -1601,28 +1601,31 @@ class _NoteEditorState extends State<_NoteEditor> {
       children: [
         _markdownToolbar(context),
         const SizedBox(height: 8),
-        TextFormField(
-          key: ValueKey('${widget.paper.id}-content'),
-          controller: _contentController,
-          focusNode: _contentFocusNode,
-          minLines: minLines,
-          maxLines: maxLines,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'Write a note...',
+        Focus(
+          onKeyEvent: _handleMarkdownKeyEvent,
+          child: TextFormField(
+            key: ValueKey('${widget.paper.id}-content'),
+            controller: _contentController,
+            focusNode: _contentFocusNode,
+            minLines: minLines,
+            maxLines: maxLines,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              hintText: 'Write a note...',
+            ),
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.apply(
+                  fontSizeFactor: widget.textZoom,
+                )
+                .copyWith(height: widget.lineSpacing),
+            inputFormatters: const [
+              _MarkdownPasteTextInputFormatter(),
+              _MarkdownListContinuationTextInputFormatter(),
+            ],
+            onChanged: _commitContent,
           ),
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.apply(
-                fontSizeFactor: widget.textZoom,
-              )
-              .copyWith(height: widget.lineSpacing),
-          inputFormatters: const [
-            _MarkdownPasteTextInputFormatter(),
-            _MarkdownListContinuationTextInputFormatter(),
-          ],
-          onChanged: _commitContent,
         ),
       ],
     );
@@ -1634,18 +1637,14 @@ class _NoteEditorState extends State<_NoteEditor> {
       runSpacing: 4,
       children: [
         _formatButton(
-          tooltip: 'Bold',
+          tooltip: 'Bold (Ctrl+B)',
           icon: Icons.format_bold,
-          onPressed: () => _applyMarkdownFormat(
-            (value) => MarkdownFormatting.wrapSelection(value, '**', '**'),
-          ),
+          onPressed: _formatBold,
         ),
         _formatButton(
-          tooltip: 'Italic',
+          tooltip: 'Italic (Ctrl+I)',
           icon: Icons.format_italic,
-          onPressed: () => _applyMarkdownFormat(
-            (value) => MarkdownFormatting.wrapSelection(value, '*', '*'),
-          ),
+          onPressed: _formatItalic,
         ),
         _formatButton(
           tooltip: 'Strikethrough',
@@ -1687,11 +1686,9 @@ class _NoteEditorState extends State<_NoteEditor> {
           ),
         ),
         _formatButton(
-          tooltip: 'Insert link',
+          tooltip: 'Insert link (Ctrl+K)',
           icon: Icons.link,
-          onPressed: () => _applyMarkdownFormat(
-            MarkdownFormatting.insertMarkdownLink,
-          ),
+          onPressed: _insertMarkdownLink,
         ),
       ],
     );
@@ -1707,6 +1704,41 @@ class _NoteEditorState extends State<_NoteEditor> {
       icon: Icon(icon),
       onPressed: onPressed,
     );
+  }
+
+  void _formatBold() {
+    _applyMarkdownFormat(
+      (value) => MarkdownFormatting.wrapSelection(value, '**', '**'),
+    );
+  }
+
+  void _formatItalic() {
+    _applyMarkdownFormat(
+      (value) => MarkdownFormatting.wrapSelection(value, '*', '*'),
+    );
+  }
+
+  void _insertMarkdownLink() {
+    _applyMarkdownFormat(MarkdownFormatting.insertMarkdownLink);
+  }
+
+  KeyEventResult _handleMarkdownKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyB) {
+      _formatBold();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyI) {
+      _formatItalic();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyK) {
+      _insertMarkdownLink();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _applyMarkdownFormat(

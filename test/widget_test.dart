@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/src/app.dart';
 import 'package:repapertodo/src/app_controller.dart';
@@ -532,7 +533,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byTooltip('Insert link'));
+    await tester.tap(find.byTooltip('Insert link (Ctrl+K)'));
     await tester.pump();
 
     expect(controller.state.papers.single.content, 'Body[link](https://)');
@@ -541,6 +542,50 @@ void main() {
     await tester.pump();
 
     expect(controller.state.papers.single.content, '# Body[link](https://)');
+  });
+
+  testWidgets('uses markdown keyboard shortcuts in note editor',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'markdown-shortcut-note',
+            type: PaperTypes.note,
+            title: 'Markdown shortcuts',
+            content: 'Body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-markdown-shortcuts.json');
+    final field = find.byKey(const ValueKey('markdown-shortcut-note-content'));
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.enterText(field, 'Body');
+    await tester.pump();
+    await _pressControlShortcut(tester, LogicalKeyboardKey.keyB);
+    await tester.pump();
+
+    expect(controller.state.papers.single.content, 'Body****');
+
+    await tester.enterText(field, 'Body');
+    await tester.pump();
+    await _pressControlShortcut(tester, LogicalKeyboardKey.keyK);
+    await tester.pump();
+
+    expect(controller.state.papers.single.content, 'Body[link](https://)');
   });
 
   testWidgets('saves custom theme color', (tester) async {
@@ -1809,6 +1854,16 @@ void main() {
     expect(find.text('Loose note'), findsOneWidget);
     expect(find.text('Still visible on the board.'), findsWidgets);
   });
+}
+
+Future<void> _pressControlShortcut(
+  WidgetTester tester,
+  LogicalKeyboardKey key,
+) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyDownEvent(key);
+  await tester.sendKeyUpEvent(key);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
 }
 
 class _RecordingPlatformServices implements PlatformServices {
