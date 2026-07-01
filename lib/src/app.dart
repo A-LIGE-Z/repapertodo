@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:path/path.dart' as p;
 
@@ -12,6 +13,7 @@ import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/model/paper_item.dart';
 import 'core/model/paper_titles.dart';
+import 'core/model/todo_paste.dart';
 import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
 import 'core/startup/startup_command.dart';
@@ -2498,6 +2500,8 @@ class _TodoEditor extends StatefulWidget {
 }
 
 class _TodoEditorState extends State<_TodoEditor> {
+  var _textFieldRevision = 0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -2746,28 +2750,62 @@ class _TodoEditorState extends State<_TodoEditor> {
     TextStyle? itemTextStyle,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
-    return TextFormField(
+    return KeyedSubtree(
       key: ValueKey('${widget.paper.id}-${item.id}-text'),
-      initialValue: item.text,
-      textInputAction: TextInputAction.next,
-      decoration: InputDecoration(
-        border: item.todoColumnCount > 1
-            ? const OutlineInputBorder()
-            : InputBorder.none,
-        labelText: item.todoColumnCount > 1 ? 'Column 1' : null,
-        hintText: 'New item',
-        isDense: true,
+      child: TextFormField(
+        key: ValueKey(
+          '${widget.paper.id}-${item.id}-text-field-$_textFieldRevision',
+        ),
+        initialValue: item.text,
+        keyboardType: TextInputType.multiline,
+        minLines: 1,
+        maxLines: null,
+        textInputAction: TextInputAction.next,
+        decoration: InputDecoration(
+          border: item.todoColumnCount > 1
+              ? const OutlineInputBorder()
+              : InputBorder.none,
+          labelText: item.todoColumnCount > 1 ? 'Column 1' : null,
+          hintText: 'New item',
+          isDense: true,
+        ),
+        style: itemTextStyle?.copyWith(
+          color: item.done ? colorScheme.outline : colorScheme.onSurface,
+          decoration: item.done ? TextDecoration.lineThrough : null,
+        ),
+        inputFormatters: [
+          _TodoPasteTextInputFormatter(
+            onPaste: (value) => _handleMultiLinePaste(item, value),
+          ),
+        ],
+        onChanged: (value) {
+          if (_handleMultiLinePaste(item, value)) {
+            return;
+          }
+          item.text = value;
+          unawaited(widget.onChanged());
+        },
+        onFieldSubmitted: (_) => _addItem(),
       ),
-      style: itemTextStyle?.copyWith(
-        color: item.done ? colorScheme.outline : colorScheme.onSurface,
-        decoration: item.done ? TextDecoration.lineThrough : null,
-      ),
-      onChanged: (value) {
-        item.text = value;
-        unawaited(widget.onChanged());
-      },
-      onFieldSubmitted: (_) => _addItem(),
     );
+  }
+
+  bool _handleMultiLinePaste(PaperItem item, String value) {
+    if (!value.contains('\n') && !value.contains('\r')) {
+      return false;
+    }
+    final lines = TodoPasteItems.parseLines(value);
+    if (lines.length <= 1) {
+      return false;
+    }
+    setState(() {
+      item.text = lines.first;
+      _addItemsAfter(item, lines.skip(1));
+      widget.paper.normalize();
+      _textFieldRevision++;
+    });
+    unawaited(widget.onChanged());
+    return true;
   }
 
   Widget _extraColumnField(
@@ -2861,6 +2899,33 @@ class _TodoEditorState extends State<_TodoEditor> {
       widget.paper.normalize();
     });
     unawaited(widget.onChanged());
+  }
+
+  void _addItemsAfter(PaperItem item, Iterable<String> lines) {
+    final insertIndex = widget.paper.items.indexWhere(
+      (candidate) => candidate.id == item.id,
+    );
+    if (insertIndex < 0) {
+      return;
+    }
+    final inheritedColumnCount = item.todoColumnCount;
+    final inheritedColumnWidths =
+        item.todoColumnWidths.length == inheritedColumnCount
+            ? item.todoColumnWidths
+            : <double>[];
+    final idSeed = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+    var lineIndex = 0;
+    final newItems = [
+      for (final line in lines)
+        PaperItem(
+          id: '$idSeed-${lineIndex++}',
+          text: line,
+          todoColumnCount: inheritedColumnCount,
+          todoExtraColumns: List.filled(inheritedColumnCount - 1, ''),
+          todoColumnWidths: [...inheritedColumnWidths],
+        ),
+    ];
+    widget.paper.items.insertAll(insertIndex + 1, newItems);
   }
 
   void _deleteItem(BuildContext context, PaperItem item) {
@@ -3090,6 +3155,32 @@ class _TodoEditorState extends State<_TodoEditor> {
       > 1 => 'In $days days',
       _ => '${-days} days overdue',
     };
+  }
+}
+
+class _TodoPasteTextInputFormatter extends TextInputFormatter {
+  const _TodoPasteTextInputFormatter({required this.onPaste});
+
+  final void Function(String text) onPaste;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (!newValue.text.contains('\n') && !newValue.text.contains('\r')) {
+      return newValue;
+    }
+    final lines = TodoPasteItems.parseLines(newValue.text);
+    if (lines.length <= 1) {
+      final text = lines.isEmpty ? oldValue.text : lines.single;
+      return TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+    scheduleMicrotask(() => onPaste(newValue.text));
+    return oldValue;
   }
 }
 

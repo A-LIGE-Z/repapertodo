@@ -874,6 +874,63 @@ void main() {
     expect(firstItem.todoExtraColumns, isEmpty);
   });
 
+  testWidgets('splits pasted todo lists into cleaned items', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'paste-paper',
+            type: PaperTypes.todo,
+            title: 'Paste paper',
+            items: [
+              PaperItem(
+                id: 'paste-item',
+                text: 'Old value',
+                todoColumnCount: 2,
+                todoExtraColumns: [''],
+                todoColumnWidths: [2, 1],
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-todo-paste.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('paste-paper-paste-item-text')),
+        matching: find.byType(EditableText),
+      ),
+      '- [ ] Read paper\n2) Compare notes\n☑ Ship build',
+    );
+    await tester.pumpAndSettle();
+
+    final items = controller.state.papers.single.items;
+    expect(items.map((item) => item.text), [
+      'Read paper',
+      'Compare notes',
+      'Ship build',
+    ]);
+    expect(items.map((item) => item.todoColumnCount), [2, 2, 2]);
+    expect(items.map((item) => item.todoColumnWidths), [
+      [2, 1],
+      [2, 1],
+      [2, 1],
+    ]);
+  });
+
   testWidgets('toggles desktop pin and always-on-top as exclusive modes',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

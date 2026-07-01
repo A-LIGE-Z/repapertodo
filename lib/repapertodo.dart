@@ -7,6 +7,7 @@ export 'src/core/model/paper_data.dart';
 export 'src/core/model/paper_item.dart';
 export 'src/core/model/paper_titles.dart';
 export 'src/core/model/sync_settings.dart';
+export 'src/core/model/todo_paste.dart';
 export 'src/core/script/script_capsule.dart';
 export 'src/core/startup/startup_command.dart';
 export 'src/core/storage/state_store.dart';

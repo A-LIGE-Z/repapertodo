@@ -138,6 +138,40 @@ void main() {
     expect(PaperTitles.defaultTitle(PaperTypes.note, 0), 'Note1');
   });
 
+  test('cleans pasted todo lines like PaperTodo', () {
+    final parsed = TodoPasteItems.parseLines('''
+- [ ] Read paper
+* [x] Ship build
+1. Review result
+2) Write notes
+3、Sync device
+4．Archive
+☑ Done glyph
+Plain item
+
+''');
+
+    expect(parsed, [
+      'Read paper',
+      'Ship build',
+      'Review result',
+      'Write notes',
+      'Sync device',
+      'Archive',
+      'Done glyph',
+      'Plain item',
+    ]);
+
+    final capped = TodoPasteItems.parseLines(
+      List.generate(250, (index) => '- item $index').join('\n'),
+    );
+    expect(capped, hasLength(200));
+    expect(
+      TodoPasteItems.parseLines('${List.filled(5001, 'x').join()}\ny').first,
+      hasLength(5000),
+    );
+  });
+
   test('normalizes pinned hotkeys like PaperTodo', () {
     final longHotKey = 'Ctrl+Alt+${List.filled(80, 'A').join()}';
     final state = AppState.fromJson({
