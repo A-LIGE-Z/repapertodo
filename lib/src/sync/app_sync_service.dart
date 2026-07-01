@@ -109,4 +109,78 @@ class AppSyncService {
         );
     }
   }
+
+  Future<List<WebDavSnapshotRecord>> listRecoverySnapshots({
+    required AppState localState,
+    required StateStore store,
+  }) async {
+    final client = await _configuredClientOrNull(
+      localState: localState,
+      store: store,
+    );
+    if (client == null) {
+      return const [];
+    }
+    return client.listSnapshots();
+  }
+
+  Future<AppSyncResult> restoreRecoverySnapshot({
+    required AppState localState,
+    required StateStore store,
+    required String snapshotPath,
+  }) async {
+    final client = await _configuredClientOrNull(
+      localState: localState,
+      store: store,
+    );
+    if (client == null) {
+      final settings = localState.sync;
+      if (!settings.enabled) {
+        return const AppSyncResult(
+          status: AppSyncStatus.disabled,
+          message: 'Sync is disabled.',
+        );
+      }
+      return const AppSyncResult(
+        status: AppSyncStatus.configurationMissing,
+        message: 'Complete WebDAV sync settings first.',
+      );
+    }
+
+    final result = await client.downloadSnapshot(snapshotPath);
+    final snapshotState = result.state;
+    if (snapshotState == null) {
+      return const AppSyncResult(
+        status: AppSyncStatus.configurationMissing,
+        message: 'Remote snapshot is empty.',
+      );
+    }
+    await store.save(snapshotState);
+    return AppSyncResult(
+      status: AppSyncStatus.downloaded,
+      state: snapshotState,
+      message: 'Snapshot restored.',
+      snapshotPath: result.snapshotPath,
+    );
+  }
+
+  Future<WebDavStateSyncService?> _configuredClientOrNull({
+    required AppState localState,
+    required StateStore store,
+  }) async {
+    localState.normalize();
+    final settings = localState.sync;
+    if (!settings.enabled ||
+        settings.provider != SyncProviderIds.webDav ||
+        !settings.webDav.isConfigured) {
+      return null;
+    }
+    final deviceId =
+        await (_deviceIdStore ?? SyncDeviceIdStore.forStateStore(store))
+            .loadOrCreate();
+    return _webDavFactory(
+      settings.webDav.copy(),
+      deviceId: deviceId,
+    );
+  }
 }

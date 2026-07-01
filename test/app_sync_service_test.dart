@@ -138,6 +138,95 @@ void main() {
     expect(result.message, contains('conflict-local.json'));
     expect(await File(store.filePath).exists(), isFalse);
   });
+
+  test('lists recovery snapshots through configured WebDAV', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('repapertodo_app_sync_list_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var forwardedDeviceId = '';
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) {
+        forwardedDeviceId = deviceId ?? '';
+        return _FakeWebDavStateSyncService(
+          onListSnapshots: () async {
+            return [
+              WebDavSnapshotRecord(
+                path: 'repapertodo/snapshots/snapshot.json',
+                deviceId: forwardedDeviceId,
+                updatedAtUtc: DateTime.utc(2026, 7),
+              ),
+            ];
+          },
+        );
+      },
+    );
+
+    final snapshots = await service.listRecoverySnapshots(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+    );
+
+    expect(snapshots, hasLength(1));
+    expect(snapshots.single.deviceId, startsWith('device-'));
+    expect(forwardedDeviceId, snapshots.single.deviceId);
+  });
+
+  test('restores a selected recovery snapshot', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('repapertodo_app_sync_restore_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final snapshotState = AppState(
+      papers: [
+        PaperData(id: 'snapshot-paper', type: PaperTypes.note, title: 'Snap'),
+      ],
+      sync: _configuredSyncSettings(),
+    );
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadSnapshot: (snapshotPath) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: snapshotState,
+            snapshotPath: snapshotPath,
+          );
+        },
+      ),
+    );
+
+    final result = await service.restoreRecoverySnapshot(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+      snapshotPath: 'repapertodo/snapshots/snapshot.json',
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(result.message, 'Snapshot restored.');
+    expect(result.snapshotPath, 'repapertodo/snapshots/snapshot.json');
+    expect((await store.load()).papers.single.title, 'Snap');
+  });
+
+  test('returns no recovery snapshots when sync is disabled', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('repapertodo_app_sync_no_list_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) =>
+          throw StateError('WebDAV should not be created'),
+    );
+
+    final snapshots = await service.listRecoverySnapshots(
+      localState: AppState(),
+      store: store,
+    );
+
+    expect(snapshots, isEmpty);
+  });
 }
 
 SyncSettings _configuredSyncSettings() {
@@ -158,9 +247,20 @@ typedef _FakeSync = Future<WebDavStateSyncResult> Function({
   DateTime? localUpdatedAtUtc,
 });
 
+typedef _FakeListSnapshots = Future<List<WebDavSnapshotRecord>> Function();
+
+typedef _FakeDownloadSnapshot = Future<WebDavStateSyncResult> Function(
+  String snapshotPath,
+);
+
 class _FakeWebDavStateSyncService extends WebDavStateSyncService {
-  _FakeWebDavStateSyncService({required _FakeSync onSync})
-      : _onSync = onSync,
+  _FakeWebDavStateSyncService({
+    _FakeSync? onSync,
+    _FakeListSnapshots? onListSnapshots,
+    _FakeDownloadSnapshot? onDownloadSnapshot,
+  })  : _onSync = onSync,
+        _onListSnapshots = onListSnapshots,
+        _onDownloadSnapshot = onDownloadSnapshot,
         super(
           client: WebDavClient(
             baseUri: Uri.parse('https://unused.example.test/'),
@@ -169,16 +269,40 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
           ),
         );
 
-  final _FakeSync _onSync;
+  final _FakeSync? _onSync;
+  final _FakeListSnapshots? _onListSnapshots;
+  final _FakeDownloadSnapshot? _onDownloadSnapshot;
 
   @override
   Future<WebDavStateSyncResult> sync({
     required AppState localState,
     DateTime? localUpdatedAtUtc,
   }) {
-    return _onSync(
+    final onSync = _onSync;
+    if (onSync == null) {
+      throw StateError('Unexpected sync call.');
+    }
+    return onSync(
       localState: localState,
       localUpdatedAtUtc: localUpdatedAtUtc,
     );
+  }
+
+  @override
+  Future<List<WebDavSnapshotRecord>> listSnapshots() {
+    final onListSnapshots = _onListSnapshots;
+    if (onListSnapshots == null) {
+      throw StateError('Unexpected listSnapshots call.');
+    }
+    return onListSnapshots();
+  }
+
+  @override
+  Future<WebDavStateSyncResult> downloadSnapshot(String snapshotPath) {
+    final onDownloadSnapshot = _onDownloadSnapshot;
+    if (onDownloadSnapshot == null) {
+      throw StateError('Unexpected downloadSnapshot call.');
+    }
+    return onDownloadSnapshot(snapshotPath);
   }
 }
