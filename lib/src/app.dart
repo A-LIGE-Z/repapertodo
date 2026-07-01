@@ -1585,6 +1585,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       onSelect: _selectCanvasElement,
       onEdit: _editCanvasElement,
       onDuplicate: _duplicateCanvasElement,
+      onMoveLayer: _moveCanvasElementLayer,
       onDelete: _deleteCanvasElement,
     );
   }
@@ -1648,6 +1649,14 @@ class _NoteEditorState extends State<_NoteEditor> {
     unawaited(widget.onChanged());
   }
 
+  void _moveCanvasElementLayer(NoteCanvasElement element, int delta) {
+    setState(() {
+      element.zIndex = (element.zIndex + delta).clamp(-10000, 10000).toInt();
+      _selectedCanvasElementId = element.id;
+    });
+    unawaited(widget.onChanged());
+  }
+
   void _deleteCanvasElement(NoteCanvasElement element) {
     setState(() {
       widget.paper.noteCanvasElements.removeWhere(
@@ -1702,6 +1711,7 @@ class _NoteCanvasPreview extends StatelessWidget {
     required this.onSelect,
     required this.onEdit,
     required this.onDuplicate,
+    required this.onMoveLayer,
     required this.onDelete,
   });
 
@@ -1712,6 +1722,7 @@ class _NoteCanvasPreview extends StatelessWidget {
   final void Function(NoteCanvasElement element) onSelect;
   final Future<void> Function(NoteCanvasElement element) onEdit;
   final void Function(NoteCanvasElement element) onDuplicate;
+  final void Function(NoteCanvasElement element, int delta) onMoveLayer;
   final void Function(NoteCanvasElement element) onDelete;
 
   @override
@@ -1761,6 +1772,7 @@ class _NoteCanvasPreview extends StatelessWidget {
                       onSelect: onSelect,
                       onEdit: onEdit,
                       onDuplicate: onDuplicate,
+                      onMoveLayer: onMoveLayer,
                       onDelete: onDelete,
                     ),
                   ),
@@ -1795,6 +1807,7 @@ class _NoteCanvasElementPreview extends StatelessWidget {
     required this.onSelect,
     required this.onEdit,
     required this.onDuplicate,
+    required this.onMoveLayer,
     required this.onDelete,
     super.key,
   });
@@ -1807,6 +1820,7 @@ class _NoteCanvasElementPreview extends StatelessWidget {
   final void Function(NoteCanvasElement element) onSelect;
   final Future<void> Function(NoteCanvasElement element) onEdit;
   final void Function(NoteCanvasElement element) onDuplicate;
+  final void Function(NoteCanvasElement element, int delta) onMoveLayer;
   final void Function(NoteCanvasElement element) onDelete;
 
   @override
@@ -1867,6 +1881,29 @@ class _NoteCanvasElementPreview extends StatelessWidget {
                     iconSize: (18 * scale).clamp(16, 18).toDouble(),
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.content_copy_outlined),
+                  ),
+                ),
+                SizedBox.square(
+                  dimension: (28 * scale).clamp(24, 28).toDouble(),
+                  child: PopupMenuButton<int>(
+                    tooltip: 'Canvas layer actions',
+                    icon: const Icon(Icons.layers_outlined),
+                    iconSize: (18 * scale).clamp(16, 18).toDouble(),
+                    padding: EdgeInsets.zero,
+                    onSelected: (delta) {
+                      onSelect(element);
+                      onMoveLayer(element, delta);
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 1,
+                        child: Text('Bring forward'),
+                      ),
+                      PopupMenuItem(
+                        value: -1,
+                        child: Text('Send backward'),
+                      ),
+                    ],
                   ),
                 ),
                 SizedBox.square(

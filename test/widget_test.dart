@@ -387,6 +387,13 @@ void main() {
     expect(duplicatedTop.height, 128);
     expect(duplicatedTop.zIndex, 6);
 
+    await tester.tap(find.byTooltip('Canvas layer actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Send backward'));
+    await tester.pumpAndSettle();
+
+    expect(duplicatedTop.zIndex, 5);
+
     await tester.tap(find.widgetWithText(TextButton, 'Add canvas block'));
     await tester.pumpAndSettle();
 
