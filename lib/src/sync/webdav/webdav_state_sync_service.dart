@@ -6,6 +6,7 @@ import '../../core/model/app_state.dart';
 import '../../core/model/sync_settings.dart';
 import '../../core/state/app_state_codec.dart';
 import '../sync_manifest.dart';
+import '../sync_operation.dart';
 import 'webdav_client.dart';
 
 enum WebDavStateSyncStatus {
@@ -20,11 +21,13 @@ class WebDavStateSyncPaths {
     this.rootPath = 'repapertodo',
     this.manifestFileName = 'manifest.json',
     this.snapshotDirectoryName = 'snapshots',
+    this.operationDirectoryName = 'ops',
   });
 
   final String rootPath;
   final String manifestFileName;
   final String snapshotDirectoryName;
+  final String operationDirectoryName;
 
   String get rootCollectionPath => _normalizeRemotePath(rootPath);
 
@@ -34,12 +37,24 @@ class WebDavStateSyncPaths {
   String get snapshotCollectionPath =>
       _joinRemotePath(rootCollectionPath, snapshotDirectoryName);
 
+  String get operationCollectionPath =>
+      _joinRemotePath(rootCollectionPath, operationDirectoryName);
+
   String snapshotPath(DateTime updatedAtUtc, String deviceId) {
     final stamp = _formatSnapshotStamp(updatedAtUtc);
     final safeDeviceId = _normalizeRemotePathSegment(deviceId);
     return _joinRemotePath(
       snapshotCollectionPath,
       'snapshot-$stamp-$safeDeviceId.json',
+    );
+  }
+
+  String operationLogPath(String deviceId, int sequence) {
+    final safeDeviceId = _normalizeRemotePathSegment(deviceId);
+    final safeSequence = sequence < 0 ? 0 : sequence;
+    return _joinRemotePath(
+      operationCollectionPath,
+      '$safeDeviceId-${safeSequence.toString().padLeft(12, '0')}.jsonl',
     );
   }
 }
@@ -135,7 +150,14 @@ class WebDavStateSyncService {
     );
     final deviceSequences =
         Map<String, int>.from(previousDeviceSequences ?? const {});
-    deviceSequences[_deviceId] = (deviceSequences[_deviceId] ?? 0) + 1;
+    final nextSequence = (deviceSequences[_deviceId] ?? 0) + 1;
+    deviceSequences[_deviceId] = nextSequence;
+    await _putSnapshotOperation(
+      state: state,
+      updatedAtUtc: stamp,
+      sequence: nextSequence,
+      snapshotPath: snapshotPath,
+    );
     final manifest = SyncManifest(
       schemaVersion: 1,
       updatedAtUtc: stamp,
@@ -318,6 +340,30 @@ class WebDavStateSyncService {
       await _client.makeCollection(root);
     }
     await _client.makeCollection(_paths.snapshotCollectionPath);
+    await _client.makeCollection(_paths.operationCollectionPath);
+  }
+
+  Future<void> _putSnapshotOperation({
+    required AppState state,
+    required DateTime updatedAtUtc,
+    required int sequence,
+    required String snapshotPath,
+  }) async {
+    final operation = SyncOperation(
+      id: '$_deviceId-$sequence',
+      deviceId: _deviceId,
+      sequence: sequence,
+      kind: SyncOperationKind.stateSnapshot,
+      createdAtUtc: updatedAtUtc,
+      payload: {
+        'snapshotPath': snapshotPath,
+        'paperCount': state.papers.length,
+      },
+    );
+    await _client.putBytes(
+      _paths.operationLogPath(_deviceId, sequence),
+      utf8.encode('${jsonEncode(operation.toJson())}\n'),
+    );
   }
 
   Future<bool> _putManifest(

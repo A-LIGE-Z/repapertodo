@@ -25,6 +25,8 @@ with WebDAV ETags.
   manifest.json
   snapshots/
     snapshot-<timestamp>-<deviceId>.json
+  ops/
+    <deviceId>-<sequence>.jsonl
 ```
 
 If a manifest conditional write fails, the uploaded local snapshot remains in
@@ -32,6 +34,8 @@ If a manifest conditional write fails, the uploaded local snapshot remains in
 The sync core can enumerate this directory and expose snapshot metadata such as
 device ID, timestamp, ETag, size, and last-modified time.
 Selected snapshot files can also be downloaded and decoded for recovery.
+Each push also writes a one-line plain JSON operation record in `ops/` that
+points at the uploaded snapshot and advances that device's manifest sequence.
 
 ## Target Remote Layout
 

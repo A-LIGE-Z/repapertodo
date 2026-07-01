@@ -41,7 +41,7 @@ void main() {
     expect(result.status, WebDavStateSyncStatus.uploaded);
     expect(
       requests.map((request) => request.method),
-      ['MKCOL', 'MKCOL', 'PUT', 'PUT'],
+      ['MKCOL', 'MKCOL', 'MKCOL', 'PUT', 'PUT', 'PUT'],
     );
 
     final snapshotRequest = requests.firstWhere((request) =>
@@ -52,6 +52,20 @@ void main() {
         as Map<String, Object?>;
     final papers = snapshot['papers'] as List<Object?>;
     expect((papers.single as Map<String, Object?>)['title'], 'Sync me');
+
+    final operationRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' &&
+        request.url.path.endsWith('/ops/test-device-000000000001.jsonl'));
+    final operation = jsonDecode(utf8.decode(operationRequest.bodyBytes).trim())
+        as Map<String, Object?>;
+    expect(operation['kind'], 'stateSnapshot');
+    expect(operation['deviceId'], 'test-device');
+    expect(operation['sequence'], 1);
+    expect(operation['payload'], {
+      'snapshotPath':
+          'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device.json',
+      'paperCount': 1,
+    });
 
     final manifestRequest = requests.firstWhere((request) =>
         request.method == 'PUT' && request.url.path.endsWith('/manifest.json'));
@@ -190,6 +204,9 @@ void main() {
         }
         if (request.method == 'PUT' &&
             request.url.path.contains('/snapshots/')) {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' && request.url.path.contains('/ops/')) {
           return http.Response('', 201);
         }
         if (request.method == 'PUT' &&

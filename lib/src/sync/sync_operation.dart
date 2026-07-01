@@ -1,6 +1,7 @@
 import '../core/model/json_helpers.dart';
 
 enum SyncOperationKind {
+  stateSnapshot,
   upsertPaper,
   deletePaper,
   upsertTodoItem,
@@ -32,9 +33,12 @@ class SyncOperation {
       deviceId: stringValue(json['deviceId'], ''),
       sequence: intValue(json['sequence'], 0),
       kind: _kindFromWire(stringValue(json['kind'], '')),
-      createdAtUtc: DateTime.tryParse(stringValue(json['createdAtUtc'], ''))?.toUtc() ??
-          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-      payload: json['payload'] is Map ? Map<String, Object?>.from(json['payload'] as Map) : <String, Object?>{},
+      createdAtUtc:
+          DateTime.tryParse(stringValue(json['createdAtUtc'], ''))?.toUtc() ??
+              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      payload: json['payload'] is Map
+          ? Map<String, Object?>.from(json['payload'] as Map)
+          : <String, Object?>{},
     );
   }
 
@@ -59,6 +63,7 @@ SyncOperationKind _kindFromWire(String value) {
 
 String _kindToWire(SyncOperationKind kind) {
   return switch (kind) {
+    SyncOperationKind.stateSnapshot => 'stateSnapshot',
     SyncOperationKind.upsertPaper => 'upsertPaper',
     SyncOperationKind.deletePaper => 'deletePaper',
     SyncOperationKind.upsertTodoItem => 'upsertTodoItem',
@@ -67,4 +72,3 @@ String _kindToWire(SyncOperationKind kind) {
     SyncOperationKind.updateSettings => 'updateSettings',
   };
 }
-
