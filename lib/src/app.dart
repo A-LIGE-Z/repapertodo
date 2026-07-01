@@ -1238,12 +1238,34 @@ class PaperPreview extends StatelessWidget {
                       ),
                       onPressed: () {
                         paper.alwaysOnTop = !paper.alwaysOnTop;
+                        if (paper.alwaysOnTop) {
+                          paper.isPinnedToDesktop = false;
+                        }
                         unawaited(onSurfaceChanged(paper));
                         unawaited(onChanged());
                       },
                       icon: Icon(paper.alwaysOnTop
                           ? Icons.push_pin
                           : Icons.push_pin_outlined),
+                    ),
+                    IconButton(
+                      tooltip: _tooltipLabel(
+                        enableToolTips,
+                        paper.isPinnedToDesktop
+                            ? 'Unpin from desktop'
+                            : 'Pin to desktop',
+                      ),
+                      onPressed: () {
+                        paper.isPinnedToDesktop = !paper.isPinnedToDesktop;
+                        if (paper.isPinnedToDesktop) {
+                          paper.alwaysOnTop = false;
+                        }
+                        unawaited(onSurfaceChanged(paper));
+                        unawaited(onChanged());
+                      },
+                      icon: Icon(paper.isPinnedToDesktop
+                          ? Icons.desktop_windows
+                          : Icons.desktop_windows_outlined),
                     ),
                     IconButton(
                       tooltip:

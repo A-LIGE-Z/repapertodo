@@ -50,6 +50,7 @@ class FlutterWindow : public Win32Window {
   NOTIFYICONDATA tray_icon_data_ = {};
   bool tray_icon_added_ = false;
   bool avoid_fullscreen_topmost_ = true;
+  bool pinned_to_desktop_ = false;
   bool todo_hotkey_registered_ = false;
   bool note_hotkey_registered_ = false;
   std::vector<std::pair<std::string, std::wstring>> tray_papers_;

@@ -597,6 +597,54 @@ void main() {
     expect(platform.paperWindows.updatedTitles, contains('Zoom paper'));
   });
 
+  testWidgets('toggles desktop pin and always-on-top as exclusive modes',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'pin-paper',
+            type: PaperTypes.todo,
+            title: 'Pin paper',
+            items: [
+              PaperItem(id: 'pin-item', text: 'Choose a surface mode'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store = StateStore(filePath: 'build/test-widget-pin-mode.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Pin to desktop'));
+    await tester.pumpAndSettle();
+
+    final paper = controller.state.papers.single;
+    expect(paper.isPinnedToDesktop, true);
+    expect(paper.alwaysOnTop, false);
+    expect(find.byTooltip('Unpin from desktop'), findsOneWidget);
+    expect(platform.paperWindows.updatedTitles, contains('Pin paper'));
+
+    await tester.tap(find.byTooltip('Keep on top'));
+    await tester.pumpAndSettle();
+
+    expect(paper.alwaysOnTop, true);
+    expect(paper.isPinnedToDesktop, false);
+    expect(find.byTooltip('Disable always on top'), findsOneWidget);
+    expect(find.byTooltip('Pin to desktop'), findsOneWidget);
+  });
+
   testWidgets('hides disabled top bar creation buttons', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

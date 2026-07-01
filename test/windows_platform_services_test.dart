@@ -37,7 +37,7 @@ void main() {
       y: 20,
       width: 320,
       height: 260,
-      alwaysOnTop: true,
+      isPinnedToDesktop: true,
     );
 
     await services.paperWindows.showPaper(paper);
@@ -128,6 +128,7 @@ void main() {
       calls.map((call) => call.method),
       [
         'setBounds',
+        'setPinnedToDesktop',
         'show',
         'setTitle',
         'setAlwaysOnTop',
@@ -151,14 +152,15 @@ void main() {
       'width': 320.0,
       'height': 260.0,
     });
-    expect(calls[2].arguments, 'RePaperTodo - Inbox');
-    expect(calls[3].arguments, true);
+    expect(calls[1].arguments, true);
+    expect(calls[3].arguments, 'RePaperTodo - Inbox');
+    expect(calls[4].arguments, false);
     expect(paper.x, 55);
     expect(paper.y, 66);
     expect(paper.width, 520);
     expect(paper.height, 460);
     expect(paper.isVisible, false);
-    expect(calls[6].arguments, [
+    expect(calls[7].arguments, [
       {
         'id': 'paper-1',
         'title': 'Inbox',
@@ -166,15 +168,15 @@ void main() {
         'isVisible': false,
       },
     ]);
-    expect(calls[7].arguments, true);
     expect(calls[8].arguments, true);
-    expect(calls[9].arguments, FullscreenTopmostModes.stayOnTop);
-    expect(calls[10].arguments, {
+    expect(calls[9].arguments, true);
+    expect(calls[10].arguments, FullscreenTopmostModes.stayOnTop);
+    expect(calls[11].arguments, {
       'todo': 'Ctrl+Alt+T',
       'note': 'Ctrl+Alt+N',
     });
-    expect(calls[11].arguments, isNull);
     expect(calls[12].arguments, isNull);
+    expect(calls[13].arguments, isNull);
     expect(calls.last.arguments, 'C:\\Temp\\note.md');
   });
 }

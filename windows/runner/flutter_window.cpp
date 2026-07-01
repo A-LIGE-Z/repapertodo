@@ -389,8 +389,14 @@ bool FlutterWindow::OnCreate() {
 
         const std::string& method = call.method_name();
         if (method == "show") {
-          ShowWindow(window, SW_SHOWNORMAL);
-          SetForegroundWindow(window);
+          if (pinned_to_desktop_) {
+            ShowWindow(window, SW_SHOWNOACTIVATE);
+            SetWindowPos(window, HWND_BOTTOM, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+          } else {
+            ShowWindow(window, SW_SHOWNORMAL);
+            SetForegroundWindow(window);
+          }
           result->Success();
           return;
         }
@@ -409,8 +415,26 @@ bool FlutterWindow::OnCreate() {
           }
           const bool should_apply_topmost =
               enabled &&
+              !pinned_to_desktop_ &&
               !(avoid_fullscreen_topmost_ && IsForegroundFullscreen(window));
-          SetWindowPos(window, should_apply_topmost ? HWND_TOPMOST : HWND_NOTOPMOST,
+          const HWND insert_after =
+              should_apply_topmost
+                  ? HWND_TOPMOST
+                  : (pinned_to_desktop_ ? HWND_BOTTOM : HWND_NOTOPMOST);
+          SetWindowPos(window, insert_after, 0, 0, 0, 0,
+                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+          result->Success();
+          return;
+        }
+        if (method == "setPinnedToDesktop") {
+          pinned_to_desktop_ = false;
+          if (call.arguments()) {
+            if (const auto* value = std::get_if<bool>(call.arguments())) {
+              pinned_to_desktop_ = *value;
+            }
+          }
+          SetWindowPos(window,
+                       pinned_to_desktop_ ? HWND_BOTTOM : HWND_NOTOPMOST,
                        0, 0, 0, 0,
                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
           result->Success();
