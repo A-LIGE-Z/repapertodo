@@ -153,6 +153,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   StreamSubscription<String>? _paperOpenSubscription;
   StreamSubscription<StartupCommand>? _startupCommandSubscription;
   Timer? _autoSyncTimer;
+  Timer? _localEditSyncDebounce;
   Timer? _surfaceSaveDebounce;
   Timer? _titleSurfaceDebounce;
   Timer? _todoReminderTimer;
@@ -181,6 +182,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoSyncTimer?.cancel();
+    _localEditSyncDebounce?.cancel();
     _surfaceSaveDebounce?.cancel();
     _titleSurfaceDebounce?.cancel();
     _todoReminderTimer?.cancel();
@@ -404,6 +406,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       });
     });
     await _saveQueue;
+    _scheduleLocalEditSync();
   }
 
   Future<void> _refreshAndSaveState() async {
@@ -629,6 +632,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (_isSyncing) {
       return;
     }
+    _localEditSyncDebounce?.cancel();
+    _localEditSyncDebounce = null;
     setState(() => _isSyncing = true);
     try {
       final result = await widget.syncService.syncAndMergeNow(
@@ -985,6 +990,18 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       return;
     }
     await _syncNow(showMessage: false);
+  }
+
+  void _scheduleLocalEditSync() {
+    _localEditSyncDebounce?.cancel();
+    _localEditSyncDebounce = null;
+    if (!_canRunAutoSync()) {
+      return;
+    }
+    _localEditSyncDebounce = Timer(const Duration(seconds: 5), () {
+      _localEditSyncDebounce = null;
+      unawaited(_syncSilentlyIfConfigured());
+    });
   }
 
   bool _canRunAutoSync() {

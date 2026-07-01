@@ -14,6 +14,7 @@ import 'package:repapertodo/src/core/model/paper_item.dart';
 import 'package:repapertodo/src/core/model/sync_settings.dart';
 import 'package:repapertodo/src/core/script/script_capsule.dart';
 import 'package:repapertodo/src/core/storage/state_store.dart';
+import 'package:repapertodo/src/core/state/app_state_codec.dart';
 import 'package:repapertodo/src/core/startup/startup_command.dart';
 import 'package:repapertodo/src/platform/noop_platform_services.dart';
 import 'package:repapertodo/src/platform/platform_services.dart';
@@ -1005,6 +1006,92 @@ void main() {
 
     expect(syncService.calls, 4);
     expect(find.text('Remote data downloaded.'), findsNothing);
+  });
+
+  testWidgets('local edits schedule one debounced silent sync', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: syncSettings.copy(),
+        papers: [
+          PaperData(
+            id: 'debounce-note',
+            type: PaperTypes.note,
+            title: 'Local',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'debounce-note',
+          type: PaperTypes.note,
+          title: 'Synced edit',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('debounce-note-title')),
+      'Draft one',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 3));
+
+    expect(syncService.calls, 0);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('debounce-note-title')),
+      'Draft two',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 4));
+
+    expect(syncService.calls, 0);
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced edit');
+    expect(find.text('Local data uploaded.'), findsNothing);
   });
 
   testWidgets('opens note markdown externally', (tester) async {
@@ -2287,6 +2374,28 @@ class _ManualSyncService extends AppSyncService {
   }) async {
     calls += 1;
     return result;
+  }
+}
+
+class _MemoryStateStore extends StateStore {
+  _MemoryStateStore() : super(filePath: 'memory-state.json');
+
+  final _codec = const AppStateCodec();
+  AppState savedState = AppState();
+
+  @override
+  Future<DateTime?> lastModifiedUtc() async {
+    return null;
+  }
+
+  @override
+  Future<AppState> load() async {
+    return savedState;
+  }
+
+  @override
+  Future<void> save(AppState state) async {
+    savedState = _codec.decode(_codec.encode(state));
   }
 }
 
