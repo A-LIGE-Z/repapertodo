@@ -1591,15 +1591,27 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   Widget _addCanvasButton() {
-    return TextButton.icon(
-      onPressed: _addCanvasElement,
-      icon: const Icon(Icons.add_box_outlined),
-      label: const Text('Add canvas block'),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        TextButton.icon(
+          onPressed: () => _addCanvasElement(NoteCanvasElementTypes.code),
+          icon: const Icon(Icons.add_box_outlined),
+          label: const Text('Add canvas block'),
+        ),
+        TextButton.icon(
+          onPressed: () => _addCanvasElement(NoteCanvasElementTypes.text),
+          icon: const Icon(Icons.note_add_outlined),
+          label: const Text('Add text block'),
+        ),
+      ],
     );
   }
 
-  void _addCanvasElement() {
+  void _addCanvasElement(String type) {
     final elements = widget.paper.noteCanvasElements;
+    final normalizedType = NoteCanvasElementTypes.normalize(type);
     final nextIndex = elements.length + 1;
     final maxLayer = elements.fold<int>(
       0,
@@ -1610,7 +1622,10 @@ class _NoteEditorState extends State<_NoteEditor> {
       elements.add(
         NoteCanvasElement(
           id: elementId,
-          text: 'Canvas block $nextIndex',
+          type: normalizedType,
+          text: normalizedType == NoteCanvasElementTypes.text
+              ? 'Canvas text $nextIndex'
+              : 'Canvas block $nextIndex',
           x: 32.0 + elements.length * 16.0,
           y: 32.0 + elements.length * 16.0,
           width: 220,

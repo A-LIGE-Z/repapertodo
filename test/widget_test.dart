@@ -401,11 +401,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.noteCanvasElements, hasLength(4));
+    expect(
+      controller.state.papers.single.noteCanvasElements.last.type,
+      NoteCanvasElementTypes.code,
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Add text block'));
+    await tester.pumpAndSettle();
+
+    final addedTextBlock =
+        controller.state.papers.single.noteCanvasElements.last;
+    expect(addedTextBlock.type, NoteCanvasElementTypes.text);
+    expect(addedTextBlock.text, 'Canvas text 5');
 
     await tester.tap(find.byTooltip('Delete canvas block').first);
     await tester.pumpAndSettle();
 
-    expect(controller.state.papers.single.noteCanvasElements, hasLength(3));
+    expect(controller.state.papers.single.noteCanvasElements, hasLength(4));
   });
 
   testWidgets('saves custom theme color', (tester) async {
