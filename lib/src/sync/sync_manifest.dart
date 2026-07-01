@@ -28,7 +28,7 @@ class SyncManifest {
       stringValue(json['updatedAtUtc'], ''),
     );
     return SyncManifest(
-      schemaVersion: intValue(json['schemaVersion'], 1),
+      schemaVersion: _schemaVersionFromWire(json['schemaVersion']),
       updatedAtUtc: updatedAtUtc,
       latestSnapshotPath: stringValue(json['latestSnapshotPath'], ''),
       deviceSequences: {
@@ -48,6 +48,18 @@ class SyncManifest {
       'deviceSequences': deviceSequences,
     };
   }
+}
+
+int _schemaVersionFromWire(Object? value) {
+  if (value is num && value.isFinite && value % 1 == 0) {
+    final schemaVersion = value.toInt();
+    if (schemaVersion == 1) {
+      return schemaVersion;
+    }
+  }
+  throw FormatException(
+    'Unsupported sync manifest schemaVersion: $value',
+  );
 }
 
 DateTime _updatedAtUtcFromWire(String value) {

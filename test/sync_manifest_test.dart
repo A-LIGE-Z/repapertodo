@@ -14,6 +14,27 @@ void main() {
     expect(manifest.deviceSequences, {'win-device': 2});
   });
 
+  test('rejects unsupported manifest schema versions', () {
+    for (final schemaVersion in const <Object?>[null, 0, 2, 1.2, '1']) {
+      expect(
+        () => SyncManifest.fromJson({
+          'schemaVersion': schemaVersion,
+          'updatedAtUtc': '2026-07-01T10:30:00Z',
+          'latestSnapshotPath': 'repapertodo/snapshots/local.json',
+          'deviceSequences': const <String, Object?>{},
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('Unsupported sync manifest schemaVersion'),
+          ),
+        ),
+        reason: '$schemaVersion',
+      );
+    }
+  });
+
   test('rejects invalid manifest timestamps', () {
     for (final updatedAtUtc in const ['', 'not-a-date']) {
       expect(
