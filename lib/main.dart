@@ -7,6 +7,9 @@ Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final bootstrap = await AppBootstrap.load(args);
+  if (bootstrap == null) {
+    return;
+  }
   runApp(
     RePaperTodoApp(
       controller: bootstrap.controller,

@@ -23,16 +23,23 @@ class BootstrappedApp {
 class AppBootstrap {
   const AppBootstrap._();
 
-  static Future<BootstrappedApp> load(
+  static Future<BootstrappedApp?> load(
     List<String> args, {
     PlatformServices? platform,
     StateStore? store,
     AppSyncService? syncService,
   }) async {
+    final resolvedPlatform = platform ?? _defaultPlatformServices();
+    final acquiredSingleInstance =
+        await resolvedPlatform.startup.acquireSingleInstance();
+    if (!acquiredSingleInstance) {
+      await resolvedPlatform.startup.forwardToPrimary(args);
+      return null;
+    }
+
     final resolvedStore =
         store ?? StateStore(filePath: await defaultStateFilePath());
     final state = await resolvedStore.load();
-    final resolvedPlatform = platform ?? _defaultPlatformServices();
     final startupCommand = StartupCommand.parse(args);
     final controller = RePaperTodoController(
       initialState: state,

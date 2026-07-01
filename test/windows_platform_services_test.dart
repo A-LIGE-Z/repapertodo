@@ -22,6 +22,9 @@ void main() {
       if (call.method == 'isForegroundFullscreen') {
         return true;
       }
+      if (call.method == 'acquireSingleInstance') {
+        return true;
+      }
       return null;
     });
     addTearDown(() {
@@ -100,6 +103,9 @@ void main() {
     await hideUpdate;
     await services.paperWindows.hidePaper(paper);
     await services.tray.rebuildMenu(AppState(papers: [paper]));
+    final acquiredSingleInstance =
+        await services.startup.acquireSingleInstance();
+    await services.startup.forwardToPrimary(['--new-note']);
     await services.systemIntegration.setStartupAtLogin(true);
     await services.systemIntegration.setHideFromWindowSwitcher(true);
     await services.systemIntegration
@@ -135,6 +141,8 @@ void main() {
         'getBounds',
         'hide',
         'setTrayMenu',
+        'acquireSingleInstance',
+        'forwardToPrimary',
         'setStartupAtLogin',
         'setHideFromWindowSwitcher',
         'setFullscreenTopmostMode',
@@ -168,15 +176,18 @@ void main() {
         'isVisible': false,
       },
     ]);
-    expect(calls[8].arguments, true);
-    expect(calls[9].arguments, true);
-    expect(calls[10].arguments, FullscreenTopmostModes.stayOnTop);
-    expect(calls[11].arguments, {
+    expect(acquiredSingleInstance, true);
+    expect(calls[8].arguments, isNull);
+    expect(calls[9].arguments, ['--new-note']);
+    expect(calls[10].arguments, true);
+    expect(calls[11].arguments, true);
+    expect(calls[12].arguments, FullscreenTopmostModes.stayOnTop);
+    expect(calls[13].arguments, {
       'todo': 'Ctrl+Alt+T',
       'note': 'Ctrl+Alt+N',
     });
-    expect(calls[12].arguments, isNull);
-    expect(calls[13].arguments, isNull);
+    expect(calls[14].arguments, isNull);
+    expect(calls[15].arguments, isNull);
     expect(calls.last.arguments, 'C:\\Temp\\note.md');
   });
 }

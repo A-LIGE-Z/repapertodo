@@ -11,7 +11,7 @@ import 'platform_services.dart';
 class WindowsPlatformServices implements PlatformServices {
   WindowsPlatformServices({
     MethodChannel channel = const MethodChannel('repapertodo/window'),
-  }) : this._(channel, WindowsStartupHost());
+  }) : this._(channel, WindowsStartupHost(channel));
 
   WindowsPlatformServices._(
     MethodChannel channel,
@@ -236,17 +236,24 @@ class WindowsTrayHost implements TrayHost {
 }
 
 class WindowsStartupHost implements StartupHost {
+  WindowsStartupHost(this._channel);
+
+  final MethodChannel _channel;
   final StreamController<StartupCommand> _commands =
       StreamController<StartupCommand>.broadcast();
 
   @override
-  Future<bool> acquireSingleInstance() async => true;
+  Future<bool> acquireSingleInstance() async {
+    return await _channel.invokeMethod<bool>('acquireSingleInstance') ?? true;
+  }
 
   @override
   Stream<StartupCommand> get commands => _commands.stream;
 
   @override
-  Future<void> forwardToPrimary(List<String> args) async {}
+  Future<void> forwardToPrimary(List<String> args) async {
+    await _channel.invokeMethod<void>('forwardToPrimary', args);
+  }
 
   void addCommand(StartupCommand command) {
     _commands.add(command);

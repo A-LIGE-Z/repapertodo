@@ -6,9 +6,11 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
+#include <atomic>
 #include <memory>
 #include <shellapi.h>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -32,6 +34,8 @@ class FlutterWindow : public Win32Window {
   void AddTrayIcon();
   void RemoveTrayIcon();
   void ShowTrayMenu();
+  void StartSingleInstanceListener();
+  void StopSingleInstanceListener();
   void SendBoundsChanged();
   void SendCloseRequested();
   void SendPaperRequested(const std::string& paper_id);
@@ -53,6 +57,8 @@ class FlutterWindow : public Win32Window {
   bool pinned_to_desktop_ = false;
   bool todo_hotkey_registered_ = false;
   bool note_hotkey_registered_ = false;
+  std::atomic<bool> single_instance_listener_running_ = false;
+  std::thread single_instance_listener_thread_;
   std::vector<std::pair<std::string, std::wstring>> tray_papers_;
 };
 

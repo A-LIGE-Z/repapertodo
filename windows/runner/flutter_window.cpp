@@ -1,10 +1,12 @@
 #include "flutter_window.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdlib>
 #include <optional>
 #include <string>
+#include <thread>
 #include <variant>
 #include <vector>
 
@@ -345,6 +347,7 @@ bool RegisterConfiguredHotkey(HWND window, int id, const std::string& hotkey) {
 
 constexpr UINT kTrayIconId = 1;
 constexpr UINT kTrayIconMessage = WM_APP + 1;
+constexpr UINT kSingleInstanceCommandMessage = WM_APP + 2;
 constexpr UINT kTrayNewTodoCommand = 40001;
 constexpr UINT kTrayNewNoteCommand = 40002;
 constexpr UINT kTraySettingsCommand = 40003;
@@ -354,6 +357,8 @@ constexpr UINT kTrayExitCommand = 40006;
 constexpr UINT kTrayPaperCommandBase = 41000;
 constexpr int kPinnedTodoHotkeyId = 42001;
 constexpr int kPinnedNoteHotkeyId = 42002;
+constexpr wchar_t kSingleInstancePipeName[] =
+    L"\\\\.\\pipe\\RePaperTodo-SingleInstance-Activate";
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -473,6 +478,14 @@ bool FlutterWindow::OnCreate() {
               }
             }
           }
+          result->Success();
+          return;
+        }
+        if (method == "acquireSingleInstance") {
+          result->Success(flutter::EncodableValue(true));
+          return;
+        }
+        if (method == "forwardToPrimary") {
           result->Success();
           return;
         }
@@ -599,6 +612,7 @@ bool FlutterWindow::OnCreate() {
       });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
   AddTrayIcon();
+  StartSingleInstanceListener();
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
@@ -638,6 +652,75 @@ void FlutterWindow::RemoveTrayIcon() {
   }
   Shell_NotifyIcon(NIM_DELETE, &tray_icon_data_);
   tray_icon_added_ = false;
+}
+
+void FlutterWindow::StartSingleInstanceListener() {
+  HWND window = GetHandle();
+  if (!window || single_instance_listener_running_.exchange(true)) {
+    return;
+  }
+
+  single_instance_listener_thread_ = std::thread([this, window]() {
+    while (single_instance_listener_running_) {
+      HANDLE pipe = CreateNamedPipeW(
+          kSingleInstancePipeName, PIPE_ACCESS_INBOUND,
+          PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 4096, 4096, 0,
+          nullptr);
+      if (pipe == INVALID_HANDLE_VALUE) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        continue;
+      }
+
+      const BOOL connected =
+          ConnectNamedPipe(pipe, nullptr)
+              ? TRUE
+              : (GetLastError() == ERROR_PIPE_CONNECTED);
+      std::string command;
+      if (connected) {
+        char buffer[512];
+        DWORD bytes_read = 0;
+        while (ReadFile(pipe, buffer, sizeof(buffer), &bytes_read, nullptr) &&
+               bytes_read > 0) {
+          command.append(buffer, bytes_read);
+          if (command.find('\n') != std::string::npos) {
+            break;
+          }
+        }
+      }
+      DisconnectNamedPipe(pipe);
+      CloseHandle(pipe);
+
+      command = TrimAscii(command);
+      if (single_instance_listener_running_ && !command.empty()) {
+        PostMessageW(window, kSingleInstanceCommandMessage, 0,
+                     reinterpret_cast<LPARAM>(new std::string(command)));
+      }
+    }
+  });
+}
+
+void FlutterWindow::StopSingleInstanceListener() {
+  if (!single_instance_listener_running_.exchange(false)) {
+    return;
+  }
+
+  for (int attempt = 0; attempt < 10; attempt++) {
+    HANDLE pipe = CreateFileW(kSingleInstancePipeName, GENERIC_WRITE, 0,
+                              nullptr, OPEN_EXISTING, 0, nullptr);
+    if (pipe != INVALID_HANDLE_VALUE) {
+      DWORD bytes_written = 0;
+      const char newline = '\n';
+      WriteFile(pipe, &newline, 1, &bytes_written, nullptr);
+      CloseHandle(pipe);
+      break;
+    }
+    WaitNamedPipeW(kSingleInstancePipeName, 100);
+    Sleep(20);
+  }
+
+  if (single_instance_listener_thread_.joinable()) {
+    single_instance_listener_thread_.join();
+  }
 }
 
 void FlutterWindow::ShowTrayMenu() {
@@ -746,6 +829,7 @@ void FlutterWindow::SendWindowEvent(const char* method) {
 }
 
 void FlutterWindow::OnDestroy() {
+  StopSingleInstanceListener();
   HWND window = GetHandle();
   if (window) {
     UnregisterHotKey(window, kPinnedTodoHotkeyId);
@@ -798,6 +882,14 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
         return 0;
       }
       break;
+    case kSingleInstanceCommandMessage: {
+      std::unique_ptr<std::string> command(
+          reinterpret_cast<std::string*>(lparam));
+      if (command && !command->empty()) {
+        SendStartupCommandRequested(*command);
+      }
+      return 0;
+    }
     case kTrayIconMessage:
       switch (LOWORD(lparam)) {
         case WM_LBUTTONUP:

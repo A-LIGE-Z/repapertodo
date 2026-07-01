@@ -42,8 +42,23 @@ void main() {
       syncService: syncService,
     );
 
-    expect(bootstrap.controller.state.papers.single.title, 'Remote');
+    expect(bootstrap, isNotNull);
+    expect(bootstrap!.controller.state.papers.single.title, 'Remote');
     expect((await store.load()).papers.single.title, 'Remote');
+  });
+
+  test('forwards startup args when another instance owns the app', () async {
+    final platform = _ForwardingPlatformServices();
+
+    final bootstrap = await AppBootstrap.load(
+      const ['--new-note'],
+      platform: platform,
+    );
+
+    expect(bootstrap, isNull);
+    expect(platform.startup.forwardedArgs, [
+      ['--new-note'],
+    ]);
   });
 }
 
@@ -88,5 +103,36 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
       localState: localState,
       localUpdatedAtUtc: localUpdatedAtUtc,
     );
+  }
+}
+
+class _ForwardingPlatformServices implements PlatformServices {
+  @override
+  final PaperWindowHost paperWindows = NoopPaperWindowHost();
+
+  @override
+  final TrayHost tray = NoopTrayHost();
+
+  @override
+  final _ForwardingStartupHost startup;
+
+  @override
+  final SystemIntegrationHost systemIntegration = NoopSystemIntegrationHost();
+
+  @override
+  final ExternalFileHost externalFiles = NoopExternalFileHost();
+
+  _ForwardingPlatformServices() : startup = _ForwardingStartupHost();
+}
+
+class _ForwardingStartupHost extends NoopStartupHost {
+  final forwardedArgs = <List<String>>[];
+
+  @override
+  Future<bool> acquireSingleInstance() async => false;
+
+  @override
+  Future<void> forwardToPrimary(List<String> args) async {
+    forwardedArgs.add(List<String>.from(args));
   }
 }
