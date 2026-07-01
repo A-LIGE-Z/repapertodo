@@ -43,9 +43,7 @@ class SyncOperation {
       sequence: _sequenceFromWire(json['sequence']),
       kind: kind,
       createdAtUtc: createdAtUtc,
-      payload: json['payload'] is Map
-          ? Map<String, Object?>.from(json['payload'] as Map)
-          : <String, Object?>{},
+      payload: _payloadFromWire(json['payload']),
     );
   }
 
@@ -80,6 +78,15 @@ int _sequenceFromWire(Object? value) {
   throw FormatException(
     'Sync operation sequence must be a positive integer: $value',
   );
+}
+
+JsonMap _payloadFromWire(Object? value) {
+  if (value is! Map) {
+    throw const FormatException(
+      'Sync operation payload must be a JSON object.',
+    );
+  }
+  return Map<String, Object?>.from(value);
 }
 
 DateTime _createdAtUtcFromWire(String value) {

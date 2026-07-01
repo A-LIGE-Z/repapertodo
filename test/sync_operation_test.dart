@@ -80,6 +80,33 @@ void main() {
     }
   });
 
+  test('rejects invalid operation payloads', () {
+    for (final payload in const <Object?>[
+      null,
+      'bad-payload',
+      ['bad'],
+    ]) {
+      expect(
+        () => SyncOperation.fromJson({
+          'id': 'invalid-payload',
+          'deviceId': 'device-a',
+          'sequence': 5,
+          'kind': 'updateSettings',
+          'createdAtUtc': '2026-07-01T09:00:00Z',
+          'payload': payload,
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('payload must be a JSON object'),
+          ),
+        ),
+        reason: '$payload',
+      );
+    }
+  });
+
   test('rejects invalid operation timestamps', () {
     for (final createdAtUtc in const ['', 'not-a-date']) {
       expect(

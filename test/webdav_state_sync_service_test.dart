@@ -963,6 +963,46 @@ void main() {
     );
   });
 
+  test('rejects operation logs with invalid operation payloads', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/repapertodo/ops/android-device-000000000001.jsonl')) {
+          return http.Response(
+            '${jsonEncode({
+                  'id': 'android-device-1',
+                  'deviceId': 'android-device',
+                  'sequence': 1,
+                  'kind': 'updateSettings',
+                  'createdAtUtc': DateTime.utc(2026, 7, 1, 9).toIso8601String(),
+                  'payload': 'bad-payload',
+                })}\n',
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    expect(
+      service.downloadOperationLog(
+        '/repapertodo/ops/android-device-000000000001.jsonl',
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('payload must be a JSON object'),
+        ),
+      ),
+    );
+  });
+
   test('uploads prepared operation logs and advances device sequences',
       () async {
     final requests = <http.Request>[];
