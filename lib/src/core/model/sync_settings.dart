@@ -250,7 +250,9 @@ class WebDavSyncSettings {
     final scheme = uri?.scheme.toLowerCase();
     if (uri == null ||
         (scheme != 'http' && scheme != 'https') ||
-        uri.host.isEmpty) {
+        uri.host.isEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
       return null;
     }
     return uri;

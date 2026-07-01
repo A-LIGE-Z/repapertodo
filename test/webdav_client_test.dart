@@ -57,4 +57,22 @@ void main() {
     }
     expect(requestCount, 0);
   });
+
+  test('rejects unsupported base URIs', () {
+    for (final baseUri in [
+      Uri.parse('ftp://dav.example.test/dav/'),
+      Uri.parse('file:///tmp/dav/'),
+      Uri.parse('https://dav.example.test/dav/?token=secret'),
+      Uri.parse('https://dav.example.test/dav/#sync-root'),
+    ]) {
+      expect(
+        () => WebDavClient(
+          baseUri: baseUri,
+          credentials:
+              const WebDavCredentials(username: 'user', password: 'pass'),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    }
+  });
 }

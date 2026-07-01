@@ -171,6 +171,21 @@ class WebDavClient {
 }
 
 Uri _normalizeBaseUri(Uri uri) {
+  final scheme = uri.scheme.toLowerCase();
+  if ((scheme != 'http' && scheme != 'https') || uri.host.isEmpty) {
+    throw ArgumentError.value(
+      uri,
+      'baseUri',
+      'WebDAV base URI must use http or https and include a host.',
+    );
+  }
+  if (uri.hasQuery || uri.hasFragment) {
+    throw ArgumentError.value(
+      uri,
+      'baseUri',
+      'WebDAV base URI must not contain query or fragment components.',
+    );
+  }
   final text = uri.toString();
   return text.endsWith('/') ? uri : Uri.parse('$text/');
 }
