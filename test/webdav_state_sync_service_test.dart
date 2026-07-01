@@ -672,6 +672,95 @@ void main() {
     });
   });
 
+  test('accepts matching existing operation logs during upload retry',
+      () async {
+    final requests = <http.Request>[];
+    final operation = SyncOperation(
+      id: 'device-a-1',
+      deviceId: 'device-a',
+      sequence: 1,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+      payload: {'paperId': 'note', 'content': 'Fresh'},
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'MKCOL') {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' && request.url.path.contains('/ops/')) {
+          return http.Response('already exists', 412);
+        }
+        if (request.method == 'GET' && request.url.path.contains('/ops/')) {
+          return http.Response('${jsonEncode(operation.toJson())}\n', 200);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final result = await service.uploadOperationLogs([operation]);
+
+    expect(result.uploadedCount, 1);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(
+      requests
+          .where((request) => request.url.path.contains('/ops/'))
+          .map((request) => request.method),
+      ['PUT', 'GET'],
+    );
+  });
+
+  test('rejects conflicting existing operation logs during upload retry',
+      () async {
+    final operation = SyncOperation(
+      id: 'device-a-1',
+      deviceId: 'device-a',
+      sequence: 1,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+      payload: {'paperId': 'note', 'content': 'Fresh'},
+    );
+    final existingOperation = SyncOperation(
+      id: 'device-a-1',
+      deviceId: 'device-a',
+      sequence: 1,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+      payload: {'paperId': 'note', 'content': 'Different'},
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'MKCOL') {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' && request.url.path.contains('/ops/')) {
+          return http.Response('already exists', 412);
+        }
+        if (request.method == 'GET' && request.url.path.contains('/ops/')) {
+          return http.Response(
+            '${jsonEncode(existingOperation.toJson())}\n',
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    await expectLater(
+      service.uploadOperationLogs([operation]),
+      throwsA(isA<WebDavException>()),
+    );
+  });
+
   test('uploads only contiguous operation logs per device', () async {
     final requests = <http.Request>[];
     final webDavClient = WebDavClient(

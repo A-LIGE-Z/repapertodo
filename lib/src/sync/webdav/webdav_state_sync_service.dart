@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:collection/collection.dart';
 
 import '../../core/model/app_state.dart';
 import '../../core/model/sync_settings.dart';
@@ -194,7 +195,7 @@ class WebDavStateSyncService {
       createOnly: true,
     );
     final operationLogPath = _paths.operationLogPath(_deviceId, nextSequence);
-    await _putSnapshotOperation(
+    final snapshotOperationUploaded = await _putSnapshotOperation(
       state: state,
       updatedAtUtc: stamp,
       sequence: nextSequence,
@@ -212,7 +213,9 @@ class WebDavStateSyncService {
       createOnly: manifestKnownMissing,
     );
     if (!manifestUploaded) {
-      await _deleteOperationLogQuietly(operationLogPath);
+      if (snapshotOperationUploaded) {
+        await _deleteOperationLogQuietly(operationLogPath);
+      }
       return WebDavStateSyncResult(
         status: WebDavStateSyncStatus.conflict,
         manifest: manifest,
@@ -536,7 +539,7 @@ class WebDavStateSyncService {
     await _client.makeCollection(_paths.operationCollectionPath);
   }
 
-  Future<void> _putSnapshotOperation({
+  Future<bool> _putSnapshotOperation({
     required AppState state,
     required DateTime updatedAtUtc,
     required int sequence,
@@ -553,15 +556,32 @@ class WebDavStateSyncService {
         'paperCount': state.papers.length,
       },
     );
-    await _putOperationLog(operation);
+    return _putOperationLog(operation);
   }
 
-  Future<void> _putOperationLog(SyncOperation operation) async {
-    await _client.putBytes(
-      _paths.operationLogPath(operation.deviceId, operation.sequence),
-      utf8.encode('${jsonEncode(operation.toJson())}\n'),
-      createOnly: true,
+  Future<bool> _putOperationLog(SyncOperation operation) async {
+    final operationLogPath = _paths.operationLogPath(
+      operation.deviceId,
+      operation.sequence,
     );
+    try {
+      await _client.putBytes(
+        operationLogPath,
+        utf8.encode('${jsonEncode(operation.toJson())}\n'),
+        createOnly: true,
+      );
+      return true;
+    } on WebDavException catch (error) {
+      if (error.statusCode != 412) {
+        rethrow;
+      }
+      final existingOperations = await downloadOperationLog(operationLogPath);
+      if (existingOperations.length != 1 ||
+          !_operationsMatch(existingOperations.single, operation)) {
+        rethrow;
+      }
+      return false;
+    }
   }
 
   Future<void> _deleteOperationLogQuietly(String operationLogPath) async {
@@ -607,6 +627,15 @@ class WebDavStateSyncService {
       rethrow;
     }
   }
+}
+
+bool _operationsMatch(SyncOperation left, SyncOperation right) {
+  return left.id == right.id &&
+      left.deviceId == right.deviceId &&
+      left.sequence == right.sequence &&
+      left.kind == right.kind &&
+      left.createdAtUtc.toUtc().isAtSameMomentAs(right.createdAtUtc.toUtc()) &&
+      const DeepCollectionEquality().equals(left.payload, right.payload);
 }
 
 List<SyncOperation> _contiguousOperationsForUpload(

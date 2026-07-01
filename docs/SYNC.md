@@ -47,7 +47,9 @@ It applies operation-level merges for settings, papers, note content, and todo
 items before saving the merged local state.
 Operation logs are created with `If-None-Match: *` and treated as immutable
 remote records so a repeated upload cannot overwrite an existing device
-sequence.
+sequence. If a retry finds the same operation already present, the upload is
+treated as idempotently accepted; if the existing operation differs, sync fails
+instead of advancing local progress.
 When downloading an operation log, the `<deviceId>-<sequence>` file name is
 treated as the authoritative operation identity so stale or hand-edited payload
 metadata cannot advance the wrong device sequence.
