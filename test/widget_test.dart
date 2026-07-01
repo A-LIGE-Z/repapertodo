@@ -593,7 +593,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('Reminder: Reminder paper - Review deadline'),
+      find.text('Reminder: Remind - Review deadline'),
       findsOneWidget,
     );
 
@@ -1403,9 +1403,9 @@ void main() {
 
     expect(
         controller.state.papers.first.items.single.linkedNoteId, 'note-paper');
-    expect(find.text('Note Research note'), findsOneWidget);
+    expect(find.text('Note Resear'), findsOneWidget);
 
-    await tester.tap(find.text('Note Research note'));
+    await tester.tap(find.text('Note Resear'));
     await tester.pump();
 
     expect(platform.paperWindows.shownTitles, contains('Research note'));
@@ -1431,13 +1431,13 @@ void main() {
 
     expect(
         controller.state.papers.first.items.single.linkedNoteId, 'note-paper');
-    expect(find.text('Note Research note'), findsOneWidget);
+    expect(find.text('Note Resear'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.close_outlined));
     await tester.pump();
 
     expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
-    expect(find.text('Note Research note'), findsNothing);
+    expect(find.text('Note Resear'), findsNothing);
   });
 
   testWidgets('shortens linked note titles with max title length',
@@ -1482,7 +1482,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Note Very lo...'), findsOneWidget);
+    expect(find.text('Note Very long '), findsOneWidget);
     expect(find.text('Note Very long research note'), findsNothing);
   });
 

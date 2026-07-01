@@ -64,6 +64,32 @@ void main() {
     expect(state.externalMarkdownExtension, '.txt');
   });
 
+  test('normalizes PaperTodo display ranges', () {
+    final clampedHigh = AppState.fromJson({
+      'zoom': 2,
+      'todoLineSpacing': 6,
+      'noteLineSpacing': 1.234,
+      'maxTitleLength': 99,
+    });
+
+    expect(clampedHigh.zoom, 1.5);
+    expect(clampedHigh.todoLineSpacing, 5);
+    expect(clampedHigh.noteLineSpacing, 1.23);
+    expect(clampedHigh.maxTitleLength, 20);
+
+    final clampedLow = AppState.fromJson({
+      'zoom': 0.1,
+      'todoLineSpacing': 0.2,
+      'noteLineSpacing': -1,
+      'maxTitleLength': 0,
+    });
+
+    expect(clampedLow.zoom, 0.5);
+    expect(clampedLow.todoLineSpacing, 0.8);
+    expect(clampedLow.noteLineSpacing, 1);
+    expect(clampedLow.maxTitleLength, 6);
+  });
+
   test('migrates retired PaperTodo settings', () {
     final state = AppState.fromJson({
       'showTopBarNewPaperButtons': false,

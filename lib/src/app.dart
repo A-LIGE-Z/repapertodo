@@ -113,11 +113,12 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
 }
 
 String _shortenTitle(String title, int maxLength) {
-  final normalizedMaxLength = maxLength.clamp(4, 80).toInt();
-  if (title.length <= normalizedMaxLength) {
+  final normalizedMaxLength = maxLength.clamp(1, 40).toInt();
+  final characters = title.runes.toList();
+  if (characters.length <= normalizedMaxLength) {
     return title;
   }
-  return '${title.substring(0, normalizedMaxLength - 3)}...';
+  return String.fromCharCodes(characters.take(normalizedMaxLength));
 }
 
 String? _tooltipLabel(bool enabled, String label) => enabled ? label : null;

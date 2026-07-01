@@ -393,12 +393,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         MarkdownRenderModes.normalize(widget.initialMarkdownRenderMode);
     _todoVisualSize = TodoVisualSizes.normalize(widget.initialTodoVisualSize);
     _uiFontPreset = UiFontPresets.normalize(widget.initialUiFontPreset);
-    _zoom = widget.initialZoom.clamp(0.6, 1.8).toDouble();
-    _maxTitleLength = widget.initialMaxTitleLength.clamp(4, 80).toDouble();
+    _zoom = widget.initialZoom.clamp(0.5, 1.5).toDouble();
+    _maxTitleLength = widget.initialMaxTitleLength.clamp(2, 20).toDouble();
     _enableToolTips = widget.initialEnableToolTips;
     _enableAnimations = widget.initialEnableAnimations;
-    _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 2.4).toDouble();
-    _noteLineSpacing = widget.initialNoteLineSpacing.clamp(0.8, 2.4).toDouble();
+    _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 5.0).toDouble();
+    _noteLineSpacing = widget.initialNoteLineSpacing.clamp(0.8, 5.0).toDouble();
     _showTodoDueRelativeTime = widget.initialShowTodoDueRelativeTime;
     _todoDueYearDisplayMode =
         TodoDueYearDisplayModes.normalize(widget.initialTodoDueYearDisplayMode);
@@ -675,9 +675,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 label: 'Zoom',
                 valueLabel: '${(_zoom * 100).round()}%',
                 value: _zoom,
-                min: 0.6,
-                max: 1.8,
-                divisions: 12,
+                min: 0.5,
+                max: 1.5,
+                divisions: 10,
                 onChanged: (value) => setState(() => _zoom = value),
               ),
               _SettingsSlider(
@@ -685,9 +685,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 label: 'Max title length',
                 valueLabel: '${_maxTitleLength.round()} chars',
                 value: _maxTitleLength,
-                min: 4,
-                max: 80,
-                divisions: 76,
+                min: 2,
+                max: 20,
+                divisions: 18,
                 onChanged: (value) => setState(() => _maxTitleLength = value),
               ),
               SwitchListTile(
@@ -710,8 +710,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 valueLabel: _todoLineSpacing.toStringAsFixed(1),
                 value: _todoLineSpacing,
                 min: 0.8,
-                max: 2.4,
-                divisions: 16,
+                max: 5.0,
+                divisions: 42,
                 onChanged: (value) => setState(() => _todoLineSpacing = value),
               ),
               _SettingsSlider(
@@ -720,8 +720,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 valueLabel: _noteLineSpacing.toStringAsFixed(1),
                 value: _noteLineSpacing,
                 min: 0.8,
-                max: 2.4,
-                divisions: 16,
+                max: 5.0,
+                divisions: 42,
                 onChanged: (value) => setState(() => _noteLineSpacing = value),
               ),
               SwitchListTile(
@@ -1310,7 +1310,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         externalMarkdownExtension:
             _normalizeExtension(_externalMarkdownExtensionController.text),
         zoom: _zoom,
-        maxTitleLength: _maxTitleLength.round().clamp(4, 80).toInt(),
+        maxTitleLength: _maxTitleLength.round().clamp(2, 20).toInt(),
         enableToolTips: _enableToolTips,
         enableAnimations: _enableAnimations,
         todoLineSpacing: _todoLineSpacing,

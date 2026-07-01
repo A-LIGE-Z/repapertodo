@@ -35,7 +35,7 @@ class AppState {
     this.allowLongLinkedNoteTitles = false,
     this.hideLinkedNotesFromCapsules = false,
     this.runLinkedScriptCapsulesOnClick = false,
-    this.maxTitleLength = 18,
+    this.maxTitleLength = 6,
     this.useCapsuleCollapseAll = false,
     this.capsuleCollapseAllActive = false,
     Map<String, bool>? capsuleCollapseAllActiveQueues,
@@ -233,7 +233,7 @@ class AppState {
           boolValue(json['hideLinkedNotesFromCapsules'], false),
       runLinkedScriptCapsulesOnClick:
           boolValue(json['runLinkedScriptCapsulesOnClick'], false),
-      maxTitleLength: intValue(json['maxTitleLength'], 18),
+      maxTitleLength: intValue(json['maxTitleLength'], 6),
       useCapsuleCollapseAll: boolValue(json['useCapsuleCollapseAll'], false),
       capsuleCollapseAllActive:
           boolValue(json['capsuleCollapseAllActive'], false),
@@ -282,7 +282,7 @@ class AppState {
     todoVisualSize = TodoVisualSizes.normalize(todoVisualSize);
     uiFontPreset = UiFontPresets.normalize(uiFontPreset);
     systemFontFamilyName = systemFontFamilyName.trim();
-    zoom = zoom.clamp(0.6, 1.8).toDouble();
+    zoom = _normalizeZoom(zoom);
     todoDueYearDisplayMode =
         TodoDueYearDisplayModes.normalize(todoDueYearDisplayMode);
     todoLineSpacing = _normalizeLineSpacing(todoLineSpacing);
@@ -293,7 +293,7 @@ class AppState {
     todoReminderScope = TodoReminderScopes.normalize(todoReminderScope);
     todoReminderBubbleDurationSeconds =
         todoReminderBubbleDurationSeconds.clamp(1, 600).toInt();
-    maxTitleLength = maxTitleLength.clamp(4, 80).toInt();
+    maxTitleLength = _normalizeMaxTitleLength(maxTitleLength);
     pinnedTodoHotKey = pinnedTodoHotKey.trim();
     pinnedNoteHotKey = pinnedNoteHotKey.trim();
     fullscreenTopmostMode =
@@ -419,7 +419,25 @@ String _normalizeColorHex(String value) {
 }
 
 double _normalizeLineSpacing(double value) {
-  return value.clamp(0.8, 2.4).toDouble();
+  if (!value.isFinite || value <= 0) {
+    return 1;
+  }
+  final rounded = (value * 100).roundToDouble() / 100;
+  return rounded.clamp(0.8, 5.0).toDouble();
+}
+
+double _normalizeZoom(double value) {
+  if (!value.isFinite || value <= 0) {
+    return 1;
+  }
+  return value.clamp(0.5, 1.5).toDouble();
+}
+
+int _normalizeMaxTitleLength(int value) {
+  if (value <= 0) {
+    return 6;
+  }
+  return value.clamp(2, 20).toInt();
 }
 
 String _normalizeExtension(String extension) {
