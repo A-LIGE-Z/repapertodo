@@ -353,6 +353,25 @@ void main() {
       'Updated canvas code',
     );
 
+    await tester.tap(find.byTooltip('Edit canvas geometry').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'X'), '96');
+    await tester.enterText(find.widgetWithText(TextField, 'Y'), '64');
+    await tester.enterText(find.widgetWithText(TextField, 'Width'), '260');
+    await tester.enterText(find.widgetWithText(TextField, 'Height'), '128');
+    await tester.enterText(find.widgetWithText(TextField, 'Layer'), '5');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final updatedTop = controller.state.papers.single.noteCanvasElements
+        .firstWhere((element) => element.id == 'canvas-top');
+    expect(updatedTop.x, 96);
+    expect(updatedTop.y, 64);
+    expect(updatedTop.width, 260);
+    expect(updatedTop.height, 128);
+    expect(updatedTop.zIndex, 5);
+
     await tester.tap(find.widgetWithText(TextButton, 'Add canvas block'));
     await tester.pumpAndSettle();
 

@@ -1574,6 +1574,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       elements: widget.paper.noteCanvasElements,
       textZoom: widget.textZoom,
       onChanged: widget.onChanged,
+      onEdit: _editCanvasElement,
       onDelete: _deleteCanvasElement,
     );
   }
@@ -1617,6 +1618,26 @@ class _NoteEditorState extends State<_NoteEditor> {
     });
     unawaited(widget.onChanged());
   }
+
+  Future<void> _editCanvasElement(NoteCanvasElement element) async {
+    final result = await showDialog<_CanvasGeometry>(
+      context: context,
+      builder: (context) => _CanvasGeometryDialog(element: element),
+    );
+    if (result == null) {
+      return;
+    }
+    setState(() {
+      element
+        ..x = result.x
+        ..y = result.y
+        ..width = result.width
+        ..height = result.height
+        ..zIndex = result.zIndex;
+      element.normalize();
+    });
+    await widget.onChanged();
+  }
 }
 
 class _NoteCanvasPreview extends StatelessWidget {
@@ -1624,12 +1645,14 @@ class _NoteCanvasPreview extends StatelessWidget {
     required this.elements,
     required this.textZoom,
     required this.onChanged,
+    required this.onEdit,
     required this.onDelete,
   });
 
   final List<NoteCanvasElement> elements;
   final double textZoom;
   final Future<void> Function() onChanged;
+  final Future<void> Function(NoteCanvasElement element) onEdit;
   final void Function(NoteCanvasElement element) onDelete;
 
   @override
@@ -1675,6 +1698,7 @@ class _NoteCanvasPreview extends StatelessWidget {
                       scale: scale,
                       textZoom: textZoom,
                       onChanged: onChanged,
+                      onEdit: onEdit,
                       onDelete: onDelete,
                     ),
                   ),
@@ -1705,6 +1729,7 @@ class _NoteCanvasElementPreview extends StatelessWidget {
     required this.scale,
     required this.textZoom,
     required this.onChanged,
+    required this.onEdit,
     required this.onDelete,
     super.key,
   });
@@ -1713,6 +1738,7 @@ class _NoteCanvasElementPreview extends StatelessWidget {
   final double scale;
   final double textZoom;
   final Future<void> Function() onChanged;
+  final Future<void> Function(NoteCanvasElement element) onEdit;
   final void Function(NoteCanvasElement element) onDelete;
 
   @override
@@ -1734,18 +1760,30 @@ class _NoteCanvasElementPreview extends StatelessWidget {
         padding: EdgeInsets.all((8 * scale).clamp(4, 8).toDouble()),
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: SizedBox.square(
-                dimension: (28 * scale).clamp(24, 28).toDouble(),
-                child: IconButton(
-                  tooltip: 'Delete canvas block',
-                  onPressed: () => onDelete(element),
-                  iconSize: (18 * scale).clamp(16, 18).toDouble(),
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.close_outlined),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                SizedBox.square(
+                  dimension: (28 * scale).clamp(24, 28).toDouble(),
+                  child: IconButton(
+                    tooltip: 'Edit canvas geometry',
+                    onPressed: () => unawaited(onEdit(element)),
+                    iconSize: (18 * scale).clamp(16, 18).toDouble(),
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.tune_outlined),
+                  ),
                 ),
-              ),
+                SizedBox.square(
+                  dimension: (28 * scale).clamp(24, 28).toDouble(),
+                  child: IconButton(
+                    tooltip: 'Delete canvas block',
+                    onPressed: () => onDelete(element),
+                    iconSize: (18 * scale).clamp(16, 18).toDouble(),
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.close_outlined),
+                  ),
+                ),
+              ],
             ),
             Expanded(
               child: TextFormField(
@@ -1772,6 +1810,171 @@ class _NoteCanvasElementPreview extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _CanvasGeometry {
+  const _CanvasGeometry({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    required this.zIndex,
+  });
+
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final int zIndex;
+}
+
+class _CanvasGeometryDialog extends StatefulWidget {
+  const _CanvasGeometryDialog({
+    required this.element,
+  });
+
+  final NoteCanvasElement element;
+
+  @override
+  State<_CanvasGeometryDialog> createState() => _CanvasGeometryDialogState();
+}
+
+class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
+  late final TextEditingController _xController;
+  late final TextEditingController _yController;
+  late final TextEditingController _widthController;
+  late final TextEditingController _heightController;
+  late final TextEditingController _layerController;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _xController = TextEditingController(text: _format(widget.element.x));
+    _yController = TextEditingController(text: _format(widget.element.y));
+    _widthController =
+        TextEditingController(text: _format(widget.element.width));
+    _heightController =
+        TextEditingController(text: _format(widget.element.height));
+    _layerController =
+        TextEditingController(text: widget.element.zIndex.toString());
+  }
+
+  @override
+  void dispose() {
+    _xController.dispose();
+    _yController.dispose();
+    _widthController.dispose();
+    _heightController.dispose();
+    _layerController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Canvas block geometry'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_errorText case final errorText?) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  errorText,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Row(
+              children: [
+                Expanded(child: _numberField(_xController, 'X')),
+                const SizedBox(width: 8),
+                Expanded(child: _numberField(_yController, 'Y')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _numberField(_widthController, 'Width')),
+                const SizedBox(width: 8),
+                Expanded(child: _numberField(_heightController, 'Height')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _numberField(_layerController, 'Layer'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _save,
+          icon: const Icon(Icons.check),
+          label: const Text('Save'),
+        ),
+      ],
+    );
+  }
+
+  Widget _numberField(TextEditingController controller, String label) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        border: const OutlineInputBorder(),
+        labelText: label,
+        isDense: true,
+      ),
+      keyboardType: const TextInputType.numberWithOptions(
+        decimal: true,
+        signed: true,
+      ),
+    );
+  }
+
+  void _save() {
+    final x = double.tryParse(_xController.text.trim());
+    final y = double.tryParse(_yController.text.trim());
+    final width = double.tryParse(_widthController.text.trim());
+    final height = double.tryParse(_heightController.text.trim());
+    final layer = int.tryParse(_layerController.text.trim());
+    if (x == null ||
+        y == null ||
+        width == null ||
+        height == null ||
+        layer == null ||
+        !x.isFinite ||
+        !y.isFinite ||
+        !width.isFinite ||
+        !height.isFinite ||
+        width <= 0 ||
+        height <= 0) {
+      setState(() => _errorText = 'Enter valid numbers for every field.');
+      return;
+    }
+    Navigator.of(context).pop(
+      _CanvasGeometry(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        zIndex: layer,
+      ),
+    );
+  }
+
+  String _format(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toInt().toString();
+    }
+    return value.toString();
   }
 }
 
