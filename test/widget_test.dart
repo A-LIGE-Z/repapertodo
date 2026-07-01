@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/src/app.dart';
 import 'package:repapertodo/src/app_controller.dart';
 import 'package:repapertodo/src/core/model/app_state.dart';
+import 'package:repapertodo/src/core/model/note_canvas_element.dart';
 import 'package:repapertodo/src/core/model/paper_constants.dart';
 import 'package:repapertodo/src/core/model/paper_data.dart';
 import 'package:repapertodo/src/core/model/paper_item.dart';
@@ -271,6 +272,71 @@ void main() {
     expect(find.text('Split'), findsOneWidget);
     expect(find.text('Research note'), findsOneWidget);
     expect(find.text('Extract claims'), findsOneWidget);
+  });
+
+  testWidgets('renders note canvas elements', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'canvas-note',
+            type: PaperTypes.note,
+            title: 'Canvas note',
+            content: 'Main note body',
+            noteCanvasElements: [
+              NoteCanvasElement(
+                id: 'canvas-top',
+                text: 'Top layer code',
+                x: 72,
+                y: 48,
+                width: 220,
+                height: 96,
+                zIndex: 2,
+              ),
+              NoteCanvasElement(
+                id: 'canvas-bottom',
+                text: 'Background idea',
+                x: 24,
+                y: 24,
+                width: 180,
+                height: 80,
+                zIndex: 1,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-note-canvas.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('note-canvas-preview')), findsOneWidget);
+    expect(find.text('Background idea'), findsOneWidget);
+    expect(find.text('Top layer code'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('note-canvas-element-canvas-bottom')),
+        matching: find.text('Background idea'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('note-canvas-element-canvas-top')),
+        matching: find.text('Top layer code'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('saves custom theme color', (tester) async {

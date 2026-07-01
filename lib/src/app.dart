@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'app_controller.dart';
 import 'core/model/app_state.dart';
+import 'core/model/note_canvas_element.dart';
 import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/model/paper_item.dart';
@@ -1410,7 +1411,19 @@ class _NoteEditorState extends State<_NoteEditor> {
   Widget build(BuildContext context) {
     final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
     if (mode == MarkdownRenderModes.off) {
-      return _editor(context, minLines: 4, maxLines: 12);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _editor(context, minLines: 4, maxLines: 12),
+          if (widget.paper.noteCanvasElements.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _NoteCanvasPreview(
+              elements: widget.paper.noteCanvasElements,
+              textZoom: widget.textZoom,
+            ),
+          ],
+        ],
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1462,6 +1475,13 @@ class _NoteEditorState extends State<_NoteEditor> {
             return _editor(context, minLines: 4, maxLines: 12);
           },
         ),
+        if (widget.paper.noteCanvasElements.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _NoteCanvasPreview(
+            elements: widget.paper.noteCanvasElements,
+            textZoom: widget.textZoom,
+          ),
+        ],
       ],
     );
   }
@@ -1537,6 +1557,123 @@ class _NoteEditorState extends State<_NoteEditor> {
     return MarkdownRenderModes.normalize(mode) == MarkdownRenderModes.enhanced
         ? _viewSplit
         : _viewEdit;
+  }
+}
+
+class _NoteCanvasPreview extends StatelessWidget {
+  const _NoteCanvasPreview({
+    required this.elements,
+    required this.textZoom,
+  });
+
+  final List<NoteCanvasElement> elements;
+  final double textZoom;
+
+  @override
+  Widget build(BuildContext context) {
+    final sortedElements = [...elements]..sort((a, b) {
+        final byLayer = a.zIndex.compareTo(b.zIndex);
+        return byLayer != 0 ? byLayer : a.id.compareTo(b.id);
+      });
+    final contentWidth = _contentWidth(sortedElements);
+    final contentHeight = _contentHeight(sortedElements);
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      key: const ValueKey('note-canvas-preview'),
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxWidth = constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : contentWidth;
+          final scale = (maxWidth / contentWidth).clamp(0.2, 1.0).toDouble();
+          return SizedBox(
+            height: (contentHeight * scale).clamp(120, 640).toDouble(),
+            child: Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: colorScheme.surfaceContainerLowest,
+                  ),
+                ),
+                for (final element in sortedElements)
+                  Positioned(
+                    left: element.x * scale,
+                    top: element.y * scale,
+                    width: element.width * scale,
+                    height: element.height * scale,
+                    child: _NoteCanvasElementPreview(
+                      key: ValueKey('note-canvas-element-${element.id}'),
+                      element: element,
+                      scale: scale,
+                      textZoom: textZoom,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  double _contentWidth(List<NoteCanvasElement> elements) {
+    return elements
+        .map((element) => element.x + element.width)
+        .fold<double>(320, (max, value) => value > max ? value : max);
+  }
+
+  double _contentHeight(List<NoteCanvasElement> elements) {
+    return elements
+        .map((element) => element.y + element.height)
+        .fold<double>(160, (max, value) => value > max ? value : max);
+  }
+}
+
+class _NoteCanvasElementPreview extends StatelessWidget {
+  const _NoteCanvasElementPreview({
+    required this.element,
+    required this.scale,
+    required this.textZoom,
+    super.key,
+  });
+
+  final NoteCanvasElement element;
+  final double scale;
+  final double textZoom;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isCode = element.type == NoteCanvasElementTypes.code;
+    final style = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.apply(fontSizeFactor: textZoom)
+        .copyWith(fontFamily: isCode ? 'monospace' : null);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHigh,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all((8 * scale).clamp(4, 8).toDouble()),
+        child: SingleChildScrollView(
+          child: Text(
+            element.text.trim().isEmpty ? 'Canvas element' : element.text,
+            style: style?.copyWith(
+              color: colorScheme.onSurface,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
