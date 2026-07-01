@@ -1581,7 +1581,6 @@ class _TodoEditorState extends State<_TodoEditor> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final visualSpec = _TodoVisualSpec.from(widget.visualSize);
     final itemTextStyle = theme.textTheme.bodyMedium
         ?.apply(fontSizeFactor: visualSpec.textScale * widget.textZoom)
@@ -1613,30 +1612,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TextFormField(
-                        key: ValueKey('${widget.paper.id}-${item.id}-text'),
-                        initialValue: item.text,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          hintText: 'New item',
-                          isDense: true,
-                        ),
-                        style: itemTextStyle?.copyWith(
-                          color: item.done
-                              ? colorScheme.outline
-                              : colorScheme.onSurface,
-                          decoration:
-                              item.done ? TextDecoration.lineThrough : null,
-                        ),
-                        onChanged: (value) {
-                          item.text = value;
-                          unawaited(widget.onChanged());
-                        },
-                        onFieldSubmitted: (_) => _addItem(),
-                      ),
-                      if (item.todoColumnCount > 1)
-                        _extraColumnFields(context, item, itemTextStyle),
+                      _todoColumnFields(context, item, itemTextStyle),
                       Wrap(
                         spacing: 6,
                         runSpacing: 4,
@@ -1732,6 +1708,24 @@ class _TodoEditorState extends State<_TodoEditor> {
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
+                      PopupMenuItem(
+                        value: _columnActionEqualWidths,
+                        enabled: item.todoColumnCount > 1,
+                        child: const ListTile(
+                          leading: Icon(Icons.view_column_outlined),
+                          title: Text('Equal widths'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: _columnActionWideFirst,
+                        enabled: item.todoColumnCount > 1,
+                        child: const ListTile(
+                          leading: Icon(Icons.view_week_outlined),
+                          title: Text('Wide first column'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                     ];
                   },
                 ),
@@ -1783,58 +1777,48 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   static const _columnActionAdd = 'add';
   static const _columnActionRemove = 'remove';
+  static const _columnActionEqualWidths = 'equal-widths';
+  static const _columnActionWideFirst = 'wide-first';
 
-  Widget _extraColumnFields(
+  Widget _todoColumnFields(
     BuildContext context,
     PaperItem item,
     TextStyle? itemTextStyle,
   ) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final fields = [
+      _mainColumnField(context, item, itemTextStyle),
+      for (var index = 0; index < item.todoExtraColumns.length; index++)
+        _extraColumnField(context, item, index, itemTextStyle),
+    ];
+    if (item.todoColumnCount <= 1) {
+      return fields.first;
+    }
     return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 6),
+      padding: const EdgeInsets.only(bottom: 6),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final useRows = constraints.maxWidth < 520;
-          final fields = [
-            for (var index = 0; index < item.todoExtraColumns.length; index++)
-              TextFormField(
-                key: ValueKey(
-                  '${widget.paper.id}-${item.id}-column-${index + 2}',
-                ),
-                initialValue: item.todoExtraColumns[index],
-                textInputAction: TextInputAction.next,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: 'Column ${index + 2}',
-                  isDense: true,
-                ),
-                style: itemTextStyle?.copyWith(
-                  color:
-                      item.done ? colorScheme.outline : colorScheme.onSurface,
-                  decoration: item.done ? TextDecoration.lineThrough : null,
-                ),
-                onChanged: (value) {
-                  item.todoExtraColumns[index] = value;
-                  unawaited(widget.onChanged());
-                },
-              ),
-          ];
-          if (useRows) {
+          if (constraints.maxWidth < 640) {
             return Column(
               children: [
-                for (final field in fields)
+                for (var index = 0; index < fields.length; index++)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: field,
+                    padding: EdgeInsets.only(
+                      bottom: index == fields.length - 1 ? 0 : 6,
+                    ),
+                    child: fields[index],
                   ),
               ],
             );
           }
           return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               for (var index = 0; index < fields.length; index++) ...[
                 if (index > 0) const SizedBox(width: 8),
-                Expanded(child: fields[index]),
+                Expanded(
+                  flex: _columnFlex(item, index),
+                  child: fields[index],
+                ),
               ],
             ],
           );
@@ -1843,12 +1827,100 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
   }
 
+  Widget _mainColumnField(
+    BuildContext context,
+    PaperItem item,
+    TextStyle? itemTextStyle,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return TextFormField(
+      key: ValueKey('${widget.paper.id}-${item.id}-text'),
+      initialValue: item.text,
+      textInputAction: TextInputAction.next,
+      decoration: InputDecoration(
+        border: item.todoColumnCount > 1
+            ? const OutlineInputBorder()
+            : InputBorder.none,
+        labelText: item.todoColumnCount > 1 ? 'Column 1' : null,
+        hintText: 'New item',
+        isDense: true,
+      ),
+      style: itemTextStyle?.copyWith(
+        color: item.done ? colorScheme.outline : colorScheme.onSurface,
+        decoration: item.done ? TextDecoration.lineThrough : null,
+      ),
+      onChanged: (value) {
+        item.text = value;
+        unawaited(widget.onChanged());
+      },
+      onFieldSubmitted: (_) => _addItem(),
+    );
+  }
+
+  Widget _extraColumnField(
+    BuildContext context,
+    PaperItem item,
+    int index,
+    TextStyle? itemTextStyle,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return TextFormField(
+      key: ValueKey(
+        '${widget.paper.id}-${item.id}-column-${index + 2}',
+      ),
+      initialValue: item.todoExtraColumns[index],
+      textInputAction: TextInputAction.next,
+      decoration: InputDecoration(
+        border: const OutlineInputBorder(),
+        labelText: 'Column ${index + 2}',
+        isDense: true,
+      ),
+      style: itemTextStyle?.copyWith(
+        color: item.done ? colorScheme.outline : colorScheme.onSurface,
+        decoration: item.done ? TextDecoration.lineThrough : null,
+      ),
+      onChanged: (value) {
+        item.todoExtraColumns[index] = value;
+        unawaited(widget.onChanged());
+      },
+    );
+  }
+
+  int _columnFlex(PaperItem item, int index) {
+    if (item.todoColumnWidths.length != item.todoColumnCount) {
+      return 1;
+    }
+    final width = item.todoColumnWidths[index];
+    if (width <= 0 || !width.isFinite) {
+      return 1;
+    }
+    return (width * 100).round().clamp(1, 10000).toInt();
+  }
+
   void _updateColumns(PaperItem item, String action) {
     setState(() {
       if (action == _columnActionAdd && item.todoColumnCount < 8) {
         item.todoColumnCount += 1;
+        if (item.todoColumnWidths.isNotEmpty) {
+          item.todoColumnWidths = [
+            ...item.todoColumnWidths.take(item.todoColumnCount - 1),
+            1,
+          ];
+        }
       } else if (action == _columnActionRemove && item.todoColumnCount > 1) {
         item.todoColumnCount -= 1;
+        if (item.todoColumnWidths.isNotEmpty) {
+          item.todoColumnWidths =
+              item.todoColumnWidths.take(item.todoColumnCount).toList();
+        }
+      } else if (action == _columnActionEqualWidths &&
+          item.todoColumnCount > 1) {
+        item.todoColumnWidths = List.filled(item.todoColumnCount, 1);
+      } else if (action == _columnActionWideFirst && item.todoColumnCount > 1) {
+        item.todoColumnWidths = [
+          2,
+          ...List.filled(item.todoColumnCount - 1, 1),
+        ];
       }
       item.normalize();
     });
@@ -1856,9 +1928,13 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _addItem() {
-    final inheritedColumnCount = widget.paper.items.isEmpty
-        ? 1
-        : widget.paper.items.last.todoColumnCount;
+    final inheritedItem =
+        widget.paper.items.isEmpty ? null : widget.paper.items.last;
+    final inheritedColumnCount = inheritedItem?.todoColumnCount ?? 1;
+    final inheritedColumnWidths =
+        inheritedItem?.todoColumnWidths.length == inheritedColumnCount
+            ? inheritedItem!.todoColumnWidths
+            : <double>[];
     setState(() {
       widget.paper.items.add(
         PaperItem(
@@ -1866,6 +1942,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           order: widget.paper.items.length,
           todoColumnCount: inheritedColumnCount,
           todoExtraColumns: List.filled(inheritedColumnCount - 1, ''),
+          todoColumnWidths: [...inheritedColumnWidths],
         ),
       );
       widget.paper.normalize();

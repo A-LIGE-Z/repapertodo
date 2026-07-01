@@ -637,6 +637,7 @@ void main() {
     final firstItem = controller.state.papers.single.items.first;
     expect(firstItem.todoColumnCount, 2);
     expect(firstItem.todoExtraColumns, ['']);
+    expect(find.text('Column 1'), findsOneWidget);
     expect(find.text('Column 2'), findsOneWidget);
 
     await tester.enterText(
@@ -647,12 +648,25 @@ void main() {
 
     expect(firstItem.todoExtraColumns.single, 'Status: reading');
 
+    await tester.tap(find.byTooltip('Todo columns'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is PopupMenuItem<String> && widget.value == 'wide-first',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(firstItem.todoColumnWidths, [2, 1]);
+
     await tester.tap(find.widgetWithText(TextButton, 'Add item'));
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.items, hasLength(2));
     expect(controller.state.papers.single.items.last.todoColumnCount, 2);
     expect(controller.state.papers.single.items.last.todoExtraColumns, ['']);
+    expect(controller.state.papers.single.items.last.todoColumnWidths, [2, 1]);
 
     await tester.tap(find.byTooltip('Todo columns').first);
     await tester.pumpAndSettle();
