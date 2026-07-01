@@ -1679,6 +1679,7 @@ class _NoteEditorState extends State<_NoteEditor> {
     }
     setState(() {
       element
+        ..type = result.type
         ..x = result.x
         ..y = result.y
         ..width = result.width
@@ -1952,6 +1953,7 @@ class _NoteCanvasElementPreview extends StatelessWidget {
 
 class _CanvasGeometry {
   const _CanvasGeometry({
+    required this.type,
     required this.x,
     required this.y,
     required this.width,
@@ -1959,6 +1961,7 @@ class _CanvasGeometry {
     required this.zIndex,
   });
 
+  final String type;
   final double x;
   final double y;
   final double width;
@@ -1983,11 +1986,13 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
   late final TextEditingController _widthController;
   late final TextEditingController _heightController;
   late final TextEditingController _layerController;
+  late String _type;
   String? _errorText;
 
   @override
   void initState() {
     super.initState();
+    _type = NoteCanvasElementTypes.normalize(widget.element.type);
     _xController = TextEditingController(text: _format(widget.element.x));
     _yController = TextEditingController(text: _format(widget.element.y));
     _widthController =
@@ -2027,6 +2032,27 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
               ),
               const SizedBox(height: 12),
             ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: NoteCanvasElementTypes.code,
+                    icon: Icon(Icons.code_outlined),
+                    label: Text('Code'),
+                  ),
+                  ButtonSegment(
+                    value: NoteCanvasElementTypes.text,
+                    icon: Icon(Icons.notes_outlined),
+                    label: Text('Text'),
+                  ),
+                ],
+                selected: {_type},
+                onSelectionChanged: (selection) =>
+                    setState(() => _type = selection.single),
+              ),
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(child: _numberField(_xController, 'X')),
@@ -2098,6 +2124,7 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
     }
     Navigator.of(context).pop(
       _CanvasGeometry(
+        type: _type,
         x: x,
         y: y,
         width: width,

@@ -361,11 +361,13 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, 'Width'), '260');
     await tester.enterText(find.widgetWithText(TextField, 'Height'), '128');
     await tester.enterText(find.widgetWithText(TextField, 'Layer'), '5');
+    await tester.tap(find.text('Text'));
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
     final updatedTop = controller.state.papers.single.noteCanvasElements
         .firstWhere((element) => element.id == 'canvas-top');
+    expect(updatedTop.type, NoteCanvasElementTypes.text);
     expect(updatedTop.x, 96);
     expect(updatedTop.y, 64);
     expect(updatedTop.width, 260);
@@ -385,6 +387,7 @@ void main() {
     expect(duplicatedTop.y, 88);
     expect(duplicatedTop.width, 260);
     expect(duplicatedTop.height, 128);
+    expect(duplicatedTop.type, NoteCanvasElementTypes.text);
     expect(duplicatedTop.zIndex, 6);
 
     await tester.tap(find.byTooltip('Canvas layer actions').last);

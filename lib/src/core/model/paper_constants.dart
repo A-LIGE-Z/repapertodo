@@ -106,9 +106,10 @@ abstract final class TodoDueYearDisplayModes {
 
 abstract final class NoteCanvasElementTypes {
   static const code = 'code';
+  static const text = 'text';
 
   static String normalize(String? value) {
-    return code;
+    return value == text ? text : code;
   }
 }
 

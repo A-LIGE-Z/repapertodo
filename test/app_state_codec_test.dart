@@ -101,6 +101,28 @@ void main() {
     expect(itemsById['item-missing']?.linkedNoteId, isNull);
   });
 
+  test('normalizes note canvas element types', () {
+    final state = AppState(
+      papers: [
+        PaperData(
+          id: 'canvas-note',
+          type: PaperTypes.note,
+          noteCanvasElements: [
+            NoteCanvasElement(id: 'text-block', type: 'text'),
+            NoteCanvasElement(id: 'unknown-block', type: 'shape'),
+          ],
+        ),
+      ],
+    )..normalize();
+
+    final elementsById = {
+      for (final element in state.papers.single.noteCanvasElements)
+        element.id: element,
+    };
+    expect(elementsById['text-block']?.type, NoteCanvasElementTypes.text);
+    expect(elementsById['unknown-block']?.type, NoteCanvasElementTypes.code);
+  });
+
   test('normalizes deep capsule top margins', () {
     final state = AppState.fromJson({
       'deepCapsuleStartTopMargin': 2,
