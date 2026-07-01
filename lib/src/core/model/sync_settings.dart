@@ -251,6 +251,7 @@ class WebDavSyncSettings {
     if (uri == null ||
         (scheme != 'http' && scheme != 'https') ||
         uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
         uri.hasQuery ||
         uri.hasFragment) {
       return null;

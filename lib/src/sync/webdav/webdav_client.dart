@@ -179,6 +179,13 @@ Uri _normalizeBaseUri(Uri uri) {
       'WebDAV base URI must use http or https and include a host.',
     );
   }
+  if (uri.userInfo.isNotEmpty) {
+    throw ArgumentError.value(
+      uri,
+      'baseUri',
+      'WebDAV base URI must not include embedded credentials.',
+    );
+  }
   if (uri.hasQuery || uri.hasFragment) {
     throw ArgumentError.value(
       uri,

@@ -8,8 +8,8 @@ The required transport is WebDAV.
 
 Generic WebDAV support is mandatory. Provider presets may be added for convenience, but they must not replace custom WebDAV configuration.
 Configured WebDAV endpoints must use `http` or `https` and must not include
-query or fragment components; unsupported endpoint shapes are treated as
-incomplete settings.
+embedded credentials, query components, or fragment components; unsupported
+endpoint shapes are treated as incomplete settings.
 
 Initial recommended preset:
 

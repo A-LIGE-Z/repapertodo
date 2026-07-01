@@ -62,6 +62,7 @@ void main() {
     for (final baseUri in [
       Uri.parse('ftp://dav.example.test/dav/'),
       Uri.parse('file:///tmp/dav/'),
+      Uri.parse('https://user:pass@dav.example.test/dav/'),
       Uri.parse('https://dav.example.test/dav/?token=secret'),
       Uri.parse('https://dav.example.test/dav/#sync-root'),
     ]) {

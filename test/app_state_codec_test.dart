@@ -746,6 +746,7 @@ Plain item
       'ftp://dav.example.test/dav/',
       'file:///tmp/dav',
       'dav.example.test/dav/',
+      'https://user:pass@dav.example.test/dav/',
       'https://dav.example.test/dav/?token=secret',
       'https://dav.example.test/dav/#sync-root',
     ]) {
