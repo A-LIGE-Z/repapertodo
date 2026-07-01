@@ -16,6 +16,7 @@ import 'core/model/paper_constants.dart';
 import 'core/model/paper_data.dart';
 import 'core/model/paper_item.dart';
 import 'core/model/paper_titles.dart';
+import 'core/model/sync_settings.dart';
 import 'core/model/todo_paste.dart';
 import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
@@ -150,6 +151,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
   StreamSubscription<String>? _paperOpenSubscription;
   StreamSubscription<StartupCommand>? _startupCommandSubscription;
+  Timer? _autoSyncTimer;
   Timer? _surfaceSaveDebounce;
   Timer? _titleSurfaceDebounce;
   Timer? _todoReminderTimer;
@@ -169,11 +171,13 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     _startupCommandSubscription = controller.startupCommands.listen((command) {
       unawaited(_handleStartupCommand(command));
     });
+    _restartAutoSyncTimer();
     _restartTodoReminderTimer();
   }
 
   @override
   void dispose() {
+    _autoSyncTimer?.cancel();
     _surfaceSaveDebounce?.cancel();
     _titleSurfaceDebounce?.cancel();
     _todoReminderTimer?.cancel();
@@ -250,7 +254,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
             ),
           IconButton(
             tooltip: _tooltipLabel(enableToolTips, 'Sync now'),
-            onPressed: _isSyncing ? null : _syncNow,
+            onPressed: _isSyncing ? null : () => _syncNow(),
             icon: _isSyncing
                 ? const SizedBox.square(
                     dimension: 20,
@@ -605,24 +609,31 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     await _saveState();
   }
 
-  Future<void> _syncNow() async {
+  Future<void> _syncNow({bool showMessage = true}) async {
+    if (_isSyncing) {
+      return;
+    }
     setState(() => _isSyncing = true);
     try {
       final result = await widget.syncService.syncAndMergeNow(
         localState: controller.state,
         store: widget.store,
       );
-      setState(() {
-        controller.replaceState(result.state);
-      });
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_syncRunMessage(result))),
-      );
+      setState(() {
+        controller.replaceState(result.state);
+      });
+      await controller.rebuildTrayMenu();
+      _restartAutoSyncTimer();
+      if (showMessage && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_syncRunMessage(result))),
+        );
+      }
     } catch (error) {
-      if (!mounted) {
+      if (!mounted || !showMessage) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
@@ -881,6 +892,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       await controller.preparePersistentScriptCapsules();
     }
     widget.onAppThemeChanged?.call();
+    _restartAutoSyncTimer();
     _restartTodoReminderTimer();
     await _saveState();
   }
@@ -936,6 +948,29 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     }
     final changeLabel = appliedCount == 1 ? 'change' : 'changes';
     return '$baseMessage Merged $appliedCount remote $changeLabel.';
+  }
+
+  void _restartAutoSyncTimer() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
+    if (!_canRunAutoSync()) {
+      return;
+    }
+    final interval = Duration(
+      minutes: controller.state.sync.webDav.autoSyncIntervalMinutes,
+    );
+    _autoSyncTimer = Timer.periodic(interval, (_) {
+      if (!_isSyncing) {
+        unawaited(_syncNow(showMessage: false));
+      }
+    });
+  }
+
+  bool _canRunAutoSync() {
+    final settings = controller.state.sync;
+    return settings.enabled &&
+        settings.provider == SyncProviderIds.webDav &&
+        settings.webDav.isConfigured;
   }
 
   Future<bool> _confirmDeletePaper(PaperData paper) async {

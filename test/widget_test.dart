@@ -11,6 +11,7 @@ import 'package:repapertodo/src/core/model/note_canvas_element.dart';
 import 'package:repapertodo/src/core/model/paper_constants.dart';
 import 'package:repapertodo/src/core/model/paper_data.dart';
 import 'package:repapertodo/src/core/model/paper_item.dart';
+import 'package:repapertodo/src/core/model/sync_settings.dart';
 import 'package:repapertodo/src/core/script/script_capsule.dart';
 import 'package:repapertodo/src/core/storage/state_store.dart';
 import 'package:repapertodo/src/core/startup/startup_command.dart';
@@ -832,6 +833,84 @@ void main() {
       find.text('Remote data downloaded. Merged 1 remote change.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('auto sync runs silently on the configured interval',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            rootPath: 'repapertodo',
+            autoSyncIntervalMinutes: 1,
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'local-note',
+            type: PaperTypes.note,
+            title: 'Local',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-auto-sync.json');
+    final syncedState = AppState(
+      papers: [
+        PaperData(
+          id: 'auto-note',
+          type: PaperTypes.note,
+          title: 'Auto synced',
+          content: 'Merged on timer',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+        operationMergeResult: AppSyncOperationMergeResult(
+          state: syncedState,
+          deviceSequences: const {'device-a': 2},
+          appliedCount: 2,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.pump(const Duration(seconds: 59));
+
+    expect(syncService.calls, 0);
+    expect(controller.state.papers.single.title, 'Local');
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Auto synced');
+    expect(controller.state.papers.single.content, 'Merged on timer');
+    expect(find.textContaining('Merged 2 remote changes.'), findsNothing);
   });
 
   testWidgets('opens note markdown externally', (tester) async {
