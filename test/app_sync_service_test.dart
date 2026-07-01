@@ -158,6 +158,99 @@ void main() {
     expect(await File(store.filePath).exists(), isFalse);
   });
 
+  test('syncAndMergeNow applies remote operations after sync succeeds',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_and_merge_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return const WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+            snapshotPath: 'repapertodo/snapshots/local.json',
+          );
+        },
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote-note',
+                  type: PaperTypes.note,
+                  title: 'Merged',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.uploaded);
+    expect(result.operationAppliedCount, 1);
+    expect(result.state.papers.single.title, 'Merged');
+    expect((await store.load()).papers.single.title, 'Merged');
+  });
+
+  test('syncAndMergeNow skips remote operations after sync conflict', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_and_merge_conflict_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return const WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.conflict,
+            snapshotPath: 'repapertodo/snapshots/conflict-local.json',
+          );
+        },
+        onListOperationLogs: () async {
+          throw StateError('Conflicted sync should not merge operations.');
+        },
+      ),
+    );
+    final localState = AppState(
+      papers: [
+        PaperData(id: 'local', type: PaperTypes.todo, title: 'Local'),
+      ],
+      sync: _configuredSyncSettings(),
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: localState,
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.conflict);
+    expect(result.operationMergeResult, isNull);
+    expect(result.state.papers.single.title, 'Local');
+    expect(await File(store.filePath).exists(), isFalse);
+  });
+
   test('lists recovery snapshots through configured WebDAV', () async {
     final directory =
         await Directory.systemTemp.createTemp('repapertodo_app_sync_list_');

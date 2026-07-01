@@ -45,6 +45,20 @@ class AppSyncOperationMergeResult {
   final int appliedCount;
 }
 
+class AppSyncRunResult {
+  const AppSyncRunResult({
+    required this.syncResult,
+    required this.state,
+    this.operationMergeResult,
+  });
+
+  final AppSyncResult syncResult;
+  final AppState state;
+  final AppSyncOperationMergeResult? operationMergeResult;
+
+  int get operationAppliedCount => operationMergeResult?.appliedCount ?? 0;
+}
+
 class AppSyncService {
   AppSyncService({
     WebDavStateSyncServiceFactory? webDavFactory,
@@ -127,6 +141,40 @@ class AppSyncService {
           snapshotPath: snapshotPath,
         );
     }
+  }
+
+  Future<AppSyncRunResult> syncAndMergeNow({
+    required AppState localState,
+    required StateStore store,
+    DateTime? localUpdatedAtUtc,
+  }) async {
+    final syncResult = await syncNow(
+      localState: localState,
+      store: store,
+      localUpdatedAtUtc: localUpdatedAtUtc,
+    );
+    var state = syncResult.state ?? localState;
+    AppSyncOperationMergeResult? operationMergeResult;
+
+    switch (syncResult.status) {
+      case AppSyncStatus.uploaded:
+      case AppSyncStatus.downloaded:
+        operationMergeResult = await mergeRemoteOperations(
+          localState: state,
+          store: store,
+        );
+        state = operationMergeResult.state;
+      case AppSyncStatus.disabled:
+      case AppSyncStatus.configurationMissing:
+      case AppSyncStatus.conflict:
+        break;
+    }
+
+    return AppSyncRunResult(
+      syncResult: syncResult,
+      state: state,
+      operationMergeResult: operationMergeResult,
+    );
   }
 
   Future<List<WebDavSnapshotRecord>> listRecoverySnapshots({
