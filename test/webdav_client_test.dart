@@ -112,6 +112,27 @@ void main() {
     expect(closeCount, 1);
   });
 
+  test('rejects requests after closing owned HTTP clients', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+    );
+
+    client.close();
+    client.close();
+
+    await expectLater(
+      client.metadata('repapertodo/manifest.json'),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'WebDAV client is closed.',
+        ),
+      ),
+    );
+  });
+
   test('rejects invalid Basic Auth usernames before sending', () async {
     for (final username in const [
       '',

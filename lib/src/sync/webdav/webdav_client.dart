@@ -186,6 +186,9 @@ class WebDavClient {
     Map<String, String>? headers,
     Object? body,
   }) {
+    if (_closed) {
+      throw StateError('WebDAV client is closed.');
+    }
     final request = http.Request(method, _resolve(path));
     request.headers.addAll({
       'authorization': _credentials.authorizationHeader,
