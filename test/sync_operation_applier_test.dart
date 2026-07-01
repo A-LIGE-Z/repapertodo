@@ -1,0 +1,178 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:repapertodo/repapertodo.dart';
+
+void main() {
+  const applier = SyncOperationApplier();
+
+  test('upserts and deletes papers', () {
+    final result = applier.apply(
+      AppState(
+        papers: [
+          PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'Old'),
+        ],
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'paper-1',
+              type: PaperTypes.note,
+              title: 'Updated',
+              content: 'Remote body',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'paper-2',
+              type: PaperTypes.todo,
+              title: 'Added',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 3,
+          kind: SyncOperationKind.deletePaper,
+          payload: {'paperId': 'paper-2'},
+        ),
+      ],
+    );
+
+    expect(result.appliedCount, 3);
+    expect(result.deviceSequences, {'device-a': 3});
+    expect(result.state.papers, hasLength(1));
+    expect(result.state.papers.single.type, PaperTypes.note);
+    expect(result.state.papers.single.title, 'Updated');
+    expect(result.state.papers.single.content, 'Remote body');
+  });
+
+  test('upserts and deletes todo items', () {
+    final result = applier.apply(
+      AppState(
+        papers: [
+          PaperData(
+            id: 'todo',
+            type: PaperTypes.todo,
+            items: [PaperItem(id: 'item-1', text: 'One')],
+          ),
+        ],
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.upsertTodoItem,
+          payload: {
+            'paperId': 'todo',
+            'item': PaperItem(id: 'item-2', text: 'Two', done: true).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.deleteTodoItem,
+          payload: {'paperId': 'todo', 'itemId': 'item-1'},
+        ),
+      ],
+    );
+
+    expect(result.state.papers.single.items, hasLength(1));
+    expect(result.state.papers.single.items.single.id, 'item-2');
+    expect(result.state.papers.single.items.single.done, true);
+  });
+
+  test('updates note content and settings', () {
+    final result = applier.apply(
+      AppState(
+        theme: 'light',
+        enableToolTips: true,
+        papers: [
+          PaperData(id: 'note', type: PaperTypes.note, content: 'Local'),
+        ],
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.updateNoteContent,
+          payload: {'paperId': 'note', 'content': 'Remote'},
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.updateSettings,
+          payload: {
+            'settings': {
+              'theme': 'dark',
+              'enableToolTips': false,
+            },
+          },
+        ),
+      ],
+    );
+
+    expect(result.state.papers.single.content, 'Remote');
+    expect(result.state.theme, 'dark');
+    expect(result.state.enableToolTips, false);
+  });
+
+  test('skips snapshot markers and already applied sequences', () {
+    final result = applier.apply(
+      AppState(
+        papers: [
+          PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'Local'),
+        ],
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'paper-1',
+              type: PaperTypes.todo,
+              title: 'Stale',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.stateSnapshot,
+          payload: {'snapshotPath': 'repapertodo/snapshots/snapshot.json'},
+        ),
+        _operation(
+          sequence: 3,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'paper-1',
+              type: PaperTypes.todo,
+              title: 'Fresh',
+            ).toJson(),
+          },
+        ),
+      ],
+      deviceSequences: {'device-a': 1},
+    );
+
+    expect(result.appliedCount, 2);
+    expect(result.deviceSequences, {'device-a': 3});
+    expect(result.state.papers.single.title, 'Fresh');
+  });
+}
+
+SyncOperation _operation({
+  required int sequence,
+  required SyncOperationKind kind,
+  required Map<String, Object?> payload,
+}) {
+  return SyncOperation(
+    id: 'device-a-$sequence',
+    deviceId: 'device-a',
+    sequence: sequence,
+    kind: kind,
+    createdAtUtc: DateTime.utc(2026, 7, 1, 9, 0, sequence),
+    payload: payload,
+  );
+}
