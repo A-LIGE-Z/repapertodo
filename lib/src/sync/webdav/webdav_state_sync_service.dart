@@ -548,6 +548,7 @@ class WebDavStateSyncService {
     await _client.putBytes(
       _paths.operationLogPath(operation.deviceId, operation.sequence),
       utf8.encode('${jsonEncode(operation.toJson())}\n'),
+      createOnly: true,
     );
   }
 

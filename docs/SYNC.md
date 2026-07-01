@@ -41,6 +41,9 @@ points at the uploaded snapshot and advances that device's manifest sequence.
 The sync core can enumerate and download these operation logs as merge inputs.
 It applies operation-level merges for settings, papers, note content, and todo
 items before saving the merged local state.
+Operation logs are created with `If-None-Match: *` and treated as immutable
+remote records so a repeated upload cannot overwrite an existing device
+sequence.
 When downloading an operation log, the `<deviceId>-<sequence>` file name is
 treated as the authoritative operation identity so stale or hand-edited payload
 metadata cannot advance the wrong device sequence.
@@ -75,6 +78,7 @@ Planned encrypted operation-log layout:
 - Merge operation logs instead of replacing the whole state file.
 - Apply operation logs in per-device sequence order without skipping gaps.
 - Upload operation logs in per-device sequence order without creating gaps.
+- Create operation log files only when the target path does not already exist.
 - Use ETag/If-Match when supported.
 - Preserve conflicts as recoverable user content.
 - Keep tombstones long enough to prevent deleted content from reappearing from stale devices.

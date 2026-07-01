@@ -56,6 +56,7 @@ void main() {
     final operationRequest = requests.firstWhere((request) =>
         request.method == 'PUT' &&
         request.url.path.endsWith('/ops/test-device-000000000001.jsonl'));
+    expect(operationRequest.headers['if-none-match'], '*');
     final operation = jsonDecode(utf8.decode(operationRequest.bodyBytes).trim())
         as Map<String, Object?>;
     expect(operation['kind'], 'stateSnapshot');
@@ -587,6 +588,10 @@ void main() {
 
     final operationRequests =
         requests.where((request) => request.method == 'PUT').toList();
+    expect(
+      operationRequests.map((request) => request.headers['if-none-match']),
+      ['*', '*'],
+    );
     expect(operationRequests.map((request) => request.url.path), [
       '/remote.php/dav/files/user/repapertodo/ops/android-device-000000000001.jsonl',
       '/remote.php/dav/files/user/repapertodo/ops/device-a-000000000002.jsonl',
@@ -680,6 +685,10 @@ void main() {
     expect(result.deviceSequences, {'device-a': 1, 'device-b': 1});
     final operationRequests =
         requests.where((request) => request.method == 'PUT').toList();
+    expect(
+      operationRequests.map((request) => request.headers['if-none-match']),
+      ['*', '*'],
+    );
     expect(operationRequests.map((request) => request.url.path), [
       '/remote.php/dav/files/user/repapertodo/ops/device-a-000000000001.jsonl',
       '/remote.php/dav/files/user/repapertodo/ops/device-b-000000000001.jsonl',
