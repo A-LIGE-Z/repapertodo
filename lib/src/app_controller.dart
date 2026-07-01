@@ -123,6 +123,10 @@ class RePaperTodoController {
     await _platform.externalFiles.openFile(path);
   }
 
+  Future<void> openUri(String uri) async {
+    await _platform.uriOpener.openUri(uri);
+  }
+
   Future<void> runScriptCapsule(ScriptCapsuleSpec spec) async {
     await _platform.scriptCapsules.runScriptCapsule(
       ScriptCapsuleRunRequest(

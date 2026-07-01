@@ -22,6 +22,7 @@ class WindowsPlatformServices implements PlatformServices {
         startup = startupHost,
         systemIntegration = WindowsSystemIntegrationHost(channel),
         externalFiles = WindowsExternalFileHost(channel),
+        uriOpener = WindowsUriOpenHost(channel),
         scriptCapsules = WindowsScriptCapsuleHost(channel);
 
   @override
@@ -38,6 +39,9 @@ class WindowsPlatformServices implements PlatformServices {
 
   @override
   final ExternalFileHost externalFiles;
+
+  @override
+  final UriOpenHost uriOpener;
 
   @override
   final ScriptCapsuleHost scriptCapsules;
@@ -319,6 +323,17 @@ class WindowsExternalFileHost implements ExternalFileHost {
   @override
   Future<void> openFile(String path) async {
     await _channel.invokeMethod<void>('openExternalFile', path);
+  }
+}
+
+class WindowsUriOpenHost implements UriOpenHost {
+  WindowsUriOpenHost(this._channel);
+
+  final MethodChannel _channel;
+
+  @override
+  Future<void> openUri(String uri) async {
+    await _channel.invokeMethod<void>('openUri', uri);
   }
 }
 

@@ -13,6 +13,7 @@ class NoopPlatformServices implements PlatformServices {
         startup = NoopStartupHost(),
         systemIntegration = NoopSystemIntegrationHost(),
         externalFiles = NoopExternalFileHost(),
+        uriOpener = NoopUriOpenHost(),
         scriptCapsules = NoopScriptCapsuleHost();
 
   @override
@@ -29,6 +30,9 @@ class NoopPlatformServices implements PlatformServices {
 
   @override
   final ExternalFileHost externalFiles;
+
+  @override
+  final UriOpenHost uriOpener;
 
   @override
   final ScriptCapsuleHost scriptCapsules;
@@ -107,6 +111,11 @@ class NoopExternalFileHost implements ExternalFileHost {
   Future<void> openFile(String path) async {
     throw UnsupportedError('External file opening is not supported here.');
   }
+}
+
+class NoopUriOpenHost implements UriOpenHost {
+  @override
+  Future<void> openUri(String uri) async {}
 }
 
 class NoopScriptCapsuleHost implements ScriptCapsuleHost {

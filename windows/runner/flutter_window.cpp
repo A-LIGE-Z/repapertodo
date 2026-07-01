@@ -957,6 +957,27 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (method == "openUri") {
+          std::string uri;
+          if (call.arguments()) {
+            if (const auto* value = std::get_if<std::string>(call.arguments())) {
+              uri = *value;
+            }
+          }
+          if (uri.empty()) {
+            result->Error("invalid_uri", "The URI is empty.");
+            return;
+          }
+          HINSTANCE open_result =
+              ShellExecuteW(window, L"open", Utf8ToWide(uri).c_str(), nullptr,
+                            nullptr, SW_SHOWNORMAL);
+          if (reinterpret_cast<intptr_t>(open_result) <= 32) {
+            result->Error("open_uri_failed", "Unable to open the URI.");
+            return;
+          }
+          result->Success();
+          return;
+        }
         if (method == "runScriptCapsule") {
           std::string engine = "auto";
           std::string script;

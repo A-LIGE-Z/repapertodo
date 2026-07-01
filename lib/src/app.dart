@@ -346,6 +346,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
       onOpen: _openPaper,
       onRunScriptCapsule: _runScriptCapsule,
       onOpenExternalMarkdown: _openNoteMarkdownExternally,
+      onOpenUri: _openUri,
       onHide: _hidePaper,
       onDelete: _deletePaper,
       onSurfaceChanged: _updatePaperSurface,
@@ -508,6 +509,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
 
   Future<void> _runScriptCapsule(ScriptCapsuleSpec spec) async {
     await controller.runScriptCapsule(spec);
+  }
+
+  Future<void> _openUri(String uri) async {
+    await controller.openUri(uri);
   }
 
   File _writeExternalMarkdownFile(PaperData paper) {
@@ -1155,6 +1160,7 @@ class PaperPreview extends StatelessWidget {
     required this.onOpen,
     required this.onRunScriptCapsule,
     required this.onOpenExternalMarkdown,
+    required this.onOpenUri,
     required this.onHide,
     required this.onDelete,
     required this.onSurfaceChanged,
@@ -1183,6 +1189,7 @@ class PaperPreview extends StatelessWidget {
   final Future<void> Function(PaperData paper) onOpen;
   final Future<void> Function(ScriptCapsuleSpec spec) onRunScriptCapsule;
   final Future<void> Function(PaperData paper) onOpenExternalMarkdown;
+  final Future<void> Function(String uri) onOpenUri;
   final Future<void> Function(PaperData paper) onHide;
   final Future<void> Function(PaperData paper) onDelete;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
@@ -1400,6 +1407,7 @@ class PaperPreview extends StatelessWidget {
                   markdownRenderMode: markdownRenderMode,
                   lineSpacing: noteLineSpacing,
                   textZoom: paper.textZoom,
+                  onOpenUri: onOpenUri,
                   onChanged: onChanged,
                 ),
             ],
@@ -1453,6 +1461,7 @@ class _NoteEditor extends StatefulWidget {
     required this.markdownRenderMode,
     required this.lineSpacing,
     required this.textZoom,
+    required this.onOpenUri,
     required this.onChanged,
   });
 
@@ -1460,6 +1469,7 @@ class _NoteEditor extends StatefulWidget {
   final String markdownRenderMode;
   final double lineSpacing;
   final double textZoom;
+  final Future<void> Function(String uri) onOpenUri;
   final Future<void> Function() onChanged;
 
   @override
@@ -1861,6 +1871,7 @@ class _NoteEditorState extends State<_NoteEditor> {
             data: widget.paper.content.trim().isEmpty
                 ? '_No note content._'
                 : widget.paper.content,
+            onTapLink: (text, href, title) => _openMarkdownLink(context, href),
             styleSheet:
                 MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
               p: Theme.of(context)
@@ -1875,6 +1886,23 @@ class _NoteEditorState extends State<_NoteEditor> {
           ),
         ),
       ),
+    );
+  }
+
+  void _openMarkdownLink(BuildContext context, String? href) {
+    final uri = href?.trim();
+    if (uri == null || uri.isEmpty) {
+      return;
+    }
+    unawaited(
+      widget.onOpenUri(uri).catchError((Object error) {
+        if (!context.mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Open link failed: $error')),
+        );
+      }),
     );
   }
 

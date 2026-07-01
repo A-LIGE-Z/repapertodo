@@ -276,6 +276,40 @@ void main() {
     expect(find.text('Extract claims'), findsOneWidget);
   });
 
+  testWidgets('opens markdown preview links', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'link-note',
+            type: PaperTypes.note,
+            title: 'Link note',
+            content: '[Open site](https://example.com/paper)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store = StateStore(filePath: 'build/test-widget-markdown-link.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.text('Open site'));
+    await tester.pump();
+
+    expect(platform.uriOpener.openedUris, ['https://example.com/paper']);
+  });
+
   testWidgets('renders note canvas elements', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1880,12 +1914,14 @@ class _RecordingPlatformServices implements PlatformServices {
   final StartupHost startup;
 
   @override
-  @override
   final _RecordingSystemIntegrationHost systemIntegration =
       _RecordingSystemIntegrationHost();
 
   @override
   final _RecordingExternalFileHost externalFiles = _RecordingExternalFileHost();
+
+  @override
+  final _RecordingUriOpenHost uriOpener = _RecordingUriOpenHost();
 
   @override
   final _RecordingScriptCapsuleHost scriptCapsules =
@@ -1913,6 +1949,15 @@ class _RecordingExternalFileHost implements ExternalFileHost {
   @override
   Future<void> openFile(String path) async {
     openedPaths.add(path);
+  }
+}
+
+class _RecordingUriOpenHost implements UriOpenHost {
+  final openedUris = <String>[];
+
+  @override
+  Future<void> openUri(String uri) async {
+    openedUris.add(uri);
   }
 }
 

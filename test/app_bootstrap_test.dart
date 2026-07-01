@@ -123,6 +123,9 @@ class _ForwardingPlatformServices implements PlatformServices {
   final ExternalFileHost externalFiles = NoopExternalFileHost();
 
   @override
+  final UriOpenHost uriOpener = NoopUriOpenHost();
+
+  @override
   final ScriptCapsuleHost scriptCapsules = NoopScriptCapsuleHost();
 
   _ForwardingPlatformServices() : startup = _ForwardingStartupHost();

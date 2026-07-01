@@ -11,6 +11,7 @@ abstract interface class PlatformServices {
   StartupHost get startup;
   SystemIntegrationHost get systemIntegration;
   ExternalFileHost get externalFiles;
+  UriOpenHost get uriOpener;
   ScriptCapsuleHost get scriptCapsules;
 }
 
@@ -49,6 +50,10 @@ abstract interface class SystemIntegrationHost {
 
 abstract interface class ExternalFileHost {
   Future<void> openFile(String path);
+}
+
+abstract interface class UriOpenHost {
+  Future<void> openUri(String uri);
 }
 
 abstract interface class ScriptCapsuleHost {

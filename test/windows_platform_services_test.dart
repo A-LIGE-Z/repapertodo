@@ -129,6 +129,7 @@ void main() {
     final foregroundFullscreen =
         await services.systemIntegration.isForegroundFullscreen();
     await services.externalFiles.openFile('C:\\Temp\\note.md');
+    await services.uriOpener.openUri('https://example.com/paper');
     await services.scriptCapsules.runScriptCapsule(
       const ScriptCapsuleRunRequest(
         engine: 'pwsh',
@@ -165,6 +166,7 @@ void main() {
         'unregisterGlobalHotkeys',
         'isForegroundFullscreen',
         'openExternalFile',
+        'openUri',
         'runScriptCapsule',
         'preparePersistentScriptCapsule',
         'stopPersistentScriptCapsules',
@@ -207,7 +209,8 @@ void main() {
     expect(calls[14].arguments, isNull);
     expect(calls[15].arguments, isNull);
     expect(calls[16].arguments, 'C:\\Temp\\note.md');
-    expect(calls[17].arguments, {
+    expect(calls[17].arguments, 'https://example.com/paper');
+    expect(calls[18].arguments, {
       'engine': 'pwsh',
       'script': 'Write-Output ok',
       'usePersistentProcess': true,
@@ -215,7 +218,7 @@ void main() {
       'preferPowerShell7': true,
       'hideScriptRunWindow': true,
     });
-    expect(calls[18].arguments, {
+    expect(calls[19].arguments, {
       'preferPowerShell7': false,
       'hideScriptRunWindow': false,
     });
