@@ -367,6 +367,42 @@ void main() {
     expect(entries.single.isCollection, true);
   });
 
+  test('ignores WebDAV-looking values outside prop containers', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:status>HTTP/1.1 200 OK</D:status>
+      <D:getetag>"outside-prop"</D:getetag>
+      <D:resourcetype><D:collection /></D:resourcetype>
+      <D:prop>
+        <D:getcontentlength>42</D:getcontentlength>
+        <D:extension>
+          <D:getlastmodified>Thu, 02 Jul 2026 10:00:00 GMT</D:getlastmodified>
+        </D:extension>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries, hasLength(1));
+    expect(entries.single.etag, isNull);
+    expect(entries.single.contentLength, 42);
+    expect(entries.single.lastModified, isNull);
+    expect(entries.single.isCollection, false);
+  });
+
   test('rejects invalid Basic Auth usernames before sending', () async {
     for (final username in const [
       '',

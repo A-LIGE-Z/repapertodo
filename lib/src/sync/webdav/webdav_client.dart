@@ -350,11 +350,7 @@ WebDavEntry _parseEntry(XmlElement element) {
     contentLength: lengthText == null ? null : int.tryParse(lengthText),
     lastModified:
         lastModifiedText == null ? null : _tryParseHttpDate(lastModifiedText),
-    isCollection: _successfulPropStatElements(element).any(
-      (propStat) => _descendantElements(propStat).any(
-        (child) => _isWebDavElement(child, 'collection'),
-      ),
-    ),
+    isCollection: _hasSuccessfulCollectionResourceType(element),
   );
 }
 
@@ -377,14 +373,34 @@ String? _firstDirectElementText(XmlElement element, String localName) {
 }
 
 String? _firstSuccessfulPropText(XmlElement element, String localName) {
-  for (final propStat in _successfulPropStatElements(element)) {
-    final matches = _descendantElements(propStat)
-        .where((child) => _isWebDavElement(child, localName));
-    if (matches.isNotEmpty) {
-      return matches.first.innerText.trim();
+  for (final prop in _successfulPropElements(element)) {
+    final text = _firstDirectElementText(prop, localName);
+    if (text != null) {
+      return text;
     }
   }
   return null;
+}
+
+bool _hasSuccessfulCollectionResourceType(XmlElement element) {
+  return _successfulPropElements(element).any((prop) {
+    final resourceTypes = prop.children
+        .whereType<XmlElement>()
+        .where((child) => _isWebDavElement(child, 'resourcetype'));
+    return resourceTypes.any(
+      (resourceType) => _descendantElements(resourceType).any(
+        (child) => _isWebDavElement(child, 'collection'),
+      ),
+    );
+  });
+}
+
+Iterable<XmlElement> _successfulPropElements(XmlElement element) {
+  return _successfulPropStatElements(element).expand((propStat) {
+    return propStat.children
+        .whereType<XmlElement>()
+        .where((child) => _isWebDavElement(child, 'prop'));
+  });
 }
 
 Iterable<XmlElement> _successfulPropStatElements(XmlElement element) {
