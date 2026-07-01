@@ -549,12 +549,24 @@ class WebDavStateSyncService {
   }
 
   Future<void> _ensureCollections() async {
-    final root = _paths.rootCollectionPath;
-    if (root.isNotEmpty) {
-      await _client.makeCollection(root);
+    final ensured = <String>{};
+    Future<void> ensurePath(String path) async {
+      final normalizedPath = _normalizeRemotePath(path);
+      if (normalizedPath.isEmpty) {
+        return;
+      }
+      final segments = normalizedPath.split('/');
+      for (var index = 1; index <= segments.length; index += 1) {
+        final collectionPath = segments.take(index).join('/');
+        if (ensured.add(collectionPath)) {
+          await _client.makeCollection(collectionPath);
+        }
+      }
     }
-    await _client.makeCollection(_paths.snapshotCollectionPath);
-    await _client.makeCollection(_paths.operationCollectionPath);
+
+    await ensurePath(_paths.rootCollectionPath);
+    await ensurePath(_paths.snapshotCollectionPath);
+    await ensurePath(_paths.operationCollectionPath);
   }
 
   Future<bool> _putSnapshot(String snapshotPath, List<int> bytes) async {

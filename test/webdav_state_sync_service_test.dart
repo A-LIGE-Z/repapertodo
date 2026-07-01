@@ -85,6 +85,50 @@ void main() {
     expect(manifest['deviceSequences'], {'test-device': 1});
   });
 
+  test('creates nested WebDAV collections before upload', () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return switch (request.method) {
+          'MKCOL' => http.Response('', 201),
+          'PUT' => http.Response('', 201),
+          _ => http.Response('unexpected ${request.method}', 500),
+        };
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      paths: const WebDavStateSyncPaths(rootPath: 'Team Space/RePaperTodo'),
+      deviceId: 'test-device',
+    );
+
+    final result = await service.push(
+      AppState(),
+      updatedAtUtc: DateTime.utc(2026, 6, 30, 10),
+    );
+
+    final mkcolPaths = requests
+        .where((request) => request.method == 'MKCOL')
+        .map((request) => request.url.pathSegments.skip(4).join('/'))
+        .toList(growable: false);
+    final putPaths = requests
+        .where((request) => request.method == 'PUT')
+        .map((request) => request.url.pathSegments.skip(4).join('/'))
+        .toList(growable: false);
+
+    expect(result.status, WebDavStateSyncStatus.uploaded);
+    expect(mkcolPaths, [
+      'Team Space',
+      'Team Space/RePaperTodo',
+      'Team Space/RePaperTodo/snapshots',
+      'Team Space/RePaperTodo/ops',
+    ]);
+    expect(putPaths, contains('Team Space/RePaperTodo/manifest.json'));
+  });
+
   test('accepts matching existing snapshots during push retry', () async {
     const codec = AppStateCodec();
     final requests = <http.Request>[];
