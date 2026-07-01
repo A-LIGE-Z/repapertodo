@@ -1585,7 +1585,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       onSelect: _selectCanvasElement,
       onEdit: _editCanvasElement,
       onDuplicate: _duplicateCanvasElement,
-      onMoveLayer: _moveCanvasElementLayer,
+      onLayerAction: _applyCanvasLayerAction,
       onDelete: _deleteCanvasElement,
     );
   }
@@ -1664,9 +1664,28 @@ class _NoteEditorState extends State<_NoteEditor> {
     unawaited(widget.onChanged());
   }
 
-  void _moveCanvasElementLayer(NoteCanvasElement element, int delta) {
+  void _applyCanvasLayerAction(
+    NoteCanvasElement element,
+    _CanvasLayerAction action,
+  ) {
+    final elements = widget.paper.noteCanvasElements;
+    final minLayer = elements.fold<int>(
+      element.zIndex,
+      (min, candidate) => candidate.zIndex < min ? candidate.zIndex : min,
+    );
+    final maxLayer = elements.fold<int>(
+      element.zIndex,
+      (max, candidate) => candidate.zIndex > max ? candidate.zIndex : max,
+    );
     setState(() {
-      element.zIndex = (element.zIndex + delta).clamp(-10000, 10000).toInt();
+      element.zIndex = switch (action) {
+        _CanvasLayerAction.bringForward => element.zIndex + 1,
+        _CanvasLayerAction.sendBackward => element.zIndex - 1,
+        _CanvasLayerAction.bringToFront => maxLayer + 1,
+        _CanvasLayerAction.sendToBack => minLayer - 1,
+      }
+          .clamp(-10000, 10000)
+          .toInt();
       _selectedCanvasElementId = element.id;
     });
     unawaited(widget.onChanged());
@@ -1727,7 +1746,7 @@ class _NoteCanvasPreview extends StatelessWidget {
     required this.onSelect,
     required this.onEdit,
     required this.onDuplicate,
-    required this.onMoveLayer,
+    required this.onLayerAction,
     required this.onDelete,
   });
 
@@ -1738,7 +1757,8 @@ class _NoteCanvasPreview extends StatelessWidget {
   final void Function(NoteCanvasElement element) onSelect;
   final Future<void> Function(NoteCanvasElement element) onEdit;
   final void Function(NoteCanvasElement element) onDuplicate;
-  final void Function(NoteCanvasElement element, int delta) onMoveLayer;
+  final void Function(NoteCanvasElement element, _CanvasLayerAction action)
+      onLayerAction;
   final void Function(NoteCanvasElement element) onDelete;
 
   @override
@@ -1788,7 +1808,7 @@ class _NoteCanvasPreview extends StatelessWidget {
                       onSelect: onSelect,
                       onEdit: onEdit,
                       onDuplicate: onDuplicate,
-                      onMoveLayer: onMoveLayer,
+                      onLayerAction: onLayerAction,
                       onDelete: onDelete,
                     ),
                   ),
@@ -1823,7 +1843,7 @@ class _NoteCanvasElementPreview extends StatelessWidget {
     required this.onSelect,
     required this.onEdit,
     required this.onDuplicate,
-    required this.onMoveLayer,
+    required this.onLayerAction,
     required this.onDelete,
     super.key,
   });
@@ -1836,7 +1856,8 @@ class _NoteCanvasElementPreview extends StatelessWidget {
   final void Function(NoteCanvasElement element) onSelect;
   final Future<void> Function(NoteCanvasElement element) onEdit;
   final void Function(NoteCanvasElement element) onDuplicate;
-  final void Function(NoteCanvasElement element, int delta) onMoveLayer;
+  final void Function(NoteCanvasElement element, _CanvasLayerAction action)
+      onLayerAction;
   final void Function(NoteCanvasElement element) onDelete;
 
   @override
@@ -1901,23 +1922,32 @@ class _NoteCanvasElementPreview extends StatelessWidget {
                 ),
                 SizedBox.square(
                   dimension: (28 * scale).clamp(24, 28).toDouble(),
-                  child: PopupMenuButton<int>(
+                  child: PopupMenuButton<_CanvasLayerAction>(
+                    key: ValueKey('note-canvas-layer-actions-${element.id}'),
                     tooltip: 'Canvas layer actions',
                     icon: const Icon(Icons.layers_outlined),
                     iconSize: (18 * scale).clamp(16, 18).toDouble(),
                     padding: EdgeInsets.zero,
-                    onSelected: (delta) {
+                    onSelected: (action) {
                       onSelect(element);
-                      onMoveLayer(element, delta);
+                      onLayerAction(element, action);
                     },
                     itemBuilder: (context) => const [
                       PopupMenuItem(
-                        value: 1,
+                        value: _CanvasLayerAction.bringToFront,
+                        child: Text('Bring to front'),
+                      ),
+                      PopupMenuItem(
+                        value: _CanvasLayerAction.bringForward,
                         child: Text('Bring forward'),
                       ),
                       PopupMenuItem(
-                        value: -1,
+                        value: _CanvasLayerAction.sendBackward,
                         child: Text('Send backward'),
+                      ),
+                      PopupMenuItem(
+                        value: _CanvasLayerAction.sendToBack,
+                        child: Text('Send to back'),
                       ),
                     ],
                   ),
@@ -1964,6 +1994,13 @@ class _NoteCanvasElementPreview extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _CanvasLayerAction {
+  bringForward,
+  sendBackward,
+  bringToFront,
+  sendToBack,
 }
 
 class _CanvasGeometry {
