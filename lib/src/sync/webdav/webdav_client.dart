@@ -79,11 +79,19 @@ class WebDavClient {
     http.Client? httpClient,
   })  : _baseUri = _normalizeBaseUri(baseUri),
         _credentials = credentials,
+        _ownsHttpClient = httpClient == null,
         _httpClient = httpClient ?? http.Client();
 
   final Uri _baseUri;
   final WebDavCredentials _credentials;
+  final bool _ownsHttpClient;
   final http.Client _httpClient;
+
+  void close() {
+    if (_ownsHttpClient) {
+      _httpClient.close();
+    }
+  }
 
   Future<bool> exists(String path) async {
     return await metadata(path) != null;

@@ -125,6 +125,69 @@ void main() {
     expect(stored.sync.operationDeviceSequences, {'remote-device': 7});
   });
 
+  test('closes configured WebDAV clients after sync and merge', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('repapertodo_app_sync_close_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var createdCount = 0;
+    var closedCount = 0;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) {
+        createdCount += 1;
+        return _FakeWebDavStateSyncService(
+          onSync: ({required localState, localUpdatedAtUtc}) async {
+            return const WebDavStateSyncResult(
+              status: WebDavStateSyncStatus.uploaded,
+              snapshotPath: 'repapertodo/snapshots/local.json',
+            );
+          },
+          onListOperationLogs: () async => const [],
+          onClose: () => closedCount += 1,
+        );
+      },
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.uploaded);
+    expect(createdCount, 2);
+    expect(closedCount, 2);
+  });
+
+  test('closes configured WebDAV client when sync fails', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_close_error_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var closedCount = 0;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) {
+        return _FakeWebDavStateSyncService(
+          onSync: ({required localState, localUpdatedAtUtc}) async {
+            throw StateError('network failed');
+          },
+          onClose: () => closedCount += 1,
+        );
+      },
+    );
+
+    await expectLater(
+      service.syncNow(
+        localState: AppState(sync: _configuredSyncSettings()),
+        store: store,
+        localUpdatedAtUtc: DateTime.utc(2026, 7),
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(closedCount, 1);
+  });
+
   test('reports WebDAV conflicts without saving local state', () async {
     final directory =
         await Directory.systemTemp.createTemp('repapertodo_app_sync_conflict_');
@@ -877,6 +940,8 @@ typedef _FakeUploadOperationLogs = Future<WebDavOperationLogUploadResult>
   Map<String, int>? previousDeviceSequences,
 });
 
+typedef _FakeClose = void Function();
+
 class _FakeWebDavStateSyncService extends WebDavStateSyncService {
   _FakeWebDavStateSyncService({
     _FakeSync? onSync,
@@ -885,12 +950,14 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
     _FakeListOperationLogs? onListOperationLogs,
     _FakeDownloadOperationLog? onDownloadOperationLog,
     _FakeUploadOperationLogs? onUploadOperationLogs,
+    _FakeClose? onClose,
   })  : _onSync = onSync,
         _onListSnapshots = onListSnapshots,
         _onDownloadSnapshot = onDownloadSnapshot,
         _onListOperationLogs = onListOperationLogs,
         _onDownloadOperationLog = onDownloadOperationLog,
         _onUploadOperationLogs = onUploadOperationLogs,
+        _onClose = onClose,
         super(
           client: WebDavClient(
             baseUri: Uri.parse('https://unused.example.test/'),
@@ -905,6 +972,13 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
   final _FakeListOperationLogs? _onListOperationLogs;
   final _FakeDownloadOperationLog? _onDownloadOperationLog;
   final _FakeUploadOperationLogs? _onUploadOperationLogs;
+  final _FakeClose? _onClose;
+
+  @override
+  void close() {
+    _onClose?.call();
+    super.close();
+  }
 
   @override
   Future<WebDavStateSyncResult> sync({

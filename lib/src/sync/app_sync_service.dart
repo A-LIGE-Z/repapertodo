@@ -120,46 +120,50 @@ class AppSyncService {
       settings.webDav.copy(),
       deviceId: deviceId,
     );
-    final result = await client.sync(
-      localState: localState,
-      localUpdatedAtUtc: localUpdatedAtUtc ?? await store.lastModifiedUtc(),
-    );
+    try {
+      final result = await client.sync(
+        localState: localState,
+        localUpdatedAtUtc: localUpdatedAtUtc ?? await store.lastModifiedUtc(),
+      );
 
-    switch (result.status) {
-      case WebDavStateSyncStatus.uploaded:
-      case WebDavStateSyncStatus.remoteMissing:
-        _applyManifestDeviceSequences(localState, result);
-        await store.save(localState);
-        return AppSyncResult(
-          status: AppSyncStatus.uploaded,
-          message: 'Local data uploaded.',
-          snapshotPath: result.snapshotPath,
-        );
-      case WebDavStateSyncStatus.downloaded:
-        final remoteState = result.state;
-        if (remoteState == null) {
-          return const AppSyncResult(
-            status: AppSyncStatus.configurationMissing,
-            message: 'Remote snapshot is empty.',
+      switch (result.status) {
+        case WebDavStateSyncStatus.uploaded:
+        case WebDavStateSyncStatus.remoteMissing:
+          _applyManifestDeviceSequences(localState, result);
+          await store.save(localState);
+          return AppSyncResult(
+            status: AppSyncStatus.uploaded,
+            message: 'Local data uploaded.',
+            snapshotPath: result.snapshotPath,
           );
-        }
-        _applyManifestDeviceSequences(remoteState, result);
-        await store.save(remoteState);
-        return AppSyncResult(
-          status: AppSyncStatus.downloaded,
-          state: remoteState,
-          message: 'Remote data downloaded.',
-          snapshotPath: result.snapshotPath,
-        );
-      case WebDavStateSyncStatus.conflict:
-        final snapshotPath = result.snapshotPath;
-        return AppSyncResult(
-          status: AppSyncStatus.conflict,
-          message: snapshotPath.isEmpty
-              ? 'Remote data changed during sync. Pull again before upload.'
-              : 'Remote data changed during sync. Local snapshot preserved at $snapshotPath.',
-          snapshotPath: snapshotPath,
-        );
+        case WebDavStateSyncStatus.downloaded:
+          final remoteState = result.state;
+          if (remoteState == null) {
+            return const AppSyncResult(
+              status: AppSyncStatus.configurationMissing,
+              message: 'Remote snapshot is empty.',
+            );
+          }
+          _applyManifestDeviceSequences(remoteState, result);
+          await store.save(remoteState);
+          return AppSyncResult(
+            status: AppSyncStatus.downloaded,
+            state: remoteState,
+            message: 'Remote data downloaded.',
+            snapshotPath: result.snapshotPath,
+          );
+        case WebDavStateSyncStatus.conflict:
+          final snapshotPath = result.snapshotPath;
+          return AppSyncResult(
+            status: AppSyncStatus.conflict,
+            message: snapshotPath.isEmpty
+                ? 'Remote data changed during sync. Pull again before upload.'
+                : 'Remote data changed during sync. Local snapshot preserved at $snapshotPath.',
+            snapshotPath: snapshotPath,
+          );
+      }
+    } finally {
+      client.close();
     }
   }
 
@@ -208,7 +212,11 @@ class AppSyncService {
     if (client == null) {
       return const [];
     }
-    return client.listSnapshots();
+    try {
+      return await client.listSnapshots();
+    } finally {
+      client.close();
+    }
   }
 
   Future<List<WebDavOperationLogRecord>> listRemoteOperationLogs({
@@ -222,7 +230,11 @@ class AppSyncService {
     if (client == null) {
       return const [];
     }
-    return client.listOperationLogs();
+    try {
+      return await client.listOperationLogs();
+    } finally {
+      client.close();
+    }
   }
 
   Future<List<SyncOperation>> downloadRemoteOperationLog({
@@ -237,7 +249,11 @@ class AppSyncService {
     if (client == null) {
       return const [];
     }
-    return client.downloadOperationLog(operationLogPath);
+    try {
+      return await client.downloadOperationLog(operationLogPath);
+    } finally {
+      client.close();
+    }
   }
 
   Future<AppSyncOperationMergeResult> mergeRemoteOperations({
@@ -260,29 +276,33 @@ class AppSyncService {
       );
     }
 
-    final records = _contiguousOperationRecords(
-      await client.listOperationLogs(),
-      previousSequences,
-    );
-    final operations = <SyncOperation>[];
-    for (final record in records) {
-      operations.addAll(await client.downloadOperationLog(record.path));
+    try {
+      final records = _contiguousOperationRecords(
+        await client.listOperationLogs(),
+        previousSequences,
+      );
+      final operations = <SyncOperation>[];
+      for (final record in records) {
+        operations.addAll(await client.downloadOperationLog(record.path));
+      }
+      final result = _operationApplier.apply(
+        localState,
+        operations,
+        deviceSequences: previousSequences,
+      );
+      result.state.sync.operationDeviceSequences = result.deviceSequences;
+      result.state.normalize();
+      if (result.appliedCount > 0) {
+        await store.save(result.state);
+      }
+      return AppSyncOperationMergeResult(
+        state: result.state,
+        deviceSequences: result.deviceSequences,
+        appliedCount: result.appliedCount,
+      );
+    } finally {
+      client.close();
     }
-    final result = _operationApplier.apply(
-      localState,
-      operations,
-      deviceSequences: previousSequences,
-    );
-    result.state.sync.operationDeviceSequences = result.deviceSequences;
-    result.state.normalize();
-    if (result.appliedCount > 0) {
-      await store.save(result.state);
-    }
-    return AppSyncOperationMergeResult(
-      state: result.state,
-      deviceSequences: result.deviceSequences,
-      appliedCount: result.appliedCount,
-    );
   }
 
   Future<AppSyncLocalOperationUploadResult> uploadLocalOperations({
@@ -310,41 +330,45 @@ class AppSyncService {
       );
     }
 
-    final operations = _operationDiffBuilder.build(
-      before: beforeState,
-      after: afterState,
-      deviceId: context.deviceId,
-      startSequence: previousSequences[context.deviceId] ?? 0,
-      createdAtUtc: createdAtUtc,
-    );
-    if (operations.isEmpty) {
+    try {
+      final operations = _operationDiffBuilder.build(
+        before: beforeState,
+        after: afterState,
+        deviceId: context.deviceId,
+        startSequence: previousSequences[context.deviceId] ?? 0,
+        createdAtUtc: createdAtUtc,
+      );
+      if (operations.isEmpty) {
+        return AppSyncLocalOperationUploadResult(
+          state: afterState,
+          deviceSequences: previousSequences,
+          generatedCount: 0,
+          uploadedCount: 0,
+        );
+      }
+
+      final tombstonesChanged = _markLocalDeleteTombstones(
+        afterState,
+        operations,
+      );
+      final uploadResult = await context.client.uploadOperationLogs(
+        operations,
+        previousDeviceSequences: previousSequences,
+      );
+      afterState.sync.operationDeviceSequences = uploadResult.deviceSequences;
+      afterState.normalize();
+      if (uploadResult.uploadedCount > 0 || tombstonesChanged) {
+        await store.save(afterState);
+      }
       return AppSyncLocalOperationUploadResult(
         state: afterState,
-        deviceSequences: previousSequences,
-        generatedCount: 0,
-        uploadedCount: 0,
+        deviceSequences: uploadResult.deviceSequences,
+        generatedCount: operations.length,
+        uploadedCount: uploadResult.uploadedCount,
       );
+    } finally {
+      context.client.close();
     }
-
-    final tombstonesChanged = _markLocalDeleteTombstones(
-      afterState,
-      operations,
-    );
-    final uploadResult = await context.client.uploadOperationLogs(
-      operations,
-      previousDeviceSequences: previousSequences,
-    );
-    afterState.sync.operationDeviceSequences = uploadResult.deviceSequences;
-    afterState.normalize();
-    if (uploadResult.uploadedCount > 0 || tombstonesChanged) {
-      await store.save(afterState);
-    }
-    return AppSyncLocalOperationUploadResult(
-      state: afterState,
-      deviceSequences: uploadResult.deviceSequences,
-      generatedCount: operations.length,
-      uploadedCount: uploadResult.uploadedCount,
-    );
   }
 
   Future<AppSyncResult> restoreRecoverySnapshot({
@@ -370,21 +394,25 @@ class AppSyncService {
       );
     }
 
-    final result = await client.downloadSnapshot(snapshotPath);
-    final snapshotState = result.state;
-    if (snapshotState == null) {
-      return const AppSyncResult(
-        status: AppSyncStatus.configurationMissing,
-        message: 'Remote snapshot is empty.',
+    try {
+      final result = await client.downloadSnapshot(snapshotPath);
+      final snapshotState = result.state;
+      if (snapshotState == null) {
+        return const AppSyncResult(
+          status: AppSyncStatus.configurationMissing,
+          message: 'Remote snapshot is empty.',
+        );
+      }
+      await store.save(snapshotState);
+      return AppSyncResult(
+        status: AppSyncStatus.downloaded,
+        state: snapshotState,
+        message: 'Snapshot restored.',
+        snapshotPath: result.snapshotPath,
       );
+    } finally {
+      client.close();
     }
-    await store.save(snapshotState);
-    return AppSyncResult(
-      status: AppSyncStatus.downloaded,
-      state: snapshotState,
-      message: 'Snapshot restored.',
-      snapshotPath: result.snapshotPath,
-    );
   }
 
   Future<WebDavStateSyncService?> _configuredClientOrNull({

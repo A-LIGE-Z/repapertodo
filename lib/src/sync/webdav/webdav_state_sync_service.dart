@@ -171,6 +171,10 @@ class WebDavStateSyncService {
   final WebDavStateSyncPaths _paths;
   final String _deviceId;
 
+  void close() {
+    _client.close();
+  }
+
   Future<WebDavStateSyncResult> push(
     AppState state, {
     DateTime? updatedAtUtc,
