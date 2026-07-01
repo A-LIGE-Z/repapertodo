@@ -64,6 +64,60 @@ void main() {
     expect(state.externalMarkdownExtension, '.txt');
   });
 
+  test('migrates retired PaperTodo settings', () {
+    final state = AppState.fromJson({
+      'showTopBarNewPaperButtons': false,
+      'showTopBarNewTodoButton': true,
+      'showTopBarNewNoteButton': true,
+      'hideDeepCapsulesWhenFullscreen': true,
+      'futureRootField': 'keep-me',
+    });
+
+    const codec = AppStateCodec();
+    final encoded = jsonDecode(codec.encode(state)) as Map<String, Object?>;
+
+    expect(state.showTopBarNewTodoButton, false);
+    expect(state.showTopBarNewNoteButton, false);
+    expect(state.hideDeepCapsulesWhenCovered, true);
+    expect(encoded.containsKey('showTopBarNewPaperButtons'), false);
+    expect(encoded.containsKey('hideDeepCapsulesWhenFullscreen'), false);
+    expect(encoded['futureRootField'], 'keep-me');
+  });
+
+  test('normalizes capsule mode dependencies like PaperTodo', () {
+    final disabledCapsules = AppState.fromJson({
+      'useCapsuleMode': false,
+      'useDeepCapsuleMode': true,
+      'useCapsuleCollapseAll': true,
+      'capsuleCollapseAllActive': true,
+      'capsuleCollapseAllActiveQueues': {
+        'Primary|right': true,
+      },
+    });
+
+    expect(disabledCapsules.useDeepCapsuleMode, false);
+    expect(disabledCapsules.useCapsuleCollapseAll, false);
+    expect(disabledCapsules.capsuleCollapseAllActive, false);
+    expect(disabledCapsules.capsuleCollapseAllActiveQueues, isEmpty);
+
+    final activeQueue = AppState.fromJson({
+      'useCapsuleMode': true,
+      'useDeepCapsuleMode': true,
+      'useCapsuleCollapseAll': true,
+      'capsuleCollapseAllActive': false,
+      'capsuleCollapseAllActiveQueues': {
+        'Primary|left': true,
+        'Primary|right': false,
+      },
+    });
+
+    expect(activeQueue.useCapsuleCollapseAll, true);
+    expect(activeQueue.capsuleCollapseAllActive, true);
+    expect(activeQueue.capsuleCollapseAllActiveQueues, {
+      'Primary|left': true,
+    });
+  });
+
   test('normalizes custom theme color hex values', () {
     expect(
       AppState.fromJson({'customThemeColorHex': '336699'}).customThemeColorHex,
@@ -99,6 +153,40 @@ void main() {
     };
     expect(itemsById['item-valid']?.linkedNoteId, 'note-paper');
     expect(itemsById['item-missing']?.linkedNoteId, isNull);
+  });
+
+  test('normalizes todo reminder intervals like PaperTodo', () {
+    final state = AppState.fromJson({
+      'papers': [
+        {
+          'id': 'todo-paper',
+          'type': PaperTypes.todo,
+          'items': [
+            {
+              'id': 'too-large',
+              'reminderIntervalValue': 999,
+              'reminderIntervalUnit': 'days',
+            },
+            {
+              'id': 'disabled',
+              'reminderIntervalValue': 0,
+              'reminderIntervalUnit': TodoReminderIntervalUnits.hours,
+            },
+          ],
+        },
+      ],
+    });
+
+    final itemsById = {
+      for (final item in state.papers.single.items) item.id: item,
+    };
+    expect(itemsById['too-large']?.reminderIntervalValue, 240);
+    expect(
+      itemsById['too-large']?.reminderIntervalUnit,
+      TodoReminderIntervalUnits.minutes,
+    );
+    expect(itemsById['disabled']?.reminderIntervalValue, isNull);
+    expect(itemsById['disabled']?.reminderIntervalUnit, isNull);
   });
 
   test('normalizes note canvas element types', () {

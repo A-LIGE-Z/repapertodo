@@ -1,4 +1,5 @@
 import 'json_helpers.dart';
+import 'paper_constants.dart';
 
 class PaperItem {
   PaperItem({
@@ -54,12 +55,17 @@ class PaperItem {
       todoColumnCount: intValue(json['todoColumnCount'], 1),
       todoExtraColumns: stringList(json['todoExtraColumns']),
       todoColumnWidths: doubleList(json['todoColumnWidths']),
-      linkedNoteId: json['linkedNoteId'] is String ? json['linkedNoteId'] as String : null,
-      dueAtLocal: json['dueAtLocal'] is String ? json['dueAtLocal'] as String : null,
-      reminderIntervalValue:
-          json['reminderIntervalValue'] == null ? null : intValue(json['reminderIntervalValue'], 0),
-      reminderIntervalUnit:
-          json['reminderIntervalUnit'] is String ? json['reminderIntervalUnit'] as String : null,
+      linkedNoteId: json['linkedNoteId'] is String
+          ? json['linkedNoteId'] as String
+          : null,
+      dueAtLocal:
+          json['dueAtLocal'] is String ? json['dueAtLocal'] as String : null,
+      reminderIntervalValue: json['reminderIntervalValue'] == null
+          ? null
+          : intValue(json['reminderIntervalValue'], 0),
+      reminderIntervalUnit: json['reminderIntervalUnit'] is String
+          ? json['reminderIntervalUnit'] as String
+          : null,
       extra: preserveUnknown(json, _knownKeys),
     )..normalize();
   }
@@ -81,6 +87,10 @@ class PaperItem {
     if (reminderIntervalValue != null && reminderIntervalValue! <= 0) {
       reminderIntervalValue = null;
       reminderIntervalUnit = null;
+    } else if (reminderIntervalValue != null) {
+      reminderIntervalValue = reminderIntervalValue!.clamp(1, 240).toInt();
+      reminderIntervalUnit =
+          TodoReminderIntervalUnits.normalize(reminderIntervalUnit);
     }
   }
 
@@ -96,8 +106,10 @@ class PaperItem {
       'todoColumnWidths': todoColumnWidths,
       if (linkedNoteId != null) 'linkedNoteId': linkedNoteId,
       if (dueAtLocal != null) 'dueAtLocal': dueAtLocal,
-      if (reminderIntervalValue != null) 'reminderIntervalValue': reminderIntervalValue,
-      if (reminderIntervalUnit != null) 'reminderIntervalUnit': reminderIntervalUnit,
+      if (reminderIntervalValue != null)
+        'reminderIntervalValue': reminderIntervalValue,
+      if (reminderIntervalUnit != null)
+        'reminderIntervalUnit': reminderIntervalUnit,
     };
   }
 }

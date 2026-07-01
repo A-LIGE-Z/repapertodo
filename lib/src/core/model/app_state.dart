@@ -80,6 +80,7 @@ class AppState {
     'useDeepCapsuleMode',
     'showTopBarNewTodoButton',
     'showTopBarNewNoteButton',
+    'showTopBarNewPaperButtons',
     'showTopBarExternalOpenButton',
     'hidePapersFromWindowSwitcher',
     'enableTodoNoteLinks',
@@ -103,6 +104,7 @@ class AppState {
     'showDeepCapsuleWhileExpanded',
     'collapseExpandedDeepCapsuleOnClick',
     'hideDeepCapsulesWhenCovered',
+    'hideDeepCapsulesWhenFullscreen',
     'enableAnimations',
     'enableToolTips',
     'startAtLogin',
@@ -116,6 +118,7 @@ class AppState {
     'deepCapsuleQueueStartTopMargins',
     'deepCapsuleSide',
     'deepCapsuleMonitorDeviceName',
+    'topBarHeight',
     'sync',
   };
 
@@ -173,6 +176,17 @@ class AppState {
   JsonMap extra;
 
   factory AppState.fromJson(JsonMap json) {
+    final retiredTopBarButtons = json['showTopBarNewPaperButtons'];
+    final topBarNewTodoButton = retiredTopBarButtons is bool
+        ? retiredTopBarButtons
+        : boolValue(json['showTopBarNewTodoButton'], true);
+    final topBarNewNoteButton = retiredTopBarButtons is bool
+        ? retiredTopBarButtons
+        : boolValue(json['showTopBarNewNoteButton'], true);
+    final hideDeepCapsulesWhenCovered =
+        boolValue(json['hideDeepCapsulesWhenCovered'], false) ||
+            boolValue(json['hideDeepCapsulesWhenFullscreen'], false);
+
     return AppState(
       papers: jsonMapList(json['papers']).map(PaperData.fromJson).toList(),
       theme: stringValue(json['theme'], 'system'),
@@ -189,8 +203,8 @@ class AppState {
       zoom: doubleValue(json['zoom'], 1),
       useCapsuleMode: boolValue(json['useCapsuleMode'], true),
       useDeepCapsuleMode: boolValue(json['useDeepCapsuleMode'], true),
-      showTopBarNewTodoButton: boolValue(json['showTopBarNewTodoButton'], true),
-      showTopBarNewNoteButton: boolValue(json['showTopBarNewNoteButton'], true),
+      showTopBarNewTodoButton: topBarNewTodoButton,
+      showTopBarNewNoteButton: topBarNewNoteButton,
       showTopBarExternalOpenButton:
           boolValue(json['showTopBarExternalOpenButton'], true),
       hidePapersFromWindowSwitcher:
@@ -229,8 +243,7 @@ class AppState {
           boolValue(json['showDeepCapsuleWhileExpanded'], true),
       collapseExpandedDeepCapsuleOnClick:
           boolValue(json['collapseExpandedDeepCapsuleOnClick'], false),
-      hideDeepCapsulesWhenCovered:
-          boolValue(json['hideDeepCapsulesWhenCovered'], false),
+      hideDeepCapsulesWhenCovered: hideDeepCapsulesWhenCovered,
       enableAnimations: boolValue(json['enableAnimations'], true),
       enableToolTips: boolValue(json['enableToolTips'], true),
       startAtLogin: boolValue(json['startAtLogin'], false),
@@ -285,6 +298,24 @@ class AppState {
     pinnedNoteHotKey = pinnedNoteHotKey.trim();
     fullscreenTopmostMode =
         FullscreenTopmostModes.normalize(fullscreenTopmostMode);
+    if (!useCapsuleMode) {
+      useDeepCapsuleMode = false;
+    }
+    if (!useCapsuleMode || !useDeepCapsuleMode) {
+      useCapsuleCollapseAll = false;
+    }
+    if (!useCapsuleCollapseAll) {
+      capsuleCollapseAllActive = false;
+      capsuleCollapseAllActiveQueues = <String, bool>{};
+    } else {
+      capsuleCollapseAllActiveQueues = {
+        for (final entry in capsuleCollapseAllActiveQueues.entries)
+          if (entry.value) entry.key: true,
+      };
+      if (capsuleCollapseAllActiveQueues.isNotEmpty) {
+        capsuleCollapseAllActive = true;
+      }
+    }
     deepCapsuleStartTopMargin =
         deepCapsuleStartTopMargin.clamp(8, 10000).toDouble();
     deepCapsuleQueueStartTopMargins = {
