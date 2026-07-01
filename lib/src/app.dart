@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import 'app_controller.dart';
 import 'core/model/app_state.dart';
+import 'core/model/markdown_formatting.dart';
 import 'core/model/markdown_list_continuation.dart';
 import 'core/model/markdown_paste.dart';
 import 'core/model/note_canvas_element.dart';
@@ -1470,8 +1471,17 @@ class _NoteEditorState extends State<_NoteEditor> {
   static const _viewPreview = 'preview';
   static const _viewSplit = 'split';
 
+  late final TextEditingController _contentController;
+  late final FocusNode _contentFocusNode;
   late String _view = _defaultView(widget.markdownRenderMode);
   String? _selectedCanvasElementId;
+
+  @override
+  void initState() {
+    super.initState();
+    _contentController = TextEditingController(text: widget.paper.content);
+    _contentFocusNode = FocusNode();
+  }
 
   @override
   void didUpdateWidget(covariant _NoteEditor oldWidget) {
@@ -1479,12 +1489,29 @@ class _NoteEditorState extends State<_NoteEditor> {
     if (oldWidget.markdownRenderMode != widget.markdownRenderMode) {
       _view = _defaultView(widget.markdownRenderMode);
     }
+    if (oldWidget.paper.id != widget.paper.id ||
+        widget.paper.content != _contentController.text) {
+      final offset = _contentController.selection.baseOffset
+          .clamp(0, widget.paper.content.length)
+          .toInt();
+      _contentController.value = TextEditingValue(
+        text: widget.paper.content,
+        selection: TextSelection.collapsed(offset: offset),
+      );
+    }
     if (_selectedCanvasElementId != null &&
         !widget.paper.noteCanvasElements.any(
           (element) => element.id == _selectedCanvasElementId,
         )) {
       _selectedCanvasElementId = null;
     }
+  }
+
+  @override
+  void dispose() {
+    _contentFocusNode.dispose();
+    _contentController.dispose();
+    super.dispose();
   }
 
   @override
@@ -1569,31 +1596,135 @@ class _NoteEditorState extends State<_NoteEditor> {
     required int minLines,
     required int maxLines,
   }) {
-    return TextFormField(
-      key: ValueKey('${widget.paper.id}-content'),
-      initialValue: widget.paper.content,
-      minLines: minLines,
-      maxLines: maxLines,
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(),
-        hintText: 'Write a note...',
-      ),
-      style: Theme.of(context)
-          .textTheme
-          .bodyMedium
-          ?.apply(
-            fontSizeFactor: widget.textZoom,
-          )
-          .copyWith(height: widget.lineSpacing),
-      inputFormatters: const [
-        _MarkdownPasteTextInputFormatter(),
-        _MarkdownListContinuationTextInputFormatter(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _markdownToolbar(context),
+        const SizedBox(height: 8),
+        TextFormField(
+          key: ValueKey('${widget.paper.id}-content'),
+          controller: _contentController,
+          focusNode: _contentFocusNode,
+          minLines: minLines,
+          maxLines: maxLines,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Write a note...',
+          ),
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.apply(
+                fontSizeFactor: widget.textZoom,
+              )
+              .copyWith(height: widget.lineSpacing),
+          inputFormatters: const [
+            _MarkdownPasteTextInputFormatter(),
+            _MarkdownListContinuationTextInputFormatter(),
+          ],
+          onChanged: _commitContent,
+        ),
       ],
-      onChanged: (value) {
-        setState(() => widget.paper.content = value);
-        unawaited(widget.onChanged());
-      },
     );
+  }
+
+  Widget _markdownToolbar(BuildContext context) {
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: [
+        _formatButton(
+          tooltip: 'Bold',
+          icon: Icons.format_bold,
+          onPressed: () => _applyMarkdownFormat(
+            (value) => MarkdownFormatting.wrapSelection(value, '**', '**'),
+          ),
+        ),
+        _formatButton(
+          tooltip: 'Italic',
+          icon: Icons.format_italic,
+          onPressed: () => _applyMarkdownFormat(
+            (value) => MarkdownFormatting.wrapSelection(value, '*', '*'),
+          ),
+        ),
+        _formatButton(
+          tooltip: 'Strikethrough',
+          icon: Icons.strikethrough_s,
+          onPressed: () => _applyMarkdownFormat(
+            (value) => MarkdownFormatting.wrapSelection(value, '~~', '~~'),
+          ),
+        ),
+        _formatButton(
+          tooltip: 'Heading',
+          icon: Icons.title,
+          onPressed: () => _applyMarkdownFormat(
+            (value) => MarkdownFormatting.insertLinePrefix(value, '# '),
+          ),
+        ),
+        _formatButton(
+          tooltip: 'Quote',
+          icon: Icons.format_quote,
+          onPressed: () => _applyMarkdownFormat(
+            (value) => MarkdownFormatting.insertLinePrefix(value, '> '),
+          ),
+        ),
+        _formatButton(
+          tooltip: 'List',
+          icon: Icons.format_list_bulleted,
+          onPressed: () => _applyMarkdownFormat(
+            (value) => MarkdownFormatting.insertLinePrefix(value, '- '),
+          ),
+        ),
+        _formatButton(
+          tooltip: 'Code block',
+          icon: Icons.code,
+          onPressed: () => _applyMarkdownFormat(
+            (value) => MarkdownFormatting.wrapSelection(
+              value,
+              '```\n',
+              '\n```',
+            ),
+          ),
+        ),
+        _formatButton(
+          tooltip: 'Insert link',
+          icon: Icons.link,
+          onPressed: () => _applyMarkdownFormat(
+            MarkdownFormatting.insertMarkdownLink,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _formatButton({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton.outlined(
+      tooltip: tooltip,
+      icon: Icon(icon),
+      onPressed: onPressed,
+    );
+  }
+
+  void _applyMarkdownFormat(
+    TextEditingValue Function(TextEditingValue value) format,
+  ) {
+    _contentController.value = format(_contentController.value);
+    _commitContent(_contentController.text);
+    _contentFocusNode.requestFocus();
+  }
+
+  void _commitContent(String value) {
+    if (widget.paper.content == value) {
+      return;
+    }
+    setState(() {
+      widget.paper.content = value;
+    });
+    unawaited(widget.onChanged());
   }
 
   Widget _noteStatusBar(BuildContext context, String view) {

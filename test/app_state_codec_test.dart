@@ -216,6 +216,72 @@ Plain item
     expect(result.selection.baseOffset, 0);
   });
 
+  test('formats markdown selections like PaperTodo', () {
+    var result = MarkdownFormatting.wrapSelection(
+      const TextEditingValue(
+        text: 'alpha',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+      '**',
+      '**',
+    );
+    expect(result.text, 'al****pha');
+    expect(result.selection.baseOffset, 4);
+
+    result = MarkdownFormatting.wrapSelection(
+      const TextEditingValue(
+        text: 'alpha',
+        selection: TextSelection(baseOffset: 1, extentOffset: 4),
+      ),
+      '*',
+      '*',
+    );
+    expect(result.text, 'a*lph*a');
+    expect(
+        result.selection, const TextSelection(baseOffset: 2, extentOffset: 5));
+
+    result = MarkdownFormatting.wrapSelection(
+      const TextEditingValue(
+        text: 'one\n\ntwo',
+        selection: TextSelection(baseOffset: 0, extentOffset: 8),
+      ),
+      '~~',
+      '~~',
+    );
+    expect(result.text, '~~one~~\n\n~~two~~');
+    expect(
+        result.selection, const TextSelection(baseOffset: 0, extentOffset: 16));
+  });
+
+  test('inserts markdown prefixes and links like PaperTodo', () {
+    var result = MarkdownFormatting.insertLinePrefix(
+      const TextEditingValue(
+        text: 'one\ntwo',
+        selection: TextSelection.collapsed(offset: 5),
+      ),
+      '> ',
+    );
+    expect(result.text, 'one\n> two');
+    expect(result.selection.baseOffset, 7);
+
+    result = MarkdownFormatting.insertMarkdownLink(
+      const TextEditingValue(
+        text: 'read paper',
+        selection: TextSelection(baseOffset: 5, extentOffset: 10),
+      ),
+    );
+    expect(result.text, 'read [paper](https://)');
+    expect(
+      result.selection,
+      const TextSelection(baseOffset: 13, extentOffset: 21),
+    );
+
+    result = MarkdownFormatting.insertMarkdownLink(
+      const TextEditingValue(text: 'start'),
+    );
+    expect(result.text, 'start[link](https://)');
+  });
+
   test('normalizes pinned hotkeys like PaperTodo', () {
     final longHotKey = 'Ctrl+Alt+${List.filled(80, 'A').join()}';
     final state = AppState.fromJson({

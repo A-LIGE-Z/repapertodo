@@ -505,6 +505,44 @@ void main() {
     expect(content.contains('\r'), isFalse);
   });
 
+  testWidgets('uses markdown toolbar actions in note editor', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'markdown-toolbar-note',
+            type: PaperTypes.note,
+            title: 'Markdown toolbar',
+            content: 'Body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-markdown-toolbar.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Insert link'));
+    await tester.pump();
+
+    expect(controller.state.papers.single.content, 'Body[link](https://)');
+
+    await tester.tap(find.byTooltip('Heading'));
+    await tester.pump();
+
+    expect(controller.state.papers.single.content, '# Body[link](https://)');
+  });
+
   testWidgets('saves custom theme color', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

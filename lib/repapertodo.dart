@@ -1,6 +1,7 @@
 library repapertodo;
 
 export 'src/core/model/app_state.dart';
+export 'src/core/model/markdown_formatting.dart';
 export 'src/core/model/markdown_list_continuation.dart';
 export 'src/core/model/markdown_paste.dart';
 export 'src/core/model/note_canvas_element.dart';
