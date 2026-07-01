@@ -157,6 +157,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   Timer? _surfaceSaveDebounce;
   Timer? _titleSurfaceDebounce;
   Timer? _todoReminderTimer;
+  AppState? _pendingLocalEditBaseState;
+  AppState? _pendingLocalEditLatestState;
   String? _surfacePaperId;
   final Map<String, DateTime> _lastTodoReminderAt = <String, DateTime>{};
 
@@ -400,13 +402,25 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _saveState() async {
-    _saveQueue = _saveQueue.catchError((_) {}).then((_) {
-      return widget.store.save(controller.state).then((_) {
-        return controller.rebuildTrayMenu();
-      });
+    AppState? beforeState;
+    _saveQueue = _saveQueue.catchError((_) {}).then((_) async {
+      try {
+        final loadedState = await widget.store.load();
+        beforeState = _stateSnapshot(loadedState);
+      } catch (_) {
+        beforeState = null;
+      }
+      await widget.store.save(controller.state);
+      await controller.rebuildTrayMenu();
     });
     await _saveQueue;
-    _scheduleLocalEditSync();
+    final localBeforeState = beforeState;
+    if (localBeforeState != null) {
+      _scheduleLocalEditSync(
+        beforeState: localBeforeState,
+        afterState: _stateSnapshot(controller.state),
+      );
+    }
   }
 
   Future<void> _refreshAndSaveState() async {
@@ -634,6 +648,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     }
     _localEditSyncDebounce?.cancel();
     _localEditSyncDebounce = null;
+    _pendingLocalEditBaseState = null;
+    _pendingLocalEditLatestState = null;
     setState(() => _isSyncing = true);
     try {
       final result = await widget.syncService.syncAndMergeNow(
@@ -992,16 +1008,78 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     await _syncNow(showMessage: false);
   }
 
-  void _scheduleLocalEditSync() {
+  void _scheduleLocalEditSync({
+    required AppState beforeState,
+    required AppState afterState,
+  }) {
     _localEditSyncDebounce?.cancel();
     _localEditSyncDebounce = null;
     if (!_canRunAutoSync()) {
+      _pendingLocalEditBaseState = null;
+      _pendingLocalEditLatestState = null;
       return;
     }
+    _pendingLocalEditBaseState ??= beforeState;
+    _pendingLocalEditLatestState = afterState;
     _localEditSyncDebounce = Timer(const Duration(seconds: 5), () {
       _localEditSyncDebounce = null;
-      unawaited(_syncSilentlyIfConfigured());
+      unawaited(_uploadLocalEditsThenSync());
     });
+  }
+
+  Future<void> _uploadLocalEditsThenSync() async {
+    if (!_canRunAutoSync()) {
+      _pendingLocalEditBaseState = null;
+      _pendingLocalEditLatestState = null;
+      return;
+    }
+    if (_isSyncing) {
+      _reschedulePendingLocalEditSync();
+      return;
+    }
+    final beforeState = _pendingLocalEditBaseState;
+    final afterState = _pendingLocalEditLatestState;
+    _pendingLocalEditBaseState = null;
+    _pendingLocalEditLatestState = null;
+    if (beforeState != null && afterState != null) {
+      try {
+        final uploadResult = await widget.syncService.uploadLocalOperations(
+          beforeState: beforeState,
+          afterState: afterState,
+          store: widget.store,
+        );
+        if (!mounted) {
+          return;
+        }
+        if (uploadResult.uploadedCount > 0) {
+          setState(() {
+            controller.replaceState(uploadResult.state);
+          });
+          await controller.rebuildTrayMenu();
+        }
+      } catch (_) {
+        _pendingLocalEditBaseState = beforeState;
+        _pendingLocalEditLatestState = afterState;
+        return;
+      }
+    }
+    await _syncSilentlyIfConfigured();
+  }
+
+  void _reschedulePendingLocalEditSync() {
+    if (_pendingLocalEditBaseState == null ||
+        _pendingLocalEditLatestState == null ||
+        _localEditSyncDebounce != null) {
+      return;
+    }
+    _localEditSyncDebounce = Timer(const Duration(seconds: 1), () {
+      _localEditSyncDebounce = null;
+      unawaited(_uploadLocalEditsThenSync());
+    });
+  }
+
+  AppState _stateSnapshot(AppState state) {
+    return AppState.fromJson(state.toJson());
   }
 
   bool _canRunAutoSync() {

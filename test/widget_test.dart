@@ -1023,28 +1023,30 @@ void main() {
         autoSyncIntervalMinutes: 15,
       ),
     );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'debounce-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
     final controller = RePaperTodoController(
-      initialState: AppState(
-        sync: syncSettings.copy(),
-        papers: [
-          PaperData(
-            id: 'debounce-note',
-            type: PaperTypes.note,
-            title: 'Local',
-            content: 'Local body',
-          ),
-        ],
-      ),
+      initialState: initialState,
       platform: _RecordingPlatformServices(),
     );
     final store = _MemoryStateStore();
+    await store.save(initialState);
     final syncedState = AppState(
       sync: syncSettings.copy(),
       papers: [
         PaperData(
           id: 'debounce-note',
           type: PaperTypes.note,
-          title: 'Synced edit',
+          title: 'Synced',
           content: 'Local body',
         ),
       ],
@@ -1058,6 +1060,18 @@ void main() {
         ),
         state: syncedState,
       ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        papers: [
+          PaperData(
+            id: 'debounce-note',
+            type: PaperTypes.note,
+            title: 'Two',
+            content: 'Local body',
+          ),
+        ],
+      ),
     );
 
     await tester.pumpWidget(
@@ -1070,7 +1084,7 @@ void main() {
 
     await tester.enterText(
       find.byKey(const ValueKey('debounce-note-title')),
-      'Draft one',
+      'One',
     );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 3));
@@ -1079,7 +1093,7 @@ void main() {
 
     await tester.enterText(
       find.byKey(const ValueKey('debounce-note-title')),
-      'Draft two',
+      'Two',
     );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 4));
@@ -1089,9 +1103,111 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump();
 
+    expect(syncService.localUploadCalls, 1);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Two']);
     expect(syncService.calls, 1);
-    expect(controller.state.papers.single.title, 'Synced edit');
+    expect(controller.state.papers.single.title, 'Synced');
     expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
+  testWidgets('local edits retry upload when sync is busy', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'busy-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'busy-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final firstSyncGate = Completer<void>();
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      firstSyncGate: firstSyncGate.future,
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        papers: [
+          PaperData(
+            id: 'busy-note',
+            type: PaperTypes.note,
+            title: 'Two',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    expect(syncService.calls, 1);
+
+    await tester.enterText(
+        find.byKey(const ValueKey('busy-note-title')), 'Two');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+
+    expect(syncService.localUploadCalls, 0);
+
+    firstSyncGate.complete();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(syncService.localUploadCalls, 1);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Two']);
+    expect(syncService.calls, 2);
   });
 
   testWidgets('opens note markdown externally', (tester) async {
@@ -2361,10 +2477,19 @@ class _RecoverySnapshotSyncService extends AppSyncService {
 }
 
 class _ManualSyncService extends AppSyncService {
-  _ManualSyncService({required this.result});
+  _ManualSyncService({
+    required this.result,
+    this.firstSyncGate,
+    this.localUploadState,
+  });
 
   final AppSyncRunResult result;
+  final Future<void>? firstSyncGate;
+  final AppState? localUploadState;
   var calls = 0;
+  var localUploadCalls = 0;
+  final localUploadBeforeTitles = <String>[];
+  final localUploadAfterTitles = <String>[];
 
   @override
   Future<AppSyncRunResult> syncAndMergeNow({
@@ -2373,7 +2498,31 @@ class _ManualSyncService extends AppSyncService {
     DateTime? localUpdatedAtUtc,
   }) async {
     calls += 1;
+    final gate = firstSyncGate;
+    if (calls == 1 && gate != null) {
+      await gate;
+    }
     return result;
+  }
+
+  @override
+  Future<AppSyncLocalOperationUploadResult> uploadLocalOperations({
+    required AppState beforeState,
+    required AppState afterState,
+    required StateStore store,
+    DateTime? createdAtUtc,
+  }) async {
+    localUploadCalls += 1;
+    localUploadBeforeTitles.add(beforeState.papers.single.title);
+    localUploadAfterTitles.add(afterState.papers.single.title);
+    final state = localUploadState ?? afterState;
+    await store.save(state);
+    return AppSyncLocalOperationUploadResult(
+      state: state,
+      deviceSequences: state.sync.operationDeviceSequences,
+      generatedCount: 1,
+      uploadedCount: 1,
+    );
   }
 }
 
