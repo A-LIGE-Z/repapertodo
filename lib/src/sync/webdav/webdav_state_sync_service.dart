@@ -41,12 +41,19 @@ class WebDavStateSyncPaths {
   String get operationCollectionPath =>
       _joinRemotePath(rootCollectionPath, operationDirectoryName);
 
-  String snapshotPath(DateTime updatedAtUtc, String deviceId) {
+  String snapshotPath(
+    DateTime updatedAtUtc,
+    String deviceId, {
+    int? sequence,
+  }) {
     final stamp = _formatSnapshotStamp(updatedAtUtc);
     final safeDeviceId = _normalizeRemotePathSegment(deviceId);
+    final safeSequence = sequence == null
+        ? ''
+        : '-seq-${(sequence < 0 ? 0 : sequence).toString().padLeft(12, '0')}';
     return _joinRemotePath(
       snapshotCollectionPath,
-      'snapshot-$stamp-$safeDeviceId.json',
+      'snapshot-$stamp-$safeDeviceId$safeSequence.json',
     );
   }
 
@@ -172,16 +179,20 @@ class WebDavStateSyncService {
   }) async {
     final stamp = (updatedAtUtc ?? DateTime.now().toUtc()).toUtc();
     await _ensureCollections();
-    final snapshotPath = _paths.snapshotPath(stamp, _deviceId);
+    final deviceSequences =
+        normalizeSyncDeviceSequences(previousDeviceSequences);
+    final nextSequence = (deviceSequences[_deviceId] ?? 0) + 1;
+    deviceSequences[_deviceId] = nextSequence;
+    final snapshotPath = _paths.snapshotPath(
+      stamp,
+      _deviceId,
+      sequence: nextSequence,
+    );
     await _client.putBytes(
       snapshotPath,
       utf8.encode(_codec.encode(state)),
       createOnly: true,
     );
-    final deviceSequences =
-        normalizeSyncDeviceSequences(previousDeviceSequences);
-    final nextSequence = (deviceSequences[_deviceId] ?? 0) + 1;
-    deviceSequences[_deviceId] = nextSequence;
     final operationLogPath = _paths.operationLogPath(_deviceId, nextSequence);
     await _putSnapshotOperation(
       state: state,
@@ -394,8 +405,7 @@ class WebDavStateSyncService {
   WebDavSnapshotRecord? _snapshotRecordFromEntry(WebDavEntry entry) {
     final path = _entryRemotePath(entry.href);
     final fileName = path.split('/').last;
-    final match =
-        RegExp(r'^snapshot-(\d{8}T\d{9}Z)-(.+)\.json$').firstMatch(fileName);
+    final match = _snapshotFileNamePattern.firstMatch(fileName);
     if (match == null) {
       return null;
     }
@@ -458,7 +468,7 @@ class WebDavStateSyncService {
       );
     }
     final fileName = normalizedPath.split('/').last;
-    if (!RegExp(r'^snapshot-\d{8}T\d{9}Z-.+\.json$').hasMatch(fileName)) {
+    if (!_snapshotFileNamePattern.hasMatch(fileName)) {
       throw const WebDavSyncConfigurationException(
         'Snapshot path must reference a RePaperTodo snapshot file.',
       );
@@ -662,6 +672,10 @@ _OperationLogIdentity? _operationLogIdentityFromPath(String path) {
   }
   return _OperationLogIdentity(deviceId: deviceId, sequence: sequence);
 }
+
+final _snapshotFileNamePattern = RegExp(
+  r'^snapshot-(\d{8}T\d{9}Z)-(.+?)(?:-seq-\d{12})?\.json$',
+);
 
 String _joinRemotePath(String base, String child) {
   final normalizedChild = _normalizeRemotePath(child);

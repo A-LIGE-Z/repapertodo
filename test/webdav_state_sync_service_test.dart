@@ -47,7 +47,7 @@ void main() {
     final snapshotRequest = requests.firstWhere((request) =>
         request.method == 'PUT' &&
         request.url.path.endsWith(
-            '/snapshots/snapshot-20260630T100000000Z-test-device.json'));
+            '/snapshots/snapshot-20260630T100000000Z-test-device-seq-000000000001.json'));
     expect(snapshotRequest.headers['if-none-match'], '*');
     final snapshot = jsonDecode(utf8.decode(snapshotRequest.bodyBytes))
         as Map<String, Object?>;
@@ -65,7 +65,7 @@ void main() {
     expect(operation['sequence'], 1);
     expect(operation['payload'], {
       'snapshotPath':
-          'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device.json',
+          'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device-seq-000000000001.json',
       'paperCount': 1,
     });
 
@@ -75,11 +75,11 @@ void main() {
         as Map<String, Object?>;
     expect(
       manifest['latestSnapshotPath'],
-      'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device.json',
+      'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device-seq-000000000001.json',
     );
     expect(
       result.snapshotPath,
-      'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device.json',
+      'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device-seq-000000000001.json',
     );
     expect(manifest['updatedAtUtc'], '2026-06-30T10:00:00.000Z');
     expect(manifest['deviceSequences'], {'test-device': 1});
@@ -240,7 +240,7 @@ void main() {
     expect(result.status, WebDavStateSyncStatus.conflict);
     expect(
       result.snapshotPath,
-      'repapertodo/snapshots/snapshot-20260701T000000000Z-test-device.json',
+      'repapertodo/snapshots/snapshot-20260701T000000000Z-test-device-seq-000000000005.json',
     );
     final snapshotRequest = requests.firstWhere((request) =>
         request.method == 'PUT' && request.url.path.contains('/snapshots/'));
@@ -278,7 +278,7 @@ void main() {
     </D:propstat>
   </D:response>
   <D:response>
-    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json</D:href>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/snapshot-20260701T090000000Z-phone-seq-000000000004.json</D:href>
     <D:propstat>
       <D:prop>
         <D:getetag>"phone-v1"</D:getetag>
@@ -320,7 +320,7 @@ void main() {
       'win-device',
     ]);
     expect(snapshots.first.path,
-        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json');
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone-seq-000000000004.json');
     expect(snapshots.first.updatedAtUtc, DateTime.utc(2026, 7, 1, 9));
     expect(snapshots.first.etag, 'phone-v1');
     expect(snapshots.first.contentLength, 2048);

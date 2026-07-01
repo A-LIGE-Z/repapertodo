@@ -24,7 +24,7 @@ uploading a distinct snapshot path using `If-None-Match: *` and updating
 /RePaperTodo/
   manifest.json
   snapshots/
-    snapshot-<timestamp>-<deviceId>.json
+    snapshot-<timestamp>-<deviceId>-seq-<sequence>.json
   ops/
     <deviceId>-<sequence>.jsonl
 ```
@@ -36,6 +36,8 @@ does not advance that device's operation sequence.
 The sync core can enumerate this directory and expose snapshot metadata such as
 device ID, timestamp, ETag, size, and last-modified time.
 Selected snapshot files can also be downloaded and decoded for recovery.
+Legacy snapshot names without the `-seq-<sequence>` suffix remain accepted for
+recovery.
 Each push also writes a one-line plain JSON operation record in `ops/` that
 points at the uploaded snapshot and advances that device's manifest sequence.
 The sync core can enumerate and download these operation logs as merge inputs.
@@ -67,7 +69,7 @@ Planned encrypted operation-log layout:
 /RePaperTodo/
   manifest.json.enc
   snapshots/
-    snapshot-<timestamp>-<deviceId>.json.enc
+    snapshot-<timestamp>-<deviceId>-seq-<sequence>.json.enc
   ops/
     <deviceId>-<sequence>.jsonl.enc
 ```
