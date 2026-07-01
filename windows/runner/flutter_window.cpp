@@ -345,9 +345,12 @@ bool RegisterConfiguredHotkey(HWND window, int id, const std::string& hotkey) {
 
 constexpr UINT kTrayIconId = 1;
 constexpr UINT kTrayIconMessage = WM_APP + 1;
-constexpr UINT kTrayShowCommand = 40001;
-constexpr UINT kTrayHideCommand = 40002;
-constexpr UINT kTrayExitCommand = 40003;
+constexpr UINT kTrayNewTodoCommand = 40001;
+constexpr UINT kTrayNewNoteCommand = 40002;
+constexpr UINT kTraySettingsCommand = 40003;
+constexpr UINT kTrayShowCommand = 40004;
+constexpr UINT kTrayHideCommand = 40005;
+constexpr UINT kTrayExitCommand = 40006;
 constexpr UINT kTrayPaperCommandBase = 41000;
 constexpr int kPinnedTodoHotkeyId = 42001;
 constexpr int kPinnedNoteHotkeyId = 42002;
@@ -645,6 +648,11 @@ void FlutterWindow::ShowTrayMenu() {
   POINT cursor_position;
   GetCursorPos(&cursor_position);
   HMENU menu = CreatePopupMenu();
+  AppendMenu(menu, MF_STRING, kTrayNewTodoCommand, L"New todo");
+  AppendMenu(menu, MF_STRING, kTrayNewNoteCommand, L"New note");
+  AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
+  AppendMenu(menu, MF_STRING, kTraySettingsCommand, L"Settings");
+  AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenu(menu, MF_STRING, kTrayShowCommand, L"Show");
   AppendMenu(menu, MF_STRING, kTrayHideCommand, L"Hide");
   if (!tray_papers_.empty()) {
@@ -667,6 +675,15 @@ void FlutterWindow::ShowTrayMenu() {
   DestroyMenu(menu);
 
   switch (command) {
+    case kTrayNewTodoCommand:
+      SendStartupCommandRequested("new-todo");
+      break;
+    case kTrayNewNoteCommand:
+      SendStartupCommandRequested("new-note");
+      break;
+    case kTraySettingsCommand:
+      SendStartupCommandRequested("settings");
+      break;
     case kTrayShowCommand:
       SendWindowEvent("showRequested");
       ShowWindow(window, SW_SHOWNORMAL);

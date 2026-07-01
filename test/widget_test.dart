@@ -1358,6 +1358,11 @@ void main() {
     expect(controller.state.papers.last.type, PaperTypes.todo);
     expect(platform.paperWindows.shownTitles, contains('Todo2'));
     expect(find.text('Todo2'), findsOneWidget);
+
+    startup.addCommand(const StartupCommand(StartupCommandKind.settings));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
   });
 
   testWidgets('links todo items to note papers', (tester) async {

@@ -547,6 +547,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen> {
     if (command.kind == StartupCommandKind.none) {
       return;
     }
+    if (command.kind == StartupCommandKind.settings) {
+      await _openSettings();
+      return;
+    }
     await controller.executeStartupCommand(command);
     if (mounted) {
       setState(() {});

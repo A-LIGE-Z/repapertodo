@@ -152,6 +152,8 @@ class RePaperTodoController {
         await _platform.paperWindows.showPaper(createPaper(PaperTypes.todo));
       case StartupCommandKind.newNote:
         await _platform.paperWindows.showPaper(createPaper(PaperTypes.note));
+      case StartupCommandKind.settings:
+        return;
       case StartupCommandKind.exit:
         await _platform.systemIntegration.unregisterGlobalHotkeys();
         await _platform.tray.dispose();

@@ -5,6 +5,7 @@ enum StartupCommandKind {
   toggle,
   newTodo,
   newNote,
+  settings,
   exit,
 }
 
@@ -13,13 +14,15 @@ class StartupCommand {
 
   final StartupCommandKind kind;
 
-  bool get createsPaper => kind == StartupCommandKind.newTodo || kind == StartupCommandKind.newNote;
+  bool get createsPaper =>
+      kind == StartupCommandKind.newTodo || kind == StartupCommandKind.newNote;
 
   static StartupCommand parse(
     Iterable<String> args, {
     StartupCommandKind defaultWhenEmpty = StartupCommandKind.none,
   }) {
-    final normalized = args.map(_normalize).where((arg) => arg.isNotEmpty).firstOrNull;
+    final normalized =
+        args.map(_normalize).where((arg) => arg.isNotEmpty).firstOrNull;
     if (normalized == null) {
       return StartupCommand(defaultWhenEmpty);
     }
@@ -29,6 +32,11 @@ class StartupCommand {
       'toggle' => StartupCommandKind.toggle,
       'new-todo' || 'todo' => StartupCommandKind.newTodo,
       'new-note' || 'note' || 'paper' => StartupCommandKind.newNote,
+      'settings' ||
+      'setting' ||
+      'preferences' ||
+      'prefs' =>
+        StartupCommandKind.settings,
       'exit' || 'quit' => StartupCommandKind.exit,
       _ => StartupCommandKind.none,
     });
@@ -45,4 +53,3 @@ extension _FirstOrNull<T> on Iterable<T> {
     return iterator.moveNext() ? iterator.current : null;
   }
 }
-
