@@ -2,6 +2,7 @@ import '../core/model/app_state.dart';
 import '../core/model/sync_settings.dart';
 import '../core/storage/state_store.dart';
 import 'sync_device_id_store.dart';
+import 'sync_operation.dart';
 import 'webdav/webdav_state_sync_service.dart';
 
 typedef WebDavStateSyncServiceFactory = WebDavStateSyncService Function(
@@ -122,6 +123,35 @@ class AppSyncService {
       return const [];
     }
     return client.listSnapshots();
+  }
+
+  Future<List<WebDavOperationLogRecord>> listRemoteOperationLogs({
+    required AppState localState,
+    required StateStore store,
+  }) async {
+    final client = await _configuredClientOrNull(
+      localState: localState,
+      store: store,
+    );
+    if (client == null) {
+      return const [];
+    }
+    return client.listOperationLogs();
+  }
+
+  Future<List<SyncOperation>> downloadRemoteOperationLog({
+    required AppState localState,
+    required StateStore store,
+    required String operationLogPath,
+  }) async {
+    final client = await _configuredClientOrNull(
+      localState: localState,
+      store: store,
+    );
+    if (client == null) {
+      return const [];
+    }
+    return client.downloadOperationLog(operationLogPath);
   }
 
   Future<AppSyncResult> restoreRecoverySnapshot({

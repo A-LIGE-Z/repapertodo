@@ -175,6 +175,77 @@ void main() {
     expect(forwardedDeviceId, snapshots.single.deviceId);
   });
 
+  test('lists operation logs through configured WebDAV', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('repapertodo_app_sync_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var forwardedDeviceId = '';
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) {
+        forwardedDeviceId = deviceId ?? '';
+        return _FakeWebDavStateSyncService(
+          onListOperationLogs: () async {
+            return [
+              WebDavOperationLogRecord(
+                path: 'repapertodo/ops/$forwardedDeviceId-000000000001.jsonl',
+                deviceId: forwardedDeviceId,
+                sequence: 1,
+              ),
+            ];
+          },
+        );
+      },
+    );
+
+    final logs = await service.listRemoteOperationLogs(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+    );
+
+    expect(logs, hasLength(1));
+    expect(logs.single.deviceId, startsWith('device-'));
+    expect(logs.single.sequence, 1);
+    expect(forwardedDeviceId, logs.single.deviceId);
+  });
+
+  test('downloads operation logs through configured WebDAV', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_download_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-1',
+              deviceId: deviceId ?? '',
+              sequence: 1,
+              kind: SyncOperationKind.stateSnapshot,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {'path': operationLogPath},
+            ),
+          ];
+        },
+      ),
+    );
+
+    final operations = await service.downloadRemoteOperationLog(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+      operationLogPath: 'repapertodo/ops/device-000000000001.jsonl',
+    );
+
+    expect(operations, hasLength(1));
+    expect(operations.single.kind, SyncOperationKind.stateSnapshot);
+    expect(operations.single.payload['path'],
+        'repapertodo/ops/device-000000000001.jsonl');
+  });
+
   test('restores a selected recovery snapshot', () async {
     final directory =
         await Directory.systemTemp.createTemp('repapertodo_app_sync_restore_');
@@ -227,6 +298,30 @@ void main() {
 
     expect(snapshots, isEmpty);
   });
+
+  test('returns no operation logs when sync is disabled', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('repapertodo_app_sync_no_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) =>
+          throw StateError('WebDAV should not be created'),
+    );
+
+    final logs = await service.listRemoteOperationLogs(
+      localState: AppState(),
+      store: store,
+    );
+    final operations = await service.downloadRemoteOperationLog(
+      localState: AppState(),
+      store: store,
+      operationLogPath: 'repapertodo/ops/device-000000000001.jsonl',
+    );
+
+    expect(logs, isEmpty);
+    expect(operations, isEmpty);
+  });
 }
 
 SyncSettings _configuredSyncSettings() {
@@ -249,8 +344,15 @@ typedef _FakeSync = Future<WebDavStateSyncResult> Function({
 
 typedef _FakeListSnapshots = Future<List<WebDavSnapshotRecord>> Function();
 
+typedef _FakeListOperationLogs = Future<List<WebDavOperationLogRecord>>
+    Function();
+
 typedef _FakeDownloadSnapshot = Future<WebDavStateSyncResult> Function(
   String snapshotPath,
+);
+
+typedef _FakeDownloadOperationLog = Future<List<SyncOperation>> Function(
+  String operationLogPath,
 );
 
 class _FakeWebDavStateSyncService extends WebDavStateSyncService {
@@ -258,9 +360,13 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
     _FakeSync? onSync,
     _FakeListSnapshots? onListSnapshots,
     _FakeDownloadSnapshot? onDownloadSnapshot,
+    _FakeListOperationLogs? onListOperationLogs,
+    _FakeDownloadOperationLog? onDownloadOperationLog,
   })  : _onSync = onSync,
         _onListSnapshots = onListSnapshots,
         _onDownloadSnapshot = onDownloadSnapshot,
+        _onListOperationLogs = onListOperationLogs,
+        _onDownloadOperationLog = onDownloadOperationLog,
         super(
           client: WebDavClient(
             baseUri: Uri.parse('https://unused.example.test/'),
@@ -272,6 +378,8 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
   final _FakeSync? _onSync;
   final _FakeListSnapshots? _onListSnapshots;
   final _FakeDownloadSnapshot? _onDownloadSnapshot;
+  final _FakeListOperationLogs? _onListOperationLogs;
+  final _FakeDownloadOperationLog? _onDownloadOperationLog;
 
   @override
   Future<WebDavStateSyncResult> sync({
@@ -298,11 +406,29 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
   }
 
   @override
+  Future<List<WebDavOperationLogRecord>> listOperationLogs() {
+    final onListOperationLogs = _onListOperationLogs;
+    if (onListOperationLogs == null) {
+      throw StateError('Unexpected listOperationLogs call.');
+    }
+    return onListOperationLogs();
+  }
+
+  @override
   Future<WebDavStateSyncResult> downloadSnapshot(String snapshotPath) {
     final onDownloadSnapshot = _onDownloadSnapshot;
     if (onDownloadSnapshot == null) {
       throw StateError('Unexpected downloadSnapshot call.');
     }
     return onDownloadSnapshot(snapshotPath);
+  }
+
+  @override
+  Future<List<SyncOperation>> downloadOperationLog(String operationLogPath) {
+    final onDownloadOperationLog = _onDownloadOperationLog;
+    if (onDownloadOperationLog == null) {
+      throw StateError('Unexpected downloadOperationLog call.');
+    }
+    return onDownloadOperationLog(operationLogPath);
   }
 }
