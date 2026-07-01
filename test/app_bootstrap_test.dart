@@ -20,7 +20,12 @@ void main() {
     );
     final remoteState = AppState(
       papers: [
-        PaperData(id: 'paper-remote', type: PaperTypes.note, title: 'Remote'),
+        PaperData(
+          id: 'paper-remote',
+          type: PaperTypes.note,
+          title: 'Remote',
+          content: 'Snapshot body',
+        ),
       ],
       sync: _configuredSyncSettings(autoSyncOnStart: true),
     );
@@ -31,6 +36,30 @@ void main() {
             status: WebDavStateSyncStatus.downloaded,
             state: remoteState,
           );
+        },
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.updateNoteContent,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paperId': 'paper-remote',
+                'content': 'Merged body',
+              },
+            ),
+          ];
         },
       ),
     );
@@ -44,7 +73,11 @@ void main() {
 
     expect(bootstrap, isNotNull);
     expect(bootstrap!.controller.state.papers.single.title, 'Remote');
-    expect((await store.load()).papers.single.title, 'Remote');
+    expect(bootstrap.controller.state.papers.single.content, 'Merged body');
+    final stored = await store.load();
+    expect(stored.papers.single.title, 'Remote');
+    expect(stored.papers.single.content, 'Merged body');
+    expect(stored.sync.operationDeviceSequences, {'device-a': 1});
   });
 
   test('forwards startup args when another instance owns the app', () async {
@@ -81,9 +114,21 @@ typedef _FakeSync = Future<WebDavStateSyncResult> Function({
   DateTime? localUpdatedAtUtc,
 });
 
+typedef _FakeListOperationLogs = Future<List<WebDavOperationLogRecord>>
+    Function();
+
+typedef _FakeDownloadOperationLog = Future<List<SyncOperation>> Function(
+  String operationLogPath,
+);
+
 class _FakeWebDavStateSyncService extends WebDavStateSyncService {
-  _FakeWebDavStateSyncService({required _FakeSync onSync})
-      : _onSync = onSync,
+  _FakeWebDavStateSyncService({
+    required _FakeSync onSync,
+    _FakeListOperationLogs? onListOperationLogs,
+    _FakeDownloadOperationLog? onDownloadOperationLog,
+  })  : _onSync = onSync,
+        _onListOperationLogs = onListOperationLogs,
+        _onDownloadOperationLog = onDownloadOperationLog,
         super(
           client: WebDavClient(
             baseUri: Uri.parse('https://unused.example.test/'),
@@ -93,6 +138,8 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
         );
 
   final _FakeSync _onSync;
+  final _FakeListOperationLogs? _onListOperationLogs;
+  final _FakeDownloadOperationLog? _onDownloadOperationLog;
 
   @override
   Future<WebDavStateSyncResult> sync({
@@ -103,6 +150,24 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
       localState: localState,
       localUpdatedAtUtc: localUpdatedAtUtc,
     );
+  }
+
+  @override
+  Future<List<WebDavOperationLogRecord>> listOperationLogs() {
+    final onListOperationLogs = _onListOperationLogs;
+    if (onListOperationLogs == null) {
+      throw StateError('Unexpected listOperationLogs call.');
+    }
+    return onListOperationLogs();
+  }
+
+  @override
+  Future<List<SyncOperation>> downloadOperationLog(String operationLogPath) {
+    final onDownloadOperationLog = _onDownloadOperationLog;
+    if (onDownloadOperationLog == null) {
+      throw StateError('Unexpected downloadOperationLog call.');
+    }
+    return onDownloadOperationLog(operationLogPath);
   }
 }
 

@@ -49,13 +49,11 @@ class AppBootstrap {
     await controller.start(startupCommand: startupCommand);
     if (controller.state.sync.enabled &&
         controller.state.sync.webDav.autoSyncOnStart) {
-      final result = await (syncService ?? AppSyncService()).syncNow(
+      final result = await (syncService ?? AppSyncService()).syncAndMergeNow(
         localState: controller.state,
         store: resolvedStore,
       );
-      if (result.state != null) {
-        controller.replaceState(result.state!);
-      }
+      controller.replaceState(result.state);
     }
     await resolvedStore.save(controller.state);
     return BootstrappedApp(
