@@ -337,10 +337,38 @@ void main() {
     );
     expect(
       find.descendant(
+        of: find.byKey(const ValueKey('note-canvas-element-canvas-bottom')),
+        matching: find.text('CODE'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('note-canvas-element-canvas-bottom')),
+        matching: find.text('Layer 1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
         of: find.byKey(const ValueKey('note-canvas-element-canvas-top')),
         matching: find.byKey(
           const ValueKey('note-canvas-element-text-canvas-top'),
         ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('note-canvas-element-canvas-top')),
+        matching: find.text('CODE'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('note-canvas-element-canvas-top')),
+        matching: find.text('Top 2'),
       ),
       findsOneWidget,
     );

@@ -1906,16 +1906,20 @@ class _NoteCanvasPreview extends StatelessWidget {
                     color: colorScheme.surfaceContainerLowest,
                   ),
                 ),
-                for (final element in sortedElements)
+                for (var index = 0; index < sortedElements.length; index++)
                   Positioned(
-                    left: element.x * scale,
-                    top: element.y * scale,
-                    width: element.width * scale,
-                    height: element.height * scale,
+                    left: sortedElements[index].x * scale,
+                    top: sortedElements[index].y * scale,
+                    width: sortedElements[index].width * scale,
+                    height: sortedElements[index].height * scale,
                     child: _NoteCanvasElementPreview(
-                      key: ValueKey('note-canvas-element-${element.id}'),
-                      element: element,
-                      isSelected: element.id == selectedElementId,
+                      key: ValueKey(
+                        'note-canvas-element-${sortedElements[index].id}',
+                      ),
+                      element: sortedElements[index],
+                      layerRank: index + 1,
+                      layerCount: sortedElements.length,
+                      isSelected: sortedElements[index].id == selectedElementId,
                       scale: scale,
                       textZoom: textZoom,
                       onChanged: onChanged,
@@ -1950,6 +1954,8 @@ class _NoteCanvasPreview extends StatelessWidget {
 class _NoteCanvasElementPreview extends StatelessWidget {
   const _NoteCanvasElementPreview({
     required this.element,
+    required this.layerRank,
+    required this.layerCount,
     required this.isSelected,
     required this.scale,
     required this.textZoom,
@@ -1963,6 +1969,8 @@ class _NoteCanvasElementPreview extends StatelessWidget {
   });
 
   final NoteCanvasElement element;
+  final int layerRank;
+  final int layerCount;
   final bool isSelected;
   final double scale;
   final double textZoom;
@@ -1983,6 +1991,8 @@ class _NoteCanvasElementPreview extends StatelessWidget {
         .bodySmall
         ?.apply(fontSizeFactor: textZoom)
         .copyWith(fontFamily: isCode ? 'monospace' : null);
+    final typeLabel = _noteCanvasElementTypeLabel(element.type);
+    final layerLabel = _noteCanvasLayerLabel(layerRank, layerCount);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHigh,
@@ -2006,8 +2016,27 @@ class _NoteCanvasElementPreview extends StatelessWidget {
         child: Column(
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: (6 * scale).clamp(3, 6).toDouble(),
+                    runSpacing: (4 * scale).clamp(2, 4).toDouble(),
+                    children: [
+                      _NoteCanvasElementBadge(
+                        label: typeLabel,
+                        scale: scale,
+                        color: colorScheme.primaryContainer,
+                        foregroundColor: colorScheme.onPrimaryContainer,
+                      ),
+                      _NoteCanvasElementBadge(
+                        label: layerLabel,
+                        scale: scale,
+                        color: colorScheme.secondaryContainer,
+                        foregroundColor: colorScheme.onSecondaryContainer,
+                      ),
+                    ],
+                  ),
+                ),
                 SizedBox.square(
                   dimension: (28 * scale).clamp(24, 28).toDouble(),
                   child: IconButton(
@@ -2108,6 +2137,61 @@ class _NoteCanvasElementPreview extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NoteCanvasElementBadge extends StatelessWidget {
+  const _NoteCanvasElementBadge({
+    required this.label,
+    required this.scale,
+    required this.color,
+    required this.foregroundColor,
+  });
+
+  final String label;
+  final double scale;
+  final Color color;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: (6 * scale).clamp(4, 6).toDouble(),
+          vertical: (3 * scale).clamp(2, 3).toDouble(),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: foregroundColor,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+String _noteCanvasElementTypeLabel(String type) {
+  return switch (type) {
+    NoteCanvasElementTypes.text => 'TEXT',
+    NoteCanvasElementTypes.code => 'CODE',
+    _ => type.trim().isEmpty ? 'BLOCK' : type.trim().toUpperCase(),
+  };
+}
+
+String _noteCanvasLayerLabel(int layerRank, int layerCount) {
+  if (layerCount > 1 && layerRank == layerCount) {
+    return 'Top $layerRank';
+  }
+  return 'Layer $layerRank';
 }
 
 enum _CanvasLayerAction {
