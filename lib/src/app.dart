@@ -2500,7 +2500,18 @@ class _TodoEditor extends StatefulWidget {
 }
 
 class _TodoEditorState extends State<_TodoEditor> {
+  static const _maxTodoUndoDepth = 100;
+
+  final _todoFocusNode = FocusNode(debugLabel: 'todo-editor');
+  final _undoStack = <List<Map<String, Object?>>>[];
+  final _redoStack = <List<Map<String, Object?>>>[];
   var _textFieldRevision = 0;
+
+  @override
+  void dispose() {
+    _todoFocusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2511,7 +2522,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         .copyWith(
           height: widget.lineSpacing,
         );
-    return Column(
+    final editor = Column(
       children: [
         for (final item in widget.paper.items)
           Padding(
@@ -2526,6 +2537,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                     child: Checkbox(
                       value: item.done,
                       onChanged: (value) {
+                        _pushTodoUndoSnapshot();
                         setState(() => item.done = value ?? false);
                         unawaited(widget.onChanged());
                       },
@@ -2682,13 +2694,36 @@ class _TodoEditorState extends State<_TodoEditor> {
           ),
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: _addItem,
-            icon: const Icon(Icons.add),
-            label: const Text('Add item'),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton.icon(
+                onPressed: _addItem,
+                icon: const Icon(Icons.add),
+                label: const Text('Add item'),
+              ),
+              IconButton(
+                tooltip:
+                    _tooltipLabel(widget.enableToolTips, 'Undo todo change'),
+                onPressed: _undoStack.isEmpty ? null : _undoTodoChange,
+                icon: const Icon(Icons.undo),
+              ),
+              IconButton(
+                tooltip:
+                    _tooltipLabel(widget.enableToolTips, 'Redo todo change'),
+                onPressed: _redoStack.isEmpty ? null : _redoTodoChange,
+                icon: const Icon(Icons.redo),
+              ),
+            ],
           ),
         ),
       ],
+    );
+    return Focus(
+      focusNode: _todoFocusNode,
+      autofocus: true,
+      onKeyEvent: _handleTodoKeyEvent,
+      child: editor,
     );
   }
 
@@ -2696,6 +2731,73 @@ class _TodoEditorState extends State<_TodoEditor> {
   static const _columnActionRemove = 'remove';
   static const _columnActionEqualWidths = 'equal-widths';
   static const _columnActionWideFirst = 'wide-first';
+
+  List<Map<String, Object?>> _snapshotTodoItems() {
+    return [
+      for (final item in widget.paper.items)
+        Map<String, Object?>.from(item.toJson()),
+    ];
+  }
+
+  void _pushTodoUndoSnapshot() {
+    _undoStack.add(_snapshotTodoItems());
+    if (_undoStack.length > _maxTodoUndoDepth) {
+      _undoStack.removeAt(0);
+    }
+    _redoStack.clear();
+  }
+
+  void _restoreTodoSnapshot(List<Map<String, Object?>> snapshot) {
+    setState(() {
+      widget.paper.items = [
+        for (final itemJson in snapshot)
+          PaperItem.fromJson(Map<String, Object?>.from(itemJson)),
+      ];
+      widget.paper.normalize();
+      _textFieldRevision++;
+    });
+    _requestTodoFocus();
+    unawaited(widget.onChanged());
+  }
+
+  void _requestTodoFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _todoFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _undoTodoChange() {
+    if (_undoStack.isEmpty) {
+      return;
+    }
+    _redoStack.add(_snapshotTodoItems());
+    _restoreTodoSnapshot(_undoStack.removeLast());
+  }
+
+  void _redoTodoChange() {
+    if (_redoStack.isEmpty) {
+      return;
+    }
+    _undoStack.add(_snapshotTodoItems());
+    _restoreTodoSnapshot(_redoStack.removeLast());
+  }
+
+  KeyEventResult _handleTodoKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyZ) {
+      _undoTodoChange();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyY) {
+      _redoTodoChange();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
 
   Widget _todoColumnFields(
     BuildContext context,
@@ -2798,12 +2900,14 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (lines.length <= 1) {
       return false;
     }
+    _pushTodoUndoSnapshot();
     setState(() {
       item.text = lines.first;
       _addItemsAfter(item, lines.skip(1));
       widget.paper.normalize();
       _textFieldRevision++;
     });
+    _requestTodoFocus();
     unawaited(widget.onChanged());
     return true;
   }
@@ -2849,6 +2953,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _updateColumns(PaperItem item, String action) {
+    _pushTodoUndoSnapshot();
     setState(() {
       if (action == _columnActionAdd && item.todoColumnCount < 8) {
         item.todoColumnCount += 1;
@@ -2879,6 +2984,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _addItem() {
+    _pushTodoUndoSnapshot();
     final inheritedItem =
         widget.paper.items.isEmpty ? null : widget.paper.items.last;
     final inheritedColumnCount = inheritedItem?.todoColumnCount ?? 1;
@@ -2935,6 +3041,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (removedIndex < 0 || widget.paper.items.length <= 1) {
       return;
     }
+    _pushTodoUndoSnapshot();
     setState(() {
       widget.paper.items.removeAt(removedIndex);
       widget.paper.normalize();
@@ -2976,6 +3083,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (pickedDate == null) {
       return;
     }
+    _pushTodoUndoSnapshot();
     setState(() {
       item.dueAtLocal =
           DateTime(pickedDate.year, pickedDate.month, pickedDate.day)
@@ -2985,6 +3093,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _clearDueDate(PaperItem item) {
+    _pushTodoUndoSnapshot();
     setState(() => item.dueAtLocal = null);
     unawaited(widget.onChanged());
   }
@@ -3003,6 +3112,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (result == null) {
       return;
     }
+    _pushTodoUndoSnapshot();
     setState(() {
       if (result.clear) {
         item.reminderIntervalValue = null;
@@ -3016,6 +3126,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _clearReminderInterval(PaperItem item) {
+    _pushTodoUndoSnapshot();
     setState(() {
       item.reminderIntervalValue = null;
       item.reminderIntervalUnit = null;
@@ -3024,11 +3135,13 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _linkNote(PaperItem item, String noteId) {
+    _pushTodoUndoSnapshot();
     setState(() => item.linkedNoteId = noteId);
     unawaited(widget.onChanged());
   }
 
   void _clearLinkedNote(PaperItem item) {
+    _pushTodoUndoSnapshot();
     setState(() => item.linkedNoteId = null);
     unawaited(widget.onChanged());
   }

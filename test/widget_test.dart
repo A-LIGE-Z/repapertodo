@@ -929,6 +929,22 @@ void main() {
       [2, 1],
       [2, 1],
     ]);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.map((item) => item.text), [
+      'Old value',
+    ]);
+
+    await tester.tap(find.byTooltip('Redo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.map((item) => item.text), [
+      'Read paper',
+      'Compare notes',
+      'Ship build',
+    ]);
   });
 
   testWidgets('toggles desktop pin and always-on-top as exclusive modes',
