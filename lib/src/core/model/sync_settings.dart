@@ -246,7 +246,11 @@ class WebDavSyncSettings {
   }
 
   Uri? get endpointUri {
-    final uri = Uri.tryParse(endpoint);
+    final trimmedEndpoint = endpoint.trim();
+    if (_hasUnsafeEndpointPath(trimmedEndpoint)) {
+      return null;
+    }
+    final uri = Uri.tryParse(trimmedEndpoint);
     final scheme = uri?.scheme.toLowerCase();
     if (uri == null ||
         (scheme != 'http' && scheme != 'https') ||
@@ -323,6 +327,36 @@ String _normalizeRootPath(String value) {
   }
   final normalized = segments.join('/');
   return normalized.isEmpty ? 'repapertodo' : normalized;
+}
+
+bool _hasUnsafeEndpointPath(String endpoint) {
+  final schemeSeparator = endpoint.indexOf('://');
+  if (schemeSeparator < 0) {
+    return false;
+  }
+  final pathStart = endpoint.indexOf('/', schemeSeparator + 3);
+  if (pathStart < 0) {
+    return false;
+  }
+  var pathEnd = endpoint.length;
+  for (final terminator in const ['?', '#']) {
+    final index = endpoint.indexOf(terminator, pathStart);
+    if (index >= 0 && index < pathEnd) {
+      pathEnd = index;
+    }
+  }
+  late final String decodedPath;
+  try {
+    decodedPath = Uri.decodeComponent(endpoint.substring(pathStart, pathEnd));
+  } on ArgumentError {
+    return true;
+  } on FormatException {
+    return true;
+  }
+  return decodedPath.replaceAll('\\', '/').split('/').any((segment) {
+    final trimmed = segment.trim();
+    return trimmed == '.' || trimmed == '..';
+  });
 }
 
 Map<String, String> _normalizeTombstoneMap(Object? value) {

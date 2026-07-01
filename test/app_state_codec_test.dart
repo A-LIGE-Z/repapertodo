@@ -749,6 +749,10 @@ Plain item
       'https://user:pass@dav.example.test/dav/',
       'https://dav.example.test/dav/?token=secret',
       'https://dav.example.test/dav/#sync-root',
+      'https://dav.example.test/dav/./files/',
+      'https://dav.example.test/dav/../files/',
+      'https://dav.example.test/dav/%2e%2e/files/',
+      'https://dav.example.test/dav/bad%/',
     ]) {
       final settings = WebDavSyncSettings(
         endpoint: endpoint,

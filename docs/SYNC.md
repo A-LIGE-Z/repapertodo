@@ -10,6 +10,9 @@ Generic WebDAV support is mandatory. Provider presets may be added for convenien
 Configured WebDAV endpoints must use `http` or `https` and must not include
 embedded credentials, query components, or fragment components; unsupported
 endpoint shapes are treated as incomplete settings.
+Endpoint paths with dot-segments or malformed percent encoding are also treated
+as incomplete settings so the configured WebDAV base folder is not silently
+rewritten by URI normalization.
 
 Initial recommended preset:
 
