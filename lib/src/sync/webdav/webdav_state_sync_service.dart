@@ -91,6 +91,24 @@ class WebDavSnapshotRecord {
   final DateTime? lastModifiedUtc;
 }
 
+class WebDavOperationLogRecord {
+  const WebDavOperationLogRecord({
+    required this.path,
+    required this.deviceId,
+    required this.sequence,
+    this.etag,
+    this.contentLength,
+    this.lastModifiedUtc,
+  });
+
+  final String path;
+  final String deviceId;
+  final int sequence;
+  final String? etag;
+  final int? contentLength;
+  final DateTime? lastModifiedUtc;
+}
+
 class WebDavStateSyncService {
   WebDavStateSyncService({
     required WebDavClient client,
@@ -239,6 +257,30 @@ class WebDavStateSyncService {
     }
   }
 
+  Future<List<WebDavOperationLogRecord>> listOperationLogs() async {
+    try {
+      final entries = await _client.list(_paths.operationCollectionPath);
+      final logs = entries
+          .where((entry) => !entry.isCollection)
+          .map(_operationLogRecordFromEntry)
+          .whereType<WebDavOperationLogRecord>()
+          .toList();
+      logs.sort((a, b) {
+        final deviceComparison = a.deviceId.compareTo(b.deviceId);
+        if (deviceComparison != 0) {
+          return deviceComparison;
+        }
+        return a.sequence.compareTo(b.sequence);
+      });
+      return logs;
+    } on WebDavException catch (error) {
+      if (error.statusCode == 404) {
+        return const [];
+      }
+      rethrow;
+    }
+  }
+
   Future<WebDavStateSyncResult> downloadSnapshot(String snapshotPath) async {
     final normalizedPath = _normalizeSnapshotPath(snapshotPath);
     final bytes = await _client.getBytes(normalizedPath);
@@ -247,6 +289,17 @@ class WebDavStateSyncService {
       state: _codec.decode(utf8.decode(bytes)),
       snapshotPath: normalizedPath,
     );
+  }
+
+  Future<List<SyncOperation>> downloadOperationLog(
+      String operationLogPath) async {
+    final normalizedPath = _normalizeOperationLogPath(operationLogPath);
+    final bytes = await _client.getBytes(normalizedPath);
+    final lines = utf8.decode(bytes).split('\n');
+    return [
+      for (final line in lines)
+        if (line.trim().isNotEmpty) _decodeOperation(line.trim()),
+    ];
   }
 
   Future<SyncManifest?> _loadManifest() async {
@@ -281,6 +334,27 @@ class WebDavStateSyncService {
       path: path,
       deviceId: match.group(2)!,
       updatedAtUtc: updatedAtUtc,
+      etag: entry.etag,
+      contentLength: entry.contentLength,
+      lastModifiedUtc: entry.lastModified?.toUtc(),
+    );
+  }
+
+  WebDavOperationLogRecord? _operationLogRecordFromEntry(WebDavEntry entry) {
+    final path = _entryRemotePath(entry.href);
+    final fileName = path.split('/').last;
+    final match = RegExp(r'^(.+)-(\d{12})\.jsonl$').firstMatch(fileName);
+    if (match == null) {
+      return null;
+    }
+    final sequence = int.tryParse(match.group(2)!);
+    if (sequence == null) {
+      return null;
+    }
+    return WebDavOperationLogRecord(
+      path: path,
+      deviceId: match.group(1)!,
+      sequence: sequence,
       etag: entry.etag,
       contentLength: entry.contentLength,
       lastModifiedUtc: entry.lastModified?.toUtc(),
@@ -322,6 +396,32 @@ class WebDavStateSyncService {
       );
     }
     return normalizedPath;
+  }
+
+  String _normalizeOperationLogPath(String operationLogPath) {
+    final normalizedPath = _normalizeRemotePath(operationLogPath);
+    final operationCollectionPath = _paths.operationCollectionPath;
+    final expectedPrefix = '$operationCollectionPath/';
+    if (!normalizedPath.startsWith(expectedPrefix)) {
+      throw WebDavSyncConfigurationException(
+        'Operation log path must be inside $operationCollectionPath.',
+      );
+    }
+    final fileName = normalizedPath.split('/').last;
+    if (!RegExp(r'^.+-\d{12}\.jsonl$').hasMatch(fileName)) {
+      throw const WebDavSyncConfigurationException(
+        'Operation log path must reference a RePaperTodo operation log file.',
+      );
+    }
+    return normalizedPath;
+  }
+
+  SyncOperation _decodeOperation(String line) {
+    final decoded = jsonDecode(line);
+    if (decoded is! Map) {
+      throw const FormatException('Sync operation must be a JSON object.');
+    }
+    return SyncOperation.fromJson(Map<String, Object?>.from(decoded));
   }
 
   Future<WebDavStateSyncResult> _downloadSnapshot(SyncManifest manifest) async {

@@ -328,6 +328,135 @@ void main() {
     expect(await service.listSnapshots(), isEmpty);
   });
 
+  test('lists remote operation logs for merge inputs', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/repapertodo/ops')) {
+          return http.Response(
+            '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/</D:href>
+    <D:propstat>
+      <D:prop><D:resourcetype><D:collection /></D:resourcetype></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/win-device-000000000003.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"win-op-v3"</D:getetag>
+        <D:getcontentlength>256</D:getcontentlength>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:03:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/android-device-000000000001.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"android-op-v1"</D:getetag>
+        <D:getcontentlength>128</D:getcontentlength>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:01:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/readme.txt</D:href>
+    <D:propstat><D:prop /></D:propstat>
+  </D:response>
+</D:multistatus>
+''',
+            207,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final logs = await service.listOperationLogs();
+
+    expect(logs, hasLength(2));
+    expect(logs.map((log) => '${log.deviceId}:${log.sequence}'), [
+      'android-device:1',
+      'win-device:3',
+    ]);
+    expect(
+        logs.first.path, 'repapertodo/ops/android-device-000000000001.jsonl');
+    expect(logs.first.etag, 'android-op-v1');
+    expect(logs.first.contentLength, 128);
+    expect(logs.first.lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 1));
+  });
+
+  test('lists no operation logs when the operation collection is missing',
+      () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/repapertodo/ops')) {
+          return http.Response('', 404);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    expect(await service.listOperationLogs(), isEmpty);
+  });
+
+  test('downloads a selected operation log', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/repapertodo/ops/android-device-000000000001.jsonl')) {
+          return http.Response(
+            [
+              jsonEncode(
+                SyncOperation(
+                  id: 'android-device-1',
+                  deviceId: 'android-device',
+                  sequence: 1,
+                  kind: SyncOperationKind.stateSnapshot,
+                  createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+                  payload: {
+                    'snapshotPath':
+                        'repapertodo/snapshots/snapshot-android.json',
+                  },
+                ).toJson(),
+              ),
+              '',
+            ].join('\n'),
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final operations = await service.downloadOperationLog(
+      '/repapertodo/ops/android-device-000000000001.jsonl',
+    );
+
+    expect(operations, hasLength(1));
+    expect(operations.single.kind, SyncOperationKind.stateSnapshot);
+    expect(operations.single.payload['snapshotPath'],
+        'repapertodo/snapshots/snapshot-android.json');
+  });
+
   test('downloads a selected snapshot for recovery', () async {
     const codec = AppStateCodec();
     final snapshotState = AppState(
@@ -376,6 +505,23 @@ void main() {
 
     expect(
       service.downloadSnapshot('repapertodo/manifest.json'),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+  });
+
+  test('rejects operation log downloads outside the operation collection',
+      () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        return http.Response('network should not be reached', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    expect(
+      service.downloadOperationLog('repapertodo/snapshots/local.json'),
       throwsA(isA<WebDavSyncConfigurationException>()),
     );
   });
