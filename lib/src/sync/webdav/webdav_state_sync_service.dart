@@ -49,11 +49,13 @@ class WebDavStateSyncResult {
     required this.status,
     this.state,
     this.manifest,
+    this.snapshotPath = '',
   });
 
   final WebDavStateSyncStatus status;
   final AppState? state;
   final SyncManifest? manifest;
+  final String snapshotPath;
 }
 
 class WebDavStateSyncService {
@@ -131,11 +133,13 @@ class WebDavStateSyncService {
       return WebDavStateSyncResult(
         status: WebDavStateSyncStatus.conflict,
         manifest: manifest,
+        snapshotPath: snapshotPath,
       );
     }
     return WebDavStateSyncResult(
       status: WebDavStateSyncStatus.uploaded,
       manifest: manifest,
+      snapshotPath: snapshotPath,
     );
   }
 
@@ -199,6 +203,7 @@ class WebDavStateSyncService {
       status: WebDavStateSyncStatus.downloaded,
       state: _codec.decode(utf8.decode(bytes)),
       manifest: manifest,
+      snapshotPath: manifest.latestSnapshotPath,
     );
   }
 

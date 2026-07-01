@@ -22,11 +22,13 @@ class AppSyncResult {
     required this.status,
     this.state,
     this.message = '',
+    this.snapshotPath = '',
   });
 
   final AppSyncStatus status;
   final AppState? state;
   final String message;
+  final String snapshotPath;
 }
 
 class AppSyncService {
@@ -76,9 +78,10 @@ class AppSyncService {
       case WebDavStateSyncStatus.uploaded:
       case WebDavStateSyncStatus.remoteMissing:
         await store.save(localState);
-        return const AppSyncResult(
+        return AppSyncResult(
           status: AppSyncStatus.uploaded,
           message: 'Local data uploaded.',
+          snapshotPath: result.snapshotPath,
         );
       case WebDavStateSyncStatus.downloaded:
         final remoteState = result.state;
@@ -93,11 +96,16 @@ class AppSyncService {
           status: AppSyncStatus.downloaded,
           state: remoteState,
           message: 'Remote data downloaded.',
+          snapshotPath: result.snapshotPath,
         );
       case WebDavStateSyncStatus.conflict:
-        return const AppSyncResult(
+        final snapshotPath = result.snapshotPath;
+        return AppSyncResult(
           status: AppSyncStatus.conflict,
-          message: 'Remote data changed during sync. Pull again before upload.',
+          message: snapshotPath.isEmpty
+              ? 'Remote data changed during sync. Pull again before upload.'
+              : 'Remote data changed during sync. Local snapshot preserved at $snapshotPath.',
+          snapshotPath: snapshotPath,
         );
     }
   }

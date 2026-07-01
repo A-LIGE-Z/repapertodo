@@ -46,7 +46,9 @@ void main() {
           onSync: ({required localState, localUpdatedAtUtc}) async {
             uploadedStateTitle = localState.papers.single.title;
             return const WebDavStateSyncResult(
-                status: WebDavStateSyncStatus.uploaded);
+              status: WebDavStateSyncStatus.uploaded,
+              snapshotPath: 'repapertodo/snapshots/local.json',
+            );
           },
         );
       },
@@ -59,6 +61,7 @@ void main() {
     );
 
     expect(result.status, AppSyncStatus.uploaded);
+    expect(result.snapshotPath, 'repapertodo/snapshots/local.json');
     expect(uploadedStateTitle, 'Local');
     expect(forwardedDeviceId, startsWith('device-'));
     expect((await store.load()).papers.single.title, 'Local');
@@ -85,6 +88,7 @@ void main() {
           return WebDavStateSyncResult(
             status: WebDavStateSyncStatus.downloaded,
             state: remoteState,
+            snapshotPath: 'repapertodo/snapshots/remote.json',
           );
         },
       ),
@@ -97,6 +101,7 @@ void main() {
     );
 
     expect(result.status, AppSyncStatus.downloaded);
+    expect(result.snapshotPath, 'repapertodo/snapshots/remote.json');
     expect(result.state?.papers.single.title, 'Remote');
     expect((await store.load()).papers.single.title, 'Remote');
   });
@@ -110,7 +115,9 @@ void main() {
       webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
         onSync: ({required localState, localUpdatedAtUtc}) async {
           return const WebDavStateSyncResult(
-              status: WebDavStateSyncStatus.conflict);
+            status: WebDavStateSyncStatus.conflict,
+            snapshotPath: 'repapertodo/snapshots/conflict-local.json',
+          );
         },
       ),
     );
@@ -127,6 +134,8 @@ void main() {
     );
 
     expect(result.status, AppSyncStatus.conflict);
+    expect(result.snapshotPath, 'repapertodo/snapshots/conflict-local.json');
+    expect(result.message, contains('conflict-local.json'));
     expect(await File(store.filePath).exists(), isFalse);
   });
 }

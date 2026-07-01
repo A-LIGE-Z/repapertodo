@@ -14,9 +14,25 @@ Initial recommended preset:
 - Endpoint: `https://dav.jianguoyun.com/dav/`
 - Suggested remote path: `/RePaperTodo/`
 
-## Remote Layout
+## Current Remote Layout
 
-Proposed remote layout:
+The current implementation stores plain JSON snapshots first, with each device
+uploading a distinct snapshot path and updating `manifest.json` conditionally
+with WebDAV ETags.
+
+```text
+/RePaperTodo/
+  manifest.json
+  snapshots/
+    snapshot-<timestamp>-<deviceId>.json
+```
+
+If a manifest conditional write fails, the uploaded local snapshot remains in
+`snapshots/` so a later conflict recovery flow can inspect or restore it.
+
+## Target Remote Layout
+
+Planned encrypted operation-log layout:
 
 ```text
 /RePaperTodo/
@@ -35,4 +51,3 @@ Proposed remote layout:
 - Preserve conflicts as recoverable user content.
 - Keep tombstones long enough to prevent deleted content from reappearing from stale devices.
 - Sync on startup, exit, foreground/background transitions, manual request, and debounced local edits.
-

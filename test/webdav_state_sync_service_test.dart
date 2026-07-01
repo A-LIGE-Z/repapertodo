@@ -61,6 +61,10 @@ void main() {
       manifest['latestSnapshotPath'],
       'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device.json',
     );
+    expect(
+      result.snapshotPath,
+      'repapertodo/snapshots/snapshot-20260630T100000000Z-test-device.json',
+    );
     expect(manifest['updatedAtUtc'], '2026-06-30T10:00:00.000Z');
     expect(manifest['deviceSequences'], {'test-device': 1});
   });
@@ -116,6 +120,7 @@ void main() {
 
     expect(result.status, WebDavStateSyncStatus.downloaded);
     expect(result.manifest?.updatedAtUtc, DateTime.utc(2026, 6, 30, 11));
+    expect(result.snapshotPath, 'repapertodo/state.json');
     expect(result.state?.papers.single.title, 'Remote');
     expect(result.state?.papers.single.content, 'From WebDAV');
   });
@@ -211,6 +216,10 @@ void main() {
     );
 
     expect(result.status, WebDavStateSyncStatus.conflict);
+    expect(
+      result.snapshotPath,
+      'repapertodo/snapshots/snapshot-20260701T000000000Z-test-device.json',
+    );
     expect(result.manifest?.deviceSequences, {
       'other-device': 2,
       'test-device': 5,
