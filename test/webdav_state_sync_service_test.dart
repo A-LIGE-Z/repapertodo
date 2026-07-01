@@ -315,6 +315,52 @@ void main() {
     );
   });
 
+  test('rejects manifest snapshots with parent-directory segments', () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode(
+              SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
+                latestSnapshotPath:
+                    'repapertodo/snapshots/../other/snapshot-20260630T110000000Z-other-device-seq-000000000004.json',
+                deviceSequences: {'other-device': 2},
+              ).toJson(),
+            ),
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    await expectLater(
+      service.pull(),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+    expect(
+      requests
+          .where((request) =>
+              request.method == 'GET' &&
+              !request.url.path.endsWith('/manifest.json'))
+          .map((request) => request.url.path),
+      isEmpty,
+    );
+  });
+
   test('sync creates the manifest only when it is still missing', () async {
     final requests = <http.Request>[];
     final webDavClient = WebDavClient(
@@ -475,6 +521,16 @@ void main() {
     <D:href>/remote.php/dav/files/user/repapertodo/snapshots/readme.txt</D:href>
     <D:propstat><D:prop /></D:propstat>
   </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/../other/snapshot-20260702T090000000Z-escaped-seq-000000000001.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"escaped"</D:getetag>
+        <D:getcontentlength>4096</D:getcontentlength>
+        <D:getlastmodified>Thu, 02 Jul 2026 09:00:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
 </D:multistatus>
 ''',
             207,
@@ -559,6 +615,16 @@ void main() {
   <D:response>
     <D:href>/remote.php/dav/files/user/repapertodo/ops/readme.txt</D:href>
     <D:propstat><D:prop /></D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/../snapshots/escaped-device-000000000001.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"escaped-op"</D:getetag>
+        <D:getcontentlength>512</D:getcontentlength>
+        <D:getlastmodified>Thu, 02 Jul 2026 09:00:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
   </D:response>
 </D:multistatus>
 ''',
@@ -1012,6 +1078,12 @@ void main() {
       service.downloadSnapshot('repapertodo/manifest.json'),
       throwsA(isA<WebDavSyncConfigurationException>()),
     );
+    expect(
+      service.downloadSnapshot(
+        'repapertodo/snapshots/../other/snapshot-20260701T090000000Z-phone.json',
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
   });
 
   test('rejects operation log downloads outside the operation collection',
@@ -1027,6 +1099,12 @@ void main() {
 
     expect(
       service.downloadOperationLog('repapertodo/snapshots/local.json'),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+    expect(
+      service.downloadOperationLog(
+        'repapertodo/ops/../snapshots/android-device-000000000001.jsonl',
+      ),
       throwsA(isA<WebDavSyncConfigurationException>()),
     );
   });

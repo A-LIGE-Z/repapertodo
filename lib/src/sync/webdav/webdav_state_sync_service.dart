@@ -403,7 +403,10 @@ class WebDavStateSyncService {
   }
 
   WebDavSnapshotRecord? _snapshotRecordFromEntry(WebDavEntry entry) {
-    final path = _entryRemotePath(entry.href);
+    final path = _tryNormalizeEntryPath(entry.href, _normalizeSnapshotPath);
+    if (path == null) {
+      return null;
+    }
     final fileName = path.split('/').last;
     final match = _snapshotFileNamePattern.firstMatch(fileName);
     if (match == null) {
@@ -424,7 +427,10 @@ class WebDavStateSyncService {
   }
 
   WebDavOperationLogRecord? _operationLogRecordFromEntry(WebDavEntry entry) {
-    final path = _entryRemotePath(entry.href);
+    final path = _tryNormalizeEntryPath(entry.href, _normalizeOperationLogPath);
+    if (path == null) {
+      return null;
+    }
     final identity = _operationLogIdentityFromPath(path);
     if (identity == null) {
       return null;
@@ -456,6 +462,17 @@ class WebDavStateSyncService {
       }
     }
     return _normalizeRemotePath(path);
+  }
+
+  String? _tryNormalizeEntryPath(
+    String href,
+    String Function(String path) normalize,
+  ) {
+    try {
+      return normalize(_entryRemotePath(href));
+    } on WebDavSyncConfigurationException {
+      return null;
+    }
   }
 
   String _normalizeSnapshotPath(String snapshotPath) {
@@ -733,12 +750,20 @@ String _joinRemotePath(String base, String child) {
 }
 
 String _normalizeRemotePath(String path) {
-  return path
-      .trim()
-      .replaceAll('\\', '/')
-      .split('/')
-      .where((segment) => segment.trim().isNotEmpty)
-      .join('/');
+  final segments = <String>[];
+  for (final segment in path.trim().replaceAll('\\', '/').split('/')) {
+    final trimmed = segment.trim();
+    if (trimmed.isEmpty || trimmed == '.') {
+      continue;
+    }
+    if (trimmed == '..') {
+      throw const WebDavSyncConfigurationException(
+        'Remote path must not contain parent-directory segments.',
+      );
+    }
+    segments.add(segment);
+  }
+  return segments.join('/');
 }
 
 String _normalizeRemotePathSegment(String value) {
