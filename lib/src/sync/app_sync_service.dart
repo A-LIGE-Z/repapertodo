@@ -6,6 +6,8 @@ import 'sync_device_id_store.dart';
 import 'sync_operation.dart';
 import 'sync_operation_applier.dart';
 import 'sync_operation_diff.dart';
+import 'webdav/webdav_client.dart';
+import 'webdav/webdav_payload_codec.dart';
 import 'webdav/webdav_state_sync_service.dart';
 
 typedef WebDavStateSyncServiceFactory = WebDavStateSyncService Function(
@@ -19,6 +21,7 @@ enum AppSyncStatus {
   uploaded,
   downloaded,
   conflict,
+  payloadUnreadable,
 }
 
 class AppSyncResult {
@@ -27,12 +30,16 @@ class AppSyncResult {
     this.state,
     this.message = '',
     this.snapshotPath = '',
+    this.legacyPlainPayloadDetected = false,
+    this.legacyPlainPayloadMigrated = false,
   });
 
   final AppSyncStatus status;
   final AppState? state;
   final String message;
   final String snapshotPath;
+  final bool legacyPlainPayloadDetected;
+  final bool legacyPlainPayloadMigrated;
 }
 
 class AppSyncOperationMergeResult {
@@ -40,11 +47,15 @@ class AppSyncOperationMergeResult {
     required this.state,
     required this.deviceSequences,
     required this.appliedCount,
+    this.legacyPlainOperationLogCount = 0,
+    this.legacyPlainOperationLogMigratedCount = 0,
   });
 
   final AppState state;
   final Map<String, int> deviceSequences;
   final int appliedCount;
+  final int legacyPlainOperationLogCount;
+  final int legacyPlainOperationLogMigratedCount;
 }
 
 class AppSyncRunResult {
@@ -67,12 +78,14 @@ class AppSyncLocalOperationUploadResult {
     required this.deviceSequences,
     required this.generatedCount,
     required this.uploadedCount,
+    this.stateChanged = false,
   });
 
   final AppState state;
   final Map<String, int> deviceSequences;
   final int generatedCount;
   final int uploadedCount;
+  final bool stateChanged;
 }
 
 class AppSyncService {
@@ -97,8 +110,8 @@ class AppSyncService {
     required StateStore store,
     DateTime? localUpdatedAtUtc,
   }) async {
-    localState.normalize();
-    final settings = localState.sync;
+    final syncState = AppState.fromJson(localState.toJson())..normalize();
+    final settings = syncState.sync;
     if (!settings.enabled) {
       return const AppSyncResult(
         status: AppSyncStatus.disabled,
@@ -106,10 +119,11 @@ class AppSyncService {
       );
     }
     if (settings.provider != SyncProviderIds.webDav ||
-        !settings.webDav.isConfigured) {
+        !settings.webDav.isSecurelyConfigured) {
       return const AppSyncResult(
         status: AppSyncStatus.configurationMissing,
-        message: 'Complete WebDAV sync settings first.',
+        message:
+            'Complete WebDAV sync settings and encryption passphrase first.',
       );
     }
 
@@ -122,35 +136,54 @@ class AppSyncService {
     );
     try {
       final result = await client.sync(
-        localState: localState,
+        localState: syncState,
         localUpdatedAtUtc: localUpdatedAtUtc ?? await store.lastModifiedUtc(),
       );
 
       switch (result.status) {
         case WebDavStateSyncStatus.uploaded:
         case WebDavStateSyncStatus.remoteMissing:
-          _applyManifestDeviceSequences(localState, result);
-          await store.save(localState);
+          _applyManifestDeviceSequences(syncState, result);
+          await store.save(syncState);
           return AppSyncResult(
             status: AppSyncStatus.uploaded,
+            state: syncState,
             message: 'Local data uploaded.',
             snapshotPath: result.snapshotPath,
           );
         case WebDavStateSyncStatus.downloaded:
-          final remoteState = result.state;
-          if (remoteState == null) {
+          final downloadedState = result.state;
+          if (downloadedState == null) {
             return const AppSyncResult(
               status: AppSyncStatus.configurationMissing,
               message: 'Remote snapshot is empty.',
             );
           }
+          final remoteState = AppState.fromJson(downloadedState.toJson());
+          _preserveLocalSyncConfiguration(remoteState, syncState.sync);
           _applyManifestDeviceSequences(remoteState, result);
           await store.save(remoteState);
+          final legacyPlainPayloadDetected =
+              _isLegacyPlainPayloadDownload(settings.webDav, result);
+          final legacyPlainPayloadMigrated = legacyPlainPayloadDetected &&
+              await _migrateLegacyPlainPayload(
+                client: client,
+                state: remoteState,
+                downloadedResult: result,
+                store: store,
+              );
           return AppSyncResult(
             status: AppSyncStatus.downloaded,
             state: remoteState,
-            message: 'Remote data downloaded.',
+            message: _downloadedMessage(
+              legacyPlainPayloadDetected: legacyPlainPayloadDetected,
+              legacyPlainPayloadMigrated: legacyPlainPayloadMigrated,
+              canAttemptLegacyPlainPayloadMigration:
+                  _canAttemptLegacyPlainPayloadMigration(result),
+            ),
             snapshotPath: result.snapshotPath,
+            legacyPlainPayloadDetected: legacyPlainPayloadDetected,
+            legacyPlainPayloadMigrated: legacyPlainPayloadMigrated,
           );
         case WebDavStateSyncStatus.conflict:
           final snapshotPath = result.snapshotPath;
@@ -162,6 +195,21 @@ class AppSyncService {
             snapshotPath: snapshotPath,
           );
       }
+    } on WebDavPayloadDecryptionException catch (error) {
+      return AppSyncResult(
+        status: AppSyncStatus.payloadUnreadable,
+        message: error.message,
+      );
+    } on WebDavSyncConfigurationException catch (error) {
+      return AppSyncResult(
+        status: AppSyncStatus.payloadUnreadable,
+        message: error.message,
+      );
+    } on FormatException catch (error) {
+      return AppSyncResult(
+        status: AppSyncStatus.payloadUnreadable,
+        message: _formatExceptionMessage(error),
+      );
     } finally {
       client.close();
     }
@@ -183,14 +231,50 @@ class AppSyncService {
     switch (syncResult.status) {
       case AppSyncStatus.uploaded:
       case AppSyncStatus.downloaded:
-        operationMergeResult = await mergeRemoteOperations(
-          localState: state,
-          store: store,
-        );
-        state = operationMergeResult.state;
+        try {
+          operationMergeResult = await mergeRemoteOperations(
+            localState: state,
+            store: store,
+          );
+          state = operationMergeResult.state;
+        } on WebDavPayloadDecryptionException catch (error) {
+          return AppSyncRunResult(
+            syncResult: AppSyncResult(
+              status: AppSyncStatus.payloadUnreadable,
+              state: state,
+              message: error.message,
+              legacyPlainPayloadDetected: syncResult.legacyPlainPayloadDetected,
+              legacyPlainPayloadMigrated: syncResult.legacyPlainPayloadMigrated,
+            ),
+            state: state,
+          );
+        } on WebDavSyncConfigurationException catch (error) {
+          return AppSyncRunResult(
+            syncResult: AppSyncResult(
+              status: AppSyncStatus.payloadUnreadable,
+              state: state,
+              message: error.message,
+              legacyPlainPayloadDetected: syncResult.legacyPlainPayloadDetected,
+              legacyPlainPayloadMigrated: syncResult.legacyPlainPayloadMigrated,
+            ),
+            state: state,
+          );
+        } on FormatException catch (error) {
+          return AppSyncRunResult(
+            syncResult: AppSyncResult(
+              status: AppSyncStatus.payloadUnreadable,
+              state: state,
+              message: _formatExceptionMessage(error),
+              legacyPlainPayloadDetected: syncResult.legacyPlainPayloadDetected,
+              legacyPlainPayloadMigrated: syncResult.legacyPlainPayloadMigrated,
+            ),
+            state: state,
+          );
+        }
       case AppSyncStatus.disabled:
       case AppSyncStatus.configurationMissing:
       case AppSyncStatus.conflict:
+      case AppSyncStatus.payloadUnreadable:
         break;
     }
 
@@ -282,8 +366,25 @@ class AppSyncService {
         previousSequences,
       );
       final operations = <SyncOperation>[];
+      var legacyPlainOperationLogCount = 0;
+      var legacyPlainOperationLogMigratedCount = 0;
       for (final record in records) {
-        operations.addAll(await client.downloadOperationLog(record.path));
+        final downloadResult =
+            await client.downloadOperationLogWithMetadata(record.path);
+        if (_isLegacyPlainOperationLogDownload(
+          localState.sync.webDav,
+          downloadResult,
+        )) {
+          legacyPlainOperationLogCount += 1;
+          if (await _migrateLegacyPlainOperationLog(
+            client: client,
+            record: record,
+            downloadResult: downloadResult,
+          )) {
+            legacyPlainOperationLogMigratedCount += 1;
+          }
+        }
+        operations.addAll(downloadResult.operations);
       }
       final result = _operationApplier.apply(
         localState,
@@ -299,6 +400,9 @@ class AppSyncService {
         state: result.state,
         deviceSequences: result.deviceSequences,
         appliedCount: result.appliedCount,
+        legacyPlainOperationLogCount: legacyPlainOperationLogCount,
+        legacyPlainOperationLogMigratedCount:
+            legacyPlainOperationLogMigratedCount,
       );
     } finally {
       client.close();
@@ -311,60 +415,79 @@ class AppSyncService {
     required StateStore store,
     DateTime? createdAtUtc,
   }) async {
-    beforeState.normalize();
-    afterState.normalize();
+    final normalizedBeforeState = AppState.fromJson(beforeState.toJson())
+      ..normalize();
     final previousSequences = normalizeSyncDeviceSequences(
       afterState.sync.operationDeviceSequences,
     );
-    afterState.sync.operationDeviceSequences = previousSequences;
+    final uploadState = AppState.fromJson(afterState.toJson())
+      ..sync.operationDeviceSequences = previousSequences
+      ..normalize();
     final context = await _configuredClientContextOrNull(
-      localState: afterState,
+      localState: uploadState,
       store: store,
     );
     if (context == null) {
       return AppSyncLocalOperationUploadResult(
-        state: afterState,
+        state: uploadState,
         deviceSequences: previousSequences,
         generatedCount: 0,
         uploadedCount: 0,
+        stateChanged: false,
       );
     }
 
     try {
       final operations = _operationDiffBuilder.build(
-        before: beforeState,
-        after: afterState,
+        before: normalizedBeforeState,
+        after: uploadState,
         deviceId: context.deviceId,
         startSequence: previousSequences[context.deviceId] ?? 0,
         createdAtUtc: createdAtUtc,
       );
       if (operations.isEmpty) {
         return AppSyncLocalOperationUploadResult(
-          state: afterState,
+          state: uploadState,
           deviceSequences: previousSequences,
           generatedCount: 0,
           uploadedCount: 0,
+          stateChanged: false,
         );
       }
 
       final tombstonesChanged = _markLocalDeleteTombstones(
-        afterState,
+        uploadState,
         operations,
       );
       final uploadResult = await context.client.uploadOperationLogs(
         operations,
         previousDeviceSequences: previousSequences,
       );
-      afterState.sync.operationDeviceSequences = uploadResult.deviceSequences;
-      afterState.normalize();
-      if (uploadResult.uploadedCount > 0 || tombstonesChanged) {
-        await store.save(afterState);
+      final uploadedDeviceSequences = _mergeDeviceSequences(
+        previousSequences,
+        uploadResult.deviceSequences,
+        uploadResult.acceptedDeviceSequences,
+      );
+      final deviceSequencesChanged = !_deviceSequencesEqual(
+        previousSequences,
+        uploadedDeviceSequences,
+      );
+      uploadState.sync.operationDeviceSequences = uploadedDeviceSequences;
+      uploadState.normalize();
+      if (uploadResult.uploadedCount > 0 ||
+          tombstonesChanged ||
+          deviceSequencesChanged) {
+        await store.save(uploadState);
       }
+      final stateChanged = uploadResult.uploadedCount > 0 ||
+          tombstonesChanged ||
+          deviceSequencesChanged;
       return AppSyncLocalOperationUploadResult(
-        state: afterState,
-        deviceSequences: uploadResult.deviceSequences,
+        state: uploadState,
+        deviceSequences: uploadedDeviceSequences,
         generatedCount: operations.length,
         uploadedCount: uploadResult.uploadedCount,
+        stateChanged: stateChanged,
       );
     } finally {
       context.client.close();
@@ -390,25 +513,45 @@ class AppSyncService {
       }
       return const AppSyncResult(
         status: AppSyncStatus.configurationMissing,
-        message: 'Complete WebDAV sync settings first.',
+        message:
+            'Complete WebDAV sync settings and encryption passphrase first.',
       );
     }
 
     try {
       final result = await client.downloadSnapshot(snapshotPath);
-      final snapshotState = result.state;
-      if (snapshotState == null) {
+      final downloadedSnapshotState = result.state;
+      if (downloadedSnapshotState == null) {
         return const AppSyncResult(
           status: AppSyncStatus.configurationMissing,
           message: 'Remote snapshot is empty.',
         );
       }
+      final snapshotState = AppState.fromJson(downloadedSnapshotState.toJson());
+      _preserveLocalSyncConfiguration(snapshotState, localState.sync);
       await store.save(snapshotState);
       return AppSyncResult(
         status: AppSyncStatus.downloaded,
         state: snapshotState,
         message: 'Snapshot restored.',
         snapshotPath: result.snapshotPath,
+        legacyPlainPayloadDetected:
+            _isLegacyPlainPayloadDownload(localState.sync.webDav, result),
+      );
+    } on WebDavPayloadDecryptionException catch (error) {
+      return AppSyncResult(
+        status: AppSyncStatus.payloadUnreadable,
+        message: error.message,
+      );
+    } on WebDavSyncConfigurationException catch (error) {
+      return AppSyncResult(
+        status: AppSyncStatus.payloadUnreadable,
+        message: error.message,
+      );
+    } on FormatException catch (error) {
+      return AppSyncResult(
+        status: AppSyncStatus.payloadUnreadable,
+        message: _formatExceptionMessage(error),
       );
     } finally {
       client.close();
@@ -430,11 +573,11 @@ class AppSyncService {
     required AppState localState,
     required StateStore store,
   }) async {
-    localState.normalize();
-    final settings = localState.sync;
+    final normalizedState = AppState.fromJson(localState.toJson())..normalize();
+    final settings = normalizedState.sync;
     if (!settings.enabled ||
         settings.provider != SyncProviderIds.webDav ||
-        !settings.webDav.isConfigured) {
+        !settings.webDav.isSecurelyConfigured) {
       return null;
     }
     final deviceId =
@@ -457,10 +600,35 @@ class AppSyncService {
     if (manifest == null) {
       return;
     }
-    state.sync.operationDeviceSequences = normalizeSyncDeviceSequences(
+    state.sync.operationDeviceSequences = _mergeDeviceSequences(
+      state.sync.operationDeviceSequences,
       manifest.deviceSequences,
+      const <String, int>{},
     );
     state.normalize();
+  }
+
+  void _preserveLocalSyncConfiguration(
+    AppState remoteState,
+    SyncSettings localSync,
+  ) {
+    final remoteSync = remoteState.sync.copy()..normalize();
+    final preservedSync = localSync.copy()..normalize();
+    preservedSync.operationDeviceSequences = _mergeDeviceSequences(
+      preservedSync.operationDeviceSequences,
+      remoteSync.operationDeviceSequences,
+      const <String, int>{},
+    );
+    preservedSync.deletedPaperTombstones = _mergeTombstones(
+      preservedSync.deletedPaperTombstones,
+      remoteSync.deletedPaperTombstones,
+    );
+    preservedSync.deletedTodoItemTombstones = _mergeNestedTombstones(
+      preservedSync.deletedTodoItemTombstones,
+      remoteSync.deletedTodoItemTombstones,
+    );
+    remoteState.sync = preservedSync;
+    remoteState.normalize();
   }
 
   bool _markLocalDeleteTombstones(
@@ -473,8 +641,9 @@ class AppSyncService {
         case SyncOperationKind.deletePaper:
           final paperId = operation.payload['paperId'];
           if (paperId is String && paperId.trim().isNotEmpty) {
-            changed = changed || !state.sync.isPaperDeleted(paperId);
-            state.sync.markPaperDeleted(paperId, operation.createdAtUtc);
+            changed =
+                state.sync.markPaperDeleted(paperId, operation.createdAtUtc) ||
+                    changed;
           }
         case SyncOperationKind.deleteTodoItem:
           final paperId = operation.payload['paperId'];
@@ -483,12 +652,12 @@ class AppSyncService {
               itemId is String &&
               paperId.trim().isNotEmpty &&
               itemId.trim().isNotEmpty) {
-            changed = changed || !state.sync.isTodoItemDeleted(paperId, itemId);
-            state.sync.markTodoItemDeleted(
-              paperId,
-              itemId,
-              operation.createdAtUtc,
-            );
+            changed = state.sync.markTodoItemDeleted(
+                  paperId,
+                  itemId,
+                  operation.createdAtUtc,
+                ) ||
+                changed;
           }
         case SyncOperationKind.stateSnapshot:
         case SyncOperationKind.upsertPaper:
@@ -499,6 +668,195 @@ class AppSyncService {
       }
     }
     return changed;
+  }
+}
+
+bool _isLegacyPlainPayloadDownload(
+  WebDavSyncSettings settings,
+  WebDavStateSyncResult result,
+) {
+  return settings.usesEncryptedPayloads &&
+      result.snapshotPayloadFormat == WebDavPayloadFormat.plainJson;
+}
+
+bool _isLegacyPlainOperationLogDownload(
+  WebDavSyncSettings settings,
+  WebDavOperationLogDownloadResult result,
+) {
+  return settings.usesEncryptedPayloads &&
+      result.payloadFormat == WebDavPayloadFormat.plainJson;
+}
+
+bool _canAttemptLegacyPlainPayloadMigration(WebDavStateSyncResult result) {
+  return result.manifest != null && (result.manifestEtag ?? '').isNotEmpty;
+}
+
+Future<bool> _migrateLegacyPlainPayload({
+  required WebDavStateSyncService client,
+  required AppState state,
+  required WebDavStateSyncResult downloadedResult,
+  required StateStore store,
+}) async {
+  final manifest = downloadedResult.manifest;
+  final manifestEtag = downloadedResult.manifestEtag;
+  if (manifest == null || manifestEtag == null || manifestEtag.isEmpty) {
+    return false;
+  }
+
+  late final WebDavStateSyncResult uploadResult;
+  try {
+    uploadResult = await client.push(
+      state,
+      updatedAtUtc: _nextMigrationSnapshotTime(manifest.updatedAtUtc),
+      expectedManifestEtag: manifestEtag,
+      previousDeviceSequences: manifest.deviceSequences,
+    );
+  } on WebDavException {
+    return false;
+  }
+  if (uploadResult.status != WebDavStateSyncStatus.uploaded) {
+    return false;
+  }
+  final uploadedManifest = uploadResult.manifest;
+  if (uploadedManifest != null) {
+    state.sync.operationDeviceSequences = normalizeSyncDeviceSequences(
+      uploadedManifest.deviceSequences,
+    );
+    state.normalize();
+    await store.save(state);
+  }
+  return true;
+}
+
+Future<bool> _migrateLegacyPlainOperationLog({
+  required WebDavStateSyncService client,
+  required WebDavOperationLogRecord record,
+  required WebDavOperationLogDownloadResult downloadResult,
+}) async {
+  try {
+    return await client.migrateLegacyPlainOperationLog(
+      record,
+      downloadedResult: downloadResult,
+    );
+  } on WebDavException {
+    return false;
+  }
+}
+
+DateTime _nextMigrationSnapshotTime(DateTime remoteUpdatedAtUtc) {
+  final now = DateTime.now().toUtc();
+  final minimum =
+      remoteUpdatedAtUtc.toUtc().add(const Duration(milliseconds: 1));
+  return now.isAfter(minimum) ? now : minimum;
+}
+
+String _downloadedMessage({
+  required bool legacyPlainPayloadDetected,
+  required bool legacyPlainPayloadMigrated,
+  required bool canAttemptLegacyPlainPayloadMigration,
+}) {
+  if (!legacyPlainPayloadDetected) {
+    return 'Remote data downloaded.';
+  }
+  if (legacyPlainPayloadMigrated) {
+    return 'Remote data downloaded from legacy plain WebDAV data and migrated to encrypted payloads.';
+  }
+  if (canAttemptLegacyPlainPayloadMigration) {
+    return 'Remote data downloaded from legacy plain WebDAV data. Automatic encryption migration could not complete; sync again to retry.';
+  }
+  return 'Remote data downloaded from legacy plain WebDAV data. The next successful upload will write encrypted payloads.';
+}
+
+String _formatExceptionMessage(FormatException error) {
+  final message = error.message.trim();
+  return message.isEmpty ? 'Remote sync data is not readable.' : message;
+}
+
+bool _deviceSequencesEqual(Map<String, int> left, Map<String, int> right) {
+  if (left.length != right.length) {
+    return false;
+  }
+  for (final entry in left.entries) {
+    if (right[entry.key] != entry.value) {
+      return false;
+    }
+  }
+  return true;
+}
+
+Map<String, int> _mergeDeviceSequences(
+  Map<String, int> first,
+  Map<String, int> second,
+  Map<String, int> third,
+) {
+  final merged = <String, int>{};
+  for (final source in [
+    normalizeSyncDeviceSequences(first),
+    normalizeSyncDeviceSequences(second),
+    normalizeSyncDeviceSequences(third),
+  ]) {
+    for (final entry in source.entries) {
+      final previous = merged[entry.key] ?? 0;
+      if (entry.value > previous) {
+        merged[entry.key] = entry.value;
+      }
+    }
+  }
+  return merged;
+}
+
+Map<String, String> _mergeTombstones(
+  Map<String, String> first,
+  Map<String, String> second,
+) {
+  final merged = <String, String>{};
+  for (final source in [first, second]) {
+    for (final entry in source.entries) {
+      _putLatestTombstone(merged, entry.key, entry.value);
+    }
+  }
+  return merged;
+}
+
+Map<String, Map<String, String>> _mergeNestedTombstones(
+  Map<String, Map<String, String>> first,
+  Map<String, Map<String, String>> second,
+) {
+  final merged = <String, Map<String, String>>{};
+  for (final source in [first, second]) {
+    for (final paperEntry in source.entries) {
+      final paperId = paperEntry.key.trim();
+      if (paperId.isEmpty) {
+        continue;
+      }
+      final itemTombstones = merged.putIfAbsent(
+        paperId,
+        () => <String, String>{},
+      );
+      for (final itemEntry in paperEntry.value.entries) {
+        _putLatestTombstone(itemTombstones, itemEntry.key, itemEntry.value);
+      }
+    }
+  }
+  return {
+    for (final entry in merged.entries)
+      if (entry.value.isNotEmpty) entry.key: entry.value,
+  };
+}
+
+void _putLatestTombstone(
+  Map<String, String> target,
+  String rawId,
+  String rawTimestamp,
+) {
+  final id = rawId.trim();
+  final timestamp = DateTime.tryParse(rawTimestamp.trim())?.toUtc();
+  if (id.isEmpty || timestamp == null) {
+    return;
+  }
+  final previous = DateTime.tryParse(target[id] ?? '')?.toUtc();
+  if (previous == null || timestamp.isAfter(previous)) {
+    target[id] = timestamp.toIso8601String();
   }
 }
 

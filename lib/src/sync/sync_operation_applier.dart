@@ -2,6 +2,7 @@ import '../core/model/app_state.dart';
 import '../core/model/json_helpers.dart';
 import '../core/model/paper_data.dart';
 import '../core/model/paper_item.dart';
+import '../core/state/papertodo_legacy_migration.dart';
 import 'sync_device_id.dart';
 import 'sync_operation.dart';
 
@@ -27,37 +28,57 @@ class SyncOperationApplier {
   }) {
     final state = AppState.fromJson(baseState.toJson());
     final sequences = normalizeSyncDeviceSequences(deviceSequences);
-    final sortedOperations =
-        operations.map(_normalizeOperation).whereType<SyncOperation>().toList()
-          ..sort((a, b) {
-            final deviceComparison = a.deviceId.compareTo(b.deviceId);
-            if (deviceComparison != 0) {
-              return deviceComparison;
-            }
-            return a.sequence.compareTo(b.sequence);
-          });
+    final operationsByDevice = <String, List<SyncOperation>>{};
+    for (final operation
+        in operations.map(_normalizeOperation).whereType<SyncOperation>()) {
+      operationsByDevice
+          .putIfAbsent(operation.deviceId, () => <SyncOperation>[])
+          .add(operation);
+    }
+    for (final deviceOperations in operationsByDevice.values) {
+      deviceOperations.sort(_compareDeviceOperations);
+    }
 
     var appliedCount = 0;
-    final expectedSequences = <String, int>{};
-    final blockedDevices = <String>{};
-    for (final operation in sortedOperations) {
-      if (blockedDevices.contains(operation.deviceId)) {
-        continue;
+    final cursors = <String, int>{
+      for (final deviceId in operationsByDevice.keys) deviceId: 0,
+    };
+    final expectedSequences = <String, int>{
+      for (final deviceId in operationsByDevice.keys)
+        deviceId: (sequences[deviceId] ?? 0) + 1,
+    };
+    while (true) {
+      SyncOperation? nextOperation;
+      for (final entry in operationsByDevice.entries) {
+        final deviceId = entry.key;
+        final deviceOperations = entry.value;
+        var cursor = cursors[deviceId] ?? 0;
+        final expectedSequence = expectedSequences[deviceId] ?? 1;
+        while (cursor < deviceOperations.length &&
+            deviceOperations[cursor].sequence < expectedSequence) {
+          cursor++;
+        }
+        cursors[deviceId] = cursor;
+        if (cursor >= deviceOperations.length) {
+          continue;
+        }
+        final candidate = deviceOperations[cursor];
+        if (candidate.sequence > expectedSequence) {
+          continue;
+        }
+        if (nextOperation == null ||
+            _compareReadyOperations(candidate, nextOperation) < 0) {
+          nextOperation = candidate;
+        }
       }
-      final expectedSequence = expectedSequences.putIfAbsent(
-        operation.deviceId,
-        () => (sequences[operation.deviceId] ?? 0) + 1,
-      );
-      if (operation.sequence < expectedSequence) {
-        continue;
+      if (nextOperation == null) {
+        break;
       }
-      if (operation.sequence > expectedSequence) {
-        blockedDevices.add(operation.deviceId);
-        continue;
-      }
-      _applyOperation(state, operation);
-      sequences[operation.deviceId] = operation.sequence;
-      expectedSequences[operation.deviceId] = expectedSequence + 1;
+      _applyOperation(state, nextOperation);
+      sequences[nextOperation.deviceId] = nextOperation.sequence;
+      expectedSequences[nextOperation.deviceId] = nextOperation.sequence + 1;
+      cursors[nextOperation.deviceId] =
+          (cursors[nextOperation.deviceId] ?? 0) + 1;
       appliedCount++;
     }
     state.normalize();
@@ -107,11 +128,15 @@ class SyncOperationApplier {
     JsonMap payload,
     DateTime createdAtUtc,
   ) {
-    final paperJson = _jsonMapOrNull(payload['paper']);
+    final paperJson = _jsonMapOrNull(_payloadValue(payload, 'paper'));
     if (paperJson == null) {
       return;
     }
-    final paper = PaperData.fromJson(paperJson);
+    final paper = PaperData.fromJson(_migratePaperPayload(paperJson));
+    paper.id = paper.id.trim();
+    for (final item in paper.items) {
+      item.id = item.id.trim();
+    }
     final deletedAtUtc = state.sync.paperDeletedAtUtc(paper.id);
     if (deletedAtUtc != null &&
         !_isNewerOperation(createdAtUtc, deletedAtUtc)) {
@@ -129,7 +154,7 @@ class SyncOperationApplier {
       });
     }
     final index =
-        state.papers.indexWhere((candidate) => candidate.id == paper.id);
+        state.papers.indexWhere((candidate) => _paperId(candidate) == paper.id);
     if (index < 0) {
       state.papers.add(paper);
     } else {
@@ -138,15 +163,15 @@ class SyncOperationApplier {
   }
 
   void _deletePaper(AppState state, JsonMap payload, DateTime deletedAtUtc) {
-    final paperId = stringValue(payload['paperId'], '');
+    final paperId = _payloadStringId(payload, 'paperId');
     if (paperId.isEmpty) {
       return;
     }
     state.sync.markPaperDeleted(paperId, deletedAtUtc);
-    state.papers.removeWhere((paper) => paper.id == paperId);
+    state.papers.removeWhere((paper) => _paperId(paper) == paperId);
     for (final paper in state.papers) {
       for (final item in paper.items) {
-        if (item.linkedNoteId == paperId) {
+        if (item.linkedNoteId?.trim() == paperId) {
           item.linkedNoteId = null;
         }
       }
@@ -158,8 +183,8 @@ class SyncOperationApplier {
     JsonMap payload,
     DateTime createdAtUtc,
   ) {
-    final paperId = stringValue(payload['paperId'], '');
-    final itemJson = _jsonMapOrNull(payload['item']);
+    final paperId = _payloadStringId(payload, 'paperId');
+    final itemJson = _jsonMapOrNull(_payloadValue(payload, 'item'));
     if (paperId.isEmpty || itemJson == null) {
       return;
     }
@@ -169,12 +194,14 @@ class SyncOperationApplier {
       return;
     }
     final paper =
-        state.papers.where((paper) => paper.id == paperId).firstOrNull;
+        state.papers.where((paper) => _paperId(paper) == paperId).firstOrNull;
     if (paper == null || !paper.isTodo) {
       return;
     }
+    paper.id = paperId;
     state.sync.clearPaperDeleted(paperId);
-    final item = PaperItem.fromJson(itemJson);
+    final item = PaperItem.fromJson(_migrateTodoItemPayload(itemJson));
+    item.id = item.id.trim();
     if (_shouldSkipTodoItemUpsert(
       state,
       paperId,
@@ -184,7 +211,7 @@ class SyncOperationApplier {
       return;
     }
     final index =
-        paper.items.indexWhere((candidate) => candidate.id == item.id);
+        paper.items.indexWhere((candidate) => _itemId(candidate) == item.id);
     if (index < 0) {
       paper.items.add(item);
     } else {
@@ -193,18 +220,19 @@ class SyncOperationApplier {
   }
 
   void _deleteTodoItem(AppState state, JsonMap payload, DateTime deletedAtUtc) {
-    final paperId = stringValue(payload['paperId'], '');
-    final itemId = stringValue(payload['itemId'], '');
+    final paperId = _payloadStringId(payload, 'paperId');
+    final itemId = _payloadStringId(payload, 'itemId');
     if (paperId.isEmpty || itemId.isEmpty) {
       return;
     }
     state.sync.markTodoItemDeleted(paperId, itemId, deletedAtUtc);
     final paper =
-        state.papers.where((paper) => paper.id == paperId).firstOrNull;
+        state.papers.where((paper) => _paperId(paper) == paperId).firstOrNull;
     if (paper == null || !paper.isTodo) {
       return;
     }
-    paper.items.removeWhere((item) => item.id == itemId);
+    paper.id = paperId;
+    paper.items.removeWhere((item) => _itemId(item) == itemId);
   }
 
   void _updateNoteContent(
@@ -212,8 +240,8 @@ class SyncOperationApplier {
     JsonMap payload,
     DateTime createdAtUtc,
   ) {
-    final paperId = stringValue(payload['paperId'], '');
-    final content = stringValue(payload['content'], '');
+    final paperId = _payloadStringId(payload, 'paperId');
+    final content = stringValue(_payloadValue(payload, 'content'), '');
     if (paperId.isEmpty) {
       return;
     }
@@ -223,22 +251,29 @@ class SyncOperationApplier {
       return;
     }
     final paper =
-        state.papers.where((paper) => paper.id == paperId).firstOrNull;
+        state.papers.where((paper) => _paperId(paper) == paperId).firstOrNull;
     if (paper == null || !paper.isNote) {
       return;
     }
+    paper.id = paperId;
     state.sync.clearPaperDeleted(paperId);
     paper.content = content;
   }
 
   void _updateSettings(AppState state, JsonMap payload) {
-    final settings = _jsonMapOrNull(payload['settings']);
+    final settings = _jsonMapOrNull(_payloadValue(payload, 'settings'));
     if (settings == null || settings.isEmpty) {
+      return;
+    }
+    final migratedSettings = migrateLegacyPaperTodoJson(settings);
+    final safeSettings = Map<String, Object?>.from(migratedSettings)
+      ..remove('sync');
+    if (safeSettings.isEmpty) {
       return;
     }
     final merged = {
       ...state.toJson(),
-      ...settings,
+      ...safeSettings,
       'papers': state.papers.map((paper) => paper.toJson()).toList(),
     };
     final updated = AppState.fromJson(merged);
@@ -323,4 +358,78 @@ class SyncOperationApplier {
 
 JsonMap? _jsonMapOrNull(Object? value) {
   return value is Map ? Map<String, Object?>.from(value) : null;
+}
+
+Object? _payloadValue(JsonMap payload, String key) {
+  if (payload.containsKey(key)) {
+    return payload[key];
+  }
+  final normalizedKey = key.toLowerCase();
+  for (final entry in payload.entries) {
+    if (entry.key.toLowerCase() == normalizedKey) {
+      return entry.value;
+    }
+  }
+  return null;
+}
+
+String _payloadStringId(JsonMap payload, String key) {
+  return stringValue(_payloadValue(payload, key), '').trim();
+}
+
+String _paperId(PaperData paper) {
+  return paper.id.trim();
+}
+
+String _itemId(PaperItem item) {
+  return item.id.trim();
+}
+
+JsonMap _migratePaperPayload(JsonMap paperJson) {
+  final migrated = migrateLegacyPaperTodoJson({
+    'papers': [paperJson],
+  });
+  final papers = jsonMapList(migrated['papers']);
+  return papers.isEmpty ? paperJson : papers.first;
+}
+
+JsonMap _migrateTodoItemPayload(JsonMap itemJson) {
+  final migrated = migrateLegacyPaperTodoJson({
+    'papers': [
+      {
+        'items': [itemJson],
+      },
+    ],
+  });
+  final papers = jsonMapList(migrated['papers']);
+  if (papers.isEmpty) {
+    return itemJson;
+  }
+  final items = jsonMapList(papers.first['items']);
+  return items.isEmpty ? itemJson : items.first;
+}
+
+int _compareDeviceOperations(SyncOperation left, SyncOperation right) {
+  final sequenceComparison = left.sequence.compareTo(right.sequence);
+  if (sequenceComparison != 0) {
+    return sequenceComparison;
+  }
+  return _compareReadyOperations(left, right);
+}
+
+int _compareReadyOperations(SyncOperation left, SyncOperation right) {
+  final timeComparison =
+      left.createdAtUtc.toUtc().compareTo(right.createdAtUtc.toUtc());
+  if (timeComparison != 0) {
+    return timeComparison;
+  }
+  final deviceComparison = left.deviceId.compareTo(right.deviceId);
+  if (deviceComparison != 0) {
+    return deviceComparison;
+  }
+  final sequenceComparison = left.sequence.compareTo(right.sequence);
+  if (sequenceComparison != 0) {
+    return sequenceComparison;
+  }
+  return left.id.compareTo(right.id);
 }

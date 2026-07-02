@@ -7,6 +7,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include <atomic>
+#include <map>
 #include <memory>
 #include <shellapi.h>
 #include <string>
@@ -41,6 +42,18 @@ class FlutterWindow : public Win32Window {
   void SendPaperRequested(const std::string& paper_id);
   void SendStartupCommandRequested(const std::string& command);
   void SendWindowEvent(const char* method);
+  void RememberActivePaperId(const flutter::EncodableValue* arguments);
+  void RememberActivePaperBounds(HWND window);
+  void RememberPaperBounds(const std::string& paper_id, const RECT& bounds);
+  void RememberPaperVisibility(const std::string& paper_id, bool is_visible);
+  void RememberPaperPinnedToDesktop(const std::string& paper_id, bool enabled);
+  void RememberPaperAlwaysOnTop(const std::string& paper_id, bool enabled);
+  void RefreshActivePaperZOrder(HWND window);
+  bool ActivePaperPinnedToDesktop() const;
+  bool ActivePaperAlwaysOnTop() const;
+  flutter::EncodableValue BoundsValueForPaper(
+      HWND window, const std::string& paper_id) const;
+  flutter::EncodableValue WindowEventArguments() const;
 
   // The project to run.
   flutter::DartProject project_;
@@ -52,14 +65,35 @@ class FlutterWindow : public Win32Window {
       window_channel_;
 
   NOTIFYICONDATA tray_icon_data_ = {};
+  HICON tray_icon_handle_ = nullptr;
+  bool tray_icon_handle_is_custom_ = false;
   bool tray_icon_added_ = false;
+  UINT taskbar_created_message_ = 0;
   bool avoid_fullscreen_topmost_ = true;
   bool pinned_to_desktop_ = false;
+  bool z_order_state_initialized_ = false;
+  bool z_order_pinned_to_desktop_ = false;
+  bool z_order_topmost_applied_ = false;
+  bool z_order_fullscreen_blocked_ = false;
   bool todo_hotkey_registered_ = false;
   bool note_hotkey_registered_ = false;
+  std::string active_paper_id_;
   std::atomic<bool> single_instance_listener_running_ = false;
   std::thread single_instance_listener_thread_;
-  std::vector<std::pair<std::string, std::wstring>> tray_papers_;
+  struct TrayPaperMenuItem {
+    std::string id;
+    std::wstring label;
+    bool is_visible = false;
+  };
+  std::vector<TrayPaperMenuItem> tray_papers_;
+  struct PaperSurfaceState {
+    RECT bounds = {};
+    bool has_bounds = false;
+    bool is_visible = false;
+    bool pinned_to_desktop = false;
+    bool always_on_top = false;
+  };
+  std::map<std::string, PaperSurfaceState> paper_surfaces_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

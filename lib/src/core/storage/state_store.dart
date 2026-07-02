@@ -10,10 +10,12 @@ class StateStore {
     required this.filePath,
     AppStateCodec codec = const AppStateCodec(),
   })  : backupPath = p.join(p.dirname(filePath), 'data.backup.json'),
+        tempPath = '$filePath.tmp',
         _codec = codec;
 
   final String filePath;
   final String backupPath;
+  final String tempPath;
   final AppStateCodec _codec;
 
   Future<DateTime?> lastModifiedUtc() async {
@@ -27,12 +29,17 @@ class StateStore {
   Future<AppState> load() async {
     final primary = File(filePath);
     final backup = File(backupPath);
+    final temp = File(tempPath);
 
-    if (!await primary.exists() && !await backup.exists()) {
+    if (!await primary.exists() &&
+        !await backup.exists() &&
+        !await temp.exists()) {
       return AppState();
     }
 
     Object? primaryError;
+    Object? tempError;
+    final primaryExists = await primary.exists();
     if (await primary.exists()) {
       try {
         return _codec.decode(await primary.readAsString());
@@ -41,10 +48,22 @@ class StateStore {
       }
     }
 
+    if (!primaryExists && await temp.exists()) {
+      try {
+        final recovered = _codec.decode(await temp.readAsString());
+        await _copyRecoverySource(temp, 'used_for_recovery');
+        return recovered;
+      } catch (error) {
+        tempError = error;
+        await _copyRecoverySource(temp, 'failed_load');
+        // Fall back to the stable backup if the interrupted write was partial.
+      }
+    }
+
     if (await backup.exists()) {
       try {
         final recovered = _codec.decode(await backup.readAsString());
-        if (await primary.exists()) {
+        if (primaryExists) {
           await _copyRecoverySource(primary, 'failed_load');
           await _copyRecoverySource(backup, 'used_for_recovery');
         }
@@ -54,7 +73,10 @@ class StateStore {
       }
     }
 
-    throw StateStoreException('Unable to load PaperTodo state.', primaryError);
+    throw StateStoreException(
+      'Unable to load PaperTodo state.',
+      primaryError ?? tempError,
+    );
   }
 
   Future<void> save(AppState state) async {
@@ -64,7 +86,7 @@ class StateStore {
 
     final primary = File(filePath);
     final backup = File(backupPath);
-    final temp = File('$filePath.tmp');
+    final temp = File(tempPath);
     await temp.writeAsString(_codec.encode(state));
 
     if (await primary.exists()) {

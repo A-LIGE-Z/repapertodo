@@ -96,6 +96,96 @@ std::string UpperAscii(std::string value) {
   return value;
 }
 
+std::string LowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char character) {
+                   return static_cast<char>(std::tolower(character));
+                 });
+  return value;
+}
+
+bool StartsWith(const std::string& value, const std::string& prefix) {
+  return value.size() >= prefix.size() &&
+         value.compare(0, prefix.size(), prefix) == 0;
+}
+
+bool IsAllowedExternalUri(const std::string& value) {
+  const std::string uri = TrimAscii(value);
+  if (uri.empty()) {
+    return false;
+  }
+  for (const char character : uri) {
+    const unsigned char ascii = static_cast<unsigned char>(character);
+    if (ascii <= 0x20 || ascii == 0x7F) {
+      return false;
+    }
+  }
+  const size_t scheme_separator = uri.find(':');
+  if (scheme_separator == std::string::npos || scheme_separator == 0) {
+    return false;
+  }
+  const std::string scheme = LowerAscii(uri.substr(0, scheme_separator));
+  if (scheme == "mailto") {
+    return !TrimAscii(uri.substr(scheme_separator + 1)).empty();
+  }
+  if (scheme != "http" && scheme != "https") {
+    return false;
+  }
+  const std::string authority_prefix = scheme + "://";
+  if (!StartsWith(LowerAscii(uri), authority_prefix)) {
+    return false;
+  }
+  const size_t authority_start = authority_prefix.size();
+  const size_t authority_end =
+      uri.find_first_of("/?#", authority_start);
+  const std::string authority = uri.substr(
+      authority_start,
+      authority_end == std::string::npos ? std::string::npos
+                                         : authority_end - authority_start);
+  return !TrimAscii(authority).empty();
+}
+
+std::string CompactHotkeyToken(const std::string& value) {
+  std::string compact;
+  compact.reserve(value.size());
+  for (const char character : value) {
+    const unsigned char ascii = static_cast<unsigned char>(character);
+    if (std::isspace(ascii) || character == '-' || character == '_') {
+      continue;
+    }
+    compact.push_back(static_cast<char>(std::toupper(ascii)));
+  }
+  return compact;
+}
+
+std::string GetPaperIdArgument(const flutter::EncodableValue* arguments) {
+  if (!arguments) {
+    return std::string();
+  }
+  if (const auto* value = std::get_if<std::string>(arguments)) {
+    return TrimAscii(*value);
+  }
+  if (const auto* map = std::get_if<flutter::EncodableMap>(arguments)) {
+    return TrimAscii(GetStringArgument(*map, "paperId", ""));
+  }
+  return std::string();
+}
+
+bool GetBoolArgumentValue(const flutter::EncodableValue* arguments,
+                          const std::string& key,
+                          bool fallback) {
+  if (!arguments) {
+    return fallback;
+  }
+  if (const auto* value = std::get_if<bool>(arguments)) {
+    return *value;
+  }
+  if (const auto* map = std::get_if<flutter::EncodableMap>(arguments)) {
+    return GetBoolArgument(*map, key, fallback);
+  }
+  return fallback;
+}
+
 std::wstring Utf8ToWide(const std::string& value) {
   if (value.empty()) {
     return std::wstring();
@@ -167,6 +257,52 @@ bool FileExists(const std::wstring& path) {
   const DWORD attributes = GetFileAttributesW(path.c_str());
   return attributes != INVALID_FILE_ATTRIBUTES &&
          (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+std::wstring ExecutableDirectory() {
+  std::array<wchar_t, MAX_PATH> executable_path = {};
+  const DWORD length =
+      GetModuleFileNameW(nullptr, executable_path.data(),
+                         static_cast<DWORD>(executable_path.size()));
+  if (length == 0 || length >= executable_path.size()) {
+    return std::wstring();
+  }
+  std::wstring directory(executable_path.data(), length);
+  const size_t separator = directory.find_last_of(L"\\/");
+  if (separator == std::wstring::npos) {
+    return std::wstring();
+  }
+  return directory.substr(0, separator);
+}
+
+HICON LoadCustomTrayIcon(const std::wstring& file_name) {
+  const std::wstring directory = ExecutableDirectory();
+  if (directory.empty()) {
+    return nullptr;
+  }
+  const std::wstring path = directory + L"\\" + file_name;
+  if (!FileExists(path)) {
+    return nullptr;
+  }
+  return static_cast<HICON>(LoadImageW(
+      nullptr, path.c_str(), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+      GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE | LR_DEFAULTCOLOR));
+}
+
+HICON LoadTrayIcon(bool* is_custom) {
+  if (is_custom) {
+    *is_custom = false;
+  }
+  for (const wchar_t* file_name : {L"PaperTodo.ico", L"RePaperTodo.ico"}) {
+    HICON icon = LoadCustomTrayIcon(file_name);
+    if (icon) {
+      if (is_custom) {
+        *is_custom = true;
+      }
+      return icon;
+    }
+  }
+  return LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
 }
 
 std::wstring FindExecutableOnPath(const std::wstring& file_name) {
@@ -479,14 +615,39 @@ void StopPersistentScriptProcesses() {
 std::wstring TrayPaperLabel(const flutter::EncodableMap& map) {
   const std::string type = GetStringArgument(map, "type", "todo");
   const bool is_visible = GetBoolArgument(map, "isVisible", false);
+  const bool is_collapsed = GetBoolArgument(map, "isCollapsed", false);
+  const bool always_on_top = GetBoolArgument(map, "alwaysOnTop", false);
+  const bool is_pinned_to_desktop =
+      GetBoolArgument(map, "isPinnedToDesktop", false);
   std::wstring title = Utf8ToWide(GetStringArgument(map, "title", "Untitled"));
   if (title.empty()) {
     title = L"Untitled";
   }
   std::wstring label = type == "note" ? L"Note - " : L"Todo - ";
   label += title;
+  std::wstring status;
+  auto append_status = [&status](const wchar_t* value) {
+    if (!status.empty()) {
+      status += L", ";
+    }
+    status += value;
+  };
   if (!is_visible) {
-    label += L" (hidden)";
+    append_status(L"hidden");
+  }
+  if (is_collapsed) {
+    append_status(L"collapsed");
+  }
+  if (is_pinned_to_desktop) {
+    append_status(L"desktop");
+  }
+  if (always_on_top) {
+    append_status(L"topmost");
+  }
+  if (!status.empty()) {
+    label += L" (";
+    label += status;
+    label += L")";
   }
   return label;
 }
@@ -570,10 +731,13 @@ bool IsForegroundFullscreen(HWND own_window) {
          foreground_bounds.bottom >= monitor_bounds.bottom;
 }
 
-flutter::EncodableValue WindowBoundsValue(HWND window) {
-  RECT bounds;
-  GetWindowRect(window, &bounds);
+flutter::EncodableValue BoundsValueFromRect(
+    const RECT& bounds, const std::string& paper_id = "") {
   flutter::EncodableMap result_map;
+  if (!paper_id.empty()) {
+    result_map[flutter::EncodableValue("paperId")] =
+        flutter::EncodableValue(paper_id);
+  }
   result_map[flutter::EncodableValue("x")] =
       flutter::EncodableValue(static_cast<int32_t>(bounds.left));
   result_map[flutter::EncodableValue("y")] =
@@ -583,6 +747,13 @@ flutter::EncodableValue WindowBoundsValue(HWND window) {
   result_map[flutter::EncodableValue("height")] = flutter::EncodableValue(
       static_cast<int32_t>(bounds.bottom - bounds.top));
   return flutter::EncodableValue(result_map);
+}
+
+flutter::EncodableValue WindowBoundsValue(HWND window,
+                                          const std::string& paper_id = "") {
+  RECT bounds;
+  GetWindowRect(window, &bounds);
+  return BoundsValueFromRect(bounds, paper_id);
 }
 
 std::vector<std::string> SplitHotkey(const std::string& hotkey) {
@@ -607,78 +778,179 @@ std::vector<std::string> SplitHotkey(const std::string& hotkey) {
 }
 
 bool TryParseVirtualKey(const std::string& token, UINT* key) {
-  if (token.size() == 1) {
-    const unsigned char character = static_cast<unsigned char>(token[0]);
+  const std::string compact = CompactHotkeyToken(token);
+  if (compact.size() == 1) {
+    const unsigned char character = static_cast<unsigned char>(compact[0]);
     if (std::isalnum(character)) {
       *key = static_cast<UINT>(std::toupper(character));
       return true;
     }
   }
-  if (token.size() >= 2 && token[0] == 'F') {
-    const int function_key = std::atoi(token.c_str() + 1);
+  if (compact.size() >= 2 && compact[0] == 'F') {
+    const int function_key = std::atoi(compact.c_str() + 1);
     if (function_key >= 1 && function_key <= 24) {
       *key = VK_F1 + static_cast<UINT>(function_key - 1);
       return true;
     }
   }
-  if (token == "SPACE") {
+
+  std::string numpad_suffix;
+  if (compact.rfind("NUMPAD", 0) == 0) {
+    numpad_suffix = compact.substr(6);
+  } else if (compact.rfind("NUM", 0) == 0 && compact != "NUMLOCK") {
+    numpad_suffix = compact.substr(3);
+  }
+  if (!numpad_suffix.empty()) {
+    if (numpad_suffix.size() == 1 &&
+        std::isdigit(static_cast<unsigned char>(numpad_suffix[0]))) {
+      *key = VK_NUMPAD0 + static_cast<UINT>(numpad_suffix[0] - '0');
+      return true;
+    }
+    if (numpad_suffix == "ADD" || numpad_suffix == "PLUS") {
+      *key = VK_ADD;
+      return true;
+    }
+    if (numpad_suffix == "SUBTRACT" || numpad_suffix == "MINUS") {
+      *key = VK_SUBTRACT;
+      return true;
+    }
+    if (numpad_suffix == "MULTIPLY" || numpad_suffix == "ASTERISK") {
+      *key = VK_MULTIPLY;
+      return true;
+    }
+    if (numpad_suffix == "DIVIDE" || numpad_suffix == "SLASH") {
+      *key = VK_DIVIDE;
+      return true;
+    }
+    if (numpad_suffix == "DECIMAL" || numpad_suffix == "DOT" ||
+        numpad_suffix == "PERIOD") {
+      *key = VK_DECIMAL;
+      return true;
+    }
+  }
+
+  if (compact == "SPACE") {
     *key = VK_SPACE;
     return true;
   }
-  if (token == "TAB") {
+  if (compact == "TAB") {
     *key = VK_TAB;
     return true;
   }
-  if (token == "ENTER" || token == "RETURN") {
+  if (compact == "ENTER" || compact == "RETURN") {
     *key = VK_RETURN;
     return true;
   }
-  if (token == "ESC" || token == "ESCAPE") {
+  if (compact == "ESC" || compact == "ESCAPE") {
     *key = VK_ESCAPE;
     return true;
   }
-  if (token == "BACKSPACE") {
+  if (compact == "BACKSPACE") {
     *key = VK_BACK;
     return true;
   }
-  if (token == "DELETE" || token == "DEL") {
+  if (compact == "DELETE" || compact == "DEL") {
     *key = VK_DELETE;
     return true;
   }
-  if (token == "INSERT" || token == "INS") {
+  if (compact == "INSERT" || compact == "INS") {
     *key = VK_INSERT;
     return true;
   }
-  if (token == "HOME") {
+  if (compact == "HOME") {
     *key = VK_HOME;
     return true;
   }
-  if (token == "END") {
+  if (compact == "END") {
     *key = VK_END;
     return true;
   }
-  if (token == "PAGEUP" || token == "PGUP") {
+  if (compact == "PAGEUP" || compact == "PGUP") {
     *key = VK_PRIOR;
     return true;
   }
-  if (token == "PAGEDOWN" || token == "PGDN") {
+  if (compact == "PAGEDOWN" || compact == "PGDN") {
     *key = VK_NEXT;
     return true;
   }
-  if (token == "UP") {
+  if (compact == "UP" || compact == "ARROWUP" || compact == "UPARROW") {
     *key = VK_UP;
     return true;
   }
-  if (token == "DOWN") {
+  if (compact == "DOWN" || compact == "ARROWDOWN" ||
+      compact == "DOWNARROW") {
     *key = VK_DOWN;
     return true;
   }
-  if (token == "LEFT") {
+  if (compact == "LEFT" || compact == "ARROWLEFT" ||
+      compact == "LEFTARROW") {
     *key = VK_LEFT;
     return true;
   }
-  if (token == "RIGHT") {
+  if (compact == "RIGHT" || compact == "ARROWRIGHT" ||
+      compact == "RIGHTARROW") {
     *key = VK_RIGHT;
+    return true;
+  }
+  if (compact == "PRINTSCREEN" || compact == "PRTSC" ||
+      compact == "PRTSCR") {
+    *key = VK_SNAPSHOT;
+    return true;
+  }
+  if (compact == "CAPSLOCK") {
+    *key = VK_CAPITAL;
+    return true;
+  }
+  if (compact == "NUMLOCK") {
+    *key = VK_NUMLOCK;
+    return true;
+  }
+  if (compact == "SCROLLLOCK") {
+    *key = VK_SCROLL;
+    return true;
+  }
+  if (compact == "PLUS" || compact == "EQUAL" || compact == "EQUALS") {
+    *key = VK_OEM_PLUS;
+    return true;
+  }
+  if (compact == "MINUS" || compact == "DASH") {
+    *key = VK_OEM_MINUS;
+    return true;
+  }
+  if (compact == "COMMA") {
+    *key = VK_OEM_COMMA;
+    return true;
+  }
+  if (compact == "PERIOD" || compact == "DOT") {
+    *key = VK_OEM_PERIOD;
+    return true;
+  }
+  if (compact == "SLASH" || compact == "FORWARDSLASH") {
+    *key = VK_OEM_2;
+    return true;
+  }
+  if (compact == "BACKSLASH") {
+    *key = VK_OEM_5;
+    return true;
+  }
+  if (compact == "SEMICOLON") {
+    *key = VK_OEM_1;
+    return true;
+  }
+  if (compact == "QUOTE" || compact == "APOSTROPHE") {
+    *key = VK_OEM_7;
+    return true;
+  }
+  if (compact == "LEFTBRACKET" || compact == "OPENBRACKET") {
+    *key = VK_OEM_4;
+    return true;
+  }
+  if (compact == "RIGHTBRACKET" || compact == "CLOSEBRACKET") {
+    *key = VK_OEM_6;
+    return true;
+  }
+  if (compact == "BACKQUOTE" || compact == "GRAVE" || compact == "TILDE") {
+    *key = VK_OEM_3;
     return true;
   }
   return false;
@@ -732,9 +1004,12 @@ constexpr UINT kTraySettingsCommand = 40003;
 constexpr UINT kTrayShowCommand = 40004;
 constexpr UINT kTrayHideCommand = 40005;
 constexpr UINT kTrayExitCommand = 40006;
+constexpr UINT kTrayToggleCommand = 40007;
 constexpr UINT kTrayPaperCommandBase = 41000;
 constexpr int kPinnedTodoHotkeyId = 42001;
 constexpr int kPinnedNoteHotkeyId = 42002;
+constexpr UINT_PTR kFullscreenTopmostRefreshTimerId = 43001;
+constexpr UINT kFullscreenTopmostRefreshIntervalMs = 1000;
 constexpr wchar_t kSingleInstancePipeName[] =
     L"\\\\.\\pipe\\RePaperTodo-SingleInstance-Activate";
 
@@ -748,6 +1023,7 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   CleanupOldScriptCapsuleTempFiles();
+  taskbar_created_message_ = RegisterWindowMessageW(L"TaskbarCreated");
 
   RECT frame = GetClientArea();
 
@@ -776,6 +1052,18 @@ bool FlutterWindow::OnCreate() {
 
         const std::string& method = call.method_name();
         if (method == "show") {
+          RememberActivePaperId(call.arguments());
+          RememberPaperVisibility(active_paper_id_, true);
+          if (!active_paper_id_.empty()) {
+            pinned_to_desktop_ = GetBoolArgumentValue(
+                call.arguments(), "isPinnedToDesktop", pinned_to_desktop_);
+            RememberPaperPinnedToDesktop(active_paper_id_, pinned_to_desktop_);
+            RememberPaperAlwaysOnTop(
+                active_paper_id_,
+                GetBoolArgumentValue(call.arguments(), "alwaysOnTop",
+                                     paper_surfaces_[active_paper_id_]
+                                         .always_on_top));
+          }
           if (pinned_to_desktop_) {
             ShowWindow(window, SW_SHOWNOACTIVATE);
             SetWindowPos(window, HWND_BOTTOM, 0, 0, 0, 0,
@@ -784,46 +1072,42 @@ bool FlutterWindow::OnCreate() {
             ShowWindow(window, SW_SHOWNORMAL);
             SetForegroundWindow(window);
           }
+          z_order_state_initialized_ = false;
+          RefreshActivePaperZOrder(window);
           result->Success();
           return;
         }
         if (method == "hide") {
+          RememberActivePaperId(call.arguments());
+          RememberPaperVisibility(active_paper_id_, false);
           ShowWindow(window, SW_HIDE);
+          z_order_state_initialized_ = false;
           result->Success();
           return;
         }
         if (method == "setAlwaysOnTop") {
-          bool enabled = false;
-          if (call.arguments()) {
-            if (const auto* value =
-                    std::get_if<bool>(call.arguments())) {
-              enabled = *value;
-            }
-          }
-          const bool should_apply_topmost =
-              enabled &&
-              !pinned_to_desktop_ &&
-              !(avoid_fullscreen_topmost_ && IsForegroundFullscreen(window));
-          const HWND insert_after =
-              should_apply_topmost
-                  ? HWND_TOPMOST
-                  : (pinned_to_desktop_ ? HWND_BOTTOM : HWND_NOTOPMOST);
-          SetWindowPos(window, insert_after, 0, 0, 0, 0,
-                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+          RememberActivePaperId(call.arguments());
+          const bool previous = active_paper_id_.empty()
+                                    ? false
+                                    : paper_surfaces_[active_paper_id_]
+                                          .always_on_top;
+          const bool enabled =
+              GetBoolArgumentValue(call.arguments(), "enabled", previous);
+          RememberPaperAlwaysOnTop(active_paper_id_, enabled);
+          RefreshActivePaperZOrder(window);
           result->Success();
           return;
         }
         if (method == "setPinnedToDesktop") {
-          pinned_to_desktop_ = false;
-          if (call.arguments()) {
-            if (const auto* value = std::get_if<bool>(call.arguments())) {
-              pinned_to_desktop_ = *value;
-            }
-          }
-          SetWindowPos(window,
-                       pinned_to_desktop_ ? HWND_BOTTOM : HWND_NOTOPMOST,
-                       0, 0, 0, 0,
-                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+          RememberActivePaperId(call.arguments());
+          const bool previous = active_paper_id_.empty()
+                                    ? pinned_to_desktop_
+                                    : paper_surfaces_[active_paper_id_]
+                                          .pinned_to_desktop;
+          pinned_to_desktop_ =
+              GetBoolArgumentValue(call.arguments(), "enabled", previous);
+          RememberPaperPinnedToDesktop(active_paper_id_, pinned_to_desktop_);
+          RefreshActivePaperZOrder(window);
           result->Success();
           return;
         }
@@ -850,8 +1134,31 @@ bool FlutterWindow::OnCreate() {
                   const std::string id =
                       GetStringArgument(*paper_map, "id", "");
                   if (!id.empty()) {
+                    RememberPaperVisibility(
+                        id, GetBoolArgument(*paper_map, "isVisible", false));
+                    RememberPaperPinnedToDesktop(
+                        id, GetBoolArgument(*paper_map, "isPinnedToDesktop",
+                                            false));
+                    RememberPaperAlwaysOnTop(
+                        id,
+                        GetBoolArgument(*paper_map, "alwaysOnTop", false));
+                    const double x = GetNumberArgument(*paper_map, "x", 0);
+                    const double y = GetNumberArgument(*paper_map, "y", 0);
+                    const double width =
+                        GetNumberArgument(*paper_map, "width", 0);
+                    const double height =
+                        GetNumberArgument(*paper_map, "height", 0);
+                    if (width > 0 && height > 0) {
+                      const RECT paper_bounds = {
+                          static_cast<LONG>(x),
+                          static_cast<LONG>(y),
+                          static_cast<LONG>(x + width),
+                          static_cast<LONG>(y + height)};
+                      RememberPaperBounds(id, paper_bounds);
+                    }
                     tray_papers_.push_back(
-                        std::make_pair(id, TrayPaperLabel(*paper_map)));
+                        {id, TrayPaperLabel(*paper_map),
+                         GetBoolArgument(*paper_map, "isVisible", false)});
                   }
                 }
               }
@@ -901,6 +1208,7 @@ bool FlutterWindow::OnCreate() {
               avoid_fullscreen_topmost_ = *value != "stayOnTop";
             }
           }
+          RefreshActivePaperZOrder(window);
           result->Success();
           return;
         }
@@ -931,6 +1239,11 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (method == "exitApplication") {
+          result->Success();
+          DestroyWindow(window);
+          return;
+        }
         if (method == "isForegroundFullscreen") {
           result->Success(flutter::EncodableValue(IsForegroundFullscreen(window)));
           return;
@@ -942,12 +1255,18 @@ bool FlutterWindow::OnCreate() {
               path = *value;
             }
           }
+          path = TrimAscii(path);
           if (path.empty()) {
             result->Error("invalid_path", "The external file path is empty.");
             return;
           }
+          const std::wstring wide_path = Utf8ToWide(path);
+          if (!FileExists(wide_path)) {
+            result->Error("file_not_found", "The file does not exist.");
+            return;
+          }
           HINSTANCE open_result =
-              ShellExecuteW(window, L"open", Utf8ToWide(path).c_str(), nullptr,
+              ShellExecuteW(window, L"open", wide_path.c_str(), nullptr,
                             nullptr, SW_SHOWNORMAL);
           if (reinterpret_cast<intptr_t>(open_result) <= 32) {
             result->Error("open_external_file_failed",
@@ -964,8 +1283,13 @@ bool FlutterWindow::OnCreate() {
               uri = *value;
             }
           }
+          uri = TrimAscii(uri);
           if (uri.empty()) {
             result->Error("invalid_uri", "The URI is empty.");
+            return;
+          }
+          if (!IsAllowedExternalUri(uri)) {
+            result->Error("invalid_uri", "The URI scheme is not supported.");
             return;
           }
           HINSTANCE open_result =
@@ -1069,6 +1393,7 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "setBounds") {
+          RememberActivePaperId(call.arguments());
           RECT current_bounds;
           GetWindowRect(window, &current_bounds);
           double x = static_cast<double>(current_bounds.left);
@@ -1090,11 +1415,16 @@ bool FlutterWindow::OnCreate() {
                        static_cast<int>(y), static_cast<int>(width),
                        static_cast<int>(height),
                        SWP_NOZORDER | SWP_NOACTIVATE);
+          RememberActivePaperBounds(window);
           result->Success();
           return;
         }
         if (method == "getBounds") {
-          result->Success(WindowBoundsValue(window));
+          const std::string requested_paper_id =
+              GetPaperIdArgument(call.arguments());
+          result->Success(BoundsValueForPaper(
+              window, requested_paper_id.empty() ? active_paper_id_
+                                                 : requested_paper_id));
           return;
         }
 
@@ -1103,6 +1433,8 @@ bool FlutterWindow::OnCreate() {
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
   AddTrayIcon();
   StartSingleInstanceListener();
+  SetTimer(GetHandle(), kFullscreenTopmostRefreshTimerId,
+           kFullscreenTopmostRefreshIntervalMs, nullptr);
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
@@ -1124,24 +1456,39 @@ void FlutterWindow::AddTrayIcon() {
   if (!window) {
     return;
   }
+  if (tray_icon_handle_is_custom_ && tray_icon_handle_) {
+    DestroyIcon(tray_icon_handle_);
+  }
+  tray_icon_handle_ = LoadTrayIcon(&tray_icon_handle_is_custom_);
   tray_icon_data_ = {};
   tray_icon_data_.cbSize = sizeof(NOTIFYICONDATA);
   tray_icon_data_.hWnd = window;
   tray_icon_data_.uID = kTrayIconId;
   tray_icon_data_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
   tray_icon_data_.uCallbackMessage = kTrayIconMessage;
-  tray_icon_data_.hIcon =
-      LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+  tray_icon_data_.hIcon = tray_icon_handle_;
   wcscpy_s(tray_icon_data_.szTip, L"RePaperTodo");
   tray_icon_added_ = Shell_NotifyIcon(NIM_ADD, &tray_icon_data_) == TRUE;
+  if (tray_icon_added_) {
+    tray_icon_data_.uVersion = NOTIFYICON_VERSION_4;
+    Shell_NotifyIcon(NIM_SETVERSION, &tray_icon_data_);
+  } else if (tray_icon_handle_is_custom_ && tray_icon_handle_) {
+    DestroyIcon(tray_icon_handle_);
+    tray_icon_handle_ = nullptr;
+    tray_icon_handle_is_custom_ = false;
+  }
 }
 
 void FlutterWindow::RemoveTrayIcon() {
-  if (!tray_icon_added_) {
-    return;
+  if (tray_icon_added_) {
+    Shell_NotifyIcon(NIM_DELETE, &tray_icon_data_);
+    tray_icon_added_ = false;
   }
-  Shell_NotifyIcon(NIM_DELETE, &tray_icon_data_);
-  tray_icon_added_ = false;
+  if (tray_icon_handle_is_custom_ && tray_icon_handle_) {
+    DestroyIcon(tray_icon_handle_);
+  }
+  tray_icon_handle_ = nullptr;
+  tray_icon_handle_is_custom_ = false;
 }
 
 void FlutterWindow::StartSingleInstanceListener() {
@@ -1228,13 +1575,17 @@ void FlutterWindow::ShowTrayMenu() {
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenu(menu, MF_STRING, kTrayShowCommand, L"Show");
   AppendMenu(menu, MF_STRING, kTrayHideCommand, L"Hide");
+  AppendMenu(menu, MF_STRING, kTrayToggleCommand, L"Toggle");
   if (!tray_papers_.empty()) {
     AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenu(menu, MF_STRING | MF_DISABLED, 0, L"Papers");
     for (size_t index = 0; index < tray_papers_.size(); index++) {
-      AppendMenu(menu, MF_STRING,
+      const UINT flags =
+          MF_STRING | (tray_papers_[index].is_visible ? MF_CHECKED
+                                                      : MF_UNCHECKED);
+      AppendMenu(menu, flags,
                  kTrayPaperCommandBase + static_cast<UINT>(index),
-                 tray_papers_[index].second.c_str());
+                 tray_papers_[index].label.c_str());
     }
   }
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
@@ -1258,22 +1609,24 @@ void FlutterWindow::ShowTrayMenu() {
       SendStartupCommandRequested("settings");
       break;
     case kTrayShowCommand:
-      SendWindowEvent("showRequested");
+      SendStartupCommandRequested("show");
       ShowWindow(window, SW_SHOWNORMAL);
       SetForegroundWindow(window);
       break;
     case kTrayHideCommand:
-      SendWindowEvent("hideRequested");
+      SendStartupCommandRequested("hide");
       ShowWindow(window, SW_HIDE);
       break;
+    case kTrayToggleCommand:
+      SendStartupCommandRequested("toggle");
+      break;
     case kTrayExitCommand:
-      RemoveTrayIcon();
-      DestroyWindow(window);
+      SendStartupCommandRequested("exit");
       break;
     default:
       if (command >= kTrayPaperCommandBase &&
           command < kTrayPaperCommandBase + tray_papers_.size()) {
-        SendPaperRequested(tray_papers_[command - kTrayPaperCommandBase].first);
+        SendPaperRequested(tray_papers_[command - kTrayPaperCommandBase].id);
       }
       break;
   }
@@ -1284,9 +1637,13 @@ void FlutterWindow::SendBoundsChanged() {
   if (!window_channel_ || !window) {
     return;
   }
+  if (IsIconic(window)) {
+    return;
+  }
+  RememberActivePaperBounds(window);
   window_channel_->InvokeMethod(
       "boundsChanged", std::make_unique<flutter::EncodableValue>(
-                           WindowBoundsValue(window)));
+                           BoundsValueForPaper(window, active_paper_id_)));
 }
 
 void FlutterWindow::SendCloseRequested() {
@@ -1297,8 +1654,11 @@ void FlutterWindow::SendPaperRequested(const std::string& paper_id) {
   if (!window_channel_) {
     return;
   }
+  active_paper_id_ = paper_id;
+  flutter::EncodableMap event;
+  event[flutter::EncodableValue("paperId")] = flutter::EncodableValue(paper_id);
   window_channel_->InvokeMethod(
-      "paperRequested", std::make_unique<flutter::EncodableValue>(paper_id));
+      "paperRequested", std::make_unique<flutter::EncodableValue>(event));
 }
 
 void FlutterWindow::SendStartupCommandRequested(const std::string& command) {
@@ -1314,8 +1674,134 @@ void FlutterWindow::SendWindowEvent(const char* method) {
   if (!window_channel_) {
     return;
   }
-  window_channel_->InvokeMethod(method,
-                                std::make_unique<flutter::EncodableValue>());
+  window_channel_->InvokeMethod(
+      method, std::make_unique<flutter::EncodableValue>(
+                  WindowEventArguments()));
+}
+
+void FlutterWindow::RememberActivePaperId(
+    const flutter::EncodableValue* arguments) {
+  const std::string paper_id = GetPaperIdArgument(arguments);
+  if (!paper_id.empty()) {
+    active_paper_id_ = paper_id;
+    paper_surfaces_.try_emplace(paper_id);
+  }
+}
+
+void FlutterWindow::RememberActivePaperBounds(HWND window) {
+  if (active_paper_id_.empty()) {
+    return;
+  }
+  if (IsIconic(window)) {
+    return;
+  }
+  RECT bounds;
+  if (GetWindowRect(window, &bounds)) {
+    RememberPaperBounds(active_paper_id_, bounds);
+  }
+}
+
+void FlutterWindow::RememberPaperBounds(const std::string& paper_id,
+                                        const RECT& bounds) {
+  if (paper_id.empty()) {
+    return;
+  }
+  PaperSurfaceState& state = paper_surfaces_[paper_id];
+  state.bounds = bounds;
+  state.has_bounds = true;
+}
+
+void FlutterWindow::RememberPaperVisibility(const std::string& paper_id,
+                                            bool is_visible) {
+  if (paper_id.empty()) {
+    return;
+  }
+  paper_surfaces_[paper_id].is_visible = is_visible;
+}
+
+void FlutterWindow::RememberPaperPinnedToDesktop(const std::string& paper_id,
+                                                 bool enabled) {
+  if (paper_id.empty()) {
+    return;
+  }
+  paper_surfaces_[paper_id].pinned_to_desktop = enabled;
+}
+
+void FlutterWindow::RememberPaperAlwaysOnTop(const std::string& paper_id,
+                                             bool enabled) {
+  if (paper_id.empty()) {
+    return;
+  }
+  paper_surfaces_[paper_id].always_on_top = enabled;
+}
+
+bool FlutterWindow::ActivePaperPinnedToDesktop() const {
+  if (active_paper_id_.empty()) {
+    return pinned_to_desktop_;
+  }
+  const auto iterator = paper_surfaces_.find(active_paper_id_);
+  if (iterator == paper_surfaces_.end()) {
+    return pinned_to_desktop_;
+  }
+  return iterator->second.pinned_to_desktop;
+}
+
+bool FlutterWindow::ActivePaperAlwaysOnTop() const {
+  if (active_paper_id_.empty()) {
+    return false;
+  }
+  const auto iterator = paper_surfaces_.find(active_paper_id_);
+  return iterator != paper_surfaces_.end() && iterator->second.always_on_top;
+}
+
+void FlutterWindow::RefreshActivePaperZOrder(HWND window) {
+  if (!window || !IsWindow(window)) {
+    return;
+  }
+  const bool pinned_to_desktop = ActivePaperPinnedToDesktop();
+  pinned_to_desktop_ = pinned_to_desktop;
+  const bool fullscreen_blocked =
+      avoid_fullscreen_topmost_ && IsForegroundFullscreen(window);
+  const bool should_apply_topmost =
+      ActivePaperAlwaysOnTop() && !pinned_to_desktop &&
+      !fullscreen_blocked;
+  if (z_order_state_initialized_ &&
+      z_order_pinned_to_desktop_ == pinned_to_desktop &&
+      z_order_topmost_applied_ == should_apply_topmost &&
+      z_order_fullscreen_blocked_ == fullscreen_blocked) {
+    return;
+  }
+  const HWND insert_after =
+      pinned_to_desktop
+          ? HWND_BOTTOM
+          : (should_apply_topmost ? HWND_TOPMOST : HWND_NOTOPMOST);
+  SetWindowPos(window, insert_after, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  z_order_state_initialized_ = true;
+  z_order_pinned_to_desktop_ = pinned_to_desktop;
+  z_order_topmost_applied_ = should_apply_topmost;
+  z_order_fullscreen_blocked_ = fullscreen_blocked;
+}
+
+flutter::EncodableValue FlutterWindow::BoundsValueForPaper(
+    HWND window, const std::string& paper_id) const {
+  if (!paper_id.empty()) {
+    const auto iterator = paper_surfaces_.find(paper_id);
+    if (iterator != paper_surfaces_.end() && iterator->second.has_bounds) {
+      return BoundsValueFromRect(iterator->second.bounds, paper_id);
+    }
+  }
+  return WindowBoundsValue(window, paper_id);
+}
+
+flutter::EncodableValue FlutterWindow::WindowEventArguments() const {
+  if (active_paper_id_.empty()) {
+    return flutter::EncodableValue();
+  }
+  flutter::EncodableMap event;
+  event[flutter::EncodableValue("paperId")] =
+      flutter::EncodableValue(active_paper_id_);
+  return flutter::EncodableValue(event);
 }
 
 void FlutterWindow::OnDestroy() {
@@ -1323,6 +1809,7 @@ void FlutterWindow::OnDestroy() {
   StopPersistentScriptProcesses();
   HWND window = GetHandle();
   if (window) {
+    KillTimer(window, kFullscreenTopmostRefreshTimerId);
     UnregisterHotKey(window, kPinnedTodoHotkeyId);
     UnregisterHotKey(window, kPinnedNoteHotkeyId);
   }
@@ -1351,13 +1838,25 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     }
   }
 
+  if (taskbar_created_message_ != 0 && message == taskbar_created_message_) {
+    tray_icon_added_ = false;
+    AddTrayIcon();
+    return 0;
+  }
+
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
     case WM_MOVE:
+      if (!IsIconic(hwnd)) {
+        SendBoundsChanged();
+      }
+      break;
     case WM_SIZE:
-      SendBoundsChanged();
+      if (wparam != SIZE_MINIMIZED && !IsIconic(hwnd)) {
+        SendBoundsChanged();
+      }
       break;
     case WM_CLOSE:
       SendCloseRequested();
@@ -1373,6 +1872,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
         return 0;
       }
       break;
+    case WM_TIMER:
+      if (wparam == kFullscreenTopmostRefreshTimerId) {
+        RefreshActivePaperZOrder(hwnd);
+        return 0;
+      }
+      break;
     case kSingleInstanceCommandMessage: {
       std::unique_ptr<std::string> command(
           reinterpret_cast<std::string*>(lparam));
@@ -1385,7 +1890,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       switch (LOWORD(lparam)) {
         case WM_LBUTTONUP:
         case WM_LBUTTONDBLCLK:
-          SendWindowEvent("showRequested");
+          SendStartupCommandRequested("show");
           ShowWindow(hwnd, SW_SHOWNORMAL);
           SetForegroundWindow(hwnd);
           return 0;

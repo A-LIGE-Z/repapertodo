@@ -5,7 +5,17 @@ String stringValue(Object? value, String fallback) {
 }
 
 bool boolValue(Object? value, bool fallback) {
-  return value is bool ? value : fallback;
+  if (value is bool) {
+    return value;
+  }
+  if (value is String) {
+    return switch (value.trim().toLowerCase()) {
+      'true' => true,
+      'false' => false,
+      _ => fallback,
+    };
+  }
+  return fallback;
 }
 
 int intValue(Object? value, int fallback) {
@@ -15,12 +25,21 @@ int intValue(Object? value, int fallback) {
   if (value is num) {
     return value.round();
   }
+  if (value is String) {
+    return int.tryParse(value.trim()) ?? fallback;
+  }
   return fallback;
 }
 
 double doubleValue(Object? value, double fallback) {
   if (value is num && value.isFinite) {
     return value.toDouble();
+  }
+  if (value is String) {
+    final parsed = double.tryParse(value.trim());
+    if (parsed != null && parsed.isFinite) {
+      return parsed;
+    }
   }
   return fallback;
 }
@@ -61,8 +80,8 @@ Map<String, bool> boolMap(Object? value) {
   }
   return {
     for (final entry in value.entries)
-      if (entry.key is String && entry.value is bool)
-        entry.key as String: entry.value as bool,
+      if (entry.key is String && _boolValueOrNull(entry.value) != null)
+        entry.key as String: _boolValueOrNull(entry.value)!,
   };
 }
 
@@ -72,8 +91,8 @@ Map<String, int> intMap(Object? value) {
   }
   return {
     for (final entry in value.entries)
-      if (entry.key is String && entry.value is num)
-        entry.key as String: (entry.value as num).round(),
+      if (entry.key is String && _intValueOrNull(entry.value) != null)
+        entry.key as String: _intValueOrNull(entry.value)!,
   };
 }
 
@@ -83,10 +102,8 @@ Map<String, double> doubleMap(Object? value) {
   }
   return {
     for (final entry in value.entries)
-      if (entry.key is String &&
-          entry.value is num &&
-          (entry.value as num).isFinite)
-        entry.key as String: (entry.value as num).toDouble(),
+      if (entry.key is String && _doubleValueOrNull(entry.value) != null)
+        entry.key as String: _doubleValueOrNull(entry.value)!,
   };
 }
 
@@ -95,4 +112,44 @@ JsonMap preserveUnknown(JsonMap source, Set<String> knownKeys) {
     for (final entry in source.entries)
       if (!knownKeys.contains(entry.key)) entry.key: entry.value,
   };
+}
+
+bool? _boolValueOrNull(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is String) {
+    return switch (value.trim().toLowerCase()) {
+      'true' => true,
+      'false' => false,
+      _ => null,
+    };
+  }
+  return null;
+}
+
+int? _intValueOrNull(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.round();
+  }
+  if (value is String) {
+    return int.tryParse(value.trim());
+  }
+  return null;
+}
+
+double? _doubleValueOrNull(Object? value) {
+  if (value is num && value.isFinite) {
+    return value.toDouble();
+  }
+  if (value is String) {
+    final parsed = double.tryParse(value.trim());
+    if (parsed != null && parsed.isFinite) {
+      return parsed;
+    }
+  }
+  return null;
 }

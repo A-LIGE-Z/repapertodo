@@ -273,10 +273,7 @@ class AppState {
   }
 
   void normalize({bool storageCompatibility = false}) {
-    theme = switch (theme) {
-      'light' || 'dark' || 'system' => theme,
-      _ => 'system',
-    };
+    theme = _normalizeTheme(theme);
     customThemeColorHex = _normalizeColorHex(customThemeColorHex);
     colorScheme = ColorSchemes.normalize(colorScheme);
     markdownRenderMode = MarkdownRenderModes.normalize(markdownRenderMode);
@@ -472,6 +469,15 @@ String _normalizeHotKeyForSettings(String value) {
   return text.length > 64 ? text.substring(0, 64) : text;
 }
 
+String _normalizeTheme(String value) {
+  return switch (value.trim().toLowerCase()) {
+    'light' => 'light',
+    'dark' => 'dark',
+    'system' => 'system',
+    _ => 'system',
+  };
+}
+
 String _newUniqueId(Set<String> usedIds) {
   String id;
   do {
@@ -514,9 +520,7 @@ String _normalizeQueueKey(String? key) {
 
 String _queueKey(String? monitorDeviceName, String? side) {
   final monitor = (monitorDeviceName ?? '').trim();
-  final normalizedSide = side == DeepCapsuleSides.left
-      ? DeepCapsuleSides.left
-      : DeepCapsuleSides.right;
+  final normalizedSide = DeepCapsuleSides.normalize(side);
   return '$monitor|$normalizedSide';
 }
 

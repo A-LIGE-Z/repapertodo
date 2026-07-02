@@ -38,8 +38,10 @@ class AppBootstrap {
       return null;
     }
 
-    final resolvedStore =
-        store ?? StateStore(filePath: await defaultStateFilePath());
+    final resolvedStore = store ??
+        StateStore(
+          filePath: await defaultStateFilePath(platform: resolvedPlatform),
+        );
     final state = await resolvedStore.load();
     final startupCommand = StartupCommand.parse(args);
     final controller = RePaperTodoController(
@@ -49,11 +51,16 @@ class AppBootstrap {
     await controller.start(startupCommand: startupCommand);
     if (controller.state.sync.enabled &&
         controller.state.sync.webDav.autoSyncOnStart) {
-      final result = await (syncService ?? AppSyncService()).syncAndMergeNow(
-        localState: controller.state,
-        store: resolvedStore,
-      );
-      controller.replaceState(result.state);
+      try {
+        final result = await (syncService ?? AppSyncService()).syncAndMergeNow(
+          localState: controller.state,
+          store: resolvedStore,
+        );
+        controller.replaceState(result.state);
+        await controller.applyCurrentStateToPlatform();
+      } catch (_) {
+        // Startup sync is opportunistic; local data must remain usable offline.
+      }
     }
     await resolvedStore.save(controller.state);
     return BootstrappedApp(
@@ -62,11 +69,35 @@ class AppBootstrap {
     );
   }
 
-  static Future<String> defaultStateFilePath() async {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      return p.join(p.dirname(Platform.resolvedExecutable), 'data.json');
+  static Future<String> defaultStateFilePath({
+    PlatformServices? platform,
+    Future<String> Function()? mobileDocumentsDirectoryPath,
+  }) async {
+    return defaultStateFilePathForPlatform(
+      isDesktop: Platform.isWindows || Platform.isLinux || Platform.isMacOS,
+      desktopExecutablePath: Platform.resolvedExecutable,
+      mobileDocumentsDirectoryPath: mobileDocumentsDirectoryPath ??
+          (platform ?? NoopPlatformServices()).storage.documentsDirectoryPath,
+    );
+  }
+
+  static Future<String> defaultStateFilePathForPlatform({
+    required bool isDesktop,
+    required String desktopExecutablePath,
+    required Future<String> Function() mobileDocumentsDirectoryPath,
+  }) async {
+    if (isDesktop) {
+      final executablePath = desktopExecutablePath.trim();
+      if (executablePath.isEmpty) {
+        throw StateError('Desktop executable path is unavailable.');
+      }
+      return p.join(p.dirname(executablePath), 'data.json');
     }
-    return p.join(Directory.current.path, 'data.json');
+    final directoryPath = (await mobileDocumentsDirectoryPath()).trim();
+    if (directoryPath.isEmpty) {
+      throw StateError('Mobile documents directory is unavailable.');
+    }
+    return p.join(directoryPath, 'data.json');
   }
 
   static PlatformServices _defaultPlatformServices() {

@@ -12,6 +12,7 @@ dependencies:
   characters: ^1.4.0
   collection: ^1.18.0
   crypto: ^3.0.3
+  cryptography: ^2.7.0
   flutter_markdown_plus: ^1.0.7
   http: ^1.2.2
   json_annotation: ^4.9.0

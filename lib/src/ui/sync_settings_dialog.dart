@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/model/paper_constants.dart';
 import '../core/model/sync_settings.dart';
+import '../core/model/webdav_presets.dart';
 
 class SyncSettingsDialogResult {
   const SyncSettingsDialogResult({
@@ -143,6 +145,11 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialCollapseExpandedDeepCapsuleOnClick,
   required bool initialHideDeepCapsulesWhenCovered,
   required bool initialStartAtLogin,
+  required bool supportsStartAtLogin,
+  required bool supportsHideFromWindowSwitcher,
+  required bool supportsFullscreenTopmostMode,
+  required bool supportsGlobalHotkeys,
+  required bool supportsScriptCapsules,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
   required String initialPinnedTodoHotKey,
@@ -197,6 +204,11 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
           initialCollapseExpandedDeepCapsuleOnClick,
       initialHideDeepCapsulesWhenCovered: initialHideDeepCapsulesWhenCovered,
       initialStartAtLogin: initialStartAtLogin,
+      supportsStartAtLogin: supportsStartAtLogin,
+      supportsHideFromWindowSwitcher: supportsHideFromWindowSwitcher,
+      supportsFullscreenTopmostMode: supportsFullscreenTopmostMode,
+      supportsGlobalHotkeys: supportsGlobalHotkeys,
+      supportsScriptCapsules: supportsScriptCapsules,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
       initialPinnedTodoHotKey: initialPinnedTodoHotKey,
@@ -253,6 +265,11 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialCollapseExpandedDeepCapsuleOnClick,
     required this.initialHideDeepCapsulesWhenCovered,
     required this.initialStartAtLogin,
+    required this.supportsStartAtLogin,
+    required this.supportsHideFromWindowSwitcher,
+    required this.supportsFullscreenTopmostMode,
+    required this.supportsGlobalHotkeys,
+    required this.supportsScriptCapsules,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
     required this.initialPinnedTodoHotKey,
@@ -304,6 +321,11 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialCollapseExpandedDeepCapsuleOnClick;
   final bool initialHideDeepCapsulesWhenCovered;
   final bool initialStartAtLogin;
+  final bool supportsStartAtLogin;
+  final bool supportsHideFromWindowSwitcher;
+  final bool supportsFullscreenTopmostMode;
+  final bool supportsGlobalHotkeys;
+  final bool supportsScriptCapsules;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
   final String initialPinnedTodoHotKey;
@@ -364,11 +386,19 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _hideLinkedNotesFromCapsules;
   late String _presetId;
   late bool _obscurePassword = true;
+  late bool _obscureEncryptionPassphrase = true;
   late final TextEditingController _endpointController;
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
+  late final TextEditingController _encryptionPassphraseController;
   late final TextEditingController _rootPathController;
+  final FocusNode _endpointFocusNode = FocusNode();
+  final FocusNode _rootPathFocusNode = FocusNode();
+  final FocusNode _usernameFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
+  final FocusNode _encryptionPassphraseFocusNode = FocusNode();
   late final TextEditingController _intervalController;
+  late final TextEditingController _requestTimeoutController;
   late final TextEditingController _fontFamilyController;
   late final TextEditingController _customThemeColorController;
   late final TextEditingController _externalMarkdownExtensionController;
@@ -379,6 +409,18 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _reminderIntervalController;
   late final TextEditingController _reminderDurationController;
   String? _errorText;
+  String? _endpointErrorText;
+  String? _rootPathErrorText;
+  String? _usernameErrorText;
+  String? _passwordErrorText;
+  String? _encryptionPassphraseErrorText;
+
+  bool get _hasDesktopIntegrationSettings =>
+      widget.supportsStartAtLogin ||
+      widget.supportsHideFromWindowSwitcher ||
+      widget.supportsFullscreenTopmostMode ||
+      widget.supportsGlobalHotkeys ||
+      widget.supportsScriptCapsules;
 
   @override
   void initState() {
@@ -439,9 +481,13 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _endpointController = TextEditingController(text: webDav.endpoint);
     _usernameController = TextEditingController(text: webDav.username);
     _passwordController = TextEditingController(text: webDav.password);
+    _encryptionPassphraseController =
+        TextEditingController(text: webDav.encryptionPassphrase);
     _rootPathController = TextEditingController(text: webDav.rootPath);
     _intervalController =
         TextEditingController(text: webDav.autoSyncIntervalMinutes.toString());
+    _requestTimeoutController =
+        TextEditingController(text: webDav.requestTimeoutSeconds.toString());
     _fontFamilyController =
         TextEditingController(text: widget.initialSystemFontFamilyName);
     _customThemeColorController = TextEditingController(
@@ -479,8 +525,15 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _endpointController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _encryptionPassphraseController.dispose();
     _rootPathController.dispose();
+    _endpointFocusNode.dispose();
+    _rootPathFocusNode.dispose();
+    _usernameFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _encryptionPassphraseFocusNode.dispose();
     _intervalController.dispose();
+    _requestTimeoutController.dispose();
     _fontFamilyController.dispose();
     _customThemeColorController.dispose();
     _externalMarkdownExtensionController.dispose();
@@ -497,11 +550,17 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       title: const Row(
         children: [
           Icon(Icons.sync_outlined),
           SizedBox(width: 12),
-          Text('Sync settings'),
+          Expanded(
+            child: Text(
+              'Sync settings',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
       content: SizedBox(
@@ -511,51 +570,43 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
+              _adaptiveChoiceSelector(
+                key: const ValueKey('settings-theme-selector'),
+                labelText: 'Theme',
+                compactIcon: Icons.brightness_auto_outlined,
+                selectedValue: _theme,
+                choices: const [
+                  _SettingsChoice(
                     value: 'system',
-                    icon: Icon(Icons.brightness_auto_outlined),
-                    label: Text('System'),
+                    label: 'System',
+                    icon: Icons.brightness_auto_outlined,
                   ),
-                  ButtonSegment(
+                  _SettingsChoice(
                     value: 'light',
-                    icon: Icon(Icons.light_mode_outlined),
-                    label: Text('Light'),
+                    label: 'Light',
+                    icon: Icons.light_mode_outlined,
                   ),
-                  ButtonSegment(
+                  _SettingsChoice(
                     value: 'dark',
-                    icon: Icon(Icons.dark_mode_outlined),
-                    label: Text('Dark'),
+                    label: 'Dark',
+                    icon: Icons.dark_mode_outlined,
                   ),
                 ],
-                selected: {_theme},
-                onSelectionChanged: (selection) =>
-                    setState(() => _theme = selection.single),
+                onChanged: (value) => setState(() => _theme = value),
               ),
               const SizedBox(height: 12),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: ColorSchemes.warm,
-                    label: Text('Warm'),
-                  ),
-                  ButtonSegment(
-                    value: ColorSchemes.ink,
-                    label: Text('Ink'),
-                  ),
-                  ButtonSegment(
-                    value: ColorSchemes.forest,
-                    label: Text('Forest'),
-                  ),
-                  ButtonSegment(
-                    value: ColorSchemes.rose,
-                    label: Text('Rose'),
-                  ),
+              _adaptiveChoiceSelector(
+                key: const ValueKey('settings-color-scheme-selector'),
+                labelText: 'Color scheme',
+                compactIcon: Icons.palette_outlined,
+                selectedValue: _colorScheme,
+                choices: const [
+                  _SettingsChoice(value: ColorSchemes.warm, label: 'Warm'),
+                  _SettingsChoice(value: ColorSchemes.ink, label: 'Ink'),
+                  _SettingsChoice(value: ColorSchemes.forest, label: 'Forest'),
+                  _SettingsChoice(value: ColorSchemes.rose, label: 'Rose'),
                 ],
-                selected: {_colorScheme},
-                onSelectionChanged: (selection) =>
-                    setState(() => _colorScheme = selection.single),
+                onChanged: (value) => setState(() => _colorScheme = value),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -572,51 +623,50 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
+              _adaptiveChoiceSelector(
+                key: const ValueKey('settings-markdown-mode-selector'),
+                labelText: 'Markdown mode',
+                compactIcon: Icons.article_outlined,
+                selectedValue: _markdownRenderMode,
+                choices: const [
+                  _SettingsChoice(
                     value: MarkdownRenderModes.off,
-                    icon: Icon(Icons.edit_outlined),
-                    label: Text('Markdown off'),
+                    label: 'Markdown off',
+                    icon: Icons.edit_outlined,
                   ),
-                  ButtonSegment(
+                  _SettingsChoice(
                     value: MarkdownRenderModes.basic,
-                    icon: Icon(Icons.article_outlined),
-                    label: Text('Basic'),
+                    label: 'Basic',
+                    icon: Icons.article_outlined,
                   ),
-                  ButtonSegment(
+                  _SettingsChoice(
                     value: MarkdownRenderModes.enhanced,
-                    icon: Icon(Icons.vertical_split_outlined),
-                    label: Text('Enhanced'),
+                    label: 'Enhanced',
+                    icon: Icons.vertical_split_outlined,
                   ),
                 ],
-                selected: {_markdownRenderMode},
-                onSelectionChanged: (selection) =>
-                    setState(() => _markdownRenderMode = selection.single),
+                onChanged: (value) =>
+                    setState(() => _markdownRenderMode = value),
               ),
               const SizedBox(height: 12),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: TodoVisualSizes.small,
-                    label: Text('Small'),
-                  ),
-                  ButtonSegment(
+              _adaptiveChoiceSelector(
+                key: const ValueKey('settings-todo-visual-size-selector'),
+                labelText: 'Todo visual size',
+                compactIcon: Icons.format_size_outlined,
+                selectedValue: _todoVisualSize,
+                choices: const [
+                  _SettingsChoice(value: TodoVisualSizes.small, label: 'Small'),
+                  _SettingsChoice(
                     value: TodoVisualSizes.medium,
-                    label: Text('Medium'),
+                    label: 'Medium',
                   ),
-                  ButtonSegment(
-                    value: TodoVisualSizes.large,
-                    label: Text('Large'),
-                  ),
-                  ButtonSegment(
+                  _SettingsChoice(value: TodoVisualSizes.large, label: 'Large'),
+                  _SettingsChoice(
                     value: TodoVisualSizes.extraLarge,
-                    label: Text('XL'),
+                    label: 'XL',
                   ),
                 ],
-                selected: {_todoVisualSize},
-                onSelectionChanged: (selection) =>
-                    setState(() => _todoVisualSize = selection.single),
+                onChanged: (value) => setState(() => _todoVisualSize = value),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -733,26 +783,29 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     setState(() => _showTodoDueRelativeTime = value),
               ),
               const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
+              _adaptiveChoiceSelector(
+                key: const ValueKey('settings-due-year-selector'),
+                labelText: 'Due year display',
+                compactIcon: Icons.event_outlined,
+                selectedValue: _todoDueYearDisplayMode,
+                choices: const [
+                  _SettingsChoice(
                     value: TodoDueYearDisplayModes.none,
-                    label: Text('No year'),
+                    label: 'No year',
                   ),
-                  ButtonSegment(
+                  _SettingsChoice(
                     value: TodoDueYearDisplayModes.short,
-                    label: Text('YY'),
+                    label: 'YY',
                   ),
-                  ButtonSegment(
+                  _SettingsChoice(
                     value: TodoDueYearDisplayModes.full,
-                    label: Text('YYYY'),
+                    label: 'YYYY',
                   ),
                 ],
-                selected: {_todoDueYearDisplayMode},
-                onSelectionChanged: _showTodoDueRelativeTime
+                onChanged: _showTodoDueRelativeTime
                     ? null
-                    : (selection) => setState(
-                        () => _todoDueYearDisplayMode = selection.single),
+                    : (value) =>
+                        setState(() => _todoDueYearDisplayMode = value),
               ),
               const Divider(height: 24),
               SwitchListTile(
@@ -837,23 +890,25 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     : null,
               ),
               const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
+              _adaptiveChoiceSelector(
+                key: const ValueKey('settings-deep-capsule-side-selector'),
+                labelText: 'Deep capsule side',
+                compactIcon: Icons.vertical_align_center_outlined,
+                selectedValue: _deepCapsuleSide,
+                choices: const [
+                  _SettingsChoice(
                     value: DeepCapsuleSides.left,
-                    icon: Icon(Icons.keyboard_double_arrow_left_outlined),
-                    label: Text('Left'),
+                    label: 'Left',
+                    icon: Icons.keyboard_double_arrow_left_outlined,
                   ),
-                  ButtonSegment(
+                  _SettingsChoice(
                     value: DeepCapsuleSides.right,
-                    icon: Icon(Icons.keyboard_double_arrow_right_outlined),
-                    label: Text('Right'),
+                    label: 'Right',
+                    icon: Icons.keyboard_double_arrow_right_outlined,
                   ),
                 ],
-                selected: {_deepCapsuleSide},
-                onSelectionChanged: _useCapsuleMode && _useDeepCapsuleMode
-                    ? (selection) =>
-                        setState(() => _deepCapsuleSide = selection.single)
+                onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                    ? (value) => setState(() => _deepCapsuleSide = value)
                     : null,
               ),
               const SizedBox(height: 12),
@@ -908,105 +963,108 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                         setState(() => _hideDeepCapsulesWhenCovered = value)
                     : null,
               ),
-              const Divider(height: 24),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.login_outlined),
-                title: const Text('Start at login'),
-                value: _startAtLogin,
-                onChanged: (value) => setState(() => _startAtLogin = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.visibility_off_outlined),
-                title: const Text('Hide from task switcher'),
-                value: _hideFromWindowSwitcher,
-                onChanged: (value) =>
-                    setState(() => _hideFromWindowSwitcher = value),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: FullscreenTopmostModes.avoid,
-                    icon: Icon(Icons.fullscreen_exit_outlined),
-                    label: Text('Avoid fullscreen'),
-                  ),
-                  ButtonSegment(
-                    value: FullscreenTopmostModes.stayOnTop,
-                    icon: Icon(Icons.push_pin_outlined),
-                    label: Text('Stay on top'),
-                  ),
-                ],
-                selected: {_fullscreenTopmostMode},
-                onSelectionChanged: (selection) => setState(
-                  () => _fullscreenTopmostMode = selection.single,
+              if (_hasDesktopIntegrationSettings) const Divider(height: 24),
+              if (widget.supportsStartAtLogin)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.login_outlined),
+                  title: const Text('Start at login'),
+                  value: _startAtLogin,
+                  onChanged: (value) => setState(() => _startAtLogin = value),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _pinnedTodoHotKeyController,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: 'Pinned todo hotkey',
-                        prefixIcon: Icon(Icons.keyboard_outlined),
-                      ),
+              if (widget.supportsHideFromWindowSwitcher)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.visibility_off_outlined),
+                  title: const Text('Hide from task switcher'),
+                  value: _hideFromWindowSwitcher,
+                  onChanged: (value) =>
+                      setState(() => _hideFromWindowSwitcher = value),
+                ),
+              if (widget.supportsFullscreenTopmostMode) ...[
+                const SizedBox(height: 8),
+                _adaptiveChoiceSelector(
+                  key: const ValueKey('settings-fullscreen-topmost-selector'),
+                  labelText: 'Fullscreen behavior',
+                  compactIcon: Icons.fullscreen_exit_outlined,
+                  selectedValue: _fullscreenTopmostMode,
+                  choices: const [
+                    _SettingsChoice(
+                      value: FullscreenTopmostModes.avoid,
+                      label: 'Avoid fullscreen',
+                      icon: Icons.fullscreen_exit_outlined,
+                    ),
+                    _SettingsChoice(
+                      value: FullscreenTopmostModes.stayOnTop,
+                      label: 'Stay on top',
+                      icon: Icons.push_pin_outlined,
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _fullscreenTopmostMode = value),
+                ),
+              ],
+              if (widget.supportsGlobalHotkeys) ...[
+                const SizedBox(height: 12),
+                _adaptiveFieldPair(
+                  first: TextField(
+                    controller: _pinnedTodoHotKeyController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Pinned todo hotkey',
+                      prefixIcon: Icon(Icons.keyboard_outlined),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _pinnedNoteHotKeyController,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: 'Pinned note hotkey',
-                        prefixIcon: Icon(Icons.keyboard_command_key_outlined),
-                      ),
+                  second: TextField(
+                    controller: _pinnedNoteHotKeyController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Pinned note hotkey',
+                      prefixIcon: Icon(Icons.keyboard_command_key_outlined),
                     ),
                   ),
-                ],
-              ),
-              const Divider(height: 24),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.terminal_outlined),
-                title: const Text('Run linked script capsules on click'),
-                value: _runLinkedScriptCapsulesOnClick,
-                onChanged: (value) =>
-                    setState(() => _runLinkedScriptCapsulesOnClick = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.memory_outlined),
-                title: const Text('Persistent PowerShell process'),
-                value: _usePersistentPowerShellProcess,
-                onChanged: _runLinkedScriptCapsulesOnClick
-                    ? (value) => setState(
-                          () => _usePersistentPowerShellProcess = value,
-                        )
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.bolt_outlined),
-                title: const Text('Prefer PowerShell 7'),
-                value: _preferPowerShell7,
-                onChanged: _runLinkedScriptCapsulesOnClick
-                    ? (value) => setState(() => _preferPowerShell7 = value)
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.visibility_off_outlined),
-                title: const Text('Hide script run window'),
-                value: _hideScriptRunWindow,
-                onChanged: _runLinkedScriptCapsulesOnClick
-                    ? (value) => setState(() => _hideScriptRunWindow = value)
-                    : null,
-              ),
+                ),
+              ],
+              if (widget.supportsScriptCapsules) ...[
+                const Divider(height: 24),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.terminal_outlined),
+                  title: const Text('Run linked script capsules on click'),
+                  value: _runLinkedScriptCapsulesOnClick,
+                  onChanged: (value) =>
+                      setState(() => _runLinkedScriptCapsulesOnClick = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.memory_outlined),
+                  title: const Text('Persistent PowerShell process'),
+                  value: _usePersistentPowerShellProcess,
+                  onChanged: _runLinkedScriptCapsulesOnClick
+                      ? (value) => setState(
+                            () => _usePersistentPowerShellProcess = value,
+                          )
+                      : null,
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.bolt_outlined),
+                  title: const Text('Prefer PowerShell 7'),
+                  value: _preferPowerShell7,
+                  onChanged: _runLinkedScriptCapsulesOnClick
+                      ? (value) => setState(() => _preferPowerShell7 = value)
+                      : null,
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.visibility_off_outlined),
+                  title: const Text('Hide script run window'),
+                  value: _hideScriptRunWindow,
+                  onChanged: _runLinkedScriptCapsulesOnClick
+                      ? (value) => setState(() => _hideScriptRunWindow = value)
+                      : null,
+                ),
+              ],
               const Divider(height: 24),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -1017,62 +1075,58 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     setState(() => _useTodoReminderInterval = value),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _reminderIntervalController,
-                      enabled: _useTodoReminderInterval,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: 'Reminder interval',
-                        prefixIcon: Icon(Icons.timer_outlined),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
+              _adaptiveFieldPair(
+                first: TextField(
+                  controller: _reminderIntervalController,
+                  enabled: _useTodoReminderInterval,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Reminder interval',
+                    prefixIcon: Icon(Icons.timer_outlined),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(
-                          value: TodoReminderIntervalUnits.minutes,
-                          label: Text('Minutes'),
-                        ),
-                        ButtonSegment(
-                          value: TodoReminderIntervalUnits.hours,
-                          label: Text('Hours'),
-                        ),
-                      ],
-                      selected: {_todoReminderIntervalUnit},
-                      onSelectionChanged: _useTodoReminderInterval
-                          ? (selection) => setState(
-                                () => _todoReminderIntervalUnit =
-                                    selection.single,
-                              )
-                          : null,
+                  keyboardType: TextInputType.number,
+                ),
+                second: _adaptiveChoiceSelector(
+                  key: const ValueKey('settings-reminder-unit-selector'),
+                  labelText: 'Reminder unit',
+                  compactIcon: Icons.schedule_outlined,
+                  selectedValue: _todoReminderIntervalUnit,
+                  choices: const [
+                    _SettingsChoice(
+                      value: TodoReminderIntervalUnits.minutes,
+                      label: 'Minutes',
                     ),
-                  ),
-                ],
+                    _SettingsChoice(
+                      value: TodoReminderIntervalUnits.hours,
+                      label: 'Hours',
+                    ),
+                  ],
+                  onChanged: _useTodoReminderInterval
+                      ? (value) =>
+                          setState(() => _todoReminderIntervalUnit = value)
+                      : null,
+                ),
               ),
               const SizedBox(height: 12),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
+              _adaptiveChoiceSelector(
+                key: const ValueKey('settings-reminder-scope-selector'),
+                labelText: 'Reminder scope',
+                compactIcon: Icons.notifications_active_outlined,
+                selectedValue: _todoReminderScope,
+                choices: const [
+                  _SettingsChoice(
                     value: TodoReminderScopes.all,
-                    icon: Icon(Icons.format_list_bulleted_outlined),
-                    label: Text('All due'),
+                    label: 'All due',
+                    icon: Icons.format_list_bulleted_outlined,
                   ),
-                  ButtonSegment(
+                  _SettingsChoice(
                     value: TodoReminderScopes.nearest,
-                    icon: Icon(Icons.near_me_outlined),
-                    label: Text('Nearest'),
+                    label: 'Nearest',
+                    icon: Icons.near_me_outlined,
                   ),
                 ],
-                selected: {_todoReminderScope},
-                onSelectionChanged: _useTodoReminderInterval
-                    ? (selection) =>
-                        setState(() => _todoReminderScope = selection.single)
+                onChanged: _useTodoReminderInterval
+                    ? (value) => setState(() => _todoReminderScope = value)
                     : null,
               ),
               const SizedBox(height: 12),
@@ -1137,63 +1191,67 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 onChanged: (value) => setState(() => _enabled = value),
               ),
               const SizedBox(height: 12),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: WebDavPresetIds.jianguoyun,
-                    icon: Icon(Icons.cloud_queue_outlined),
-                    label: Text('Jianguoyun'),
-                  ),
-                  ButtonSegment(
-                    value: WebDavPresetIds.custom,
-                    icon: Icon(Icons.dns_outlined),
-                    label: Text('Generic'),
-                  ),
-                ],
-                selected: {_presetId},
-                onSelectionChanged: (selection) =>
-                    _applyPreset(selection.single),
-              ),
+              _webDavPresetSelector(context),
               const SizedBox(height: 16),
               TextField(
                 controller: _endpointController,
+                focusNode: _endpointFocusNode,
                 enabled: _enabled,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
+                onChanged: (_) => _clearWebDavError(
+                  WebDavSyncConfigurationIssue.endpoint,
+                ),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
                   labelText: 'WebDAV URL',
-                  prefixIcon: Icon(Icons.link_outlined),
+                  errorText: _endpointErrorText,
+                  prefixIcon: const Icon(Icons.link_outlined),
                 ),
                 keyboardType: TextInputType.url,
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _rootPathController,
+                focusNode: _rootPathFocusNode,
                 enabled: _enabled,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
+                onChanged: (_) => _clearWebDavError(
+                  WebDavSyncConfigurationIssue.rootPath,
+                ),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
                   labelText: 'Remote folder',
-                  prefixIcon: Icon(Icons.folder_outlined),
+                  errorText: _rootPathErrorText,
+                  prefixIcon: const Icon(Icons.folder_outlined),
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _usernameController,
+                focusNode: _usernameFocusNode,
                 enabled: _enabled,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
+                onChanged: (_) => _clearWebDavError(
+                  WebDavSyncConfigurationIssue.username,
+                ),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
                   labelText: 'Username',
-                  prefixIcon: Icon(Icons.person_outline),
+                  errorText: _usernameErrorText,
+                  prefixIcon: const Icon(Icons.person_outline),
                 ),
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _passwordController,
+                focusNode: _passwordFocusNode,
                 enabled: _enabled,
                 obscureText: _obscurePassword,
+                onChanged: (_) => _clearWebDavError(
+                  WebDavSyncConfigurationIssue.password,
+                ),
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
                   labelText: 'Password',
+                  errorText: _passwordErrorText,
                   prefixIcon: const Icon(Icons.key_outlined),
                   suffixIcon: IconButton(
                     tooltip: _enableToolTips
@@ -1211,14 +1269,59 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: _intervalController,
+                controller: _encryptionPassphraseController,
+                focusNode: _encryptionPassphraseFocusNode,
                 enabled: _enabled,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Interval minutes',
-                  prefixIcon: Icon(Icons.schedule_outlined),
+                obscureText: _obscureEncryptionPassphrase,
+                onChanged: (_) => _clearWebDavError(
+                  WebDavSyncConfigurationIssue.encryptionPassphrase,
                 ),
-                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: 'Sync encryption passphrase',
+                  helperText:
+                      'Required for encrypted Windows and Android sync.',
+                  errorText: _encryptionPassphraseErrorText,
+                  prefixIcon: const Icon(Icons.enhanced_encryption_outlined),
+                  suffixIcon: IconButton(
+                    tooltip: _enableToolTips
+                        ? _obscureEncryptionPassphrase
+                            ? 'Show passphrase'
+                            : 'Hide passphrase'
+                        : null,
+                    onPressed: () => setState(() =>
+                        _obscureEncryptionPassphrase =
+                            !_obscureEncryptionPassphrase),
+                    icon: Icon(_obscureEncryptionPassphrase
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _adaptiveFieldPair(
+                first: TextField(
+                  controller: _intervalController,
+                  enabled: _enabled,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Interval minutes',
+                    prefixIcon: Icon(Icons.schedule_outlined),
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                ),
+                second: TextField(
+                  controller: _requestTimeoutController,
+                  enabled: _enabled,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Request timeout seconds',
+                    prefixIcon: Icon(Icons.timer_outlined),
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                ),
               ),
               const SizedBox(height: 4),
               CheckboxListTile(
@@ -1255,21 +1358,231 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     );
   }
 
+  Widget _adaptiveChoiceSelector({
+    Key? key,
+    required String labelText,
+    required IconData compactIcon,
+    required String selectedValue,
+    required List<_SettingsChoice> choices,
+    required ValueChanged<String>? onChanged,
+  }) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    if (compact) {
+      return DropdownButtonFormField<String>(
+        key: key,
+        initialValue: selectedValue,
+        decoration: InputDecoration(
+          border: const OutlineInputBorder(),
+          labelText: labelText,
+          prefixIcon: Icon(compactIcon),
+        ),
+        isExpanded: true,
+        items: [
+          for (final choice in choices)
+            DropdownMenuItem(
+              value: choice.value,
+              child: Text(choice.label),
+            ),
+        ],
+        onChanged: onChanged == null
+            ? null
+            : (value) => onChanged(value ?? selectedValue),
+      );
+    }
+    return SegmentedButton<String>(
+      key: key,
+      segments: [
+        for (final choice in choices)
+          ButtonSegment(
+            value: choice.value,
+            icon: choice.icon == null ? null : Icon(choice.icon),
+            label: Text(choice.label),
+          ),
+      ],
+      selected: {selectedValue},
+      onSelectionChanged:
+          onChanged == null ? null : (selection) => onChanged(selection.single),
+    );
+  }
+
+  Widget _adaptiveFieldPair({
+    required Widget first,
+    required Widget second,
+  }) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          first,
+          const SizedBox(height: 12),
+          second,
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: first),
+        const SizedBox(width: 12),
+        Expanded(child: second),
+      ],
+    );
+  }
+
+  Widget _webDavPresetSelector(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    final presetItems = [
+      for (final preset in WebDavPresets.recommended)
+        DropdownMenuItem(
+          value: preset.id,
+          child: Text(preset.label),
+        ),
+      const DropdownMenuItem(
+        value: WebDavPresetIds.custom,
+        child: Text('Generic'),
+      ),
+    ];
+    if (compact) {
+      return DropdownButtonFormField<String>(
+        key: const ValueKey('compact-webdav-preset-selector'),
+        initialValue: _presetId,
+        decoration: const InputDecoration(
+          border: OutlineInputBorder(),
+          labelText: 'WebDAV provider',
+          prefixIcon: Icon(Icons.cloud_queue_outlined),
+        ),
+        isExpanded: true,
+        items: presetItems,
+        onChanged: (value) => _applyPreset(value ?? WebDavPresetIds.custom),
+      );
+    }
+    return SegmentedButton<String>(
+      segments: [
+        for (final preset in WebDavPresets.recommended)
+          ButtonSegment(
+            value: preset.id,
+            icon: const Icon(Icons.cloud_queue_outlined),
+            label: Text(preset.label),
+          ),
+        const ButtonSegment(
+          value: WebDavPresetIds.custom,
+          icon: Icon(Icons.dns_outlined),
+          label: Text('Generic'),
+        ),
+      ],
+      selected: {_presetId},
+      onSelectionChanged: (selection) => _applyPreset(selection.single),
+    );
+  }
+
   void _applyPreset(String presetId) {
     setState(() {
-      _presetId = presetId;
-      if (presetId == WebDavPresetIds.jianguoyun) {
-        _endpointController.text = 'https://dav.jianguoyun.com/dav/';
+      final preset = WebDavPresets.byId(presetId);
+      _presetId = preset?.id ?? WebDavPresetIds.custom;
+      if (preset != null) {
+        _endpointController.text = preset.endpointText;
+        _endpointErrorText = null;
         if (_rootPathController.text.trim().isEmpty ||
             _rootPathController.text.trim() == 'repapertodo') {
-          _rootPathController.text = 'RePaperTodo';
+          _rootPathController.text = preset.defaultRootPath;
+          _rootPathErrorText = null;
         }
+      }
+      if (!_hasWebDavFieldError) {
+        _errorText = null;
+      }
+    });
+  }
+
+  void _clearWebDavError(WebDavSyncConfigurationIssue issue) {
+    final hadIssue = switch (issue) {
+      WebDavSyncConfigurationIssue.endpoint => _endpointErrorText != null,
+      WebDavSyncConfigurationIssue.username => _usernameErrorText != null,
+      WebDavSyncConfigurationIssue.password => _passwordErrorText != null,
+      WebDavSyncConfigurationIssue.rootPath => _rootPathErrorText != null,
+      WebDavSyncConfigurationIssue.encryptionPassphrase =>
+        _encryptionPassphraseErrorText != null,
+    };
+    if (!hadIssue) {
+      return;
+    }
+    setState(() {
+      switch (issue) {
+        case WebDavSyncConfigurationIssue.endpoint:
+          _endpointErrorText = null;
+        case WebDavSyncConfigurationIssue.username:
+          _usernameErrorText = null;
+        case WebDavSyncConfigurationIssue.password:
+          _passwordErrorText = null;
+        case WebDavSyncConfigurationIssue.rootPath:
+          _rootPathErrorText = null;
+        case WebDavSyncConfigurationIssue.encryptionPassphrase:
+          _encryptionPassphraseErrorText = null;
+      }
+      if (!_hasWebDavFieldError) {
+        _errorText = null;
+      }
+    });
+  }
+
+  bool get _hasWebDavFieldError {
+    return _endpointErrorText != null ||
+        _rootPathErrorText != null ||
+        _usernameErrorText != null ||
+        _passwordErrorText != null ||
+        _encryptionPassphraseErrorText != null;
+  }
+
+  String _webDavIssueText(
+    WebDavSyncConfigurationIssue issue,
+    WebDavSyncSettings settings,
+  ) {
+    return switch (issue) {
+      WebDavSyncConfigurationIssue.endpoint => settings.endpoint.trim().isEmpty
+          ? 'Enter a WebDAV URL.'
+          : 'Use a full http:// or https:// WebDAV URL without user info, query, fragment, unsafe path segments, or control characters.',
+      WebDavSyncConfigurationIssue.username => settings.username.isEmpty
+          ? 'Enter a WebDAV username.'
+          : 'Username cannot contain colons or control characters.',
+      WebDavSyncConfigurationIssue.password => settings.password.trim().isEmpty
+          ? 'Enter a WebDAV password or app password.'
+          : 'Password cannot contain control characters.',
+      WebDavSyncConfigurationIssue.rootPath =>
+        'Use a remote folder without parent-directory segments, backslashes, invalid percent escapes, or control characters.',
+      WebDavSyncConfigurationIssue.encryptionPassphrase =>
+        'Enter a sync encryption passphrase.',
+    };
+  }
+
+  void _focusFirstWebDavIssue(Set<WebDavSyncConfigurationIssue> issues) {
+    final focusNode = switch ((
+      issues.contains(WebDavSyncConfigurationIssue.endpoint),
+      issues.contains(WebDavSyncConfigurationIssue.rootPath),
+      issues.contains(WebDavSyncConfigurationIssue.username),
+      issues.contains(WebDavSyncConfigurationIssue.password),
+      issues.contains(WebDavSyncConfigurationIssue.encryptionPassphrase),
+    )) {
+      (true, _, _, _, _) => _endpointFocusNode,
+      (_, true, _, _, _) => _rootPathFocusNode,
+      (_, _, true, _, _) => _usernameFocusNode,
+      (_, _, _, true, _) => _passwordFocusNode,
+      (_, _, _, _, true) => _encryptionPassphraseFocusNode,
+      _ => null,
+    };
+    if (focusNode == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        focusNode.requestFocus();
       }
     });
   }
 
   void _save() {
     final interval = int.tryParse(_intervalController.text.trim());
+    final requestTimeoutSeconds =
+        int.tryParse(_requestTimeoutController.text.trim());
     final reminderInterval =
         int.tryParse(_reminderIntervalController.text.trim()) ?? 10;
     final reminderDuration =
@@ -1284,15 +1597,56 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         endpoint: _endpointController.text,
         username: _usernameController.text,
         password: _passwordController.text,
+        encryptionPassphrase: _encryptionPassphraseController.text,
         rootPath: _rootPathController.text,
         autoSyncOnStart: _autoSyncOnStart,
         autoSyncIntervalMinutes: interval ?? 15,
+        requestTimeoutSeconds: requestTimeoutSeconds ?? 30,
       ),
     )..normalize();
 
-    if (_enabled && !settings.webDav.isConfigured) {
-      setState(() => _errorText =
-          'Complete the WebDAV URL, username, password, and remote folder.');
+    if (_enabled && !settings.webDav.isSecurelyConfigured) {
+      final issues = settings.webDav.secureConfigurationIssues;
+      setState(() {
+        _endpointErrorText =
+            issues.contains(WebDavSyncConfigurationIssue.endpoint)
+                ? _webDavIssueText(
+                    WebDavSyncConfigurationIssue.endpoint,
+                    settings.webDav,
+                  )
+                : null;
+        _rootPathErrorText =
+            issues.contains(WebDavSyncConfigurationIssue.rootPath)
+                ? _webDavIssueText(
+                    WebDavSyncConfigurationIssue.rootPath,
+                    settings.webDav,
+                  )
+                : null;
+        _usernameErrorText =
+            issues.contains(WebDavSyncConfigurationIssue.username)
+                ? _webDavIssueText(
+                    WebDavSyncConfigurationIssue.username,
+                    settings.webDav,
+                  )
+                : null;
+        _passwordErrorText =
+            issues.contains(WebDavSyncConfigurationIssue.password)
+                ? _webDavIssueText(
+                    WebDavSyncConfigurationIssue.password,
+                    settings.webDav,
+                  )
+                : null;
+        _encryptionPassphraseErrorText =
+            issues.contains(WebDavSyncConfigurationIssue.encryptionPassphrase)
+                ? _webDavIssueText(
+                    WebDavSyncConfigurationIssue.encryptionPassphrase,
+                    settings.webDav,
+                  )
+                : null;
+        _errorText =
+            'Complete the WebDAV URL, username, password, remote folder, and sync encryption passphrase.';
+      });
+      _focusFirstWebDavIssue(issues);
       return;
     }
 
@@ -1367,8 +1721,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   }
 
   String _normalizeTheme(String theme) {
-    return switch (theme) {
-      'light' || 'dark' || 'system' => theme,
+    return switch (theme.trim().toLowerCase()) {
+      'light' => 'light',
+      'dark' => 'dark',
+      'system' => 'system',
       _ => 'system',
     };
   }
@@ -1415,6 +1771,18 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     }
     return '#${withoutPrefix.toUpperCase()}';
   }
+}
+
+class _SettingsChoice {
+  const _SettingsChoice({
+    required this.value,
+    required this.label,
+    this.icon,
+  });
+
+  final String value;
+  final String label;
+  final IconData? icon;
 }
 
 class _SettingsSlider extends StatelessWidget {

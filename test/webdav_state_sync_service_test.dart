@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:collection/collection.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -83,6 +86,71 @@ void main() {
     );
     expect(manifest['updatedAtUtc'], '2026-06-30T10:00:00.000Z');
     expect(manifest['deviceSequences'], {'test-device': 1});
+  });
+
+  test('redacts local WebDAV settings from uploaded snapshots', () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return switch (request.method) {
+          'MKCOL' => http.Response('', 201),
+          'PUT' => http.Response('', 201),
+          _ => http.Response('unexpected ${request.method}', 500),
+        };
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
+    final pushedState = AppState(
+      papers: [
+        PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'Private sync'),
+      ],
+      sync: SyncSettings(
+        enabled: true,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/dav/',
+          username: 'private-user',
+          password: 'private-password',
+          rootPath: 'PrivateRoot',
+          requestTimeoutSeconds: 99,
+        ),
+        operationDeviceSequences: {'phone-device': 2},
+      ),
+    );
+    pushedState.sync.markPaperDeleted(
+      'deleted-paper',
+      DateTime.utc(2026, 7, 1),
+    );
+
+    await service.push(
+      pushedState,
+      updatedAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    final snapshotRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' && request.url.path.contains('/snapshots/'));
+    final snapshot = jsonDecode(utf8.decode(snapshotRequest.bodyBytes))
+        as Map<String, Object?>;
+    final sync = snapshot['sync'] as Map<String, Object?>;
+    final snapshotWebDav = sync['webDav'] as Map<String, Object?>;
+
+    expect(sync['enabled'], false);
+    expect(sync['provider'], SyncProviderIds.none);
+    expect(sync['operationDeviceSequences'], {'phone-device': 2});
+    expect(sync['deletedPaperTombstones'], {
+      'deleted-paper': DateTime.utc(2026, 7, 1).toIso8601String(),
+    });
+    expect(snapshotWebDav['endpoint'], '');
+    expect(snapshotWebDav['username'], '');
+    expect(snapshotWebDav['password'], '');
+    expect(snapshotWebDav['rootPath'], 'repapertodo');
+    expect(snapshotWebDav['requestTimeoutSeconds'], 30);
   });
 
   test('creates nested WebDAV collections before upload', () async {
@@ -202,6 +270,90 @@ void main() {
     );
   });
 
+  test('accepts matching encrypted snapshots during push retry', () async {
+    const codec = AppStateCodec();
+    final pushedState = AppState(
+      papers: [
+        PaperData(
+          id: 'paper-1',
+          type: PaperTypes.note,
+          title: 'Encrypted',
+          content: 'Same logical snapshot',
+        ),
+      ],
+    );
+    final existingSnapshotBytes = await EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(1),
+    ).encodeSnapshot(pushedState, codec);
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'MKCOL') {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.contains('/snapshots/')) {
+          expect(
+            const ListEquality<int>().equals(
+              request.bodyBytes,
+              existingSnapshotBytes,
+            ),
+            false,
+          );
+          return http.Response('already exists', 412);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.contains('/snapshots/')) {
+          return http.Response.bytes(existingSnapshotBytes, 200);
+        }
+        if (request.method == 'PUT') {
+          return http.Response('', 201);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      codec: codec,
+      payloadCodec: EncryptedWebDavPayloadCodec(
+        passphrase: 'shared sync secret',
+        kdfIterations: 100000,
+        random: Random(2),
+      ),
+      deviceId: 'test-device',
+    );
+
+    final result = await service.push(
+      pushedState,
+      updatedAtUtc: DateTime.utc(2026, 6, 30, 10),
+    );
+
+    expect(result.status, WebDavStateSyncStatus.uploaded);
+    expect(
+      requests
+          .where((request) => request.url.path.contains('/snapshots/'))
+          .map((request) => request.method),
+      ['PUT', 'GET'],
+    );
+    expect(
+      requests.any((request) =>
+          request.method == 'PUT' && request.url.path.contains('/ops/')),
+      true,
+    );
+    expect(
+      requests.any((request) =>
+          request.method == 'PUT' &&
+          request.url.path.endsWith('/manifest.json')),
+      true,
+    );
+  });
+
   test('rejects conflicting existing snapshots during push retry', () async {
     const codec = AppStateCodec();
     final requests = <http.Request>[];
@@ -276,7 +428,7 @@ void main() {
       httpClient: MockClient((request) async {
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response('', 200, headers: {'etag': '"manifest-v1"'});
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -311,12 +463,393 @@ void main() {
 
     expect(result.status, WebDavStateSyncStatus.downloaded);
     expect(result.manifest?.updatedAtUtc, DateTime.utc(2026, 6, 30, 11));
+    expect(result.manifestEtag, '"manifest-v1"');
+    expect(result.snapshotPayloadFormat, WebDavPayloadFormat.plainJson);
     expect(
       result.snapshotPath,
       'repapertodo/snapshots/snapshot-20260630T110000000Z-other-device-seq-000000000004.json',
     );
     expect(result.state?.papers.single.title, 'Remote');
     expect(result.state?.papers.single.content, 'From WebDAV');
+  });
+
+  test('pull accepts legacy-cased manifest wire keys and string sequences',
+      () async {
+    const codec = AppStateCodec();
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260630T110000000Z-other-device-seq-000000000004.json';
+    final remoteState = AppState(
+      papers: [
+        PaperData(
+          id: 'paper-legacy-manifest',
+          type: PaperTypes.note,
+          title: 'Legacy manifest note',
+          content: 'From uppercase manifest keys',
+        ),
+      ],
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200, headers: {'etag': '"manifest-v1"'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode({
+              'SCHEMAVERSION': '1',
+              'UPDATEDATUTC': '2026-06-30T11:00:00Z',
+              'LATESTSNAPSHOTPATH': snapshotPath,
+              'DEVICESEQUENCES': {'other-device': '4'},
+            }),
+            200,
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/snapshots/snapshot-20260630T110000000Z-other-device-seq-000000000004.json')) {
+          return http.Response(codec.encode(remoteState), 200);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
+
+    final result = await service.pull();
+
+    expect(result.status, WebDavStateSyncStatus.downloaded);
+    expect(result.manifest?.updatedAtUtc, DateTime.utc(2026, 6, 30, 11));
+    expect(result.manifest?.latestSnapshotPath, snapshotPath);
+    expect(result.manifest?.deviceSequences, {'other-device': 4});
+    expect(result.manifestEtag, '"manifest-v1"');
+    expect(result.state?.papers.single.title, 'Legacy');
+    expect(result.state?.papers.single.content, 'From uppercase manifest keys');
+  });
+
+  test('pull accepts manifests without device sequences', () async {
+    const codec = AppStateCodec();
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260630T110000000Z-other-device-seq-000000000004.json';
+    final remoteState = AppState(
+      papers: [
+        PaperData(
+          id: 'paper-missing-sequences',
+          type: PaperTypes.note,
+          title: 'Missing sequences',
+          content: 'Pulled from a minimal manifest',
+        ),
+      ],
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200, headers: {'etag': '"manifest-v1"'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode({
+              'schemaVersion': 1,
+              'updatedAtUtc': '2026-06-30T11:00:00Z',
+              'latestSnapshotPath': snapshotPath,
+            }),
+            200,
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/snapshots/snapshot-20260630T110000000Z-other-device-seq-000000000004.json')) {
+          return http.Response(codec.encode(remoteState), 200);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
+
+    final result = await service.pull();
+
+    expect(result.status, WebDavStateSyncStatus.downloaded);
+    expect(result.manifest?.updatedAtUtc, DateTime.utc(2026, 6, 30, 11));
+    expect(result.manifest?.latestSnapshotPath, snapshotPath);
+    expect(result.manifest?.deviceSequences, isEmpty);
+    expect(result.manifestEtag, '"manifest-v1"');
+    expect(result.state?.papers.single.id, 'paper-missing-sequences');
+    expect(
+        result.state?.papers.single.content, 'Pulled from a minimal manifest');
+  });
+
+  test('pull accepts UTF-8 BOM-prefixed manifests', () async {
+    const codec = AppStateCodec();
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260630T110000000Z-bom-device-seq-000000000001.json';
+    final remoteState = AppState(
+      papers: [
+        PaperData(
+          id: 'paper-bom-manifest',
+          type: PaperTypes.note,
+          title: 'BOM manifest',
+          content: 'Pulled after stripping manifest BOM',
+        ),
+      ],
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200, headers: {'etag': '"manifest-bom"'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response.bytes(
+            utf8.encode(
+              '\uFEFF${jsonEncode({
+                    'schemaVersion': 1,
+                    'updatedAtUtc': '2026-06-30T11:00:00Z',
+                    'latestSnapshotPath': snapshotPath,
+                    'deviceSequences': {'bom-device': 1},
+                  })}',
+            ),
+            200,
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/snapshots/snapshot-20260630T110000000Z-bom-device-seq-000000000001.json')) {
+          return http.Response(codec.encode(remoteState), 200);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
+
+    final result = await service.pull();
+
+    expect(result.status, WebDavStateSyncStatus.downloaded);
+    expect(result.manifestEtag, '"manifest-bom"');
+    expect(result.manifest?.deviceSequences, {'bom-device': 1});
+    expect(result.state?.papers.single.id, 'paper-bom-manifest');
+    expect(
+      result.state?.papers.single.content,
+      'Pulled after stripping manifest BOM',
+    );
+  });
+
+  test('pull downloads and decodes encrypted remote snapshots', () async {
+    const codec = AppStateCodec();
+    final remoteState = AppState(
+      papers: [
+        PaperData(
+          id: 'encrypted-remote-note',
+          type: PaperTypes.note,
+          title: 'Crypt',
+          content: 'From encrypted WebDAV',
+        ),
+      ],
+    );
+    final encryptedSnapshotBytes = await EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(1),
+    ).encodeSnapshot(remoteState, codec);
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200, headers: {'etag': '"manifest-v2"'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode(
+              SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 7, 2, 11),
+                latestSnapshotPath:
+                    'repapertodo/snapshots/snapshot-20260702T110000000Z-other-device-seq-000000000003.json',
+                deviceSequences: {'other-device': 3},
+              ).toJson(),
+            ),
+            200,
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/snapshots/snapshot-20260702T110000000Z-other-device-seq-000000000003.json')) {
+          return http.Response.bytes(encryptedSnapshotBytes, 200);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      payloadCodec: EncryptedWebDavPayloadCodec(
+        passphrase: 'shared sync secret',
+        kdfIterations: 100000,
+      ),
+      deviceId: 'test-device',
+    );
+
+    final result = await service.pull();
+
+    expect(result.status, WebDavStateSyncStatus.downloaded);
+    expect(result.manifestEtag, '"manifest-v2"');
+    expect(result.snapshotPayloadFormat, WebDavPayloadFormat.encrypted);
+    expect(result.snapshotPath,
+        'repapertodo/snapshots/snapshot-20260702T110000000Z-other-device-seq-000000000003.json');
+    expect(result.state?.papers.single.title, 'Crypt');
+    expect(result.state?.papers.single.content, 'From encrypted WebDAV');
+  });
+
+  test('encrypted settings can pull legacy plain remote snapshots', () async {
+    final service = WebDavStateSyncService.fromSettings(
+      WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/remote.php/dav/files/user/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+      ),
+      deviceId: 'test-device',
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200, headers: {'etag': '"manifest-v3"'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode(
+              SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 7, 2, 12),
+                latestSnapshotPath:
+                    'repapertodo/snapshots/snapshot-20260702T120000000Z-windows-device-seq-000000000008.json',
+                deviceSequences: {'windows-device': 8},
+              ).toJson(),
+            ),
+            200,
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/snapshots/snapshot-20260702T120000000Z-windows-device-seq-000000000008.json')) {
+          return http.Response(
+            _legacyPaperTodoSnapshotJson(
+              id: 'legacy-plain-note',
+              title: 'Legacy cloud note',
+              content: 'Plain before encryption',
+            ),
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+
+    final result = await service.pull();
+
+    expect(result.status, WebDavStateSyncStatus.downloaded);
+    expect(result.manifestEtag, '"manifest-v3"');
+    expect(result.snapshotPayloadFormat, WebDavPayloadFormat.plainJson);
+    expect(result.state?.papers.single.id, 'legacy-plain-note');
+    expect(result.state?.papers.single.title, 'Legacy');
+    expect(result.state?.papers.single.content, 'Plain before encryption');
+  });
+
+  test('reports encrypted remote snapshots with the wrong passphrase',
+      () async {
+    const codec = AppStateCodec();
+    final encryptedSnapshotBytes = await EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(1),
+    ).encodeSnapshot(
+      AppState(
+        papers: [
+          PaperData(
+            id: 'encrypted-remote-note',
+            type: PaperTypes.note,
+            title: 'Encrypted remote',
+          ),
+        ],
+      ),
+      codec,
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode(
+              SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 7, 2, 11),
+                latestSnapshotPath:
+                    'repapertodo/snapshots/snapshot-20260702T110000000Z-other-device-seq-000000000003.json',
+                deviceSequences: {'other-device': 3},
+              ).toJson(),
+            ),
+            200,
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith(
+                '/snapshots/snapshot-20260702T110000000Z-other-device-seq-000000000003.json')) {
+          return http.Response.bytes(encryptedSnapshotBytes, 200);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      payloadCodec: EncryptedWebDavPayloadCodec(
+        passphrase: 'wrong sync secret',
+        kdfIterations: 100000,
+      ),
+      deviceId: 'test-device',
+    );
+
+    await expectLater(
+      service.pull(),
+      throwsA(
+        isA<WebDavPayloadDecryptionException>().having(
+          (error) => error.message,
+          'message',
+          contains('sync encryption passphrase'),
+        ),
+      ),
+    );
   });
 
   test('rejects manifests with invalid timestamps before snapshot download',
@@ -650,6 +1183,188 @@ void main() {
     expect(manifestRequest.headers['if-none-match'], '*');
   });
 
+  test('sync uses PROPFIND metadata etag when HEAD is unsupported', () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('method not allowed', 405);
+        }
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/manifest.json')) {
+          expect(request.headers['depth'], '0');
+          return http.Response(
+            '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"manifest-v1"</D:getetag>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''',
+            207,
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode(
+              SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
+                latestSnapshotPath: 'repapertodo/state.json',
+                deviceSequences: {'other-device': 2, 'test-device': 4},
+              ).toJson(),
+            ),
+            200,
+          );
+        }
+        if (request.method == 'MKCOL') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.contains('/snapshots/')) {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' && request.url.path.contains('/ops/')) {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.endsWith('/manifest.json')) {
+          expect(request.headers['if-match'], '"manifest-v1"');
+          return http.Response('', 204);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
+
+    final result = await service.sync(
+      localState: AppState(
+        papers: [
+          PaperData(id: 'paper-local', type: PaperTypes.todo, title: 'Local'),
+        ],
+      ),
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.status, WebDavStateSyncStatus.uploaded);
+    expect(
+      requests.map((request) => request.method),
+      [
+        'HEAD',
+        'PROPFIND',
+        'GET',
+        'MKCOL',
+        'MKCOL',
+        'MKCOL',
+        'PUT',
+        'PUT',
+        'PUT'
+      ],
+    );
+    final manifestRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' && request.url.path.endsWith('/manifest.json'));
+    expect(manifestRequest.headers['if-match'], '"manifest-v1"');
+    expect(manifestRequest.headers, isNot(contains('if-none-match')));
+  });
+
+  test('sync advances legacy manifest string device sequences before upload',
+      () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200, headers: {'etag': '"manifest-v4"'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode({
+              'SCHEMAVERSION': '1',
+              'UPDATEDATUTC': '2026-06-30T11:00:00Z',
+              'LATESTSNAPSHOTPATH':
+                  'repapertodo/snapshots/snapshot-20260630T110000000Z-phone-device-seq-000000000003.json',
+              'DEVICESEQUENCES': {
+                ' TEST-DEVICE ': '4',
+                'phone-device': '3',
+              },
+            }),
+            200,
+          );
+        }
+        if (request.method == 'MKCOL') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PUT') {
+          return http.Response('', 204);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
+
+    final result = await service.sync(
+      localState: AppState(
+        papers: [
+          PaperData(
+            id: 'paper-local',
+            type: PaperTypes.note,
+            title: 'Local newer',
+          ),
+        ],
+      ),
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 1),
+    );
+
+    final operationRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' &&
+        request.url.path.endsWith('/ops/test-device-000000000005.jsonl'));
+    final operation = jsonDecode(utf8.decode(operationRequest.bodyBytes).trim())
+        as Map<String, Object?>;
+    final manifestRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' && request.url.path.endsWith('/manifest.json'));
+    final manifest = jsonDecode(utf8.decode(manifestRequest.bodyBytes))
+        as Map<String, Object?>;
+
+    expect(result.status, WebDavStateSyncStatus.uploaded);
+    expect(result.manifest?.deviceSequences, {
+      'test-device': 5,
+      'phone-device': 3,
+    });
+    expect(operation['sequence'], 5);
+    expect(manifestRequest.headers['if-match'], '"manifest-v4"');
+    expect(manifest['deviceSequences'], {
+      'test-device': 5,
+      'phone-device': 3,
+    });
+    expect(
+      manifest['latestSnapshotPath'],
+      contains('-test-device-seq-000000000005.json'),
+    );
+  });
+
   test('sync reports a conflict when manifest conditional write fails',
       () async {
     final requests = <http.Request>[];
@@ -763,6 +1478,16 @@ void main() {
     </D:propstat>
   </D:response>
   <D:response>
+    <D:href>/remote.php/dav/files/repapertodo/user/repapertodo/snapshots/snapshot-20260702T080000000Z-laptop-seq-000000000006.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"laptop-v6"</D:getetag>
+        <D:getcontentlength>3072</D:getcontentlength>
+        <D:getlastmodified>Thu, 02 Jul 2026 08:01:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
     <D:href>/remote.php/dav/files/user/repapertodo/snapshots/snapshot-20260630T210000000Z-win-device.json</D:href>
     <D:propstat>
       <D:prop>
@@ -823,17 +1548,82 @@ void main() {
 
     final snapshots = await service.listSnapshots();
 
-    expect(snapshots, hasLength(2));
+    expect(snapshots, hasLength(3));
     expect(snapshots.map((snapshot) => snapshot.deviceId), [
+      'laptop',
       'phone',
       'win-device',
     ]);
     expect(snapshots.first.path,
-        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone-seq-000000000004.json');
-    expect(snapshots.first.updatedAtUtc, DateTime.utc(2026, 7, 1, 9));
-    expect(snapshots.first.etag, 'phone-v1');
-    expect(snapshots.first.contentLength, 2048);
-    expect(snapshots.first.lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 1));
+        'repapertodo/snapshots/snapshot-20260702T080000000Z-laptop-seq-000000000006.json');
+    expect(snapshots.first.updatedAtUtc, DateTime.utc(2026, 7, 2, 8));
+    expect(snapshots.first.etag, 'laptop-v6');
+    expect(snapshots.first.contentLength, 3072);
+    expect(snapshots.first.lastModifiedUtc, DateTime.utc(2026, 7, 2, 8, 1));
+  });
+
+  test('deduplicates snapshot records by normalized path', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/repapertodo/snapshots')) {
+          return http.Response(
+            '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/snapshot-20260702T080000000Z-laptop-seq-000000000006.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"sparse-v6"</D:getetag>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>https://dav.example.test/remote.php/dav/files/user/repapertodo/snapshots/snapshot-20260702T080000000Z-laptop-seq-000000000006.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"rich-v6"</D:getetag>
+        <D:getcontentlength>3072</D:getcontentlength>
+        <D:getlastmodified>Thu, 02 Jul 2026 08:01:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/snapshots/snapshot-20260701T090000000Z-phone-seq-000000000004.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"phone-v4"</D:getetag>
+        <D:getcontentlength>2048</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''',
+            207,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final snapshots = await service.listSnapshots();
+
+    expect(snapshots, hasLength(2));
+    expect(
+      snapshots.map((snapshot) => snapshot.path),
+      [
+        'repapertodo/snapshots/snapshot-20260702T080000000Z-laptop-seq-000000000006.json',
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone-seq-000000000004.json',
+      ],
+    );
+    expect(snapshots.first.etag, 'rich-v6');
+    expect(snapshots.first.contentLength, 3072);
+    expect(snapshots.first.lastModifiedUtc, DateTime.utc(2026, 7, 2, 8, 1));
   });
 
   test('lists no snapshots when the snapshot collection is missing', () async {
@@ -852,6 +1642,82 @@ void main() {
     final service = WebDavStateSyncService(client: webDavClient);
 
     expect(await service.listSnapshots(), isEmpty);
+  });
+
+  test('lists entries from absolute encoded WebDAV hrefs', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/dav/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/Team%20Space/RePaperTodo/snapshots')) {
+          return http.Response(
+            '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>https://dav.example.test/dav/Team%20Space/RePaperTodo/snapshots/snapshot-20260702T090000000Z-phone-seq-000000000004.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"phone-v4"</D:getetag>
+        <D:getcontentlength>4096</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''',
+            207,
+          );
+        }
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/Team%20Space/RePaperTodo/ops')) {
+          return http.Response(
+            '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>https://dav.example.test/dav/Team%20Space/RePaperTodo/ops/android-device-000000000002.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"android-op-v2"</D:getetag>
+        <D:getcontentlength>512</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''',
+            207,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      paths: const WebDavStateSyncPaths(rootPath: 'Team Space/RePaperTodo'),
+    );
+
+    final snapshots = await service.listSnapshots();
+    final operationLogs = await service.listOperationLogs();
+
+    expect(snapshots, hasLength(1));
+    expect(
+      snapshots.single.path,
+      'Team Space/RePaperTodo/snapshots/snapshot-20260702T090000000Z-phone-seq-000000000004.json',
+    );
+    expect(snapshots.single.deviceId, 'phone');
+    expect(snapshots.single.etag, 'phone-v4');
+    expect(snapshots.single.contentLength, 4096);
+    expect(operationLogs, hasLength(1));
+    expect(
+      operationLogs.single.path,
+      'Team Space/RePaperTodo/ops/android-device-000000000002.jsonl',
+    );
+    expect(operationLogs.single.deviceId, 'android-device');
+    expect(operationLogs.single.sequence, 2);
+    expect(operationLogs.single.etag, 'android-op-v2');
+    expect(operationLogs.single.contentLength, 512);
   });
 
   test('lists remote operation logs for merge inputs', () async {
@@ -888,6 +1754,16 @@ void main() {
         <D:getetag>"android-op-v1"</D:getetag>
         <D:getcontentlength>128</D:getcontentlength>
         <D:getlastmodified>Wed, 01 Jul 2026 09:01:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/repapertodo/user/repapertodo/ops/tablet-device-000000000002.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"tablet-op-v2"</D:getetag>
+        <D:getcontentlength>192</D:getcontentlength>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:02:00 GMT</D:getlastmodified>
       </D:prop>
     </D:propstat>
   </D:response>
@@ -932,9 +1808,10 @@ void main() {
 
     final logs = await service.listOperationLogs();
 
-    expect(logs, hasLength(2));
+    expect(logs, hasLength(3));
     expect(logs.map((log) => '${log.deviceId}:${log.sequence}'), [
       'android-device:1',
+      'tablet-device:2',
       'win-device:3',
     ]);
     expect(
@@ -942,6 +1819,129 @@ void main() {
     expect(logs.first.etag, 'android-op-v1');
     expect(logs.first.contentLength, 128);
     expect(logs.first.lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 1));
+    expect(logs[1].path, 'repapertodo/ops/tablet-device-000000000002.jsonl');
+    expect(logs[1].etag, 'tablet-op-v2');
+    expect(logs[1].contentLength, 192);
+    expect(logs[1].lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 2));
+  });
+
+  test('deduplicates operation log records by normalized device sequence',
+      () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/repapertodo/ops')) {
+          return http.Response(
+            '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/Android-Device-000000000001.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"upper-op-v1"</D:getetag>
+        <D:getcontentlength>256</D:getcontentlength>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:02:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/android-device-000000000001.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"canonical-op-v1"</D:getetag>
+        <D:getcontentlength>128</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/android-device-000000000002.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"android-op-v2"</D:getetag>
+        <D:getcontentlength>192</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''',
+            207,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final logs = await service.listOperationLogs();
+
+    expect(logs.map((log) => '${log.deviceId}:${log.sequence}'), [
+      'android-device:1',
+      'android-device:2',
+    ]);
+    expect(
+        logs.first.path, 'repapertodo/ops/android-device-000000000001.jsonl');
+    expect(logs.first.etag, 'canonical-op-v1');
+    expect(logs.first.contentLength, 128);
+    expect(logs.last.path, 'repapertodo/ops/android-device-000000000002.jsonl');
+  });
+
+  test('deduplicates operation logs by keeping richer canonical metadata',
+      () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/repapertodo/ops')) {
+          return http.Response(
+            '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/ops/android-device-000000000001.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"sparse-op-v1"</D:getetag>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>https://dav.example.test/remote.php/dav/files/user/repapertodo/ops/android-device-000000000001.jsonl</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"rich-op-v1"</D:getetag>
+        <D:getcontentlength>384</D:getcontentlength>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:01:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''',
+            207,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final logs = await service.listOperationLogs();
+
+    expect(logs, hasLength(1));
+    expect(
+      logs.single.path,
+      'repapertodo/ops/android-device-000000000001.jsonl',
+    );
+    expect(logs.single.deviceId, 'android-device');
+    expect(logs.single.sequence, 1);
+    expect(logs.single.etag, 'rich-op-v1');
+    expect(logs.single.contentLength, 384);
+    expect(logs.single.lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 1));
   });
 
   test('lists no operation logs when the operation collection is missing',
@@ -1005,6 +2005,122 @@ void main() {
     expect(operations.single.kind, SyncOperationKind.stateSnapshot);
     expect(operations.single.payload['snapshotPath'],
         'repapertodo/snapshots/snapshot-android.json');
+  });
+
+  test('migrates downloaded legacy plain operation logs to encrypted payloads',
+      () async {
+    final operation = SyncOperation(
+      id: 'device-a-1',
+      deviceId: 'device-a',
+      sequence: 1,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+      payload: {'paperId': 'note', 'content': 'Legacy plain body'},
+    );
+    final requests = <http.Request>[];
+    List<int>? uploadedBytes;
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' &&
+            request.url.path
+                .endsWith('/repapertodo/ops/device-a-000000000001.jsonl')) {
+          return http.Response('${jsonEncode(operation.toJson())}\n', 200);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path
+                .endsWith('/repapertodo/ops/device-a-000000000001.jsonl')) {
+          uploadedBytes = request.bodyBytes;
+          return http.Response('', 204);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final payloadCodec = EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(2),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      payloadCodec: payloadCodec,
+    );
+
+    final downloadResult = await service.downloadOperationLogWithMetadata(
+      'repapertodo/ops/device-a-000000000001.jsonl',
+    );
+    final migrated = await service.migrateLegacyPlainOperationLog(
+      const WebDavOperationLogRecord(
+        path: 'repapertodo/ops/device-a-000000000001.jsonl',
+        deviceId: 'device-a',
+        sequence: 1,
+        etag: 'op-v1',
+      ),
+      downloadedResult: downloadResult,
+    );
+
+    expect(migrated, true);
+    expect(downloadResult.payloadFormat, WebDavPayloadFormat.plainJson);
+    expect(
+      requests.map((request) => request.method),
+      ['GET', 'PUT'],
+    );
+    expect(requests.last.headers['if-match'], '"op-v1"');
+    final uploadText = utf8.decode(uploadedBytes ?? const []);
+    expect(uploadText, startsWith('RePaperTodo-Encrypted-Payload-v1\n'));
+    expect(uploadText, isNot(contains('Legacy plain body')));
+    final decodedOperations = await EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+    ).decodeOperationLog(uploadedBytes ?? const []);
+    expect(decodedOperations.single.payload, {
+      'paperId': 'note',
+      'content': 'Legacy plain body',
+    });
+  });
+
+  test('skips legacy plain operation log migration without an ETag', () async {
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        return http.Response('network should not be reached', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      payloadCodec: EncryptedWebDavPayloadCodec(
+        passphrase: 'shared sync secret',
+        kdfIterations: 100000,
+      ),
+    );
+
+    final migrated = await service.migrateLegacyPlainOperationLog(
+      const WebDavOperationLogRecord(
+        path: 'repapertodo/ops/device-a-000000000001.jsonl',
+        deviceId: 'device-a',
+        sequence: 1,
+      ),
+      downloadedResult: WebDavOperationLogDownloadResult(
+        path: 'repapertodo/ops/device-a-000000000001.jsonl',
+        payloadFormat: WebDavPayloadFormat.plainJson,
+        operations: [
+          SyncOperation(
+            id: 'device-a-1',
+            deviceId: 'device-a',
+            sequence: 1,
+            kind: SyncOperationKind.stateSnapshot,
+            createdAtUtc: DateTime.utc(2026, 7, 1),
+            payload: const {},
+          ),
+        ],
+      ),
+    );
+
+    expect(migrated, false);
   });
 
   test('rejects operation logs with multiple operations', () async {
@@ -1246,6 +2362,10 @@ void main() {
       'device-a': 2,
       'android-device': 1,
     });
+    expect(result.acceptedDeviceSequences, {
+      'device-a': 2,
+      'android-device': 1,
+    });
     expect(
       requests.map((request) => request.method),
       ['MKCOL', 'MKCOL', 'MKCOL', 'PUT', 'PUT'],
@@ -1316,13 +2436,139 @@ void main() {
 
     final result = await service.uploadOperationLogs([operation]);
 
-    expect(result.uploadedCount, 1);
+    expect(result.uploadedCount, 0);
     expect(result.deviceSequences, {'device-a': 1});
+    expect(result.acceptedDeviceSequences, {'device-a': 1});
     expect(
       requests
           .where((request) => request.url.path.contains('/ops/'))
           .map((request) => request.method),
       ['PUT', 'GET'],
+    );
+  });
+
+  test('accepts matching encrypted operation logs during upload retry',
+      () async {
+    final requests = <http.Request>[];
+    final operation = SyncOperation(
+      id: 'device-a-1',
+      deviceId: 'device-a',
+      sequence: 1,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+      payload: {'paperId': 'note', 'content': 'Fresh'},
+    );
+    final existingOperationBytes = await EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(1),
+    ).encodeOperationLog(operation);
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'MKCOL') {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' && request.url.path.contains('/ops/')) {
+          expect(
+            const ListEquality<int>().equals(
+              request.bodyBytes,
+              existingOperationBytes,
+            ),
+            false,
+          );
+          return http.Response('already exists', 412);
+        }
+        if (request.method == 'GET' && request.url.path.contains('/ops/')) {
+          return http.Response.bytes(existingOperationBytes, 200);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      payloadCodec: EncryptedWebDavPayloadCodec(
+        passphrase: 'shared sync secret',
+        kdfIterations: 100000,
+        random: Random(2),
+      ),
+    );
+
+    final result = await service.uploadOperationLogs([operation]);
+
+    expect(result.uploadedCount, 0);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.acceptedDeviceSequences, {'device-a': 1});
+    expect(
+      requests
+          .where((request) => request.url.path.contains('/ops/'))
+          .map((request) => request.method),
+      ['PUT', 'GET'],
+    );
+  });
+
+  test('counts only newly created operation logs during mixed upload retry',
+      () async {
+    final requests = <http.Request>[];
+    final existingOperation = SyncOperation(
+      id: 'device-a-1',
+      deviceId: 'device-a',
+      sequence: 1,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+      payload: {'paperId': 'note', 'content': 'First'},
+    );
+    final newOperation = SyncOperation(
+      id: 'device-a-2',
+      deviceId: 'device-a',
+      sequence: 2,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9, 1),
+      payload: {'paperId': 'note', 'content': 'Second'},
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'MKCOL') {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.endsWith('/ops/device-a-000000000001.jsonl')) {
+          return http.Response('already exists', 412);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/ops/device-a-000000000001.jsonl')) {
+          return http.Response(
+              '${jsonEncode(existingOperation.toJson())}\n', 200);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.endsWith('/ops/device-a-000000000002.jsonl')) {
+          return http.Response('', 201);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+
+    final result = await service.uploadOperationLogs([
+      existingOperation,
+      newOperation,
+    ]);
+
+    expect(result.uploadedCount, 1);
+    expect(result.deviceSequences, {'device-a': 2});
+    expect(result.acceptedDeviceSequences, {'device-a': 2});
+    expect(
+      requests
+          .where((request) => request.url.path.contains('/ops/'))
+          .map((request) => request.method),
+      ['PUT', 'GET', 'PUT'],
     );
   });
 
@@ -1437,6 +2683,10 @@ void main() {
 
     expect(result.uploadedCount, 2);
     expect(result.deviceSequences, {'device-a': 1, 'device-b': 1});
+    expect(result.acceptedDeviceSequences, {
+      'device-a': 1,
+      'device-b': 1,
+    });
     final operationRequests =
         requests.where((request) => request.method == 'PUT').toList();
     expect(
@@ -1446,6 +2696,90 @@ void main() {
     expect(operationRequests.map((request) => request.url.path), [
       '/remote.php/dav/files/user/repapertodo/ops/device-a-000000000001.jsonl',
       '/remote.php/dav/files/user/repapertodo/ops/device-b-000000000001.jsonl',
+    ]);
+  });
+
+  test(
+      'deduplicates matching upload candidates and blocks conflicts per device',
+      () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return switch (request.method) {
+          'MKCOL' => http.Response('', 201),
+          'PUT' => http.Response('', 201),
+          _ => http.Response('unexpected ${request.method}', 500),
+        };
+      }),
+    );
+    final service = WebDavStateSyncService(client: webDavClient);
+    final firstAndroidOperation = SyncOperation(
+      id: 'android-device-1-a',
+      deviceId: 'android-device',
+      sequence: 1,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+      payload: {'paperId': 'note', 'content': 'Fresh'},
+    );
+    final duplicateAndroidOperation = SyncOperation(
+      id: 'android-device-1-b',
+      deviceId: 'android-device',
+      sequence: 1,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+      payload: {'paperId': 'note', 'content': 'Fresh'},
+    );
+
+    final result = await service.uploadOperationLogs(
+      [
+        SyncOperation(
+          id: 'device-a-1',
+          deviceId: 'device-a',
+          sequence: 1,
+          kind: SyncOperationKind.updateNoteContent,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+          payload: {'paperId': 'note', 'content': 'First'},
+        ),
+        SyncOperation(
+          id: 'device-a-1-conflict',
+          deviceId: 'device-a',
+          sequence: 1,
+          kind: SyncOperationKind.updateNoteContent,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+          payload: {'paperId': 'note', 'content': 'Different'},
+        ),
+        SyncOperation(
+          id: 'device-a-2',
+          deviceId: 'device-a',
+          sequence: 2,
+          kind: SyncOperationKind.updateNoteContent,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 1),
+          payload: {'paperId': 'note', 'content': 'Blocked'},
+        ),
+        firstAndroidOperation,
+        duplicateAndroidOperation,
+        SyncOperation(
+          id: 'android-device-2',
+          deviceId: 'android-device',
+          sequence: 2,
+          kind: SyncOperationKind.updateNoteContent,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 2),
+          payload: {'paperId': 'note', 'content': 'Next'},
+        ),
+      ],
+    );
+
+    expect(result.uploadedCount, 2);
+    expect(result.deviceSequences, {'android-device': 2});
+    expect(result.acceptedDeviceSequences, {'android-device': 2});
+    final operationRequests =
+        requests.where((request) => request.method == 'PUT').toList();
+    expect(operationRequests.map((request) => request.url.path), [
+      '/remote.php/dav/files/user/repapertodo/ops/android-device-000000000001.jsonl',
+      '/remote.php/dav/files/user/repapertodo/ops/android-device-000000000002.jsonl',
     ]);
   });
 
@@ -1517,6 +2851,12 @@ void main() {
       ),
       throwsA(isA<WebDavSyncConfigurationException>()),
     );
+    expect(
+      service.downloadSnapshot(
+        'repapertodo/snapshots/%0Aother/snapshot-20260701T090000000Z-phone.json',
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
   });
 
   test('rejects operation log downloads outside the operation collection',
@@ -1554,9 +2894,252 @@ void main() {
     );
     expect(
       service.downloadOperationLog(
+        'repapertodo/ops/%0Aother/android-device-000000000001.jsonl',
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+    expect(
+      service.downloadOperationLog(
         'repapertodo/ops/android-device-000000000000.jsonl',
       ),
       throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+  });
+
+  test('uses the payload codec for snapshots and operation logs', () async {
+    final requests = <http.Request>[];
+    final remoteSnapshotState = AppState(
+      papers: [
+        PaperData(
+          id: 'remote-note',
+          type: PaperTypes.note,
+          title: 'Tagged',
+        ),
+      ],
+    );
+    final remoteOperation = SyncOperation(
+      id: 'ignored',
+      deviceId: 'ignored-device',
+      sequence: 99,
+      kind: SyncOperationKind.updateNoteContent,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+      payload: {'paperId': 'remote-note', 'content': 'Decoded'},
+    );
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'MKCOL') {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT') {
+          return http.Response('', 201);
+        }
+        if (request.method == 'GET' &&
+            request.url.path.contains('/snapshots/')) {
+          return http.Response(
+            _TaggedWebDavPayloadCodec.snapshotText(remoteSnapshotState),
+            200,
+          );
+        }
+        if (request.method == 'GET' && request.url.path.contains('/ops/')) {
+          return http.Response(
+            _TaggedWebDavPayloadCodec.operationText(remoteOperation),
+            200,
+          );
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      payloadCodec: const _TaggedWebDavPayloadCodec(),
+      deviceId: 'device-a',
+    );
+
+    await service.push(
+      AppState(
+        papers: [
+          PaperData(id: 'local-note', type: PaperTypes.note, title: 'Local'),
+        ],
+      ),
+      updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+    );
+    final downloadedSnapshot = await service.downloadSnapshot(
+      'repapertodo/snapshots/snapshot-20260701T090000000Z-device-a.json',
+    );
+    final downloadedOperations = await service.downloadOperationLog(
+      'repapertodo/ops/device-a-000000000001.jsonl',
+    );
+
+    final snapshotUpload = requests.firstWhere((request) =>
+        request.method == 'PUT' && request.url.path.contains('/snapshots/'));
+    final operationUpload = requests.firstWhere((request) =>
+        request.method == 'PUT' && request.url.path.contains('/ops/'));
+    expect(utf8.decode(snapshotUpload.bodyBytes), startsWith('snapshot:'));
+    expect(utf8.decode(operationUpload.bodyBytes), startsWith('operation:'));
+    expect(downloadedSnapshot.state?.papers.single.title, 'Tagged');
+    expect(downloadedOperations.single.id, 'device-a-1');
+    expect(downloadedOperations.single.deviceId, 'device-a');
+    expect(downloadedOperations.single.sequence, 1);
+    expect(downloadedOperations.single.payload, {
+      'paperId': 'remote-note',
+      'content': 'Decoded',
+    });
+  });
+
+  test('encrypts payloads from configured WebDAV settings', () async {
+    final requests = <http.Request>[];
+    final service = WebDavStateSyncService.fromSettings(
+      WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/remote.php/dav/files/user/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+      ),
+      deviceId: 'device-a',
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return switch (request.method) {
+          'MKCOL' => http.Response('', 201),
+          'PUT' => http.Response('', 201),
+          _ => http.Response('unexpected ${request.method}', 500),
+        };
+      }),
+    );
+
+    await service.push(
+      AppState(
+        papers: [
+          PaperData(
+            id: 'secret-note',
+            type: PaperTypes.note,
+            title: 'Secret',
+            content: 'Encrypted over WebDAV',
+          ),
+        ],
+      ),
+      updatedAtUtc: DateTime.utc(2026, 7, 2, 10),
+    );
+
+    final snapshotRequest = requests.firstWhere((request) =>
+        request.method == 'PUT' && request.url.path.contains('/snapshots/'));
+    final snapshotText = utf8.decode(snapshotRequest.bodyBytes);
+    expect(snapshotText, startsWith('RePaperTodo-Encrypted-Payload-v1\n'));
+    expect(snapshotText, isNot(contains('Encrypted over WebDAV')));
+
+    final decodedState = await EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+    ).decodeSnapshot(snapshotRequest.bodyBytes, const AppStateCodec());
+    expect(decodedState.papers.single.content, 'Encrypted over WebDAV');
+  });
+
+  test('rejects configured WebDAV endpoints with encoded control characters',
+      () {
+    var requestCount = 0;
+
+    expect(
+      () => WebDavStateSyncService.fromSettings(
+        WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/remote.php/dav/%0Afiles/user/',
+          username: 'user',
+          password: 'pass',
+          encryptionPassphrase: 'shared sync secret',
+          rootPath: 'repapertodo',
+        ),
+        deviceId: 'device-a',
+        httpClient: MockClient((request) async {
+          requestCount += 1;
+          return http.Response('network should not be reached', 500);
+        }),
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+    expect(requestCount, 0);
+  });
+
+  test('rejects configured WebDAV credentials with unsafe characters', () {
+    for (final settings in [
+      WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/remote.php/dav/files/user/',
+        username: 'user:name',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+      ),
+      WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/remote.php/dav/files/user/',
+        username: 'user',
+        password: 'bad\npass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+      ),
+    ]) {
+      expect(
+        () => WebDavStateSyncService.fromSettings(
+          settings,
+          deviceId: 'device-a',
+          httpClient: MockClient((request) async {
+            return http.Response('network should not be reached', 500);
+          }),
+        ),
+        throwsA(isA<WebDavSyncConfigurationException>()),
+      );
+    }
+  });
+
+  test('rejects configured WebDAV root paths with encoded control characters',
+      () {
+    var requestCount = 0;
+
+    expect(
+      () => WebDavStateSyncService.fromSettings(
+        WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/remote.php/dav/files/user/',
+          username: 'user',
+          password: 'pass',
+          encryptionPassphrase: 'shared sync secret',
+          rootPath: 'repapertodo/%0Aother',
+        ),
+        deviceId: 'device-a',
+        httpClient: MockClient((request) async {
+          requestCount += 1;
+          return http.Response('network should not be reached', 500);
+        }),
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+    expect(requestCount, 0);
+  });
+
+  test('uses configured WebDAV request timeout seconds', () async {
+    final service = WebDavStateSyncService.fromSettings(
+      WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/remote.php/dav/files/user/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        requestTimeoutSeconds: 1,
+      ),
+      deviceId: 'test-device',
+      httpClient: MockClient((request) => Completer<http.Response>().future),
+    );
+
+    await expectLater(
+      service.pull(),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.statusCode, 'statusCode', 0)
+            .having(
+              (error) => error.message,
+              'message',
+              'WebDAV request timed out after 1s.',
+            ),
+      ),
     );
   });
 
@@ -1590,4 +3173,84 @@ void main() {
       contains('/dav/RePaperTodo/manifest.json'),
     );
   });
+}
+
+String _legacyPaperTodoSnapshotJson({
+  required String id,
+  required String title,
+  required String content,
+}) {
+  return '''
+{
+  "Theme": "dark",
+  "Papers": [
+    {
+      "Id": "$id",
+      "Type": "note",
+      "Title": "$title",
+      "Content": "$content"
+    }
+  ]
+}
+''';
+}
+
+class _TaggedWebDavPayloadCodec implements WebDavPayloadCodec {
+  const _TaggedWebDavPayloadCodec();
+
+  static String snapshotText(AppState state) {
+    return 'snapshot:${const AppStateCodec().encodeRemoteSnapshot(state)}';
+  }
+
+  static String operationText(SyncOperation operation) {
+    return 'operation:${jsonEncode(operation.toJson())}\n';
+  }
+
+  @override
+  WebDavPayloadFormat inspectPayloadFormat(List<int> bytes) {
+    return WebDavPayloadFormat.unknown;
+  }
+
+  @override
+  AppState decodeSnapshot(List<int> bytes, AppStateCodec appStateCodec) {
+    final text = utf8.decode(bytes);
+    if (!text.startsWith('snapshot:')) {
+      throw const FormatException('Missing tagged snapshot prefix.');
+    }
+    return appStateCodec.decode(text.substring('snapshot:'.length));
+  }
+
+  @override
+  List<SyncOperation> decodeOperationLog(List<int> bytes) {
+    final lines = utf8
+        .decode(bytes)
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
+    return [
+      for (final line in lines) _decodeOperation(line),
+    ];
+  }
+
+  @override
+  List<int> encodeOperationLog(SyncOperation operation) {
+    return utf8.encode(operationText(operation));
+  }
+
+  @override
+  List<int> encodeSnapshot(AppState state, AppStateCodec appStateCodec) {
+    return utf8.encode('snapshot:${appStateCodec.encodeRemoteSnapshot(state)}');
+  }
+
+  SyncOperation _decodeOperation(String line) {
+    if (!line.startsWith('operation:')) {
+      throw const FormatException('Missing tagged operation prefix.');
+    }
+    final decoded = jsonDecode(line.substring('operation:'.length));
+    if (decoded is! Map) {
+      throw const FormatException('Tagged operation must be a JSON object.');
+    }
+    return SyncOperation.fromJson(Map<String, Object?>.from(decoded));
+  }
 }

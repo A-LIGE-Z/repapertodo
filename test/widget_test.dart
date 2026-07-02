@@ -19,6 +19,7 @@ import 'package:repapertodo/src/core/startup/startup_command.dart';
 import 'package:repapertodo/src/platform/noop_platform_services.dart';
 import 'package:repapertodo/src/platform/platform_services.dart';
 import 'package:repapertodo/src/sync/app_sync_service.dart';
+import 'package:repapertodo/src/sync/webdav/webdav_client.dart';
 import 'package:repapertodo/src/sync/webdav/webdav_state_sync_service.dart';
 
 void main() {
@@ -184,8 +185,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text('Sync is disabled.'), findsOneWidget);
+    expect(find.widgetWithText(SnackBarAction, 'Settings'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
     await tester.pumpAndSettle();
 
     expect(find.text('Sync settings'), findsOneWidget);
@@ -324,6 +326,197 @@ void main() {
     await tester.pump();
 
     expect(platform.uriOpener.openedUris, ['https://example.com/paper']);
+  });
+
+  testWidgets('opens supported mailto markdown links', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'mailto-note',
+            type: PaperTypes.note,
+            title: 'Mail note',
+            content: '[Mail author](mailto:paper@example.com)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Mail author'));
+    await tester.pump();
+
+    expect(platform.uriOpener.openedUris, ['mailto:paper@example.com']);
+  });
+
+  testWidgets('blocks unsafe markdown preview links before platform open',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'unsafe-link-note',
+            type: PaperTypes.note,
+            title: 'Unsafe link note',
+            content: '[Run script](javascript:alert(1))',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Run script'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, isEmpty);
+    expect(
+      find.textContaining('unsupported link target'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('opens markdown preview links with encoded whitespace',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'spaced-link-note',
+            type: PaperTypes.note,
+            title: 'Spaced link note',
+            content: '[Bad link](<https://example.com/a b>)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Bad link'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, ['https://example.com/a%20b']);
+    expect(find.textContaining('unsupported link target'), findsNothing);
+  });
+
+  testWidgets('reports markdown preview link open failures', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    platform.uriOpener.error = StateError('No browser available');
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'failed-link-note',
+            type: PaperTypes.note,
+            title: 'Failed link note',
+            content: '[Broken link](https://example.com/missing)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-markdown-link-failure.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.text('Broken link'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, ['https://example.com/missing']);
+    expect(find.textContaining('Open link failed:'), findsOneWidget);
+    expect(find.textContaining('No browser available'), findsOneWidget);
+  });
+
+  testWidgets('shows readable platform link open failures', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    platform.uriOpener.error = PlatformException(
+      code: 'ACTIVITY_NOT_FOUND',
+      message: 'No browser app can open this link.',
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'platform-link-note',
+            type: PaperTypes.note,
+            title: 'Platform link note',
+            content: '[Platform link](https://example.com/platform)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Platform link'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, ['https://example.com/platform']);
+    expect(
+      find.textContaining('No browser app can open this link.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('PlatformException'), findsNothing);
+    expect(find.textContaining('ACTIVITY_NOT_FOUND'), findsNothing);
   });
 
   testWidgets('renders note canvas elements', (tester) async {
@@ -594,6 +787,62 @@ void main() {
     expect(controller.state.papers.single.content, '# Body[link](https://)');
   });
 
+  testWidgets('uses compact markdown toolbar actions on narrow screens',
+      (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(360, 800);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'compact-markdown-note',
+            type: PaperTypes.note,
+            title: 'Compact markdown',
+            content: 'Body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(
+      filePath: 'build/test-widget-compact-markdown-toolbar.json',
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('compact-markdown-toolbar-actions')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Insert link (Ctrl+K)'), findsOneWidget);
+    expect(find.byTooltip('Heading'), findsNothing);
+
+    await tester.tap(find.byTooltip('Insert link (Ctrl+K)'));
+    await tester.pump();
+
+    expect(controller.state.papers.single.content, 'Body[link](https://)');
+
+    await tester.tap(
+      find.byKey(const ValueKey('compact-markdown-toolbar-actions')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Heading'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.content, '# Body[link](https://)');
+  });
+
   testWidgets('uses markdown keyboard shortcuts in note editor',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -684,13 +933,458 @@ void main() {
     );
   });
 
-  testWidgets('restores a WebDAV recovery snapshot from the toolbar',
+  testWidgets('saves WebDAV sync encryption passphrase', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'sync-settings-paper',
+            type: PaperTypes.todo,
+            title: 'Sync settings',
+            items: [
+              PaperItem(id: 'sync-settings-item', text: 'Tune sync'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-sync-encryption.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Sync encryption passphrase'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Sync encryption passphrase'),
+      '  shared sync secret  ',
+    );
+    await tester.scrollUntilVisible(
+      find.text('Request timeout seconds'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Request timeout seconds'),
+      '4x5',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.sync.webDav.encryptionPassphrase,
+      'shared sync secret',
+    );
+    expect(controller.state.sync.webDav.usesEncryptedPayloads, true);
+    expect(controller.state.sync.webDav.requestTimeoutSeconds, 45);
+  });
+
+  testWidgets('shows inline error when WebDAV passphrase is missing',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     final controller = RePaperTodoController(
       initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'sync-passphrase-error-paper',
+            type: PaperTypes.todo,
+            title: 'Sync passphrase error',
+            items: [
+              PaperItem(
+                id: 'sync-passphrase-error-item',
+                text: 'Require passphrase',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Sync encryption passphrase'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Enter a sync encryption passphrase.'), findsOneWidget);
+    expect(
+      find.textContaining('Complete the WebDAV URL'),
+      findsOneWidget,
+    );
+    expect(controller.state.sync.webDav.encryptionPassphrase, isEmpty);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Sync encryption passphrase'),
+      'shared sync secret',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter a sync encryption passphrase.'), findsNothing);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.sync.webDav.encryptionPassphrase,
+        'shared sync secret');
+  });
+
+  testWidgets('shows inline errors for incomplete WebDAV settings',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'sync-field-error-paper',
+            type: PaperTypes.todo,
+            title: 'Sync field errors',
+            items: [
+              PaperItem(
+                id: 'sync-field-error-item',
+                text: 'Fix WebDAV fields',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(TextField, 'WebDAV URL'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'WebDAV URL'),
+      'dav.example.test/dav',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Remote folder'),
+      'RePaperTodo/%0AOther',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Username'),
+      'user:name',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'bad\u007Fpass',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Sync encryption passphrase'),
+      '',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+    expect(
+        find.textContaining('Use a full http:// or https://'), findsOneWidget);
+    expect(
+      find.text(
+        'Use a remote folder without parent-directory segments, backslashes, invalid percent escapes, or control characters.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Username cannot contain colons or control characters.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Password cannot contain control characters.'),
+      findsOneWidget,
+    );
+    expect(find.text('Enter a sync encryption passphrase.'), findsOneWidget);
+    expect(
+      find.textContaining('Complete the WebDAV URL'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'WebDAV URL'))
+          .focusNode
+          ?.hasFocus,
+      true,
+    );
+    expect(controller.state.sync.webDav.endpoint, 'https://dav.example.test/');
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'WebDAV URL'),
+      'https://dav.example.test/dav/',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Use a full http:// or https://'), findsNothing);
+    expect(
+      find.text('Username cannot contain colons or control characters.'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Complete the WebDAV URL'),
+      findsOneWidget,
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Remote folder'),
+      '',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Use a remote folder without parent-directory segments, backslashes, invalid percent escapes, or control characters.',
+      ),
+      findsNothing,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Use a remote folder without parent-directory segments, backslashes, invalid percent escapes, or control characters.',
+      ),
+      findsOneWidget,
+    );
+    expect(controller.state.sync.webDav.rootPath, 'repapertodo');
+  });
+
+  testWidgets('uses compact WebDAV preset selector on narrow screens',
+      (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(360, 800);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'compact-webdav-paper',
+            type: PaperTypes.todo,
+            title: 'Compact WebDAV',
+            items: [
+              PaperItem(id: 'compact-webdav-item', text: 'Tune sync preset'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('compact-app-bar-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('compact-webdav-preset-selector')),
+      480,
+      scrollable: find.byType(Scrollable).last,
+    );
+
+    expect(
+      find.byKey(const ValueKey('compact-webdav-preset-selector')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('compact-webdav-preset-selector')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jianguoyun').last);
+    await tester.pumpAndSettle();
+
+    final urlField = tester.widget<TextField>(
+      find.widgetWithText(TextField, 'WebDAV URL'),
+    );
+    expect(urlField.controller?.text, 'https://dav.jianguoyun.com/dav/');
+  });
+
+  testWidgets('uses compact settings choice controls on narrow screens',
+      (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(360, 800);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        papers: [
+          PaperData(
+            id: 'compact-settings-paper',
+            type: PaperTypes.todo,
+            title: 'Compact settings',
+            items: [
+              PaperItem(id: 'compact-settings-item', text: 'Tune settings'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('compact-app-bar-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('settings-theme-selector')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings-markdown-mode-selector')),
+      findsOneWidget,
+    );
+    expect(find.text('Theme'), findsOneWidget);
+    expect(find.text('Markdown mode'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('settings-theme-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dark').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings-markdown-mode-selector')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enhanced').last);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('settings-reminder-unit-selector')),
+      480,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings-reminder-unit-selector')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hours').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.theme, 'dark');
+    expect(controller.state.markdownRenderMode, MarkdownRenderModes.enhanced);
+    expect(
+      controller.state.todoReminderIntervalUnit,
+      TodoReminderIntervalUnits.hours,
+    );
+  });
+
+  testWidgets('restores a WebDAV recovery snapshot from the toolbar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
         papers: [
           PaperData(
             id: 'local-paper',
@@ -701,8 +1395,9 @@ void main() {
             ],
           ),
         ],
+        pinnedTodoHotKey: 'Ctrl+Alt+L',
       ),
-      platform: _RecordingPlatformServices(),
+      platform: platform,
     );
     final store =
         StateStore(filePath: 'build/test-widget-recovery-snapshot.json');
@@ -725,6 +1420,7 @@ void main() {
             content: 'Recovered body',
           ),
         ],
+        pinnedTodoHotKey: 'Ctrl+Alt+S',
       ),
     );
 
@@ -767,7 +1463,767 @@ void main() {
     expect(find.textContaining('Restore failed:'), findsNothing);
     expect(controller.state.papers.single.title, 'Snap');
     expect(controller.state.papers.single.content, 'Recovered body');
+    expect(platform.paperWindows.restoredTitleSnapshots.last, ['Snap']);
+    expect(platform.tray.rebuildTitleSnapshots.last, ['Snap']);
+    expect(platform.systemIntegration.registeredHotkeys.last.$1, 'Ctrl+Alt+S');
     expect(find.text('Snapshot restored.'), findsOneWidget);
+  });
+
+  testWidgets('recovery snapshot restore failure can retry from snackbar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json';
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'local-paper',
+            type: PaperTypes.note,
+            title: 'Local before restore retry',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      firstRestoreError: StateError('Temporary WebDAV restore failure'),
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: snapshotPath,
+          deviceId: 'phone',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+        ),
+      ],
+      restoredState: AppState(
+        papers: [
+          PaperData(
+            id: 'snapshot-paper',
+            type: PaperTypes.note,
+            title: 'Restored after retry',
+            content: 'Recovered body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('restore-snapshot-$snapshotPath')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.restoreCalls, 1);
+    expect(controller.state.papers.single.title, 'Local before restore retry');
+    expect(
+      find.textContaining('Temporary WebDAV restore failure'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Retry'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.restoreCalls, 2);
+    expect(syncService.restoredPaths, [snapshotPath]);
+    expect(controller.state.papers.single.title, 'Restored after retry');
+    expect(find.text('Snapshot restored.'), findsOneWidget);
+  });
+
+  testWidgets('recovery WebDAV failure shows a readable retry message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json';
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'local-paper',
+            type: PaperTypes.note,
+            title: 'Local before WebDAV restore retry',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      firstRestoreError: const WebDavException(
+        'WebDAV request failed: offline',
+        statusCode: 0,
+      ),
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: snapshotPath,
+          deviceId: 'phone',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+        ),
+      ],
+      restoredState: AppState(
+        papers: [
+          PaperData(
+            id: 'snapshot-paper',
+            type: PaperTypes.note,
+            title: 'Restored after WebDAV retry',
+            content: 'Recovered body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('restore-snapshot-$snapshotPath')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+        find.textContaining('WebDAV request failed: offline'), findsOneWidget);
+    expect(find.textContaining('WebDavException'), findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+  });
+
+  testWidgets('recovery timeout failure shows a readable retry message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json';
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'local-paper',
+            type: PaperTypes.note,
+            title: 'Local before timeout restore retry',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      firstRestoreError: TimeoutException('Snapshot restore timed out.'),
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: snapshotPath,
+          deviceId: 'phone',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+        ),
+      ],
+      restoredState: controller.state,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('restore-snapshot-$snapshotPath')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('Snapshot restore timed out.'), findsOneWidget);
+    expect(find.textContaining('TimeoutException'), findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+  });
+
+  testWidgets('recovery state store failure shows a readable retry message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json';
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'local-paper',
+            type: PaperTypes.note,
+            title: 'Local before store restore retry',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      firstRestoreError: const StateStoreException(
+        'Unable to save restored PaperTodo state.',
+        FormatException('Broken restored JSON.'),
+      ),
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: snapshotPath,
+          deviceId: 'phone',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+        ),
+      ],
+      restoredState: controller.state,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('restore-snapshot-$snapshotPath')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.restoreCalls, 1);
+    expect(
+      find.textContaining('Unable to save restored PaperTodo state.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Cause:'), findsNothing);
+    expect(find.textContaining('Broken restored JSON'), findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+  });
+
+  testWidgets('recovery snapshots require complete WebDAV settings',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'recovery-config-paper',
+            type: PaperTypes.todo,
+            title: 'Recovery config',
+            items: [
+              PaperItem(
+                id: 'recovery-config-item',
+                text: 'Configure sync first',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Recovery snapshots'), findsNothing);
+    expect(
+      find.text(
+          'Complete WebDAV sync settings and encryption passphrase first.'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(SnackBarAction, 'Settings'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+  });
+
+  testWidgets('recovery snapshots retry after list failures', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-laptop.json';
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'recovery-retry-paper',
+            type: PaperTypes.todo,
+            title: 'Recovery retry',
+            items: [
+              PaperItem(
+                id: 'recovery-retry-item',
+                text: 'Retry snapshot loading',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      firstListError: StateError('Temporary WebDAV outage'),
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: snapshotPath,
+          deviceId: 'laptop',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 10),
+          contentLength: 1024,
+        ),
+      ],
+      restoredState: AppState(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+
+    expect(syncService.listCalls, 1);
+    expect(find.text('Recovery snapshots'), findsOneWidget);
+    expect(find.textContaining('Temporary WebDAV outage'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('retry-recovery-snapshots')),
+      findsOneWidget,
+    );
+    expect(find.text(snapshotPath), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('retry-recovery-snapshots')));
+    await tester.pumpAndSettle();
+
+    expect(syncService.listCalls, 2);
+    expect(find.textContaining('Temporary WebDAV outage'), findsNothing);
+    expect(find.textContaining(snapshotPath), findsOneWidget);
+    expect(find.textContaining('1.0 KiB'), findsOneWidget);
+  });
+
+  testWidgets('recovery snapshot WebDAV list failure shows a readable message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260701T110000000Z-tablet.json';
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'recovery-webdav-list-paper',
+            type: PaperTypes.todo,
+            title: 'Recovery WebDAV list',
+            items: [
+              PaperItem(
+                id: 'recovery-webdav-list-item',
+                text: 'Retry readable snapshot loading',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      firstListError: const WebDavException(
+        'WebDAV request failed: offline',
+        statusCode: 0,
+      ),
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: snapshotPath,
+          deviceId: 'tablet',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 11),
+        ),
+      ],
+      restoredState: AppState(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+
+    expect(syncService.listCalls, 1);
+    expect(
+        find.textContaining('WebDAV request failed: offline'), findsOneWidget);
+    expect(find.textContaining('WebDavException'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('retry-recovery-snapshots')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('retry-recovery-snapshots')));
+    await tester.pumpAndSettle();
+
+    expect(syncService.listCalls, 2);
+    expect(find.textContaining('WebDAV request failed: offline'), findsNothing);
+    expect(find.textContaining(snapshotPath), findsOneWidget);
+  });
+
+  testWidgets('recovery snapshot format list failure shows a readable message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'recovery-format-list-paper',
+            type: PaperTypes.todo,
+            title: 'Recovery format list',
+            items: [
+              PaperItem(
+                id: 'recovery-format-list-item',
+                text: 'Retry malformed snapshot loading',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      firstListError: const FormatException('Malformed snapshot index.'),
+      snapshots: const <WebDavSnapshotRecord>[],
+      restoredState: AppState(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+
+    expect(syncService.listCalls, 1);
+    expect(find.textContaining('Malformed snapshot index.'), findsOneWidget);
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('retry-recovery-snapshots')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('recovery snapshot unreadable payload opens sync settings',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final localState = AppState(
+      sync: SyncSettings(
+        enabled: true,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/',
+          username: 'user',
+          password: 'pass',
+          encryptionPassphrase: 'shared sync secret',
+          rootPath: 'repapertodo',
+        ),
+      ),
+      papers: [
+        PaperData(
+          id: 'local-paper',
+          type: PaperTypes.todo,
+          title: 'Local',
+          items: [
+            PaperItem(id: 'local-item', text: 'Local item'),
+          ],
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: localState,
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: 'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json',
+          deviceId: 'phone',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+        ),
+      ],
+      restoredState: localState,
+      restoreStatus: AppSyncStatus.payloadUnreadable,
+      restoreMessage:
+          'Unable to decrypt WebDAV sync payload. Check the sync encryption passphrase.',
+      includeRestoredState: false,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(
+        'restore-snapshot-repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(controller.state.papers.single.title, 'Local');
+    expect(
+      find.textContaining('Check the sync encryption passphrase'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(SnackBarAction, 'Settings'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+  });
+
+  testWidgets('uses compact recovery snapshot rows on narrow screens',
+      (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(360, 800);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json';
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'compact-recovery-paper',
+            type: PaperTypes.todo,
+            title: 'Compact recovery',
+            items: [
+              PaperItem(
+                id: 'compact-recovery-item',
+                text: 'Open recovery snapshots',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: snapshotPath,
+          deviceId: 'phone',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+          contentLength: 4096,
+        ),
+      ],
+      restoredState: AppState(
+        papers: [
+          PaperData(
+            id: 'compact-recovery-paper',
+            type: PaperTypes.todo,
+            title: 'Compact recovery',
+            items: [
+              PaperItem(
+                id: 'compact-recovery-item',
+                text: 'Open recovery snapshots',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('compact-app-bar-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Recovery snapshots'));
+    await tester.pumpAndSettle();
+
+    final restoreButton = find.byKey(
+      const ValueKey('restore-snapshot-$snapshotPath'),
+    );
+    expect(find.text('Recovery snapshots'), findsOneWidget);
+    expect(find.text(snapshotPath), findsOneWidget);
+    expect(find.text('4.0 KiB'), findsOneWidget);
+    expect(tester.getSize(restoreButton).width, greaterThan(200));
+    expect(
+      tester.getTopLeft(restoreButton).dy,
+      greaterThan(tester.getBottomLeft(find.text(snapshotPath)).dy),
+    );
+
+    await tester.tap(restoreButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Restore snapshot?'), findsOneWidget);
   });
 
   testWidgets('manual sync merges remote operation logs from the toolbar',
@@ -775,6 +2231,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
+    final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
       initialState: AppState(
         papers: [
@@ -785,8 +2242,9 @@ void main() {
             content: 'Local body',
           ),
         ],
+        pinnedTodoHotKey: 'Ctrl+Alt+L',
       ),
-      platform: _RecordingPlatformServices(),
+      platform: platform,
     );
     final store = StateStore(filePath: 'build/test-widget-manual-sync.json');
     final snapshotState = AppState(
@@ -808,6 +2266,7 @@ void main() {
           content: 'Merged body',
         ),
       ],
+      pinnedTodoHotKey: 'Ctrl+Alt+R',
     );
     final syncService = _ManualSyncService(
       result: AppSyncRunResult(
@@ -842,10 +2301,534 @@ void main() {
     expect(syncService.calls, 1);
     expect(controller.state.papers.single.title, 'Remote');
     expect(controller.state.papers.single.content, 'Merged body');
+    expect(platform.paperWindows.restoredTitleSnapshots.last, ['Remote']);
+    expect(platform.tray.rebuildTitleSnapshots.last, ['Remote']);
+    expect(platform.systemIntegration.registeredHotkeys.last.$1, 'Ctrl+Alt+R');
     expect(
       find.text('Remote data downloaded. Merged 1 remote change.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('manual sync reports legacy operation log migration',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncedState = AppState(
+      papers: [
+        PaperData(
+          id: 'remote-note',
+          type: PaperTypes.note,
+          title: 'Remote',
+          content: 'Merged legacy op',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(id: 'local-note', type: PaperTypes.note, title: 'Local'),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-sync-legacy-ops.json');
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+        operationMergeResult: AppSyncOperationMergeResult(
+          state: syncedState,
+          deviceSequences: const {'device-a': 1},
+          appliedCount: 1,
+          legacyPlainOperationLogCount: 1,
+          legacyPlainOperationLogMigratedCount: 1,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.content, 'Merged legacy op');
+    expect(
+      find.textContaining('Migrated 1 legacy WebDAV operation log'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('encrypted payloads'), findsOneWidget);
+  });
+
+  testWidgets('manual sync reports unreadable encrypted payloads',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final localState = AppState(
+      papers: [
+        PaperData(
+          id: 'local-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: localState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-sync-unreadable.json');
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.payloadUnreadable,
+          state: localState,
+          message:
+              'Unable to decrypt WebDAV sync payload. Check the sync encryption passphrase.',
+        ),
+        state: localState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Local');
+    expect(
+      find.textContaining('Check the sync encryption passphrase'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(SnackBarAction, 'Settings'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.textContaining('Sync failed:'), findsNothing);
+  });
+
+  testWidgets('manual sync failure can retry from snackbar', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncedState = AppState(
+      papers: [
+        PaperData(
+          id: 'retry-note',
+          type: PaperTypes.note,
+          title: 'Synced after retry',
+          content: 'Retry succeeded',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'retry-note',
+            type: PaperTypes.note,
+            title: 'Local before retry',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _ManualSyncService(
+      firstSyncError: StateError('Temporary network failure'),
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Local before retry');
+    expect(find.textContaining('Temporary network failure'), findsOneWidget);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Retry'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 2);
+    expect(controller.state.papers.single.title, 'Synced after retry');
+    expect(find.text('Remote data downloaded.'), findsOneWidget);
+  });
+
+  testWidgets('manual WebDAV failure shows a readable retry message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'webdav-failure-note',
+            type: PaperTypes.note,
+            title: 'Local before WebDAV retry',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _ManualSyncService(
+      firstSyncError: const WebDavException(
+        'WebDAV request timed out after 30s.',
+        statusCode: 0,
+      ),
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          message: 'Local data uploaded.',
+        ),
+        state: controller.state,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('WebDAV request timed out after 30s.'),
+        findsOneWidget);
+    expect(find.textContaining('WebDavException'), findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+  });
+
+  testWidgets('manual format failure shows a readable retry message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'format-failure-note',
+            type: PaperTypes.note,
+            title: 'Local before format retry',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _ManualSyncService(
+      firstSyncError: const FormatException('Malformed remote sync manifest.'),
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          message: 'Local data uploaded.',
+        ),
+        state: controller.state,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.textContaining('Malformed remote sync manifest.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+  });
+
+  testWidgets('manual state store failure shows a readable retry message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'store-failure-note',
+            type: PaperTypes.note,
+            title: 'Local before store retry',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _ManualSyncService(
+      firstSyncError: const StateStoreException(
+        'Unable to load PaperTodo state.',
+        FormatException('Broken local JSON.'),
+      ),
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          message: 'Local data uploaded.',
+        ),
+        state: controller.state,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.textContaining('Unable to load PaperTodo state.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Cause:'), findsNothing);
+    expect(find.textContaining('Broken local JSON'), findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+  });
+
+  testWidgets('manual timeout failure shows a readable retry message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'timeout-failure-note',
+            type: PaperTypes.note,
+            title: 'Local before timeout retry',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _ManualSyncService(
+      firstSyncError: TimeoutException('Remote sync timed out.'),
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          message: 'Local data uploaded.',
+        ),
+        state: controller.state,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('Remote sync timed out.'), findsOneWidget);
+    expect(find.textContaining('TimeoutException'), findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+  });
+
+  testWidgets('manual sync conflict opens recovery snapshots from snackbar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const snapshotPath =
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-laptop.json';
+    final initialState = AppState(
+      sync: SyncSettings(
+        enabled: true,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/',
+          username: 'user',
+          password: 'pass',
+          encryptionPassphrase: 'shared sync secret',
+          rootPath: 'repapertodo',
+        ),
+      ),
+      papers: [
+        PaperData(
+          id: 'conflict-note',
+          type: PaperTypes.note,
+          title: 'Local conflict',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: const AppSyncResult(
+          status: AppSyncStatus.conflict,
+          message:
+              'Remote data changed during sync. Local snapshot preserved at repapertodo/snapshots/conflict-local.json.',
+          snapshotPath: 'repapertodo/snapshots/conflict-local.json',
+        ),
+        state: initialState,
+      ),
+      recoverySnapshots: [
+        WebDavSnapshotRecord(
+          path: snapshotPath,
+          deviceId: 'laptop',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+          contentLength: 4096,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 1);
+    expect(find.textContaining('Local snapshot preserved'), findsOneWidget);
+    expect(find.widgetWithText(SnackBarAction, 'Recovery'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Recovery'));
+    await tester.pumpAndSettle();
+
+    expect(syncService.listRecoveryCalls, 1);
+    expect(find.text('Recovery snapshots'), findsOneWidget);
+    expect(find.textContaining(snapshotPath), findsOneWidget);
+    expect(find.textContaining('4.0 KiB'), findsOneWidget);
+  });
+
+  testWidgets('manual sync reports legacy plain WebDAV migration state',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncedState = AppState(
+      papers: [
+        PaperData(
+          id: 'remote-note',
+          type: PaperTypes.note,
+          title: 'Remote',
+          content: 'Downloaded before migration',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(id: 'local-note', type: PaperTypes.note, title: 'Local'),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-sync-legacy-plain.json');
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message:
+              'Remote data downloaded from legacy plain WebDAV data and migrated to encrypted payloads.',
+          legacyPlainPayloadDetected: true,
+          legacyPlainPayloadMigrated: true,
+        ),
+        state: syncedState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Remote');
+    expect(find.textContaining('legacy plain WebDAV data'), findsOneWidget);
+    expect(find.textContaining('encrypted payloads'), findsOneWidget);
   });
 
   testWidgets('manual sync uploads pending local edits before merging',
@@ -860,6 +2843,7 @@ void main() {
         endpoint: 'https://dav.example.test/',
         username: 'user',
         password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
         rootPath: 'repapertodo',
         autoSyncIntervalMinutes: 15,
       ),
@@ -875,9 +2859,10 @@ void main() {
         ),
       ],
     );
+    final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
       initialState: initialState,
-      platform: _RecordingPlatformServices(),
+      platform: platform,
     );
     final store = _MemoryStateStore();
     await store.save(initialState);
@@ -937,7 +2922,98 @@ void main() {
     expect(syncService.localUploadAfterTitles, ['Draft']);
     expect(syncService.calls, 1);
     expect(controller.state.papers.single.title, 'Synced');
+    expect(platform.paperWindows.restoredTitleSnapshots, [
+      ['Draft'],
+      ['Synced'],
+    ]);
+    expect(platform.tray.rebuildTitleSnapshots.last, ['Synced']);
     expect(find.text('Remote data downloaded.'), findsOneWidget);
+  });
+
+  testWidgets('manual sync refreshes state after idempotent local upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'manual-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final uploadedState = AppState(
+      sync: syncSettings.copy()
+        ..operationDeviceSequences = const {'device-a': 1},
+      papers: [
+        PaperData(
+          id: 'manual-note',
+          type: PaperTypes.note,
+          title: 'Draft',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: platform,
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: uploadedState,
+          message: 'Local data uploaded.',
+        ),
+        state: uploadedState,
+      ),
+      localUploadState: uploadedState,
+      localUploadUploadedCount: 0,
+      localUploadStateChanged: true,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('manual-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.syncLocalDeviceSequences, [
+      {'device-a': 1},
+    ]);
+    expect(controller.state.sync.operationDeviceSequences, {'device-a': 1});
+    expect(platform.paperWindows.restoredTitleSnapshots.first, ['Draft']);
   });
 
   testWidgets('auto sync runs silently on the configured interval',
@@ -954,6 +3030,7 @@ void main() {
             endpoint: 'https://dav.example.test/',
             username: 'user',
             password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
             rootPath: 'repapertodo',
             autoSyncIntervalMinutes: 1,
           ),
@@ -1030,6 +3107,7 @@ void main() {
         endpoint: 'https://dav.example.test/',
         username: 'user',
         password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
         rootPath: 'repapertodo',
         autoSyncIntervalMinutes: 15,
       ),
@@ -1123,6 +3201,7 @@ void main() {
         endpoint: 'https://dav.example.test/',
         username: 'user',
         password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
         rootPath: 'repapertodo',
         autoSyncIntervalMinutes: 15,
       ),
@@ -1226,6 +3305,7 @@ void main() {
         endpoint: 'https://dav.example.test/',
         username: 'user',
         password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
         rootPath: 'repapertodo',
         autoSyncIntervalMinutes: 15,
       ),
@@ -1328,6 +3408,7 @@ void main() {
         endpoint: 'https://dav.example.test/',
         username: 'user',
         password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
         rootPath: 'repapertodo',
         autoSyncIntervalMinutes: 15,
       ),
@@ -1402,6 +3483,7 @@ void main() {
     expect(syncService.calls, 1);
     expect(controller.state.papers.single.title, 'Synced');
     expect(platform.systemIntegration.unregisterGlobalHotkeysCount, 1);
+    expect(platform.systemIntegration.exitApplicationCount, 1);
     expect(platform.tray.disposeCount, 1);
     expect(find.text('Local data uploaded.'), findsNothing);
   });
@@ -1436,6 +3518,7 @@ void main() {
     );
 
     await tester.tap(find.byIcon(Icons.file_open_outlined));
+    await tester.pump();
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 250));
     });
@@ -1447,11 +3530,174 @@ void main() {
     expect(
       openedFile.path,
       contains(
-        '${Platform.pathSeparator}RePaperTodo${Platform.pathSeparator}paper-external-note.txt',
+        '${Platform.pathSeparator}RePaperTodo${Platform.pathSeparator}exports${Platform.pathSeparator}paper-external-note.txt',
       ),
     );
     expect(openedFile.readAsStringSync(), '# Exported note\n\nMarkdown body.');
     expect(find.textContaining('Opened markdown file:'), findsOneWidget);
+  });
+
+  testWidgets('sanitizes long external markdown export names', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final longPaperId =
+        '${List.filled(90, 'a').join()}/bad:${List.filled(70, 'z').join()}?tail';
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: longPaperId,
+            type: PaperTypes.note,
+            title: 'Long export name',
+            content: '# Long export',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.file_open_outlined));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    });
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.externalFiles.openedPaths, hasLength(1));
+    final openedFile = File(platform.externalFiles.openedPaths.single);
+    final fileName = openedFile.path.split(Platform.pathSeparator).last;
+    expect(fileName.length, lessThanOrEqualTo('paper-'.length + 96 + 3));
+    expect(fileName, startsWith('paper-${List.filled(72, 'a').join()}_'));
+    expect(fileName, endsWith('.md'));
+    expect(fileName, isNot(contains(RegExp(r'[<>:"/\\|?*\x00-\x1F]'))));
+    expect(openedFile.readAsStringSync(), '# Long export');
+  });
+
+  testWidgets('cleans stale external markdown exports before writing',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final exportDirectory = Directory(
+      [
+        Directory('build/test-widget-storage').absolute.path,
+        'RePaperTodo',
+        'exports',
+      ].join(Platform.pathSeparator),
+    );
+    if (exportDirectory.existsSync()) {
+      exportDirectory.deleteSync(recursive: true);
+    }
+    exportDirectory.createSync(recursive: true);
+    addTearDown(() {
+      if (exportDirectory.existsSync()) {
+        exportDirectory.deleteSync(recursive: true);
+      }
+    });
+
+    final staleExport = File(
+      '${exportDirectory.path}${Platform.pathSeparator}paper-stale.md',
+    )..writeAsStringSync('old');
+    final freshExport = File(
+      '${exportDirectory.path}${Platform.pathSeparator}paper-fresh.md',
+    )..writeAsStringSync('fresh');
+    final userFile = File(
+      '${exportDirectory.path}${Platform.pathSeparator}manual-stale.md',
+    )..writeAsStringSync('keep');
+    final oldTimestamp = DateTime.now().subtract(const Duration(days: 9));
+    staleExport.setLastModifiedSync(oldTimestamp);
+    userFile.setLastModifiedSync(oldTimestamp);
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'cleanup-note',
+            type: PaperTypes.note,
+            title: 'Cleanup Note',
+            content: '# Cleanup',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.file_open_outlined));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    });
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(staleExport.existsSync(), false);
+    expect(freshExport.existsSync(), true);
+    expect(userFile.existsSync(), true);
+    expect(platform.externalFiles.openedPaths, hasLength(1));
+    expect(File(platform.externalFiles.openedPaths.single).readAsStringSync(),
+        '# Cleanup');
+  });
+
+  testWidgets('shows readable external markdown open failures', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    platform.externalFiles.error = PlatformException(
+      code: 'NO_VIEWER',
+      message: 'No app can open exported markdown.',
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'external-note-failure',
+            type: PaperTypes.note,
+            title: 'External Note Failure',
+            content: '# Exported note',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.file_open_outlined));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    });
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.externalFiles.openedPaths, hasLength(1));
+    expect(
+      find.textContaining('No app can open exported markdown.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('PlatformException'), findsNothing);
+    expect(find.textContaining('NO_VIEWER'), findsNothing);
   });
 
   testWidgets('shows due todo reminders', (tester) async {
@@ -1930,6 +4176,247 @@ void main() {
     expect(find.byTooltip('Settings'), findsOneWidget);
   });
 
+  testWidgets('uses compact app bar overflow actions on narrow screens',
+      (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(360, 800);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'mobile-visible',
+            type: PaperTypes.todo,
+            title: 'Mobile board',
+            items: [
+              PaperItem(id: 'mobile-item', text: 'Keep actions reachable'),
+            ],
+          ),
+          PaperData(
+            id: 'mobile-hidden',
+            type: PaperTypes.note,
+            title: 'Hidden mobile note',
+            isVisible: false,
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    expect(find.byTooltip('Sync now'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('compact-app-bar-actions')), findsOneWidget);
+    expect(find.byTooltip('New todo paper'), findsNothing);
+    expect(find.byTooltip('Settings'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('compact-app-bar-actions')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('New todo'), findsOneWidget);
+    expect(find.text('New note'), findsOneWidget);
+    expect(find.text('Show hidden'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+
+    await tester.tap(find.text('Show hidden'));
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers
+          .firstWhere((paper) => paper.id == 'mobile-hidden')
+          .isVisible,
+      true,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('compact-app-bar-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New todo'));
+    await tester.pumpAndSettle();
+
+    expect(
+        controller.state.papers.where((paper) => paper.isTodo), hasLength(2));
+  });
+
+  testWidgets('uses compact paper header actions on narrow screens',
+      (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(360, 800);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'mobile-paper-actions',
+            type: PaperTypes.note,
+            title: 'Mobile paper actions',
+            content: 'Compact paper controls',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('mobile-paper-actions-paper-actions')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Collapse paper'), findsOneWidget);
+    expect(find.byTooltip('Open paper surface'), findsNothing);
+    expect(find.byTooltip('Paper text zoom'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('mobile-paper-actions-paper-actions')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open surface'), findsOneWidget);
+    expect(find.text('Open markdown externally'), findsOneWidget);
+    expect(find.text('Zoom 125%'), findsOneWidget);
+    expect(find.text('Pin to desktop'), findsOneWidget);
+
+    await tester.tap(
+      find.widgetWithText(CheckedPopupMenuItem<String>, 'Zoom 125%'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.textZoom, 1.25);
+
+    await tester.tap(
+      find.byKey(const ValueKey('mobile-paper-actions-paper-actions')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.widgetWithText(PopupMenuItem<String>, 'Pin to desktop'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.isPinnedToDesktop, true);
+    expect(controller.state.papers.single.alwaysOnTop, false);
+  });
+
+  testWidgets('uses compact todo item actions on narrow screens',
+      (tester) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(360, 800);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        enableTodoNoteLinks: true,
+        papers: [
+          PaperData(
+            id: 'mobile-actions-paper',
+            type: PaperTypes.todo,
+            title: 'Mobile actions',
+            items: [
+              PaperItem(
+                id: 'mobile-action-item',
+                text: 'Edit with one hand',
+              ),
+              PaperItem(
+                id: 'mobile-action-spare',
+                text: 'Keep delete enabled',
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'mobile-note',
+            type: PaperTypes.note,
+            title: 'Research note',
+            content: 'Linked note body.',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final actionsFinder = find.byKey(
+      const ValueKey('mobile-actions-paper-mobile-action-item-actions'),
+    );
+    expect(actionsFinder, findsOneWidget);
+    expect(find.byTooltip('Set due date'), findsNothing);
+    expect(find.byTooltip('Delete item'), findsNothing);
+
+    await tester.tap(actionsFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Set due date'), findsOneWidget);
+    expect(find.text('Set reminder'), findsOneWidget);
+    expect(find.text('Add column'), findsOneWidget);
+    expect(find.text('Delete item'), findsOneWidget);
+
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is PopupMenuItem<String> && widget.value == 'column:add',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final item = controller.state.papers.first.items.first;
+    expect(item.todoColumnCount, 2);
+
+    await tester.tap(actionsFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is PopupMenuItem<String> &&
+            widget.value == 'link:mobile-note',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(item.linkedNoteId, 'mobile-note');
+
+    await tester.tap(actionsFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) => widget is PopupMenuItem<String> && widget.value == 'delete',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.first.items, hasLength(1));
+    expect(
+        controller.state.papers.first.items.single.id, 'mobile-action-spare');
+  });
+
   testWidgets('disables interactive tooltips', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -2346,6 +4833,297 @@ void main() {
     );
   });
 
+  testWidgets('reports platform setting failures while saving settings',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    platform.systemIntegration.registerGlobalHotkeysError =
+        StateError('Hotkey registration failed');
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        pinnedTodoHotKey: '',
+        pinnedNoteHotKey: '',
+        papers: [
+          PaperData(
+            id: 'platform-setting-failure-paper',
+            type: PaperTypes.todo,
+            title: 'Platform setting failure',
+            items: [
+              PaperItem(
+                id: 'platform-setting-failure-item',
+                text: 'Report platform errors',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Pinned todo hotkey'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pinned todo hotkey'),
+      'Ctrl+Alt+T',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(controller.state.pinnedTodoHotKey, 'Ctrl+Alt+T');
+    expect(platform.systemIntegration.registeredHotkeys, isEmpty);
+    expect(find.textContaining('Platform settings failed:'), findsOneWidget);
+    expect(find.textContaining('Hotkey registration failed'), findsOneWidget);
+  });
+
+  testWidgets('shows readable platform setting channel failures',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    platform.systemIntegration.setHideFromWindowSwitcherError =
+        PlatformException(
+      code: 'WINDOW_POLICY_FAILED',
+      message: 'Window policy is unavailable.',
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        hidePapersFromWindowSwitcher: false,
+        papers: [
+          PaperData(
+            id: 'platform-channel-failure-paper',
+            type: PaperTypes.todo,
+            title: 'Platform channel failure',
+            items: [
+              PaperItem(
+                id: 'platform-channel-failure-item',
+                text: 'Report readable platform channel errors',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Hide from task switcher'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Hide from task switcher'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(controller.state.hidePapersFromWindowSwitcher, true);
+    expect(platform.systemIntegration.hideFromWindowSwitcherValues, [true]);
+    expect(find.textContaining('Platform settings failed:'), findsOneWidget);
+    expect(
+        find.textContaining('Window policy is unavailable.'), findsOneWidget);
+    expect(find.textContaining('PlatformException'), findsNothing);
+    expect(find.textContaining('WINDOW_POLICY_FAILED'), findsNothing);
+  });
+
+  testWidgets('continues platform settings after a platform failure',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    platform.systemIntegration.setStartupAtLoginError =
+        StateError('Startup registration failed');
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        pinnedTodoHotKey: '',
+        pinnedNoteHotKey: '',
+        papers: [
+          PaperData(
+            id: 'platform-setting-continue-paper',
+            type: PaperTypes.todo,
+            title: 'Platform setting continuation',
+            items: [
+              PaperItem(
+                id: 'platform-setting-continue-item',
+                text: 'Continue platform steps',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Pinned todo hotkey'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pinned todo hotkey'),
+      'Ctrl+Alt+T',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(controller.state.pinnedTodoHotKey, 'Ctrl+Alt+T');
+    expect(platform.systemIntegration.startupAtLoginValues, [false]);
+    expect(platform.systemIntegration.registeredHotkeys, hasLength(1));
+    expect(
+      platform.systemIntegration.registeredHotkeys.single,
+      ('Ctrl+Alt+T', ''),
+    );
+    expect(find.textContaining('Platform settings failed:'), findsOneWidget);
+    expect(find.textContaining('Startup registration failed'), findsOneWidget);
+  });
+
+  testWidgets('hides desktop-only settings on unsupported platforms',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        startAtLogin: true,
+        hidePapersFromWindowSwitcher: true,
+        fullscreenTopmostMode: FullscreenTopmostModes.stayOnTop,
+        pinnedTodoHotKey: 'Ctrl+Alt+T',
+        pinnedNoteHotKey: 'Ctrl+Alt+N',
+        runLinkedScriptCapsulesOnClick: true,
+        papers: [
+          PaperData(
+            id: 'mobile-settings-paper',
+            type: PaperTypes.todo,
+            title: 'Mobile settings',
+            items: [
+              PaperItem(
+                id: 'mobile-settings-item',
+                text: 'No desktop startup switch',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(
+        supportsStartupAtLogin: false,
+        supportsDesktopIntegration: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Start at login'), findsNothing);
+    expect(find.text('Hide from task switcher'), findsNothing);
+    expect(find.text('Avoid fullscreen'), findsNothing);
+    expect(find.text('Stay on top'), findsNothing);
+    expect(find.text('Pinned todo hotkey'), findsNothing);
+    expect(find.text('Pinned note hotkey'), findsNothing);
+    expect(find.text('Run linked script capsules on click'), findsNothing);
+    expect(find.text('Persistent PowerShell process'), findsNothing);
+    expect(find.text('Prefer PowerShell 7'), findsNothing);
+    expect(find.text('Hide script run window'), findsNothing);
+    expect(controller.supportsStartupAtLogin, false);
+    expect(controller.supportsGlobalHotkeys, false);
+    expect(controller.supportsScriptCapsules, false);
+  });
+
+  testWidgets('skips desktop integration calls on unsupported platforms',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices(
+      supportsStartupAtLogin: false,
+      supportsDesktopIntegration: false,
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        startAtLogin: true,
+        hidePapersFromWindowSwitcher: true,
+        fullscreenTopmostMode: FullscreenTopmostModes.stayOnTop,
+        pinnedTodoHotKey: 'Ctrl+Alt+T',
+        pinnedNoteHotKey: 'Ctrl+Alt+N',
+        runLinkedScriptCapsulesOnClick: true,
+        usePersistentPowerShellProcess: true,
+        papers: [
+          PaperData(
+            id: 'unsupported-platform-settings',
+            type: PaperTypes.todo,
+            title: 'Unsupported platform settings',
+            items: [
+              PaperItem(
+                id: 'unsupported-platform-item',
+                text: 'Save without desktop calls',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(platform.systemIntegration.startupAtLoginValues, isEmpty);
+    expect(platform.systemIntegration.hideFromWindowSwitcherValues, isEmpty);
+    expect(platform.systemIntegration.fullscreenTopmostModes, isEmpty);
+    expect(platform.systemIntegration.registeredHotkeys, isEmpty);
+    expect(platform.scriptCapsules.preparedSettings, isEmpty);
+    expect(platform.scriptCapsules.stopCount, 0);
+  });
+
   testWidgets('executes platform startup commands while running',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -2390,6 +5168,52 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sync settings'), findsOneWidget);
+  });
+
+  testWidgets('refreshes tray immediately for platform visibility updates',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'surface-visibility-paper',
+            type: PaperTypes.todo,
+            title: 'Surface visibility',
+            items: [
+              PaperItem(id: 'surface-visibility-item', text: 'Watch tray'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    platform.tray.rebuildVisibilitySnapshots.clear();
+
+    final paper = controller.state.papers.single;
+    paper.isVisible = false;
+    platform.paperWindows.emitSurfaceUpdate(paper);
+    await tester.pump();
+
+    expect(platform.tray.rebuildVisibilitySnapshots, [
+      {'surface-visibility-paper': false},
+    ]);
+
+    paper.x = 240;
+    platform.paperWindows.emitSurfaceUpdate(paper);
+    await tester.pump();
+
+    expect(platform.tray.rebuildVisibilitySnapshots, hasLength(1));
   });
 
   testWidgets('links todo items to note papers', (tester) async {
@@ -2527,6 +5351,113 @@ void main() {
     expect(request.preferPowerShell7, true);
   });
 
+  testWidgets('reports linked script capsule failures', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    platform.scriptCapsules.runError = StateError('PowerShell failed');
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        maxTitleLength: 20,
+        runLinkedScriptCapsulesOnClick: true,
+        showLinkedNoteName: true,
+        papers: [
+          PaperData(
+            id: 'todo-script-failure',
+            type: PaperTypes.todo,
+            title: 'Script failure',
+            items: [
+              PaperItem(
+                id: 'todo-script-failure-item',
+                text: 'Run failing automation',
+                linkedNoteId: 'failing-script-note',
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'failing-script-note',
+            type: PaperTypes.note,
+            title: 'Failing script',
+            content: '!pf\n  throw "bad"',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Run Failing script'));
+    await tester.pumpAndSettle();
+
+    expect(platform.scriptCapsules.requests, hasLength(1));
+    expect(find.textContaining('Script capsule failed:'), findsOneWidget);
+    expect(find.textContaining('PowerShell failed'), findsOneWidget);
+  });
+
+  testWidgets('shows readable script capsule platform failures',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    platform.scriptCapsules.runError = PlatformException(
+      code: 'SCRIPT_HOST_FAILED',
+      message: 'PowerShell host is unavailable.',
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        maxTitleLength: 20,
+        runLinkedScriptCapsulesOnClick: true,
+        showLinkedNoteName: true,
+        papers: [
+          PaperData(
+            id: 'todo-script-platform-failure',
+            type: PaperTypes.todo,
+            title: 'Script platform failure',
+            items: [
+              PaperItem(
+                id: 'todo-script-platform-failure-item',
+                text: 'Run platform failing automation',
+                linkedNoteId: 'platform-failing-script-note',
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'platform-failing-script-note',
+            type: PaperTypes.note,
+            title: 'Bad script',
+            content: '!pf\n  Write-Output "bad host"',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Run Bad script'));
+    await tester.pumpAndSettle();
+
+    expect(platform.scriptCapsules.requests, hasLength(1));
+    expect(find.textContaining('Script capsule failed:'), findsOneWidget);
+    expect(
+        find.textContaining('PowerShell host is unavailable.'), findsOneWidget);
+    expect(find.textContaining('PlatformException'), findsNothing);
+    expect(find.textContaining('SCRIPT_HOST_FAILED'), findsNothing);
+  });
+
   testWidgets('shortens linked note titles with max title length',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -2642,17 +5573,34 @@ class _RecoverySnapshotSyncService extends AppSyncService {
   _RecoverySnapshotSyncService({
     required this.snapshots,
     required this.restoredState,
+    this.firstListError,
+    this.firstRestoreError,
+    this.restoreStatus = AppSyncStatus.downloaded,
+    this.restoreMessage = 'Snapshot restored.',
+    this.includeRestoredState = true,
   });
 
   final List<WebDavSnapshotRecord> snapshots;
   final AppState restoredState;
+  final Object? firstListError;
+  final Object? firstRestoreError;
+  final AppSyncStatus restoreStatus;
+  final String restoreMessage;
+  final bool includeRestoredState;
   final restoredPaths = <String>[];
+  var listCalls = 0;
+  var restoreCalls = 0;
 
   @override
   Future<List<WebDavSnapshotRecord>> listRecoverySnapshots({
     required AppState localState,
     required StateStore store,
   }) async {
+    listCalls += 1;
+    final error = firstListError;
+    if (listCalls == 1 && error != null) {
+      throw error;
+    }
     return snapshots;
   }
 
@@ -2662,11 +5610,16 @@ class _RecoverySnapshotSyncService extends AppSyncService {
     required StateStore store,
     required String snapshotPath,
   }) async {
+    restoreCalls += 1;
+    final error = firstRestoreError;
+    if (restoreCalls == 1 && error != null) {
+      throw error;
+    }
     restoredPaths.add(snapshotPath);
     return AppSyncResult(
-      status: AppSyncStatus.downloaded,
-      state: restoredState,
-      message: 'Snapshot restored.',
+      status: restoreStatus,
+      state: includeRestoredState ? restoredState : null,
+      message: restoreMessage,
       snapshotPath: snapshotPath,
     );
   }
@@ -2676,17 +5629,27 @@ class _ManualSyncService extends AppSyncService {
   _ManualSyncService({
     required this.result,
     this.firstSyncGate,
+    this.firstSyncError,
     this.localUploadState,
+    this.localUploadUploadedCount = 1,
+    this.localUploadStateChanged = false,
+    this.recoverySnapshots = const <WebDavSnapshotRecord>[],
   });
 
   final AppSyncRunResult result;
   final Future<void>? firstSyncGate;
+  final Object? firstSyncError;
   final AppState? localUploadState;
+  final int localUploadUploadedCount;
+  final bool localUploadStateChanged;
+  final List<WebDavSnapshotRecord> recoverySnapshots;
   var calls = 0;
   var localUploadCalls = 0;
+  var listRecoveryCalls = 0;
   final events = <String>[];
   final localUploadBeforeTitles = <String>[];
   final localUploadAfterTitles = <String>[];
+  final syncLocalDeviceSequences = <Map<String, int>>[];
 
   @override
   Future<AppSyncRunResult> syncAndMergeNow({
@@ -2696,9 +5659,16 @@ class _ManualSyncService extends AppSyncService {
   }) async {
     calls += 1;
     events.add('sync');
+    syncLocalDeviceSequences.add(
+      Map<String, int>.from(localState.sync.operationDeviceSequences),
+    );
     final gate = firstSyncGate;
     if (calls == 1 && gate != null) {
       await gate;
+    }
+    final error = firstSyncError;
+    if (calls == 1 && error != null) {
+      throw error;
     }
     return result;
   }
@@ -2720,8 +5690,18 @@ class _ManualSyncService extends AppSyncService {
       state: state,
       deviceSequences: state.sync.operationDeviceSequences,
       generatedCount: 1,
-      uploadedCount: 1,
+      uploadedCount: localUploadUploadedCount,
+      stateChanged: localUploadStateChanged,
     );
+  }
+
+  @override
+  Future<List<WebDavSnapshotRecord>> listRecoverySnapshots({
+    required AppState localState,
+    required StateStore store,
+  }) async {
+    listRecoveryCalls += 1;
+    return recoverySnapshots;
   }
 }
 
@@ -2748,8 +5728,20 @@ class _MemoryStateStore extends StateStore {
 }
 
 class _RecordingPlatformServices implements PlatformServices {
-  _RecordingPlatformServices({StartupHost? startup})
-      : startup = startup ?? NoopStartupHost();
+  _RecordingPlatformServices({
+    StartupHost? startup,
+    bool supportsStartupAtLogin = true,
+    bool supportsDesktopIntegration = true,
+  })  : startup = startup ?? NoopStartupHost(),
+        systemIntegration = _RecordingSystemIntegrationHost(
+          supportsStartupAtLogin: supportsStartupAtLogin,
+          supportsWindowSwitcherVisibility: supportsDesktopIntegration,
+          supportsFullscreenTopmostMode: supportsDesktopIntegration,
+          supportsGlobalHotkeys: supportsDesktopIntegration,
+        ),
+        scriptCapsules = _RecordingScriptCapsuleHost(
+          supportsScriptCapsules: supportsDesktopIntegration,
+        );
 
   @override
   final _RecordingPaperWindowHost paperWindows = _RecordingPaperWindowHost();
@@ -2761,8 +5753,7 @@ class _RecordingPlatformServices implements PlatformServices {
   final StartupHost startup;
 
   @override
-  final _RecordingSystemIntegrationHost systemIntegration =
-      _RecordingSystemIntegrationHost();
+  final _RecordingSystemIntegrationHost systemIntegration;
 
   @override
   final _RecordingExternalFileHost externalFiles = _RecordingExternalFileHost();
@@ -2771,22 +5762,59 @@ class _RecordingPlatformServices implements PlatformServices {
   final _RecordingUriOpenHost uriOpener = _RecordingUriOpenHost();
 
   @override
-  final _RecordingScriptCapsuleHost scriptCapsules =
-      _RecordingScriptCapsuleHost();
+  final _RecordingScriptCapsuleHost scriptCapsules;
+
+  @override
+  final AppStorageHost storage = _RecordingAppStorageHost();
+}
+
+class _RecordingAppStorageHost implements AppStorageHost {
+  @override
+  Future<String> documentsDirectoryPath() async {
+    return Directory('build/test-widget-storage').absolute.path;
+  }
 }
 
 class _RecordingTrayHost extends NoopTrayHost {
   var disposeCount = 0;
+  final rebuildTitleSnapshots = <List<String>>[];
+  final rebuildVisibilitySnapshots = <Map<String, bool>>[];
 
   @override
   Future<void> dispose() async {
     disposeCount += 1;
   }
+
+  @override
+  Future<void> rebuildMenu(AppState state) async {
+    rebuildTitleSnapshots.add(
+      state.papers.map((paper) => paper.title).toList(),
+    );
+    rebuildVisibilitySnapshots.add({
+      for (final paper in state.papers) paper.id: paper.isVisible,
+    });
+  }
 }
 
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
+  final restoredTitleSnapshots = <List<String>>[];
   final updatedTitles = <String>[];
   final shownTitles = <String>[];
+  final _surfaceUpdates = StreamController<PaperData>.broadcast();
+
+  @override
+  Stream<PaperData> get surfaceUpdates => _surfaceUpdates.stream;
+
+  void emitSurfaceUpdate(PaperData paper) {
+    _surfaceUpdates.add(paper);
+  }
+
+  @override
+  Future<void> restoreAll(AppState state) async {
+    restoredTitleSnapshots.add(
+      state.papers.map((paper) => paper.title).toList(),
+    );
+  }
 
   @override
   Future<void> showPaper(PaperData paper) async {
@@ -2801,26 +5829,42 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
 
 class _RecordingExternalFileHost implements ExternalFileHost {
   final openedPaths = <String>[];
+  Object? error;
 
   @override
   Future<void> openFile(String path) async {
     openedPaths.add(path);
+    final error = this.error;
+    if (error != null) {
+      throw error;
+    }
   }
 }
 
 class _RecordingUriOpenHost implements UriOpenHost {
   final openedUris = <String>[];
+  Object? error;
 
   @override
   Future<void> openUri(String uri) async {
     openedUris.add(uri);
+    final error = this.error;
+    if (error != null) {
+      throw error;
+    }
   }
 }
 
 class _RecordingScriptCapsuleHost implements ScriptCapsuleHost {
+  _RecordingScriptCapsuleHost({required this.supportsScriptCapsules});
+
+  @override
+  final bool supportsScriptCapsules;
+
   final requests = <ScriptCapsuleRunRequest>[];
   final preparedSettings =
       <({bool preferPowerShell7, bool hideScriptRunWindow})>[];
+  Object? runError;
   var stopCount = 0;
 
   @override
@@ -2837,6 +5881,10 @@ class _RecordingScriptCapsuleHost implements ScriptCapsuleHost {
   @override
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request) async {
     requests.add(request);
+    final error = runError;
+    if (error != null) {
+      throw error;
+    }
   }
 
   @override
@@ -2857,16 +5905,79 @@ class _RecordingStartupHost extends NoopStartupHost {
 }
 
 class _RecordingSystemIntegrationHost extends NoopSystemIntegrationHost {
+  _RecordingSystemIntegrationHost({
+    required this.supportsStartupAtLogin,
+    required this.supportsWindowSwitcherVisibility,
+    required this.supportsFullscreenTopmostMode,
+    required this.supportsGlobalHotkeys,
+  });
+
+  @override
+  final bool supportsStartupAtLogin;
+
+  @override
+  final bool supportsWindowSwitcherVisibility;
+
+  @override
+  final bool supportsFullscreenTopmostMode;
+
+  @override
+  final bool supportsGlobalHotkeys;
+
   final registeredHotkeys = <(String todo, String note)>[];
+  final startupAtLoginValues = <bool>[];
+  final hideFromWindowSwitcherValues = <bool>[];
+  final fullscreenTopmostModes = <String>[];
+  Object? setStartupAtLoginError;
+  Object? setHideFromWindowSwitcherError;
+  Object? setFullscreenTopmostModeError;
+  Object? registerGlobalHotkeysError;
   var unregisterGlobalHotkeysCount = 0;
+  var exitApplicationCount = 0;
 
   @override
   Future<void> registerGlobalHotkeys(AppState state) async {
+    final error = registerGlobalHotkeysError;
+    if (error != null) {
+      throw error;
+    }
     registeredHotkeys.add((state.pinnedTodoHotKey, state.pinnedNoteHotKey));
+  }
+
+  @override
+  Future<void> setStartupAtLogin(bool enabled) async {
+    startupAtLoginValues.add(enabled);
+    final error = setStartupAtLoginError;
+    if (error != null) {
+      throw error;
+    }
+  }
+
+  @override
+  Future<void> setHideFromWindowSwitcher(bool enabled) async {
+    hideFromWindowSwitcherValues.add(enabled);
+    final error = setHideFromWindowSwitcherError;
+    if (error != null) {
+      throw error;
+    }
+  }
+
+  @override
+  Future<void> setFullscreenTopmostMode(String mode) async {
+    fullscreenTopmostModes.add(mode);
+    final error = setFullscreenTopmostModeError;
+    if (error != null) {
+      throw error;
+    }
   }
 
   @override
   Future<void> unregisterGlobalHotkeys() async {
     unregisterGlobalHotkeysCount += 1;
+  }
+
+  @override
+  Future<void> exitApplication() async {
+    exitApplicationCount += 1;
   }
 }

@@ -13,6 +13,7 @@ abstract interface class PlatformServices {
   ExternalFileHost get externalFiles;
   UriOpenHost get uriOpener;
   ScriptCapsuleHost get scriptCapsules;
+  AppStorageHost get storage;
 }
 
 abstract interface class PaperWindowHost {
@@ -40,12 +41,18 @@ abstract interface class StartupHost {
 }
 
 abstract interface class SystemIntegrationHost {
+  bool get supportsStartupAtLogin;
+  bool get supportsWindowSwitcherVisibility;
+  bool get supportsFullscreenTopmostMode;
+  bool get supportsGlobalHotkeys;
+
   Future<void> registerGlobalHotkeys(AppState state);
   Future<void> unregisterGlobalHotkeys();
   Future<bool> isForegroundFullscreen();
   Future<void> setStartupAtLogin(bool enabled);
   Future<void> setHideFromWindowSwitcher(bool enabled);
   Future<void> setFullscreenTopmostMode(String mode);
+  Future<void> exitApplication();
 }
 
 abstract interface class ExternalFileHost {
@@ -57,10 +64,16 @@ abstract interface class UriOpenHost {
 }
 
 abstract interface class ScriptCapsuleHost {
+  bool get supportsScriptCapsules;
+
   Future<void> preparePersistentProcess({
     required bool preferPowerShell7,
     required bool hideScriptRunWindow,
   });
   Future<void> runScriptCapsule(ScriptCapsuleRunRequest request);
   Future<void> stopPersistentProcesses();
+}
+
+abstract interface class AppStorageHost {
+  Future<String> documentsDirectoryPath();
 }

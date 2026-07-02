@@ -3,7 +3,7 @@ abstract final class PaperTypes {
   static const note = 'note';
 
   static String normalize(String? value) {
-    return value == note ? note : todo;
+    return _normalizedValue(value) == note ? note : todo;
   }
 }
 
@@ -13,9 +13,12 @@ abstract final class MarkdownRenderModes {
   static const enhanced = 'enhanced';
 
   static String normalize(String? value) {
-    return value == off || value == basic || value == enhanced
-        ? value!
-        : enhanced;
+    return switch (_normalizedValue(value)) {
+      off => off,
+      basic => basic,
+      enhanced => enhanced,
+      _ => enhanced,
+    };
   }
 }
 
@@ -26,9 +29,12 @@ abstract final class TodoVisualSizes {
   static const extraLarge = 'extraLarge';
 
   static String normalize(String? value) {
-    return value == small || value == large || value == extraLarge
-        ? value!
-        : medium;
+    return switch (_normalizedValue(value)) {
+      small => small,
+      large => large,
+      'extralarge' => extraLarge,
+      _ => medium,
+    };
   }
 }
 
@@ -39,9 +45,12 @@ abstract final class UiFontPresets {
   static const custom = 'custom';
 
   static String normalize(String? value) {
-    return value == serif || value == mono || value == custom
-        ? value!
-        : defaultPreset;
+    return switch (_normalizedValue(value)) {
+      serif => serif,
+      mono => mono,
+      custom => custom,
+      _ => defaultPreset,
+    };
   }
 }
 
@@ -52,9 +61,13 @@ abstract final class ColorSchemes {
   static const rose = 'rose';
 
   static String normalize(String? value) {
-    return value == warm || value == ink || value == forest || value == rose
-        ? value!
-        : warm;
+    return switch (_normalizedValue(value)) {
+      warm => warm,
+      ink => ink,
+      forest => forest,
+      rose => rose,
+      _ => warm,
+    };
   }
 }
 
@@ -63,7 +76,7 @@ abstract final class DeepCapsuleSides {
   static const right = 'right';
 
   static String normalize(String? value) {
-    return value == left ? left : right;
+    return _normalizedValue(value) == left ? left : right;
   }
 }
 
@@ -72,7 +85,7 @@ abstract final class FullscreenTopmostModes {
   static const stayOnTop = 'stayOnTop';
 
   static String normalize(String? value) {
-    return value == stayOnTop ? stayOnTop : avoid;
+    return _normalizedValue(value) == 'stayontop' ? stayOnTop : avoid;
   }
 }
 
@@ -81,7 +94,7 @@ abstract final class TodoReminderIntervalUnits {
   static const hours = 'hours';
 
   static String normalize(String? value) {
-    return value == hours ? hours : minutes;
+    return _normalizedValue(value) == hours ? hours : minutes;
   }
 }
 
@@ -90,7 +103,7 @@ abstract final class TodoReminderScopes {
   static const all = 'all';
 
   static String normalize(String? value) {
-    return value == nearest ? nearest : all;
+    return _normalizedValue(value) == nearest ? nearest : all;
   }
 }
 
@@ -100,7 +113,11 @@ abstract final class TodoDueYearDisplayModes {
   static const full = 'full';
 
   static String normalize(String? value) {
-    return value == short || value == full ? value! : none;
+    return switch (_normalizedValue(value)) {
+      short => short,
+      full => full,
+      _ => none,
+    };
   }
 }
 
@@ -109,8 +126,12 @@ abstract final class NoteCanvasElementTypes {
   static const text = 'text';
 
   static String normalize(String? value) {
-    return value == text ? text : code;
+    return _normalizedValue(value) == text ? text : code;
   }
+}
+
+String _normalizedValue(String? value) {
+  return value?.trim().toLowerCase() ?? '';
 }
 
 abstract final class PaperLayoutDefaults {

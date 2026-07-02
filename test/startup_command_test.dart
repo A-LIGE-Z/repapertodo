@@ -12,6 +12,32 @@ void main() {
     expect(StartupCommand.parse(['quit']).kind, StartupCommandKind.exit);
   });
 
+  test('parses forgiving startup command spellings', () {
+    expect(StartupCommand.parse(['--unknown', '--new-note']).kind,
+        StartupCommandKind.newNote);
+    expect(
+        StartupCommand.parse(['new', 'todo']).kind, StartupCommandKind.newTodo);
+    expect(StartupCommand.parse(['new note']).kind, StartupCommandKind.newNote);
+    expect(
+        StartupCommand.parse(['/add_note']).kind, StartupCommandKind.newNote);
+    expect(StartupCommand.parse(['close']).kind, StartupCommandKind.hide);
+  });
+
+  test('parses option-style startup command spellings', () {
+    expect(
+      StartupCommand.parse(['--new=todo']).kind,
+      StartupCommandKind.newTodo,
+    );
+    expect(
+      StartupCommand.parse(['/new:note']).kind,
+      StartupCommandKind.newNote,
+    );
+    expect(
+      StartupCommand.parse(['--preferences=true']).kind,
+      StartupCommandKind.settings,
+    );
+  });
+
   test('empty args use caller-provided default', () {
     final command = StartupCommand.parse(
       const [],

@@ -1,21 +1,13 @@
 import 'json_helpers.dart';
 import 'sync_device_id.dart';
+import 'webdav_presets.dart';
 
 abstract final class SyncProviderIds {
   static const none = 'none';
   static const webDav = 'webDav';
 
   static String normalize(String? value) {
-    return value == webDav ? webDav : none;
-  }
-}
-
-abstract final class WebDavPresetIds {
-  static const custom = 'custom';
-  static const jianguoyun = 'jianguoyun';
-
-  static String normalize(String? value) {
-    return value == jianguoyun ? jianguoyun : custom;
+    return value?.trim().toLowerCase() == webDav.toLowerCase() ? webDav : none;
   }
 }
 
@@ -79,6 +71,7 @@ class SyncSettings {
     deletedPaperTombstones = _normalizeTombstoneMap(deletedPaperTombstones);
     deletedTodoItemTombstones =
         _normalizeNestedTombstoneMap(deletedTodoItemTombstones);
+    _removeTodoItemTombstonesCoveredByPaperTombstones();
     if (enabled && provider == SyncProviderIds.none) {
       provider = SyncProviderIds.webDav;
     }
@@ -93,19 +86,53 @@ class SyncSettings {
         ?.toUtc();
   }
 
-  void markPaperDeleted(String paperId, DateTime deletedAtUtc) {
+  bool markPaperDeleted(String paperId, DateTime deletedAtUtc) {
     final id = paperId.trim();
     if (id.isEmpty) {
-      return;
+      return false;
     }
-    final updated = _putLatestTombstone(
+    final tombstoneChanged = _putLatestTombstone(
       deletedPaperTombstones,
       id,
       _tombstoneTimestamp(deletedAtUtc),
     );
-    if (updated) {
-      deletedTodoItemTombstones.remove(id);
+    final effectiveDeletedAtUtc = paperDeletedAtUtc(id);
+    final itemTombstonesChanged = effectiveDeletedAtUtc != null &&
+        _removeCoveredTodoItemTombstones(id, effectiveDeletedAtUtc);
+    return tombstoneChanged || itemTombstonesChanged;
+  }
+
+  bool _removeCoveredTodoItemTombstones(
+    String paperId,
+    DateTime paperDeletedAtUtc,
+  ) {
+    final itemTombstones = deletedTodoItemTombstones[paperId];
+    if (itemTombstones == null) {
+      return false;
     }
+    final beforeCount = itemTombstones.length;
+    final paperDeletedAt = paperDeletedAtUtc.toUtc();
+    itemTombstones.removeWhere((_, timestamp) {
+      final itemDeletedAt = DateTime.tryParse(timestamp)?.toUtc();
+      return itemDeletedAt == null || !itemDeletedAt.isAfter(paperDeletedAt);
+    });
+    if (itemTombstones.isEmpty) {
+      deletedTodoItemTombstones.remove(paperId);
+    }
+    return itemTombstones.length != beforeCount;
+  }
+
+  bool _removeTodoItemTombstonesCoveredByPaperTombstones() {
+    var changed = false;
+    for (final entry in deletedPaperTombstones.entries) {
+      final deletedAtUtc = DateTime.tryParse(entry.value)?.toUtc();
+      if (deletedAtUtc == null) {
+        continue;
+      }
+      changed =
+          _removeCoveredTodoItemTombstones(entry.key, deletedAtUtc) || changed;
+    }
+    return changed;
   }
 
   void clearPaperDeleted(String paperId) {
@@ -129,7 +156,7 @@ class SyncSettings {
     )?.toUtc();
   }
 
-  void markTodoItemDeleted(
+  bool markTodoItemDeleted(
     String paperId,
     String itemId,
     DateTime deletedAtUtc,
@@ -137,9 +164,17 @@ class SyncSettings {
     final normalizedPaperId = paperId.trim();
     final normalizedItemId = itemId.trim();
     if (normalizedPaperId.isEmpty || normalizedItemId.isEmpty) {
-      return;
+      return false;
     }
-    _putLatestTombstone(
+    final paperDeletedAt = paperDeletedAtUtc(normalizedPaperId);
+    if (paperDeletedAt != null &&
+        !deletedAtUtc.toUtc().isAfter(paperDeletedAt)) {
+      return _removeCoveredTodoItemTombstones(
+        normalizedPaperId,
+        paperDeletedAt,
+      );
+    }
+    return _putLatestTombstone(
       deletedTodoItemTombstones.putIfAbsent(
         normalizedPaperId,
         () => <String, String>{},
@@ -198,9 +233,11 @@ class WebDavSyncSettings {
     this.endpoint = '',
     this.username = '',
     this.password = '',
+    this.encryptionPassphrase = '',
     this.rootPath = 'repapertodo',
     this.autoSyncOnStart = false,
     this.autoSyncIntervalMinutes = 15,
+    this.requestTimeoutSeconds = 30,
     JsonMap? extra,
   }) : extra = extra ?? <String, Object?>{};
 
@@ -209,30 +246,37 @@ class WebDavSyncSettings {
     'endpoint',
     'username',
     'password',
+    'encryptionPassphrase',
     'rootPath',
     'autoSyncOnStart',
     'autoSyncIntervalMinutes',
+    'requestTimeoutSeconds',
   };
 
   String presetId;
   String endpoint;
   String username;
   String password;
+  String encryptionPassphrase;
   String rootPath;
   bool autoSyncOnStart;
   int autoSyncIntervalMinutes;
+  int requestTimeoutSeconds;
   JsonMap extra;
 
   factory WebDavSyncSettings.jianguoyun({
     String username = '',
     String password = '',
+    String encryptionPassphrase = '',
   }) {
+    final preset = WebDavPresets.jianguoyun;
     return WebDavSyncSettings(
-      presetId: WebDavPresetIds.jianguoyun,
-      endpoint: 'https://dav.jianguoyun.com/dav/',
+      presetId: preset.id,
+      endpoint: preset.endpointText,
       username: username,
       password: password,
-      rootPath: 'RePaperTodo',
+      encryptionPassphrase: encryptionPassphrase,
+      rootPath: preset.defaultRootPath,
     );
   }
 
@@ -242,18 +286,36 @@ class WebDavSyncSettings {
       endpoint: stringValue(json['endpoint'], ''),
       username: stringValue(json['username'], ''),
       password: stringValue(json['password'], ''),
+      encryptionPassphrase: stringValue(json['encryptionPassphrase'], ''),
       rootPath: stringValue(json['rootPath'], 'repapertodo'),
       autoSyncOnStart: boolValue(json['autoSyncOnStart'], false),
       autoSyncIntervalMinutes: intValue(json['autoSyncIntervalMinutes'], 15),
+      requestTimeoutSeconds: intValue(json['requestTimeoutSeconds'], 30),
       extra: preserveUnknown(json, _knownKeys),
     )..normalize();
   }
 
-  bool get isConfigured {
-    return endpointUri != null &&
-        _isValidBasicAuthUsername(username) &&
-        _isValidBasicAuthPassword(password) &&
-        rootPath.isNotEmpty;
+  bool get isConfigured => configurationIssues.isEmpty;
+
+  bool get isSecurelyConfigured => secureConfigurationIssues.isEmpty;
+
+  Set<WebDavSyncConfigurationIssue> get configurationIssues {
+    return {
+      if (endpointUri == null) WebDavSyncConfigurationIssue.endpoint,
+      if (!_isValidBasicAuthUsername(username))
+        WebDavSyncConfigurationIssue.username,
+      if (!_isValidBasicAuthPassword(password))
+        WebDavSyncConfigurationIssue.password,
+      if (rootPath.isEmpty) WebDavSyncConfigurationIssue.rootPath,
+    };
+  }
+
+  Set<WebDavSyncConfigurationIssue> get secureConfigurationIssues {
+    return {
+      ...configurationIssues,
+      if (!usesEncryptedPayloads)
+        WebDavSyncConfigurationIssue.encryptionPassphrase,
+    };
   }
 
   Uri? get endpointUri {
@@ -274,14 +336,21 @@ class WebDavSyncSettings {
     return uri;
   }
 
+  bool get usesEncryptedPayloads {
+    return encryptionPassphrase.trim().isNotEmpty;
+  }
+
   void normalize() {
     presetId = WebDavPresetIds.normalize(presetId);
-    endpoint = endpoint.trim();
+    endpoint = _normalizeEndpoint(endpoint);
     username = username.trim();
+    encryptionPassphrase = encryptionPassphrase.trim();
     rootPath = _normalizeRootPath(rootPath);
     autoSyncIntervalMinutes = autoSyncIntervalMinutes.clamp(1, 1440).toInt();
-    if (presetId == WebDavPresetIds.jianguoyun && endpoint.isEmpty) {
-      endpoint = 'https://dav.jianguoyun.com/dav/';
+    requestTimeoutSeconds = requestTimeoutSeconds.clamp(1, 300).toInt();
+    final preset = WebDavPresets.byId(presetId);
+    if (preset != null && endpoint.isEmpty) {
+      endpoint = preset.endpointText;
     }
   }
 
@@ -291,9 +360,11 @@ class WebDavSyncSettings {
       endpoint: endpoint,
       username: username,
       password: password,
+      encryptionPassphrase: encryptionPassphrase,
       rootPath: rootPath,
       autoSyncOnStart: autoSyncOnStart,
       autoSyncIntervalMinutes: autoSyncIntervalMinutes,
+      requestTimeoutSeconds: requestTimeoutSeconds,
       extra: Map<String, Object?>.from(extra),
     );
   }
@@ -305,17 +376,56 @@ class WebDavSyncSettings {
       'endpoint': endpoint,
       'username': username,
       'password': password,
+      'encryptionPassphrase': encryptionPassphrase,
       'rootPath': rootPath,
       'autoSyncOnStart': autoSyncOnStart,
       'autoSyncIntervalMinutes': autoSyncIntervalMinutes,
+      'requestTimeoutSeconds': requestTimeoutSeconds,
     };
   }
+}
+
+enum WebDavSyncConfigurationIssue {
+  endpoint,
+  username,
+  password,
+  rootPath,
+  encryptionPassphrase,
+}
+
+String _normalizeEndpoint(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty || _hasUnsafeEndpointPath(trimmed)) {
+    return trimmed;
+  }
+  final uri = Uri.tryParse(trimmed);
+  final scheme = uri?.scheme.toLowerCase();
+  if (uri == null ||
+      (scheme != 'http' && scheme != 'https') ||
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty ||
+      uri.hasQuery ||
+      uri.hasFragment) {
+    return trimmed;
+  }
+  final pathSegments = [
+    ...uri.pathSegments,
+    if (!uri.path.endsWith('/')) '',
+  ];
+  final normalized = uri
+      .replace(
+        scheme: scheme,
+        host: uri.host.toLowerCase(),
+        pathSegments: pathSegments,
+      )
+      .toString();
+  return normalized.endsWith('/') ? normalized : '$normalized/';
 }
 
 String _normalizeRootPath(String value) {
   final trimmed = value.trim();
   if (trimmed.isEmpty) {
-    return 'repapertodo';
+    return value.isEmpty ? '' : 'repapertodo';
   }
   late final String decoded;
   try {
@@ -327,6 +437,9 @@ String _normalizeRootPath(String value) {
   }
   final segments = <String>[];
   for (final segment in decoded.replaceAll('\\', '/').split('/')) {
+    if (_hasControlCharacter(segment)) {
+      return '';
+    }
     final trimmedSegment = segment.trim();
     if (trimmedSegment.isEmpty || trimmedSegment == '.') {
       continue;
@@ -368,6 +481,9 @@ bool _hasUnsafeEndpointPath(String endpoint) {
     return true;
   }
   return decodedPath.replaceAll('\\', '/').split('/').any((segment) {
+    if (_hasControlCharacter(segment)) {
+      return true;
+    }
     final trimmed = segment.trim();
     return trimmed == '.' || trimmed == '..';
   });
@@ -376,12 +492,15 @@ bool _hasUnsafeEndpointPath(String endpoint) {
 bool _isValidBasicAuthUsername(String value) {
   return value.isNotEmpty &&
       !value.contains(':') &&
-      !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
+      !_hasControlCharacter(value);
 }
 
 bool _isValidBasicAuthPassword(String value) {
-  return value.trim().isNotEmpty &&
-      !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
+  return value.trim().isNotEmpty && !_hasControlCharacter(value);
+}
+
+bool _hasControlCharacter(String value) {
+  return value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
 }
 
 Map<String, String> _normalizeTombstoneMap(Object? value) {

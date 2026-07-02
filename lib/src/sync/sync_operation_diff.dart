@@ -55,7 +55,8 @@ class SyncOperationDiffBuilder {
       final previous = beforePapers[entry.key];
       final current = entry.value;
       if (previous == null) {
-        add(SyncOperationKind.upsertPaper, {'paper': current.toJson()});
+        add(SyncOperationKind.upsertPaper,
+            {'paper': _paperJsonForDiff(current)});
         continue;
       }
       _addPaperDiff(add, previous, current);
@@ -69,8 +70,8 @@ class SyncOperationDiffBuilder {
     PaperData before,
     PaperData after,
   ) {
-    final beforeJson = before.toJson();
-    final afterJson = after.toJson();
+    final beforeJson = _paperJsonForDiff(before);
+    final afterJson = _paperJsonForDiff(after);
     if (_deepEquals.equals(beforeJson, afterJson)) {
       return;
     }
@@ -82,7 +83,7 @@ class SyncOperationDiffBuilder {
         )) {
       add(
         SyncOperationKind.updateNoteContent,
-        {'paperId': after.id, 'content': after.content},
+        {'paperId': after.id.trim(), 'content': after.content},
       );
       return;
     }
@@ -108,7 +109,7 @@ class SyncOperationDiffBuilder {
     for (final itemId in beforeItems.keys) {
       if (!afterItems.containsKey(itemId)) {
         add(SyncOperationKind.deleteTodoItem, {
-          'paperId': after.id,
+          'paperId': after.id.trim(),
           'itemId': itemId,
         });
       }
@@ -117,10 +118,13 @@ class SyncOperationDiffBuilder {
       final previous = beforeItems[entry.key];
       final current = entry.value;
       if (previous == null ||
-          !_deepEquals.equals(previous.toJson(), current.toJson())) {
+          !_deepEquals.equals(
+            _itemJsonForDiff(previous),
+            _itemJsonForDiff(current),
+          )) {
         add(SyncOperationKind.upsertTodoItem, {
-          'paperId': after.id,
-          'item': current.toJson(),
+          'paperId': after.id.trim(),
+          'item': _itemJsonForDiff(current),
         });
       }
     }
@@ -145,14 +149,14 @@ class SyncOperationDiffBuilder {
   Map<String, PaperData> _paperMap(List<PaperData> papers) {
     return {
       for (final paper in papers)
-        if (paper.id.trim().isNotEmpty) paper.id: paper,
+        if (paper.id.trim().isNotEmpty) paper.id.trim(): paper,
     };
   }
 
   Map<String, PaperItem> _itemMap(List<PaperItem> items) {
     return {
       for (final item in items)
-        if (item.id.trim().isNotEmpty) item.id: item,
+        if (item.id.trim().isNotEmpty) item.id.trim(): item,
     };
   }
 
@@ -160,6 +164,26 @@ class SyncOperationDiffBuilder {
     return {
       for (final entry in source.entries)
         if (!keys.contains(entry.key)) entry.key: entry.value,
+    };
+  }
+
+  JsonMap _paperJsonForDiff(PaperData paper) {
+    final json = paper.toJson();
+    json['id'] = stringValue(json['id'], '').trim();
+    json['items'] = [
+      for (final item in jsonMapList(json['items'])) _itemJsonMapForDiff(item),
+    ];
+    return json;
+  }
+
+  JsonMap _itemJsonForDiff(PaperItem item) {
+    return _itemJsonMapForDiff(item.toJson());
+  }
+
+  JsonMap _itemJsonMapForDiff(JsonMap item) {
+    return {
+      ...item,
+      'id': stringValue(item['id'], '').trim(),
     };
   }
 }

@@ -29,19 +29,26 @@ class RePaperTodoController {
 
   Stream<StartupCommand> get startupCommands => _platform.startup.commands;
 
+  bool get supportsStartupAtLogin =>
+      _platform.systemIntegration.supportsStartupAtLogin;
+
+  bool get supportsWindowSwitcherVisibility =>
+      _platform.systemIntegration.supportsWindowSwitcherVisibility;
+
+  bool get supportsFullscreenTopmostMode =>
+      _platform.systemIntegration.supportsFullscreenTopmostMode;
+
+  bool get supportsGlobalHotkeys =>
+      _platform.systemIntegration.supportsGlobalHotkeys;
+
+  bool get supportsScriptCapsules =>
+      _platform.scriptCapsules.supportsScriptCapsules;
+
   Future<void> start(
       {StartupCommand startupCommand =
           const StartupCommand(StartupCommandKind.none)}) async {
     await _platform.tray.initialize();
-    await _platform.systemIntegration.registerGlobalHotkeys(state);
-    await _platform.systemIntegration.setStartupAtLogin(state.startAtLogin);
-    await _platform.systemIntegration
-        .setHideFromWindowSwitcher(state.hidePapersFromWindowSwitcher);
-    await _platform.systemIntegration
-        .setFullscreenTopmostMode(state.fullscreenTopmostMode);
-    if (state.usePersistentPowerShellProcess) {
-      await preparePersistentScriptCapsules();
-    }
+    await _applyStateSettingsToPlatform();
 
     if (state.papers.isEmpty && !startupCommand.createsPaper) {
       createPaper(PaperTypes.todo);
@@ -85,6 +92,13 @@ class RePaperTodoController {
     state.normalize();
   }
 
+  Future<void> applyCurrentStateToPlatform() async {
+    state.normalize();
+    await _applyStateSettingsToPlatform(stopPersistentWhenDisabled: true);
+    await _platform.paperWindows.restoreAll(state);
+    await _platform.tray.rebuildMenu(state);
+  }
+
   Future<void> updatePaperSurface(PaperData paper) async {
     await _platform.paperWindows.updatePaperSurface(paper);
   }
@@ -99,28 +113,44 @@ class RePaperTodoController {
 
   Future<void> setStartupAtLogin(bool enabled) async {
     state.startAtLogin = enabled;
+    if (!_platform.systemIntegration.supportsStartupAtLogin) {
+      return;
+    }
     await _platform.systemIntegration.setStartupAtLogin(enabled);
   }
 
   Future<void> setHideFromWindowSwitcher(bool enabled) async {
     state.hidePapersFromWindowSwitcher = enabled;
+    if (!_platform.systemIntegration.supportsWindowSwitcherVisibility) {
+      return;
+    }
     await _platform.systemIntegration.setHideFromWindowSwitcher(enabled);
   }
 
   Future<void> setFullscreenTopmostMode(String mode) async {
     state.fullscreenTopmostMode = mode;
     state.normalize();
+    if (!_platform.systemIntegration.supportsFullscreenTopmostMode) {
+      return;
+    }
     await _platform.systemIntegration
         .setFullscreenTopmostMode(state.fullscreenTopmostMode);
   }
 
   Future<void> registerGlobalHotkeys() async {
     state.normalize();
+    if (!_platform.systemIntegration.supportsGlobalHotkeys) {
+      return;
+    }
     await _platform.systemIntegration.registerGlobalHotkeys(state);
   }
 
   Future<void> openExternalFile(String path) async {
     await _platform.externalFiles.openFile(path);
+  }
+
+  Future<String> documentsDirectoryPath() {
+    return _platform.storage.documentsDirectoryPath();
   }
 
   Future<void> openUri(String uri) async {
@@ -141,10 +171,16 @@ class RePaperTodoController {
   }
 
   Future<void> stopPersistentScriptCapsules() async {
+    if (!_platform.scriptCapsules.supportsScriptCapsules) {
+      return;
+    }
     await _platform.scriptCapsules.stopPersistentProcesses();
   }
 
   Future<void> preparePersistentScriptCapsules() async {
+    if (!_platform.scriptCapsules.supportsScriptCapsules) {
+      return;
+    }
     await _platform.scriptCapsules.preparePersistentProcess(
       preferPowerShell7: state.preferPowerShell7,
       hideScriptRunWindow: state.hideScriptRunWindow,
@@ -188,8 +224,11 @@ class RePaperTodoController {
       case StartupCommandKind.settings:
         return;
       case StartupCommandKind.exit:
-        await _platform.systemIntegration.unregisterGlobalHotkeys();
+        if (_platform.systemIntegration.supportsGlobalHotkeys) {
+          await _platform.systemIntegration.unregisterGlobalHotkeys();
+        }
         await _platform.tray.dispose();
+        await _platform.systemIntegration.exitApplication();
     }
   }
 
@@ -197,5 +236,46 @@ class RePaperTodoController {
     final sameTypeCount =
         state.papers.where((paper) => paper.type == type).length + 1;
     return PaperTitles.defaultTitle(type, sameTypeCount);
+  }
+
+  Future<void> _applyStateSettingsToPlatform({
+    bool stopPersistentWhenDisabled = false,
+  }) async {
+    Future<void> ignorePlatformFailure(Future<void> Function() action) async {
+      try {
+        await action();
+      } catch (_) {
+        return;
+      }
+    }
+
+    if (_platform.systemIntegration.supportsGlobalHotkeys) {
+      await ignorePlatformFailure(
+        () => _platform.systemIntegration.registerGlobalHotkeys(state),
+      );
+    }
+    if (_platform.systemIntegration.supportsStartupAtLogin) {
+      await ignorePlatformFailure(
+        () => _platform.systemIntegration.setStartupAtLogin(state.startAtLogin),
+      );
+    }
+    if (_platform.systemIntegration.supportsWindowSwitcherVisibility) {
+      await ignorePlatformFailure(
+        () => _platform.systemIntegration
+            .setHideFromWindowSwitcher(state.hidePapersFromWindowSwitcher),
+      );
+    }
+    if (_platform.systemIntegration.supportsFullscreenTopmostMode) {
+      await ignorePlatformFailure(
+        () => _platform.systemIntegration
+            .setFullscreenTopmostMode(state.fullscreenTopmostMode),
+      );
+    }
+    if (state.usePersistentPowerShellProcess &&
+        _platform.scriptCapsules.supportsScriptCapsules) {
+      await ignorePlatformFailure(preparePersistentScriptCapsules);
+    } else if (stopPersistentWhenDisabled) {
+      await ignorePlatformFailure(stopPersistentScriptCapsules);
+    }
   }
 }

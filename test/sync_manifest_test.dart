@@ -21,6 +21,41 @@ void main() {
     });
   });
 
+  test('decodes manifest wire keys case-insensitively', () {
+    final manifest = SyncManifest.fromJson({
+      'SCHEMAVERSION': '1',
+      'UPDATEDATUTC': '2026-07-01T10:30:00+08:00',
+      'LATESTSNAPSHOTPATH': 'repapertodo/snapshots/legacy.json',
+      'DEVICESEQUENCES': {
+        ' Device A ': '1',
+        'device-a': '3',
+      },
+    });
+
+    expect(manifest.schemaVersion, 1);
+    expect(manifest.updatedAtUtc, DateTime.utc(2026, 7, 1, 2, 30));
+    expect(manifest.latestSnapshotPath, 'repapertodo/snapshots/legacy.json');
+    expect(manifest.deviceSequences, {'device-a': 3});
+  });
+
+  test('keeps modern manifest wire keys ahead of duplicate legacy keys', () {
+    final manifest = SyncManifest.fromJson({
+      'schemaVersion': 1,
+      'SCHEMAVERSION': 2,
+      'updatedAtUtc': '2026-07-01T10:30:00Z',
+      'UPDATEDATUTC': 'not-a-date',
+      'latestSnapshotPath': 'repapertodo/snapshots/modern.json',
+      'LATESTSNAPSHOTPATH': 7,
+      'deviceSequences': {'device-modern': 4},
+      'DEVICESEQUENCES': {'device-legacy': 1},
+    });
+
+    expect(manifest.schemaVersion, 1);
+    expect(manifest.updatedAtUtc, DateTime.utc(2026, 7, 1, 10, 30));
+    expect(manifest.latestSnapshotPath, 'repapertodo/snapshots/modern.json');
+    expect(manifest.deviceSequences, {'device-modern': 4});
+  });
+
   test('allows empty manifest snapshot paths', () {
     final manifest = SyncManifest.fromJson({
       'schemaVersion': 1,
@@ -32,8 +67,18 @@ void main() {
     expect(manifest.latestSnapshotPath, isEmpty);
   });
 
+  test('allows missing manifest device sequences as an empty map', () {
+    final manifest = SyncManifest.fromJson({
+      'schemaVersion': 1,
+      'updatedAtUtc': '2026-07-01T10:30:00Z',
+      'latestSnapshotPath': 'repapertodo/snapshots/local.json',
+    });
+
+    expect(manifest.deviceSequences, isEmpty);
+  });
+
   test('rejects unsupported manifest schema versions', () {
-    for (final schemaVersion in const <Object?>[null, 0, 2, 1.2, '1']) {
+    for (final schemaVersion in const <Object?>[null, 0, 2, 1.2, '1.2']) {
       expect(
         () => SyncManifest.fromJson({
           'schemaVersion': schemaVersion,
@@ -80,14 +125,14 @@ void main() {
 
   test('rejects invalid manifest device sequence maps', () {
     for (final deviceSequences in const <Object?>[
-      null,
       ['device-a'],
       {7: 1},
       {'bad': 1},
       {'device-a': 0},
       {'device-a': -1},
       {'device-a': 1.2},
-      {'device-a': '1'},
+      {'device-a': '1.2'},
+      {'device-a': 'not-a-number'},
     ]) {
       expect(
         () => SyncManifest.fromJson({

@@ -30,20 +30,20 @@ class SyncOperation {
 
   factory SyncOperation.fromJson(JsonMap json) {
     final deviceId = normalizeSyncDeviceId(
-      stringValue(json['deviceId'], ''),
+      stringValue(_wireValue(json, 'deviceId'), ''),
       fallback: '',
     );
-    final kind = _kindFromWire(stringValue(json['kind'], ''));
+    final kind = _kindFromWire(stringValue(_wireValue(json, 'kind'), ''));
     final createdAtUtc = _createdAtUtcFromWire(
-      stringValue(json['createdAtUtc'], ''),
+      stringValue(_wireValue(json, 'createdAtUtc'), ''),
     );
     return SyncOperation(
-      id: stringValue(json['id'], ''),
+      id: stringValue(_wireValue(json, 'id'), ''),
       deviceId: deviceId,
-      sequence: _sequenceFromWire(json['sequence']),
+      sequence: _sequenceFromWire(_wireValue(json, 'sequence')),
       kind: kind,
       createdAtUtc: createdAtUtc,
-      payload: _payloadFromWire(json['payload']),
+      payload: _payloadFromWire(_wireValue(json, 'payload')),
     );
   }
 
@@ -60,15 +60,41 @@ class SyncOperation {
 }
 
 SyncOperationKind _kindFromWire(String value) {
+  final normalizedValue = value.trim();
   for (final kind in SyncOperationKind.values) {
-    if (_kindToWire(kind) == value) {
+    if (_kindToWire(kind) == normalizedValue) {
+      return kind;
+    }
+  }
+  final lowerValue = normalizedValue.toLowerCase();
+  for (final kind in SyncOperationKind.values) {
+    if (_kindToWire(kind).toLowerCase() == lowerValue) {
       return kind;
     }
   }
   throw FormatException('Unknown sync operation kind: $value');
 }
 
+Object? _wireValue(JsonMap json, String key) {
+  if (json.containsKey(key)) {
+    return json[key];
+  }
+  final normalizedKey = key.toLowerCase();
+  for (final entry in json.entries) {
+    if (entry.key.toLowerCase() == normalizedKey) {
+      return entry.value;
+    }
+  }
+  return null;
+}
+
 int _sequenceFromWire(Object? value) {
+  if (value is String) {
+    final sequence = int.tryParse(value.trim());
+    if (sequence != null && sequence > 0) {
+      return sequence;
+    }
+  }
   if (value is num && value.isFinite && value % 1 == 0) {
     final sequence = value.toInt();
     if (sequence > 0) {

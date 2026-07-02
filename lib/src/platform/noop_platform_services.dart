@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import '../core/model/app_state.dart';
 import '../core/model/paper_data.dart';
@@ -14,7 +15,8 @@ class NoopPlatformServices implements PlatformServices {
         systemIntegration = NoopSystemIntegrationHost(),
         externalFiles = NoopExternalFileHost(),
         uriOpener = NoopUriOpenHost(),
-        scriptCapsules = NoopScriptCapsuleHost();
+        scriptCapsules = NoopScriptCapsuleHost(),
+        storage = NoopAppStorageHost();
 
   @override
   final PaperWindowHost paperWindows;
@@ -36,6 +38,9 @@ class NoopPlatformServices implements PlatformServices {
 
   @override
   final ScriptCapsuleHost scriptCapsules;
+
+  @override
+  final AppStorageHost storage;
 }
 
 class NoopPaperWindowHost implements PaperWindowHost {
@@ -88,6 +93,18 @@ class NoopStartupHost implements StartupHost {
 
 class NoopSystemIntegrationHost implements SystemIntegrationHost {
   @override
+  bool get supportsStartupAtLogin => false;
+
+  @override
+  bool get supportsWindowSwitcherVisibility => false;
+
+  @override
+  bool get supportsFullscreenTopmostMode => false;
+
+  @override
+  bool get supportsGlobalHotkeys => false;
+
+  @override
   Future<bool> isForegroundFullscreen() async => false;
 
   @override
@@ -104,6 +121,9 @@ class NoopSystemIntegrationHost implements SystemIntegrationHost {
 
   @override
   Future<void> unregisterGlobalHotkeys() async {}
+
+  @override
+  Future<void> exitApplication() async {}
 }
 
 class NoopExternalFileHost implements ExternalFileHost {
@@ -120,6 +140,9 @@ class NoopUriOpenHost implements UriOpenHost {
 
 class NoopScriptCapsuleHost implements ScriptCapsuleHost {
   @override
+  bool get supportsScriptCapsules => false;
+
+  @override
   Future<void> preparePersistentProcess({
     required bool preferPowerShell7,
     required bool hideScriptRunWindow,
@@ -130,4 +153,11 @@ class NoopScriptCapsuleHost implements ScriptCapsuleHost {
 
   @override
   Future<void> stopPersistentProcesses() async {}
+}
+
+class NoopAppStorageHost implements AppStorageHost {
+  @override
+  Future<String> documentsDirectoryPath() async {
+    return Directory.current.path;
+  }
 }

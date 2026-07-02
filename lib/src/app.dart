@@ -22,8 +22,13 @@ import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
 import 'core/startup/startup_command.dart';
 import 'sync/app_sync_service.dart';
+import 'sync/webdav/webdav_client.dart';
+import 'sync/webdav/webdav_payload_codec.dart';
 import 'sync/webdav/webdav_state_sync_service.dart';
 import 'ui/sync_settings_dialog.dart';
+
+const _externalMarkdownExportRetention = Duration(days: 7);
+const _maxExternalMarkdownPaperIdFileNameLength = 96;
 
 class RePaperTodoApp extends StatefulWidget {
   const RePaperTodoApp({
@@ -82,7 +87,7 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
   }
 
   ThemeMode _themeMode(String theme) {
-    return switch (theme) {
+    return switch (theme.trim().toLowerCase()) {
       'light' => ThemeMode.light,
       'dark' => ThemeMode.dark,
       _ => ThemeMode.system,
@@ -127,6 +132,84 @@ String _shortenTitle(String title, int maxLength) {
 
 String? _tooltipLabel(bool enabled, String label) => enabled ? label : null;
 
+String _readableFailureMessage(Object error) {
+  return switch (error) {
+    WebDavException(:final message) => message,
+    WebDavPayloadDecryptionException(:final message) => message,
+    PlatformException(
+      :final code,
+      :final message,
+      :final details,
+    ) =>
+      _platformFailureMessage(
+        code: code,
+        message: message,
+        details: details,
+      ),
+    FileSystemException(:final message, :final path) =>
+      path == null ? message : '$message: $path',
+    StateStoreException(:final message) => message,
+    FormatException(:final message) => message,
+    TimeoutException(:final message) => message ?? 'The operation timed out.',
+    StateError(:final message) => message,
+    _ => error.toString(),
+  };
+}
+
+String _platformFailureMessage({
+  required String code,
+  required String? message,
+  required Object? details,
+}) {
+  final readableMessage = message?.trim();
+  if (readableMessage != null && readableMessage.isNotEmpty) {
+    return readableMessage;
+  }
+  final readableDetails = details?.toString().trim();
+  if (readableDetails != null && readableDetails.isNotEmpty) {
+    return readableDetails;
+  }
+  return code;
+}
+
+String? _normalizeExternalUri(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  if (_hasUnsafeExternalUriCharacter(trimmed)) {
+    return null;
+  }
+  final uri = Uri.tryParse(trimmed);
+  if (uri == null) {
+    return null;
+  }
+  final scheme = uri.scheme.toLowerCase();
+  if (scheme == 'http' || scheme == 'https') {
+    return uri.host.trim().isEmpty ? null : trimmed;
+  }
+  if (scheme == 'mailto') {
+    return uri.path.trim().isEmpty ? null : trimmed;
+  }
+  return null;
+}
+
+bool _hasUnsafeExternalUriCharacter(String value) {
+  return value.codeUnits.any((unit) => unit <= 0x20 || unit == 0x7F);
+}
+
+class _CompactAppBarActions {
+  const _CompactAppBarActions._();
+
+  static const openSurface = 'open-surface';
+  static const newTodo = 'new-todo';
+  static const newNote = 'new-note';
+  static const toggleCollapseAll = 'toggle-collapse-all';
+  static const recoverySnapshots = 'recovery-snapshots';
+  static const showHidden = 'show-hidden';
+  static const settings = 'settings';
+}
+
 class PaperBoardScreen extends StatefulWidget {
   const PaperBoardScreen({
     required this.controller,
@@ -160,6 +243,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   AppState? _pendingLocalEditBaseState;
   AppState? _pendingLocalEditLatestState;
   String? _surfacePaperId;
+  final Map<String, bool> _surfaceVisibilityByPaperId = <String, bool>{};
   final Map<String, DateTime> _lastTodoReminderAt = <String, DateTime>{};
 
   RePaperTodoController get controller => widget.controller;
@@ -176,6 +260,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _startupCommandSubscription = controller.startupCommands.listen((command) {
       unawaited(_handleStartupCommand(command));
     });
+    _refreshSurfaceVisibilitySnapshot();
     _restartAutoSyncTimer();
     _restartTodoReminderTimer();
   }
@@ -225,6 +310,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final notePapers =
         controller.state.papers.where((paper) => paper.isNote).toList();
     final surfacePaper = _surfacePaper();
+    final useCompactAppBar = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
         leading: surfacePaper == null
@@ -237,67 +323,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         title: Text(
           surfacePaper == null ? 'RePaperTodo' : _displayTitle(surfacePaper),
         ),
-        actions: [
-          if (surfacePaper != null &&
-              controller.state.showTopBarExternalOpenButton)
-            IconButton(
-              tooltip:
-                  _tooltipLabel(enableToolTips, 'Open current paper surface'),
-              onPressed: () => _openPaper(surfacePaper),
-              icon: const Icon(Icons.open_in_new),
-            ),
-          if (controller.state.showTopBarNewTodoButton)
-            IconButton(
-              tooltip: _tooltipLabel(enableToolTips, 'New todo paper'),
-              onPressed: () => _createPaper(PaperTypes.todo),
-              icon: const Icon(Icons.add_task),
-            ),
-          if (controller.state.showTopBarNewNoteButton)
-            IconButton(
-              tooltip: _tooltipLabel(enableToolTips, 'New note paper'),
-              onPressed: () => _createPaper(PaperTypes.note),
-              icon: const Icon(Icons.note_add_outlined),
-            ),
-          if (controller.state.useCapsuleMode &&
-              controller.state.useCapsuleCollapseAll)
-            IconButton(
-              tooltip: _tooltipLabel(
-                enableToolTips,
-                controller.state.capsuleCollapseAllActive
-                    ? 'Expand all papers'
-                    : 'Collapse all papers',
-              ),
-              onPressed: _toggleCollapseAll,
-              icon: Icon(controller.state.capsuleCollapseAllActive
-                  ? Icons.unfold_more
-                  : Icons.unfold_less),
-            ),
-          IconButton(
-            tooltip: _tooltipLabel(enableToolTips, 'Sync now'),
-            onPressed: _isSyncing ? null : () => _syncNow(),
-            icon: _isSyncing
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.sync_outlined),
-          ),
-          IconButton(
-            tooltip: _tooltipLabel(enableToolTips, 'Recovery snapshots'),
-            onPressed: _isSyncing ? null : _openRecoverySnapshots,
-            icon: const Icon(Icons.restore_outlined),
-          ),
-          IconButton(
-            tooltip: _tooltipLabel(enableToolTips, 'Show hidden papers'),
-            onPressed: hiddenPapers.isEmpty ? null : _showHiddenPapers,
-            icon: const Icon(Icons.visibility_outlined),
-          ),
-          IconButton(
-            tooltip: _tooltipLabel(enableToolTips, 'Settings'),
-            onPressed: _openSettings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
+        actions: _appBarActions(
+          surfacePaper: surfacePaper,
+          hiddenPapers: hiddenPapers,
+          enableToolTips: enableToolTips,
+          compact: useCompactAppBar,
+        ),
       ),
       body: ColoredBox(
         color: colorScheme.surface,
@@ -319,6 +350,175 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
               ),
       ),
     );
+  }
+
+  List<Widget> _appBarActions({
+    required PaperData? surfacePaper,
+    required List<PaperData> hiddenPapers,
+    required bool enableToolTips,
+    required bool compact,
+  }) {
+    final syncButton = IconButton(
+      tooltip: _tooltipLabel(enableToolTips, 'Sync now'),
+      onPressed: _isSyncing ? null : () => _syncNow(),
+      icon: _isSyncing
+          ? const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.sync_outlined),
+    );
+    if (compact) {
+      return [
+        syncButton,
+        PopupMenuButton<String>(
+          key: const ValueKey('compact-app-bar-actions'),
+          tooltip: _tooltipLabel(enableToolTips, 'More actions'),
+          icon: const Icon(Icons.more_vert),
+          onSelected: (value) =>
+              _handleCompactAppBarAction(value, surfacePaper),
+          itemBuilder: (context) => [
+            if (surfacePaper != null &&
+                controller.state.showTopBarExternalOpenButton)
+              _compactMenuItem(
+                value: _CompactAppBarActions.openSurface,
+                icon: Icons.open_in_new,
+                label: 'Open surface',
+              ),
+            if (controller.state.showTopBarNewTodoButton)
+              _compactMenuItem(
+                value: _CompactAppBarActions.newTodo,
+                icon: Icons.add_task,
+                label: 'New todo',
+              ),
+            if (controller.state.showTopBarNewNoteButton)
+              _compactMenuItem(
+                value: _CompactAppBarActions.newNote,
+                icon: Icons.note_add_outlined,
+                label: 'New note',
+              ),
+            if (controller.state.useCapsuleMode &&
+                controller.state.useCapsuleCollapseAll)
+              _compactMenuItem(
+                value: _CompactAppBarActions.toggleCollapseAll,
+                icon: controller.state.capsuleCollapseAllActive
+                    ? Icons.unfold_more
+                    : Icons.unfold_less,
+                label: controller.state.capsuleCollapseAllActive
+                    ? 'Expand all'
+                    : 'Collapse all',
+              ),
+            _compactMenuItem(
+              value: _CompactAppBarActions.recoverySnapshots,
+              icon: Icons.restore_outlined,
+              label: 'Recovery snapshots',
+              enabled: !_isSyncing,
+            ),
+            _compactMenuItem(
+              value: _CompactAppBarActions.showHidden,
+              icon: Icons.visibility_outlined,
+              label: 'Show hidden',
+              enabled: hiddenPapers.isNotEmpty,
+            ),
+            _compactMenuItem(
+              value: _CompactAppBarActions.settings,
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+            ),
+          ],
+        ),
+      ];
+    }
+    return [
+      if (surfacePaper != null && controller.state.showTopBarExternalOpenButton)
+        IconButton(
+          tooltip: _tooltipLabel(enableToolTips, 'Open current paper surface'),
+          onPressed: () => _openPaper(surfacePaper),
+          icon: const Icon(Icons.open_in_new),
+        ),
+      if (controller.state.showTopBarNewTodoButton)
+        IconButton(
+          tooltip: _tooltipLabel(enableToolTips, 'New todo paper'),
+          onPressed: () => _createPaper(PaperTypes.todo),
+          icon: const Icon(Icons.add_task),
+        ),
+      if (controller.state.showTopBarNewNoteButton)
+        IconButton(
+          tooltip: _tooltipLabel(enableToolTips, 'New note paper'),
+          onPressed: () => _createPaper(PaperTypes.note),
+          icon: const Icon(Icons.note_add_outlined),
+        ),
+      if (controller.state.useCapsuleMode &&
+          controller.state.useCapsuleCollapseAll)
+        IconButton(
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            controller.state.capsuleCollapseAllActive
+                ? 'Expand all papers'
+                : 'Collapse all papers',
+          ),
+          onPressed: _toggleCollapseAll,
+          icon: Icon(controller.state.capsuleCollapseAllActive
+              ? Icons.unfold_more
+              : Icons.unfold_less),
+        ),
+      syncButton,
+      IconButton(
+        tooltip: _tooltipLabel(enableToolTips, 'Recovery snapshots'),
+        onPressed: _isSyncing ? null : _openRecoverySnapshots,
+        icon: const Icon(Icons.restore_outlined),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(enableToolTips, 'Show hidden papers'),
+        onPressed: hiddenPapers.isEmpty ? null : _showHiddenPapers,
+        icon: const Icon(Icons.visibility_outlined),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(enableToolTips, 'Settings'),
+        onPressed: _openSettings,
+        icon: const Icon(Icons.settings_outlined),
+      ),
+    ];
+  }
+
+  PopupMenuItem<String> _compactMenuItem({
+    required String value,
+    required IconData icon,
+    required String label,
+    bool enabled = true,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      enabled: enabled,
+      child: Row(
+        children: [
+          Icon(icon),
+          const SizedBox(width: 12),
+          Flexible(child: Text(label)),
+        ],
+      ),
+    );
+  }
+
+  void _handleCompactAppBarAction(String value, PaperData? surfacePaper) {
+    switch (value) {
+      case _CompactAppBarActions.openSurface:
+        if (surfacePaper != null) {
+          unawaited(_openPaper(surfacePaper));
+        }
+      case _CompactAppBarActions.newTodo:
+        unawaited(_createPaper(PaperTypes.todo));
+      case _CompactAppBarActions.newNote:
+        unawaited(_createPaper(PaperTypes.note));
+      case _CompactAppBarActions.toggleCollapseAll:
+        unawaited(_toggleCollapseAll());
+      case _CompactAppBarActions.recoverySnapshots:
+        unawaited(_openRecoverySnapshots());
+      case _CompactAppBarActions.showHidden:
+        unawaited(_showHiddenPapers());
+      case _CompactAppBarActions.settings:
+        unawaited(_openSettings());
+    }
   }
 
   Set<String> _linkedNoteIds() {
@@ -414,6 +614,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       }
       await widget.store.save(controller.state);
       await controller.rebuildTrayMenu();
+      _refreshSurfaceVisibilitySnapshot();
     });
     await _saveQueue;
     final localBeforeState = beforeState;
@@ -548,7 +749,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       return;
     }
     try {
-      final file = _writeExternalMarkdownFile(paper);
+      final file = await _writeExternalMarkdownFile(paper);
       await controller.openExternalFile(file.path);
       if (!mounted) {
         return;
@@ -561,23 +762,66 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('External markdown open failed: $error')),
+        SnackBar(
+          content: Text(
+            'External markdown open failed: ${_readableFailureMessage(error)}',
+          ),
+        ),
       );
     }
   }
 
   Future<void> _runScriptCapsule(ScriptCapsuleSpec spec) async {
-    await controller.runScriptCapsule(spec);
+    try {
+      await controller.runScriptCapsule(spec);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Script capsule failed: ${_readableFailureMessage(error)}',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _openUri(String uri) async {
-    await controller.openUri(uri);
+    final normalizedUri = _normalizeExternalUri(uri);
+    if (normalizedUri == null) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Open link failed: unsupported link target.'),
+        ),
+      );
+      return;
+    }
+    try {
+      await controller.openUri(normalizedUri);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Open link failed: ${_readableFailureMessage(error)}'),
+        ),
+      );
+    }
   }
 
-  File _writeExternalMarkdownFile(PaperData paper) {
-    final directory =
-        Directory(p.join(Directory.systemTemp.path, 'RePaperTodo'))
-          ..createSync(recursive: true);
+  Future<File> _writeExternalMarkdownFile(PaperData paper) async {
+    final documentsPath = await controller.documentsDirectoryPath();
+    final directory = Directory(
+      p.join(documentsPath, 'RePaperTodo', 'exports'),
+    );
+    directory.createSync(recursive: true);
+    _cleanupOldExternalMarkdownExports(directory);
     final safePaperId = _safeFilename(paper.id);
     final paperId = safePaperId.isEmpty
         ? DateTime.now().microsecondsSinceEpoch.toRadixString(16)
@@ -592,8 +836,31 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return file;
   }
 
+  void _cleanupOldExternalMarkdownExports(Directory directory) {
+    final cutoff = DateTime.now().subtract(_externalMarkdownExportRetention);
+    try {
+      for (final entity in directory.listSync(followLinks: false)) {
+        if (entity is! File) {
+          continue;
+        }
+        if (!p.basename(entity.path).startsWith('paper-')) {
+          continue;
+        }
+        if (entity.lastModifiedSync().isBefore(cutoff)) {
+          entity.deleteSync();
+        }
+      }
+    } catch (_) {
+      // Export cleanup is opportunistic; opening the current note should win.
+    }
+  }
+
   String _safeFilename(String value) {
-    return value.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_').trim();
+    final safe = value.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_').trim();
+    if (safe.length <= _maxExternalMarkdownPaperIdFileNameLength) {
+      return safe;
+    }
+    return '${safe.substring(0, 72)}_${safe.substring(safe.length - 23)}';
   }
 
   Future<void> _showHiddenPapers() async {
@@ -660,11 +927,39 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (!mounted) {
       return;
     }
+    final visibilityChanged = _rememberSurfaceVisibility(paper);
     setState(() {});
+    if (visibilityChanged) {
+      unawaited(controller.rebuildTrayMenu());
+    }
     _surfaceSaveDebounce?.cancel();
     _surfaceSaveDebounce = Timer(const Duration(milliseconds: 500), () {
       unawaited(_saveState());
     });
+  }
+
+  bool _rememberSurfaceVisibility(PaperData paper) {
+    final previous = _surfaceVisibilityByPaperId[paper.id];
+    _surfaceVisibilityByPaperId[paper.id] = paper.isVisible;
+    return previous != null && previous != paper.isVisible;
+  }
+
+  void _refreshSurfaceVisibilitySnapshot() {
+    _surfaceVisibilityByPaperId
+      ..clear()
+      ..addEntries(
+        controller.state.papers.map(
+          (paper) => MapEntry(paper.id, paper.isVisible),
+        ),
+      );
+  }
+
+  Future<void> _replaceStateAndApplyPlatform(AppState state) async {
+    setState(() {
+      controller.replaceState(state);
+      _refreshSurfaceVisibilitySnapshot();
+    });
+    await controller.applyCurrentStateToPlatform();
   }
 
   Future<void> _updatePaperSurface(PaperData paper) async {
@@ -700,9 +995,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       if (!mounted || !showMessage) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sync failed: $error')),
-      );
+      _showSyncFailureSnackBar(error);
       return;
     }
     if (!mounted) {
@@ -717,23 +1010,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       if (!mounted) {
         return;
       }
-      setState(() {
-        controller.replaceState(result.state);
-      });
-      await controller.rebuildTrayMenu();
+      await _replaceStateAndApplyPlatform(result.state);
       _restartAutoSyncTimer();
       if (showMessage && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_syncRunMessage(result))),
+        _showSyncSnackBar(
+          message: _syncRunMessage(result),
+          status: result.syncResult.status,
         );
       }
     } catch (error) {
       if (!mounted || !showMessage) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sync failed: $error')),
-      );
+      _showSyncFailureSnackBar(error);
     } finally {
       if (mounted) {
         setState(() => _isSyncing = false);
@@ -742,6 +1031,26 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _openRecoverySnapshots() async {
+    final sync = controller.state.sync;
+    if (!sync.enabled) {
+      _showSyncSnackBar(
+        message: _syncMessage(
+          const AppSyncResult(status: AppSyncStatus.disabled),
+        ),
+        status: AppSyncStatus.disabled,
+      );
+      return;
+    }
+    if (sync.provider != SyncProviderIds.webDav ||
+        !sync.webDav.isSecurelyConfigured) {
+      _showSyncSnackBar(
+        message: _syncMessage(
+          const AppSyncResult(status: AppSyncStatus.configurationMissing),
+        ),
+        status: AppSyncStatus.configurationMissing,
+      );
+      return;
+    }
     final snapshot = await showDialog<WebDavSnapshotRecord>(
       context: context,
       builder: (context) {
@@ -800,24 +1109,20 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         return;
       }
       if (result.state != null) {
-        setState(() {
-          controller.replaceState(result.state!);
-        });
-        await controller.rebuildTrayMenu();
+        await _replaceStateAndApplyPlatform(result.state!);
       }
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_syncMessage(result))),
+      _showSyncSnackBar(
+        message: _syncMessage(result),
+        status: result.status,
       );
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Restore failed: $error')),
-      );
+      _showRestoreFailureSnackBar(snapshot, error);
     } finally {
       if (mounted) {
         setState(() => _isSyncing = false);
@@ -879,6 +1184,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       initialHideDeepCapsulesWhenCovered:
           controller.state.hideDeepCapsulesWhenCovered,
       initialStartAtLogin: controller.state.startAtLogin,
+      supportsStartAtLogin: controller.supportsStartupAtLogin,
+      supportsHideFromWindowSwitcher:
+          controller.supportsWindowSwitcherVisibility,
+      supportsFullscreenTopmostMode: controller.supportsFullscreenTopmostMode,
+      supportsGlobalHotkeys: controller.supportsGlobalHotkeys,
+      supportsScriptCapsules: controller.supportsScriptCapsules,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
       initialFullscreenTopmostMode: controller.state.fullscreenTopmostMode,
@@ -966,17 +1277,46 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       controller.state.hideLinkedNotesFromCapsules =
           result.hideLinkedNotesFromCapsules;
     });
-    await controller.setStartupAtLogin(result.startAtLogin);
-    await controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher);
-    await controller.setFullscreenTopmostMode(result.fullscreenTopmostMode);
-    await controller.registerGlobalHotkeys();
+    final platformSettingErrors = <String>[];
+    Future<void> applyPlatformSetting(
+      String label,
+      Future<void> Function() action,
+    ) async {
+      try {
+        await action();
+      } catch (error) {
+        platformSettingErrors.add('$label: ${_readableFailureMessage(error)}');
+      }
+    }
+
+    if (controller.supportsStartupAtLogin) {
+      await applyPlatformSetting(
+        'Startup at login',
+        () => controller.setStartupAtLogin(result.startAtLogin),
+      );
+    }
+    await applyPlatformSetting(
+      'Window switcher visibility',
+      () => controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher),
+    );
+    await applyPlatformSetting(
+      'Fullscreen/topmost mode',
+      () => controller.setFullscreenTopmostMode(result.fullscreenTopmostMode),
+    );
+    await applyPlatformSetting(
+      'Global hotkeys',
+      controller.registerGlobalHotkeys,
+    );
     if (_shouldStopPersistentScriptCapsules(
       previousUsePersistentPowerShellProcess,
       previousPreferPowerShell7,
       previousHideScriptRunWindow,
       result,
     )) {
-      await controller.stopPersistentScriptCapsules();
+      await applyPlatformSetting(
+        'Script capsule process',
+        controller.stopPersistentScriptCapsules,
+      );
     }
     if (_shouldPreparePersistentScriptCapsules(
       previousUsePersistentPowerShellProcess,
@@ -984,12 +1324,93 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       previousHideScriptRunWindow,
       result,
     )) {
-      await controller.preparePersistentScriptCapsules();
+      await applyPlatformSetting(
+        'Script capsule process',
+        controller.preparePersistentScriptCapsules,
+      );
+    }
+    if (platformSettingErrors.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Platform settings failed: ${platformSettingErrors.join('; ')}',
+          ),
+        ),
+      );
     }
     widget.onAppThemeChanged?.call();
     _restartAutoSyncTimer();
     _restartTodoReminderTimer();
     await _saveState();
+  }
+
+  void _showSyncSnackBar({
+    required String message,
+    required AppSyncStatus status,
+  }) {
+    final action = switch (status) {
+      AppSyncStatus.disabled ||
+      AppSyncStatus.configurationMissing ||
+      AppSyncStatus.payloadUnreadable =>
+        SnackBarAction(
+          label: 'Settings',
+          onPressed: () {
+            if (mounted) {
+              unawaited(_openSettings());
+            }
+          },
+        ),
+      AppSyncStatus.conflict => SnackBarAction(
+          label: 'Recovery',
+          onPressed: () {
+            if (mounted) {
+              unawaited(_openRecoverySnapshots());
+            }
+          },
+        ),
+      _ => null,
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: action,
+      ),
+    );
+  }
+
+  void _showSyncFailureSnackBar(Object error) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Sync failed: ${_readableFailureMessage(error)}'),
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () {
+            if (mounted) {
+              unawaited(_syncNow());
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  void _showRestoreFailureSnackBar(
+    WebDavSnapshotRecord snapshot,
+    Object error,
+  ) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Restore failed: ${_readableFailureMessage(error)}'),
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () {
+            if (mounted) {
+              unawaited(_restoreRecoverySnapshot(snapshot));
+            }
+          },
+        ),
+      ),
+    );
   }
 
   bool _shouldStopPersistentScriptCapsules(
@@ -1027,22 +1448,44 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return switch (result.status) {
       AppSyncStatus.disabled => 'Sync is disabled.',
       AppSyncStatus.configurationMissing =>
-        'Complete WebDAV sync settings first.',
+        'Complete WebDAV sync settings and encryption passphrase first.',
       AppSyncStatus.uploaded => 'Local data uploaded.',
       AppSyncStatus.downloaded => 'Remote data downloaded.',
       AppSyncStatus.conflict =>
         'Remote data changed during sync. Pull again before upload.',
+      AppSyncStatus.payloadUnreadable =>
+        'Unable to decrypt remote sync data. Check the sync encryption passphrase.',
     };
   }
 
   String _syncRunMessage(AppSyncRunResult result) {
     final baseMessage = _syncMessage(result.syncResult);
     final appliedCount = result.operationAppliedCount;
-    if (appliedCount == 0) {
-      return baseMessage;
+    final parts = <String>[baseMessage];
+    if (appliedCount > 0) {
+      final changeLabel = appliedCount == 1 ? 'change' : 'changes';
+      parts.add('Merged $appliedCount remote $changeLabel.');
     }
-    final changeLabel = appliedCount == 1 ? 'change' : 'changes';
-    return '$baseMessage Merged $appliedCount remote $changeLabel.';
+    final mergeResult = result.operationMergeResult;
+    if (mergeResult != null && mergeResult.legacyPlainOperationLogCount > 0) {
+      final total = mergeResult.legacyPlainOperationLogCount;
+      final migrated = mergeResult.legacyPlainOperationLogMigratedCount;
+      final logLabel = total == 1 ? 'operation log' : 'operation logs';
+      if (migrated == total) {
+        parts.add(
+          'Migrated $total legacy WebDAV $logLabel to encrypted payloads.',
+        );
+      } else if (migrated > 0) {
+        parts.add(
+          'Migrated $migrated of $total legacy WebDAV $logLabel to encrypted payloads; sync again to retry the rest.',
+        );
+      } else {
+        parts.add(
+          'Found $total legacy plain WebDAV $logLabel; sync again after remote ETags are available to retry encryption migration.',
+        );
+      }
+    }
+    return parts.join(' ');
   }
 
   void _restartAutoSyncTimer() {
@@ -1119,11 +1562,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       if (!mounted) {
         return false;
       }
-      if (uploadResult.uploadedCount > 0) {
-        setState(() {
-          controller.replaceState(uploadResult.state);
-        });
-        await controller.rebuildTrayMenu();
+      if (uploadResult.uploadedCount > 0 || uploadResult.stateChanged) {
+        await _replaceStateAndApplyPlatform(uploadResult.state);
       }
       return true;
     } catch (error) {
@@ -1156,7 +1596,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final settings = controller.state.sync;
     return settings.enabled &&
         settings.provider == SyncProviderIds.webDav &&
-        settings.webDav.isConfigured;
+        settings.webDav.isSecurelyConfigured;
   }
 
   Future<bool> _confirmDeletePaper(PaperData paper) async {
@@ -1458,12 +1898,32 @@ class _LinkedNoteRestore {
   final String noteId;
 }
 
-class _RecoverySnapshotsDialog extends StatelessWidget {
+class _RecoverySnapshotsDialog extends StatefulWidget {
   const _RecoverySnapshotsDialog({
     required this.loadSnapshots,
   });
 
   final Future<List<WebDavSnapshotRecord>> Function() loadSnapshots;
+
+  @override
+  State<_RecoverySnapshotsDialog> createState() =>
+      _RecoverySnapshotsDialogState();
+}
+
+class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
+  late Future<List<WebDavSnapshotRecord>> _snapshotsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _snapshotsFuture = widget.loadSnapshots();
+  }
+
+  void _retry() {
+    setState(() {
+      _snapshotsFuture = widget.loadSnapshots();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1472,7 +1932,7 @@ class _RecoverySnapshotsDialog extends StatelessWidget {
       content: SizedBox(
         width: 520,
         child: FutureBuilder<List<WebDavSnapshotRecord>>(
-          future: loadSnapshots(),
+          future: _snapshotsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const SizedBox(
@@ -1481,7 +1941,29 @@ class _RecoverySnapshotsDialog extends StatelessWidget {
               );
             }
             if (snapshot.hasError) {
-              return Text('Unable to load snapshots: ${snapshot.error}');
+              return SizedBox(
+                height: 132,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Unable to load snapshots: '
+                      '${_readableFailureMessage(snapshot.error!)}',
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        key: const ValueKey('retry-recovery-snapshots'),
+                        onPressed: _retry,
+                        icon: const Icon(Icons.refresh_outlined),
+                        label: const Text('Retry'),
+                      ),
+                    ),
+                  ],
+                ),
+              );
             }
             final snapshots = snapshot.data ?? const <WebDavSnapshotRecord>[];
             if (snapshots.isEmpty) {
@@ -1498,20 +1980,9 @@ class _RecoverySnapshotsDialog extends StatelessWidget {
                 separatorBuilder: (context, index) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final record = snapshots[index];
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.history_outlined),
-                    title: Text(_snapshotSummary(record)),
-                    subtitle: Text(
-                      '${record.path}\n${_snapshotSizeLabel(record)}',
-                    ),
-                    isThreeLine: true,
-                    trailing: FilledButton.icon(
-                      key: ValueKey('restore-snapshot-${record.path}'),
-                      onPressed: () => Navigator.of(context).pop(record),
-                      icon: const Icon(Icons.restore_outlined),
-                      label: const Text('Restore'),
-                    ),
+                  return _RecoverySnapshotListItem(
+                    record: record,
+                    onRestore: () => Navigator.of(context).pop(record),
                   );
                 },
               ),
@@ -1525,6 +1996,84 @@ class _RecoverySnapshotsDialog extends StatelessWidget {
           child: const Text('Close'),
         ),
       ],
+    );
+  }
+}
+
+class _RecoverySnapshotListItem extends StatelessWidget {
+  const _RecoverySnapshotListItem({
+    required this.record,
+    required this.onRestore,
+  });
+
+  final WebDavSnapshotRecord record;
+  final VoidCallback onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(Icons.history_outlined),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _snapshotSummary(record),
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        record.path,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _snapshotSizeLabel(record),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              key: ValueKey('restore-snapshot-${record.path}'),
+              onPressed: onRestore,
+              icon: const Icon(Icons.restore_outlined),
+              label: const Text('Restore'),
+            ),
+          ],
+        ),
+      );
+    }
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.history_outlined),
+      title: Text(_snapshotSummary(record)),
+      subtitle: Text(
+        '${record.path}\n${_snapshotSizeLabel(record)}',
+      ),
+      isThreeLine: true,
+      trailing: FilledButton.icon(
+        key: ValueKey('restore-snapshot-${record.path}'),
+        onPressed: onRestore,
+        icon: const Icon(Icons.restore_outlined),
+        label: const Text('Restore'),
+      ),
     );
   }
 }
@@ -1597,6 +2146,15 @@ class PaperPreview extends StatelessWidget {
     required this.onCaptureBounds,
     super.key,
   });
+
+  static const _compactPaperActionOpenSurface = 'open-surface';
+  static const _compactPaperActionOpenMarkdown = 'open-markdown';
+  static const _compactPaperActionToggleAlwaysOnTop = 'toggle-always-on-top';
+  static const _compactPaperActionTogglePinned = 'toggle-pinned';
+  static const _compactPaperActionCaptureBounds = 'capture-bounds';
+  static const _compactPaperActionHide = 'hide';
+  static const _compactPaperActionDelete = 'delete';
+  static const _compactPaperZoomActionPrefix = 'zoom:';
 
   final PaperData paper;
   final List<PaperData> notePapers;
@@ -1689,112 +2247,11 @@ class PaperPreview extends StatelessWidget {
                 child: Wrap(
                   spacing: 4,
                   runSpacing: 4,
-                  children: [
-                    IconButton(
-                      tooltip:
-                          _tooltipLabel(enableToolTips, 'Open paper surface'),
-                      onPressed: () => unawaited(onOpen(paper)),
-                      icon: const Icon(Icons.open_in_new),
-                    ),
-                    if (paper.isNote)
-                      IconButton(
-                        tooltip: _tooltipLabel(
-                          enableToolTips,
-                          'Open markdown externally',
-                        ),
-                        onPressed: () =>
-                            unawaited(onOpenExternalMarkdown(paper)),
-                        icon: const Icon(Icons.file_open_outlined),
-                      ),
-                    IconButton(
-                      tooltip: _tooltipLabel(
-                        enableToolTips,
-                        collapseAllActive
-                            ? 'Collapse all is active'
-                            : paper.isCollapsed
-                                ? 'Expand paper'
-                                : 'Collapse paper',
-                      ),
-                      onPressed: collapseAllActive
-                          ? null
-                          : () {
-                              paper.isCollapsed = !paper.isCollapsed;
-                              unawaited(onChanged());
-                            },
-                      icon: Icon(
-                          isCollapsed ? Icons.expand_more : Icons.expand_less),
-                    ),
-                    PopupMenuButton<double>(
-                      tooltip: _tooltipLabel(enableToolTips, 'Paper text zoom'),
-                      icon: const Icon(Icons.text_fields),
-                      initialValue: textZoom,
-                      onSelected: (value) => _setTextZoom(value),
-                      itemBuilder: (context) {
-                        return [
-                          for (final option in _TextZoomOption.values)
-                            CheckedPopupMenuItem<double>(
-                              value: option.value,
-                              checked: option.value == textZoom,
-                              child: Text(option.label),
-                            ),
-                        ];
-                      },
-                    ),
-                    IconButton(
-                      tooltip: _tooltipLabel(
-                        enableToolTips,
-                        paper.alwaysOnTop
-                            ? 'Disable always on top'
-                            : 'Keep on top',
-                      ),
-                      onPressed: () {
-                        paper.alwaysOnTop = !paper.alwaysOnTop;
-                        if (paper.alwaysOnTop) {
-                          paper.isPinnedToDesktop = false;
-                        }
-                        unawaited(onSurfaceChanged(paper));
-                        unawaited(onChanged());
-                      },
-                      icon: Icon(paper.alwaysOnTop
-                          ? Icons.push_pin
-                          : Icons.push_pin_outlined),
-                    ),
-                    IconButton(
-                      tooltip: _tooltipLabel(
-                        enableToolTips,
-                        paper.isPinnedToDesktop
-                            ? 'Unpin from desktop'
-                            : 'Pin to desktop',
-                      ),
-                      onPressed: () {
-                        paper.isPinnedToDesktop = !paper.isPinnedToDesktop;
-                        if (paper.isPinnedToDesktop) {
-                          paper.alwaysOnTop = false;
-                        }
-                        unawaited(onSurfaceChanged(paper));
-                        unawaited(onChanged());
-                      },
-                      icon: Icon(paper.isPinnedToDesktop
-                          ? Icons.desktop_windows
-                          : Icons.desktop_windows_outlined),
-                    ),
-                    IconButton(
-                      tooltip:
-                          _tooltipLabel(enableToolTips, 'Save window bounds'),
-                      onPressed: () => unawaited(onCaptureBounds(paper)),
-                      icon: const Icon(Icons.aspect_ratio_outlined),
-                    ),
-                    IconButton(
-                      tooltip: _tooltipLabel(enableToolTips, 'Hide paper'),
-                      onPressed: () => unawaited(onHide(paper)),
-                      icon: const Icon(Icons.visibility_off_outlined),
-                    ),
-                    IconButton(
-                      tooltip: _tooltipLabel(enableToolTips, 'Delete paper'),
-                      onPressed: () => unawaited(onDelete(paper)),
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                  ],
+                  children: _paperHeaderActions(
+                    context: context,
+                    isCollapsed: isCollapsed,
+                    textZoom: textZoom,
+                  ),
                 ),
               ),
               _animatedPaperBody(isCollapsed),
@@ -1868,6 +2325,225 @@ class PaperPreview extends StatelessWidget {
     );
   }
 
+  List<Widget> _paperHeaderActions({
+    required BuildContext context,
+    required bool isCollapsed,
+    required double textZoom,
+  }) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    if (compact) {
+      return [
+        _collapseButton(isCollapsed),
+        PopupMenuButton<String>(
+          key: ValueKey('${paper.id}-paper-actions'),
+          tooltip: _tooltipLabel(enableToolTips, 'Paper actions'),
+          icon: const Icon(Icons.more_vert),
+          onSelected: _handleCompactPaperAction,
+          itemBuilder: (context) => [
+            _paperActionMenuItem(
+              value: _compactPaperActionOpenSurface,
+              icon: Icons.open_in_new,
+              label: 'Open surface',
+            ),
+            if (paper.isNote)
+              _paperActionMenuItem(
+                value: _compactPaperActionOpenMarkdown,
+                icon: Icons.file_open_outlined,
+                label: 'Open markdown externally',
+              ),
+            const PopupMenuDivider(),
+            for (final option in _TextZoomOption.values)
+              CheckedPopupMenuItem<String>(
+                value: '$_compactPaperZoomActionPrefix${option.value}',
+                checked: option.value == textZoom,
+                child: Text('Zoom ${option.label}'),
+              ),
+            const PopupMenuDivider(),
+            _paperActionMenuItem(
+              value: _compactPaperActionToggleAlwaysOnTop,
+              icon:
+                  paper.alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
+              label:
+                  paper.alwaysOnTop ? 'Disable always on top' : 'Keep on top',
+            ),
+            _paperActionMenuItem(
+              value: _compactPaperActionTogglePinned,
+              icon: paper.isPinnedToDesktop
+                  ? Icons.desktop_windows
+                  : Icons.desktop_windows_outlined,
+              label: paper.isPinnedToDesktop
+                  ? 'Unpin from desktop'
+                  : 'Pin to desktop',
+            ),
+            _paperActionMenuItem(
+              value: _compactPaperActionCaptureBounds,
+              icon: Icons.aspect_ratio_outlined,
+              label: 'Save window bounds',
+            ),
+            const PopupMenuDivider(),
+            _paperActionMenuItem(
+              value: _compactPaperActionHide,
+              icon: Icons.visibility_off_outlined,
+              label: 'Hide paper',
+            ),
+            _paperActionMenuItem(
+              value: _compactPaperActionDelete,
+              icon: Icons.delete_outline,
+              label: 'Delete paper',
+            ),
+          ],
+        ),
+      ];
+    }
+    return [
+      IconButton(
+        tooltip: _tooltipLabel(enableToolTips, 'Open paper surface'),
+        onPressed: () => unawaited(onOpen(paper)),
+        icon: const Icon(Icons.open_in_new),
+      ),
+      if (paper.isNote)
+        IconButton(
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            'Open markdown externally',
+          ),
+          onPressed: () => unawaited(onOpenExternalMarkdown(paper)),
+          icon: const Icon(Icons.file_open_outlined),
+        ),
+      _collapseButton(isCollapsed),
+      PopupMenuButton<double>(
+        tooltip: _tooltipLabel(enableToolTips, 'Paper text zoom'),
+        icon: const Icon(Icons.text_fields),
+        initialValue: textZoom,
+        onSelected: (value) => _setTextZoom(value),
+        itemBuilder: (context) {
+          return [
+            for (final option in _TextZoomOption.values)
+              CheckedPopupMenuItem<double>(
+                value: option.value,
+                checked: option.value == textZoom,
+                child: Text(option.label),
+              ),
+          ];
+        },
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          paper.alwaysOnTop ? 'Disable always on top' : 'Keep on top',
+        ),
+        onPressed: _toggleAlwaysOnTop,
+        icon:
+            Icon(paper.alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          paper.isPinnedToDesktop ? 'Unpin from desktop' : 'Pin to desktop',
+        ),
+        onPressed: _togglePinnedToDesktop,
+        icon: Icon(paper.isPinnedToDesktop
+            ? Icons.desktop_windows
+            : Icons.desktop_windows_outlined),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(enableToolTips, 'Save window bounds'),
+        onPressed: () => unawaited(onCaptureBounds(paper)),
+        icon: const Icon(Icons.aspect_ratio_outlined),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(enableToolTips, 'Hide paper'),
+        onPressed: () => unawaited(onHide(paper)),
+        icon: const Icon(Icons.visibility_off_outlined),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(enableToolTips, 'Delete paper'),
+        onPressed: () => unawaited(onDelete(paper)),
+        icon: const Icon(Icons.delete_outline),
+      ),
+    ];
+  }
+
+  IconButton _collapseButton(bool isCollapsed) {
+    return IconButton(
+      tooltip: _tooltipLabel(
+        enableToolTips,
+        collapseAllActive
+            ? 'Collapse all is active'
+            : paper.isCollapsed
+                ? 'Expand paper'
+                : 'Collapse paper',
+      ),
+      onPressed: collapseAllActive ? null : _toggleCollapsed,
+      icon: Icon(isCollapsed ? Icons.expand_more : Icons.expand_less),
+    );
+  }
+
+  PopupMenuItem<String> _paperActionMenuItem({
+    required String value,
+    required IconData icon,
+    required String label,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon),
+          const SizedBox(width: 12),
+          Flexible(child: Text(label)),
+        ],
+      ),
+    );
+  }
+
+  void _handleCompactPaperAction(String value) {
+    if (value.startsWith(_compactPaperZoomActionPrefix)) {
+      _setTextZoom(
+        double.parse(value.substring(_compactPaperZoomActionPrefix.length)),
+      );
+      return;
+    }
+    switch (value) {
+      case _compactPaperActionOpenSurface:
+        unawaited(onOpen(paper));
+      case _compactPaperActionOpenMarkdown:
+        unawaited(onOpenExternalMarkdown(paper));
+      case _compactPaperActionToggleAlwaysOnTop:
+        _toggleAlwaysOnTop();
+      case _compactPaperActionTogglePinned:
+        _togglePinnedToDesktop();
+      case _compactPaperActionCaptureBounds:
+        unawaited(onCaptureBounds(paper));
+      case _compactPaperActionHide:
+        unawaited(onHide(paper));
+      case _compactPaperActionDelete:
+        unawaited(onDelete(paper));
+    }
+  }
+
+  void _toggleCollapsed() {
+    paper.isCollapsed = !paper.isCollapsed;
+    unawaited(onChanged());
+  }
+
+  void _toggleAlwaysOnTop() {
+    paper.alwaysOnTop = !paper.alwaysOnTop;
+    if (paper.alwaysOnTop) {
+      paper.isPinnedToDesktop = false;
+    }
+    unawaited(onSurfaceChanged(paper));
+    unawaited(onChanged());
+  }
+
+  void _togglePinnedToDesktop() {
+    paper.isPinnedToDesktop = !paper.isPinnedToDesktop;
+    if (paper.isPinnedToDesktop) {
+      paper.alwaysOnTop = false;
+    }
+    unawaited(onSurfaceChanged(paper));
+    unawaited(onChanged());
+  }
+
   void _setTextZoom(double value) {
     paper.textZoom = value.clamp(0.5, 1.5).toDouble();
     unawaited(onSurfaceChanged(paper));
@@ -1914,6 +2590,11 @@ class _NoteEditorState extends State<_NoteEditor> {
   static const _viewEdit = 'edit';
   static const _viewPreview = 'preview';
   static const _viewSplit = 'split';
+  static const _markdownActionStrikethrough = 'strikethrough';
+  static const _markdownActionHeading = 'heading';
+  static const _markdownActionQuote = 'quote';
+  static const _markdownActionList = 'list';
+  static const _markdownActionCodeBlock = 'code-block';
 
   late final TextEditingController _contentController;
   late final FocusNode _contentFocusNode;
@@ -2076,6 +2757,7 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   Widget _markdownToolbar(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Wrap(
       spacing: 4,
       runSpacing: 4,
@@ -2090,50 +2772,39 @@ class _NoteEditorState extends State<_NoteEditor> {
           icon: Icons.format_italic,
           onPressed: _formatItalic,
         ),
-        _formatButton(
-          tooltip: 'Strikethrough',
-          icon: Icons.strikethrough_s,
-          onPressed: () => _applyMarkdownFormat(
-            (value) => MarkdownFormatting.wrapSelection(value, '~~', '~~'),
+        if (!compact) ...[
+          _formatButton(
+            tooltip: 'Strikethrough',
+            icon: Icons.strikethrough_s,
+            onPressed: _formatStrikethrough,
           ),
-        ),
-        _formatButton(
-          tooltip: 'Heading',
-          icon: Icons.title,
-          onPressed: () => _applyMarkdownFormat(
-            (value) => MarkdownFormatting.insertLinePrefix(value, '# '),
+          _formatButton(
+            tooltip: 'Heading',
+            icon: Icons.title,
+            onPressed: _formatHeading,
           ),
-        ),
-        _formatButton(
-          tooltip: 'Quote',
-          icon: Icons.format_quote,
-          onPressed: () => _applyMarkdownFormat(
-            (value) => MarkdownFormatting.insertLinePrefix(value, '> '),
+          _formatButton(
+            tooltip: 'Quote',
+            icon: Icons.format_quote,
+            onPressed: _formatQuote,
           ),
-        ),
-        _formatButton(
-          tooltip: 'List',
-          icon: Icons.format_list_bulleted,
-          onPressed: () => _applyMarkdownFormat(
-            (value) => MarkdownFormatting.insertLinePrefix(value, '- '),
+          _formatButton(
+            tooltip: 'List',
+            icon: Icons.format_list_bulleted,
+            onPressed: _formatList,
           ),
-        ),
-        _formatButton(
-          tooltip: 'Code block',
-          icon: Icons.code,
-          onPressed: () => _applyMarkdownFormat(
-            (value) => MarkdownFormatting.wrapSelection(
-              value,
-              '```\n',
-              '\n```',
-            ),
+          _formatButton(
+            tooltip: 'Code block',
+            icon: Icons.code,
+            onPressed: _formatCodeBlock,
           ),
-        ),
+        ],
         _formatButton(
           tooltip: 'Insert link (Ctrl+K)',
           icon: Icons.link,
           onPressed: _insertMarkdownLink,
         ),
+        if (compact) _compactMarkdownActions(),
       ],
     );
   }
@@ -2147,6 +2818,59 @@ class _NoteEditorState extends State<_NoteEditor> {
       tooltip: tooltip,
       icon: Icon(icon),
       onPressed: onPressed,
+    );
+  }
+
+  Widget _compactMarkdownActions() {
+    return PopupMenuButton<String>(
+      key: const ValueKey('compact-markdown-toolbar-actions'),
+      tooltip: 'More markdown actions',
+      icon: const Icon(Icons.more_vert),
+      onSelected: _handleCompactMarkdownAction,
+      itemBuilder: (context) => [
+        _markdownMenuItem(
+          value: _markdownActionStrikethrough,
+          icon: Icons.strikethrough_s,
+          label: 'Strikethrough',
+        ),
+        _markdownMenuItem(
+          value: _markdownActionHeading,
+          icon: Icons.title,
+          label: 'Heading',
+        ),
+        _markdownMenuItem(
+          value: _markdownActionQuote,
+          icon: Icons.format_quote,
+          label: 'Quote',
+        ),
+        _markdownMenuItem(
+          value: _markdownActionList,
+          icon: Icons.format_list_bulleted,
+          label: 'List',
+        ),
+        _markdownMenuItem(
+          value: _markdownActionCodeBlock,
+          icon: Icons.code,
+          label: 'Code block',
+        ),
+      ],
+    );
+  }
+
+  PopupMenuItem<String> _markdownMenuItem({
+    required String value,
+    required IconData icon,
+    required String label,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon),
+          const SizedBox(width: 12),
+          Flexible(child: Text(label)),
+        ],
+      ),
     );
   }
 
@@ -2164,6 +2888,55 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   void _insertMarkdownLink() {
     _applyMarkdownFormat(MarkdownFormatting.insertMarkdownLink);
+  }
+
+  void _formatStrikethrough() {
+    _applyMarkdownFormat(
+      (value) => MarkdownFormatting.wrapSelection(value, '~~', '~~'),
+    );
+  }
+
+  void _formatHeading() {
+    _applyMarkdownFormat(
+      (value) => MarkdownFormatting.insertLinePrefix(value, '# '),
+    );
+  }
+
+  void _formatQuote() {
+    _applyMarkdownFormat(
+      (value) => MarkdownFormatting.insertLinePrefix(value, '> '),
+    );
+  }
+
+  void _formatList() {
+    _applyMarkdownFormat(
+      (value) => MarkdownFormatting.insertLinePrefix(value, '- '),
+    );
+  }
+
+  void _formatCodeBlock() {
+    _applyMarkdownFormat(
+      (value) => MarkdownFormatting.wrapSelection(
+        value,
+        '```\n',
+        '\n```',
+      ),
+    );
+  }
+
+  void _handleCompactMarkdownAction(String value) {
+    switch (value) {
+      case _markdownActionStrikethrough:
+        _formatStrikethrough();
+      case _markdownActionHeading:
+        _formatHeading();
+      case _markdownActionQuote:
+        _formatQuote();
+      case _markdownActionList:
+        _formatList();
+      case _markdownActionCodeBlock:
+        _formatCodeBlock();
+    }
   }
 
   KeyEventResult _handleMarkdownKeyEvent(FocusNode node, KeyEvent event) {
@@ -2334,7 +3107,11 @@ class _NoteEditorState extends State<_NoteEditor> {
           return;
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Open link failed: $error')),
+          SnackBar(
+            content: Text(
+              'Open link failed: ${_readableFailureMessage(error)}',
+            ),
+          ),
         );
       }),
     );
@@ -3157,6 +3934,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final visualSpec = _TodoVisualSpec.from(widget.visualSize);
+    final useCompactItemActions = MediaQuery.sizeOf(context).width < 600;
     final itemTextStyle = theme.textTheme.bodyMedium
         ?.apply(fontSizeFactor: visualSpec.textScale * widget.textZoom)
         .copyWith(
@@ -3230,104 +4008,11 @@ class _TodoEditorState extends State<_TodoEditor> {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: _tooltipLabel(widget.enableToolTips, 'Set due date'),
-                  onPressed: () => unawaited(_pickDueDate(context, item)),
-                  iconSize: visualSpec.iconSize,
-                  constraints: BoxConstraints.tightFor(
-                    width: visualSpec.controlExtent,
-                    height: visualSpec.controlExtent,
-                  ),
-                  icon: const Icon(Icons.event_outlined),
-                ),
-                IconButton(
-                  tooltip: _tooltipLabel(
-                      widget.enableToolTips, 'Set reminder interval'),
-                  onPressed: () =>
-                      unawaited(_pickReminderInterval(context, item)),
-                  iconSize: visualSpec.iconSize,
-                  constraints: BoxConstraints.tightFor(
-                    width: visualSpec.controlExtent,
-                    height: visualSpec.controlExtent,
-                  ),
-                  icon: const Icon(Icons.notifications_none_outlined),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: _tooltipLabel(widget.enableToolTips, 'Todo columns'),
-                  iconSize: visualSpec.iconSize,
-                  icon: const Icon(Icons.table_chart_outlined),
-                  onSelected: (value) => _updateColumns(item, value),
-                  itemBuilder: (context) {
-                    return [
-                      PopupMenuItem(
-                        value: _columnActionAdd,
-                        enabled: item.todoColumnCount < 8,
-                        child: const ListTile(
-                          leading: Icon(Icons.add),
-                          title: Text('Add column'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: _columnActionRemove,
-                        enabled: item.todoColumnCount > 1,
-                        child: const ListTile(
-                          leading: Icon(Icons.remove),
-                          title: Text('Remove last column'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: _columnActionEqualWidths,
-                        enabled: item.todoColumnCount > 1,
-                        child: const ListTile(
-                          leading: Icon(Icons.view_column_outlined),
-                          title: Text('Equal widths'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: _columnActionWideFirst,
-                        enabled: item.todoColumnCount > 1,
-                        child: const ListTile(
-                          leading: Icon(Icons.view_week_outlined),
-                          title: Text('Wide first column'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ];
-                  },
-                ),
-                PopupMenuButton<String>(
-                  tooltip: _tooltipLabel(widget.enableToolTips, 'Link note'),
-                  enabled: widget.enableTodoNoteLinks &&
-                      widget.notePapers.isNotEmpty,
-                  iconSize: visualSpec.iconSize,
-                  icon: Icon(item.linkedNoteId == null
-                      ? Icons.note_add_outlined
-                      : Icons.link_outlined),
-                  onSelected: (noteId) => _linkNote(item, noteId),
-                  itemBuilder: (context) {
-                    return [
-                      for (final note in widget.notePapers)
-                        PopupMenuItem(
-                          value: note.id,
-                          child: Text(_displayPaperTitle(note)),
-                        ),
-                    ];
-                  },
-                ),
-                IconButton(
-                  tooltip: _tooltipLabel(widget.enableToolTips, 'Delete item'),
-                  onPressed: widget.paper.items.length <= 1
-                      ? null
-                      : () => _deleteItem(context, item),
-                  iconSize: visualSpec.iconSize,
-                  constraints: BoxConstraints.tightFor(
-                    width: visualSpec.controlExtent,
-                    height: visualSpec.controlExtent,
-                  ),
-                  icon: const Icon(Icons.delete_outline),
+                ..._todoItemActions(
+                  context: context,
+                  item: item,
+                  visualSpec: visualSpec,
+                  compact: useCompactItemActions,
                 ),
               ],
             ),
@@ -3371,6 +4056,232 @@ class _TodoEditorState extends State<_TodoEditor> {
   static const _columnActionRemove = 'remove';
   static const _columnActionEqualWidths = 'equal-widths';
   static const _columnActionWideFirst = 'wide-first';
+  static const _compactTodoActionDueDate = 'due-date';
+  static const _compactTodoActionReminder = 'reminder';
+  static const _compactTodoActionDelete = 'delete';
+  static const _compactTodoColumnActionPrefix = 'column:';
+  static const _compactTodoLinkActionPrefix = 'link:';
+
+  List<Widget> _todoItemActions({
+    required BuildContext context,
+    required PaperItem item,
+    required _TodoVisualSpec visualSpec,
+    required bool compact,
+  }) {
+    if (compact) {
+      return [
+        PopupMenuButton<String>(
+          key: ValueKey('${widget.paper.id}-${item.id}-actions'),
+          tooltip: _tooltipLabel(widget.enableToolTips, 'Todo item actions'),
+          iconSize: visualSpec.iconSize,
+          icon: const Icon(Icons.more_vert),
+          onSelected: (value) => _handleCompactTodoAction(
+            context: context,
+            item: item,
+            value: value,
+          ),
+          itemBuilder: (context) => [
+            _todoActionMenuItem(
+              value: _compactTodoActionDueDate,
+              icon: Icons.event_outlined,
+              label: 'Set due date',
+            ),
+            _todoActionMenuItem(
+              value: _compactTodoActionReminder,
+              icon: Icons.notifications_none_outlined,
+              label: 'Set reminder',
+            ),
+            const PopupMenuDivider(),
+            _todoActionMenuItem(
+              value: '$_compactTodoColumnActionPrefix$_columnActionAdd',
+              icon: Icons.add,
+              label: 'Add column',
+              enabled: item.todoColumnCount < 8,
+            ),
+            _todoActionMenuItem(
+              value: '$_compactTodoColumnActionPrefix$_columnActionRemove',
+              icon: Icons.remove,
+              label: 'Remove last column',
+              enabled: item.todoColumnCount > 1,
+            ),
+            _todoActionMenuItem(
+              value: '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
+              icon: Icons.view_column_outlined,
+              label: 'Equal widths',
+              enabled: item.todoColumnCount > 1,
+            ),
+            _todoActionMenuItem(
+              value: '$_compactTodoColumnActionPrefix$_columnActionWideFirst',
+              icon: Icons.view_week_outlined,
+              label: 'Wide first column',
+              enabled: item.todoColumnCount > 1,
+            ),
+            if (widget.enableTodoNoteLinks && widget.notePapers.isNotEmpty) ...[
+              const PopupMenuDivider(),
+              for (final note in widget.notePapers)
+                _todoActionMenuItem(
+                  value: '$_compactTodoLinkActionPrefix${note.id}',
+                  icon: item.linkedNoteId == note.id
+                      ? Icons.link_outlined
+                      : Icons.notes_outlined,
+                  label: _displayPaperTitle(note),
+                ),
+            ],
+            const PopupMenuDivider(),
+            _todoActionMenuItem(
+              value: _compactTodoActionDelete,
+              icon: Icons.delete_outline,
+              label: 'Delete item',
+              enabled: widget.paper.items.length > 1,
+            ),
+          ],
+        ),
+      ];
+    }
+    return [
+      IconButton(
+        tooltip: _tooltipLabel(widget.enableToolTips, 'Set due date'),
+        onPressed: () => unawaited(_pickDueDate(context, item)),
+        iconSize: visualSpec.iconSize,
+        constraints: BoxConstraints.tightFor(
+          width: visualSpec.controlExtent,
+          height: visualSpec.controlExtent,
+        ),
+        icon: const Icon(Icons.event_outlined),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(widget.enableToolTips, 'Set reminder interval'),
+        onPressed: () => unawaited(_pickReminderInterval(context, item)),
+        iconSize: visualSpec.iconSize,
+        constraints: BoxConstraints.tightFor(
+          width: visualSpec.controlExtent,
+          height: visualSpec.controlExtent,
+        ),
+        icon: const Icon(Icons.notifications_none_outlined),
+      ),
+      PopupMenuButton<String>(
+        tooltip: _tooltipLabel(widget.enableToolTips, 'Todo columns'),
+        iconSize: visualSpec.iconSize,
+        icon: const Icon(Icons.table_chart_outlined),
+        onSelected: (value) => _updateColumns(item, value),
+        itemBuilder: (context) {
+          return [
+            PopupMenuItem(
+              value: _columnActionAdd,
+              enabled: item.todoColumnCount < 8,
+              child: const ListTile(
+                leading: Icon(Icons.add),
+                title: Text('Add column'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: _columnActionRemove,
+              enabled: item.todoColumnCount > 1,
+              child: const ListTile(
+                leading: Icon(Icons.remove),
+                title: Text('Remove last column'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: _columnActionEqualWidths,
+              enabled: item.todoColumnCount > 1,
+              child: const ListTile(
+                leading: Icon(Icons.view_column_outlined),
+                title: Text('Equal widths'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: _columnActionWideFirst,
+              enabled: item.todoColumnCount > 1,
+              child: const ListTile(
+                leading: Icon(Icons.view_week_outlined),
+                title: Text('Wide first column'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ];
+        },
+      ),
+      PopupMenuButton<String>(
+        tooltip: _tooltipLabel(widget.enableToolTips, 'Link note'),
+        enabled: widget.enableTodoNoteLinks && widget.notePapers.isNotEmpty,
+        iconSize: visualSpec.iconSize,
+        icon: Icon(item.linkedNoteId == null
+            ? Icons.note_add_outlined
+            : Icons.link_outlined),
+        onSelected: (noteId) => _linkNote(item, noteId),
+        itemBuilder: (context) {
+          return [
+            for (final note in widget.notePapers)
+              PopupMenuItem(
+                value: note.id,
+                child: Text(_displayPaperTitle(note)),
+              ),
+          ];
+        },
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(widget.enableToolTips, 'Delete item'),
+        onPressed: widget.paper.items.length <= 1
+            ? null
+            : () => _deleteItem(context, item),
+        iconSize: visualSpec.iconSize,
+        constraints: BoxConstraints.tightFor(
+          width: visualSpec.controlExtent,
+          height: visualSpec.controlExtent,
+        ),
+        icon: const Icon(Icons.delete_outline),
+      ),
+    ];
+  }
+
+  PopupMenuItem<String> _todoActionMenuItem({
+    required String value,
+    required IconData icon,
+    required String label,
+    bool enabled = true,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      enabled: enabled,
+      child: Row(
+        children: [
+          Icon(icon),
+          const SizedBox(width: 12),
+          Flexible(child: Text(label)),
+        ],
+      ),
+    );
+  }
+
+  void _handleCompactTodoAction({
+    required BuildContext context,
+    required PaperItem item,
+    required String value,
+  }) {
+    if (value.startsWith(_compactTodoColumnActionPrefix)) {
+      _updateColumns(
+        item,
+        value.substring(_compactTodoColumnActionPrefix.length),
+      );
+      return;
+    }
+    if (value.startsWith(_compactTodoLinkActionPrefix)) {
+      _linkNote(item, value.substring(_compactTodoLinkActionPrefix.length));
+      return;
+    }
+    switch (value) {
+      case _compactTodoActionDueDate:
+        unawaited(_pickDueDate(context, item));
+      case _compactTodoActionReminder:
+        unawaited(_pickReminderInterval(context, item));
+      case _compactTodoActionDelete:
+        _deleteItem(context, item);
+    }
+  }
 
   List<Map<String, Object?>> _snapshotTodoItems() {
     return [

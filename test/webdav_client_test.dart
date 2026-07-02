@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -107,6 +111,91 @@ void main() {
     expect(blankEtagMetadata?.etag, isNull);
   });
 
+  test('falls back to PROPFIND metadata when HEAD is unsupported', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PROPFIND') {
+          expect(request.headers['depth'], '0');
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"manifest-v1"</D:getetag>
+        <D:getcontentlength>42</D:getcontentlength>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:01:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(requests.map((request) => request.method), ['HEAD', 'PROPFIND']);
+    expect(metadata?.etag, 'manifest-v1');
+    expect(metadata?.contentLength, 42);
+    expect(metadata?.lastModified, DateTime.utc(2026, 7, 1, 9, 1));
+  });
+
+  test('sends PROPFIND bodies with the XML declaration first', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        expect(String.fromCharCodes(request.bodyBytes), startsWith('<?xml'));
+        return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+  </D:response>
+</D:multistatus>
+''', 207);
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries, hasLength(1));
+  });
+
+  test('returns null when PROPFIND metadata fallback is missing', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD') {
+          return http.Response('', 501);
+        }
+        if (request.method == 'PROPFIND') {
+          expect(request.headers['depth'], '0');
+          return http.Response('', 404);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/missing.json');
+
+    expect(requests.map((request) => request.method), ['HEAD', 'PROPFIND']);
+    expect(metadata, isNull);
+  });
+
   test('omits blank WebDAV condition headers', () async {
     final requests = <http.Request>[];
     final client = WebDavClient(
@@ -146,6 +235,147 @@ void main() {
     expect(requests[3].headers['if-match'], '"manifest-v2"');
   });
 
+  test('accepts common successful MKCOL statuses', () async {
+    final statuses = [200, 201, 204, 405];
+    final requests = <http.Request>[];
+    var cursor = 0;
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response('', statuses[cursor++]);
+      }),
+    );
+
+    for (final path in const [
+      'repapertodo',
+      'repapertodo/snapshots',
+      'repapertodo/ops',
+      'repapertodo/existing',
+    ]) {
+      await client.makeCollection(path);
+    }
+
+    expect(requests.map((request) => request.method), [
+      'MKCOL',
+      'MKCOL',
+      'MKCOL',
+      'MKCOL',
+    ]);
+    expect(requests.map((request) => request.url.path), [
+      '/remote.php/dav/files/user/repapertodo',
+      '/remote.php/dav/files/user/repapertodo/snapshots',
+      '/remote.php/dav/files/user/repapertodo/ops',
+      '/remote.php/dav/files/user/repapertodo/existing',
+    ]);
+  });
+
+  test('rejects failed MKCOL statuses', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        return http.Response('quota exceeded', 507);
+      }),
+    );
+
+    await expectLater(
+      client.makeCollection('repapertodo'),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.statusCode, 'statusCode', 507)
+            .having(
+              (error) => error.message,
+              'message',
+              'WebDAV storage quota is full.',
+            )
+            .having(
+              (error) => error.responseBody,
+              'responseBody',
+              'quota exceeded',
+            ),
+      ),
+    );
+  });
+
+  test('reports common WebDAV failure statuses with actionable messages',
+      () async {
+    for (final caseData in const <({int statusCode, String message})>[
+      (
+        statusCode: 400,
+        message: 'WebDAV request was rejected by the provider.',
+      ),
+      (
+        statusCode: 401,
+        message:
+            'WebDAV authentication failed. Check the username and app password.',
+      ),
+      (
+        statusCode: 403,
+        message:
+            'WebDAV permission denied. Check account access and remote folder permissions.',
+      ),
+      (
+        statusCode: 409,
+        message: 'WebDAV parent folder is missing or the remote file changed.',
+      ),
+      (
+        statusCode: 412,
+        message: 'WebDAV precondition failed because the remote file changed.',
+      ),
+      (
+        statusCode: 423,
+        message: 'WebDAV resource is locked by the provider.',
+      ),
+      (
+        statusCode: 429,
+        message: 'WebDAV provider rate limit reached. Try again later.',
+      ),
+      (
+        statusCode: 500,
+        message: 'WebDAV provider returned a server error.',
+      ),
+      (
+        statusCode: 503,
+        message: 'WebDAV provider is temporarily unavailable. Try again later.',
+      ),
+      (
+        statusCode: 507,
+        message: 'WebDAV storage quota is full.',
+      ),
+    ]) {
+      final client = WebDavClient(
+        baseUri:
+            Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+        credentials:
+            const WebDavCredentials(username: 'user', password: 'pass'),
+        httpClient: MockClient((request) async {
+          return http.Response('failure body', caseData.statusCode);
+        }),
+      );
+
+      await expectLater(
+        client.getBytes('repapertodo/manifest.json'),
+        throwsA(
+          isA<WebDavException>()
+              .having(
+                (error) => error.statusCode,
+                'statusCode',
+                caseData.statusCode,
+              )
+              .having((error) => error.message, 'message', caseData.message)
+              .having(
+                (error) => error.responseBody,
+                'responseBody',
+                'failure body',
+              ),
+        ),
+        reason: caseData.statusCode.toString(),
+      );
+    }
+  });
+
   test('rejects unsafe request paths before sending', () async {
     var requestCount = 0;
     final client = WebDavClient(
@@ -164,6 +394,8 @@ void main() {
       'https://evil.example.test/manifest.json',
       '//evil.example.test/manifest.json',
       '%2F%2Fevil.example.test/manifest.json',
+      'repapertodo/\nmanifest.json',
+      'repapertodo/%0Amanifest.json',
     ]) {
       await expectLater(
         client.getBytes(path),
@@ -246,6 +478,102 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('times out stalled WebDAV requests', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      requestTimeout: const Duration(milliseconds: 10),
+      httpClient: MockClient((request) => Completer<http.Response>().future),
+    );
+
+    await expectLater(
+      client.metadata('repapertodo/manifest.json'),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.statusCode, 'statusCode', 0)
+            .having(
+              (error) => error.message,
+              'message',
+              'WebDAV request timed out after 10ms.',
+            ),
+      ),
+    );
+  });
+
+  test('wraps lower-level WebDAV timeout failures as WebDAV errors', () async {
+    for (final caseData in <({TimeoutException error, String message})>[
+      (
+        error: TimeoutException('upstream timed out'),
+        message: 'WebDAV request timed out: upstream timed out',
+      ),
+      (
+        error: TimeoutException(''),
+        message: 'WebDAV request timed out.',
+      ),
+    ]) {
+      final client = WebDavClient(
+        baseUri:
+            Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+        credentials:
+            const WebDavCredentials(username: 'user', password: 'pass'),
+        httpClient: MockClient((request) async => throw caseData.error),
+      );
+
+      await expectLater(
+        client.metadata('repapertodo/manifest.json'),
+        throwsA(
+          isA<WebDavException>()
+              .having((exception) => exception.statusCode, 'statusCode', 0)
+              .having(
+                (exception) => exception.message,
+                'message',
+                caseData.message,
+              ),
+        ),
+        reason: caseData.error.toString(),
+      );
+    }
+  });
+
+  test('wraps WebDAV transport failures as WebDAV errors', () async {
+    for (final caseData in <({Object error, String message})>[
+      (
+        error: http.ClientException('connection reset'),
+        message: 'WebDAV request failed: connection reset',
+      ),
+      (
+        error: const SocketException('offline'),
+        message: 'WebDAV request failed: offline',
+      ),
+      (
+        error: http.ClientException(''),
+        message: 'WebDAV request failed: Network request failed.',
+      ),
+    ]) {
+      final client = WebDavClient(
+        baseUri:
+            Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+        credentials:
+            const WebDavCredentials(username: 'user', password: 'pass'),
+        httpClient: MockClient((request) async => throw caseData.error),
+      );
+
+      await expectLater(
+        client.metadata('repapertodo/manifest.json'),
+        throwsA(
+          isA<WebDavException>()
+              .having((exception) => exception.statusCode, 'statusCode', 0)
+              .having(
+                (exception) => exception.message,
+                'message',
+                caseData.message,
+              ),
+        ),
+        reason: caseData.error.toString(),
+      );
+    }
   });
 
   test('reports malformed multistatus responses as WebDAV errors', () async {
@@ -337,6 +665,130 @@ void main() {
     );
     expect(entries.single.etag, 'manifest-v1');
     expect(entries.single.contentLength, 42);
+  });
+
+  test('decodes multistatus responses with declared charsets', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response.bytes(
+          latin1.encode('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/café.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"café-v1"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+'''),
+          207,
+          headers: {'content-type': 'application/xml; charset=iso-8859-1'},
+        );
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries, hasLength(1));
+    expect(
+      entries.single.href,
+      '/remote.php/dav/files/user/repapertodo/café.json',
+    );
+    expect(entries.single.etag, 'café-v1');
+  });
+
+  test('decodes multistatus responses with XML-declared encodings', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response.bytes(
+          latin1.encode('''<?xml version="1.0" encoding="ISO-8859-1"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/café.xml</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"café-v2"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+'''),
+          207,
+        );
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries, hasLength(1));
+    expect(
+      entries.single.href,
+      '/remote.php/dav/files/user/repapertodo/café.xml',
+    );
+    expect(entries.single.etag, 'café-v2');
+  });
+
+  test('decodes charset-less multistatus responses as UTF-8', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response.bytes(
+          utf8.encode('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/论文.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"论文-v1"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+'''),
+          207,
+        );
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries, hasLength(1));
+    expect(
+      entries.single.href,
+      '/remote.php/dav/files/user/repapertodo/论文.json',
+    );
+    expect(entries.single.etag, '论文-v1');
+  });
+
+  test('ignores UTF-8 BOMs before multistatus responses', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response.bytes(
+          utf8.encode('''\uFEFF<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"manifest-v1"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+'''),
+          207,
+        );
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries, hasLength(1));
+    expect(entries.single.etag, 'manifest-v1');
   });
 
   test('normalizes WebDAV etags without deleting internal quotes', () async {
@@ -564,6 +1016,53 @@ void main() {
     expect(entries.single.contentLength, 42);
   });
 
+  test('ignores WebDAV response entries with failed direct statuses', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/available.json</D:href>
+    <D:status>HTTP/1.1 200 OK</D:status>
+    <D:propstat>
+      <D:prop><D:getetag>"available-v1"</D:getetag></D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/missing.json</D:href>
+    <D:status>HTTP/1.1 404 Not Found</D:status>
+    <D:propstat>
+      <D:prop><D:getetag>"stale-v1"</D:getetag></D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/locked.json</D:href>
+    <D:status>HTTP/1.1 423 Locked</D:status>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/malformed-status.json</D:href>
+    <D:status>not an HTTP status line</D:status>
+  </D:response>
+</D:multistatus>
+''', 207);
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries, hasLength(1));
+    expect(
+      entries.single.href,
+      '/remote.php/dav/files/user/repapertodo/available.json',
+    );
+    expect(entries.single.etag, 'available-v1');
+  });
+
   test('ignores WebDAV-looking values outside prop containers', () async {
     final client = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
@@ -674,6 +1173,7 @@ void main() {
       Uri.parse('https://dav.example.test/dav/?token=secret'),
       Uri.parse('https://dav.example.test/dav/#sync-root'),
       Uri.parse('https://dav.example.test/dav/%5C..%5Cfiles/'),
+      Uri.parse('https://dav.example.test/dav/%0Afiles/'),
     ]) {
       expect(
         () => WebDavClient(
@@ -683,6 +1183,29 @@ void main() {
         ),
         throwsA(isA<ArgumentError>()),
         reason: baseUri.toString(),
+      );
+    }
+  });
+
+  test('rejects non-positive WebDAV request timeouts', () {
+    for (final timeout in const [
+      Duration.zero,
+      Duration(milliseconds: -1),
+    ]) {
+      expect(
+        () => WebDavClient(
+          baseUri:
+              Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+          credentials:
+              const WebDavCredentials(username: 'user', password: 'pass'),
+          requestTimeout: timeout,
+        ),
+        throwsA(
+          isA<ArgumentError>()
+              .having((error) => error.name, 'name', 'requestTimeout')
+              .having((error) => error.invalidValue, 'invalidValue', timeout),
+        ),
+        reason: timeout.toString(),
       );
     }
   });

@@ -12,7 +12,8 @@ class AndroidPlatformServices implements PlatformServices {
         systemIntegration = NoopSystemIntegrationHost(),
         externalFiles = AndroidExternalFileHost(channel),
         uriOpener = AndroidUriOpenHost(channel),
-        scriptCapsules = NoopScriptCapsuleHost();
+        scriptCapsules = NoopScriptCapsuleHost(),
+        storage = AndroidAppStorageHost(channel);
 
   @override
   final PaperWindowHost paperWindows;
@@ -34,6 +35,9 @@ class AndroidPlatformServices implements PlatformServices {
 
   @override
   final ScriptCapsuleHost scriptCapsules;
+
+  @override
+  final AppStorageHost storage;
 }
 
 class AndroidUriOpenHost implements UriOpenHost {
@@ -55,5 +59,21 @@ class AndroidExternalFileHost implements ExternalFileHost {
   @override
   Future<void> openFile(String path) async {
     await _channel.invokeMethod<void>('openExternalFile', path);
+  }
+}
+
+class AndroidAppStorageHost implements AppStorageHost {
+  AndroidAppStorageHost(this._channel);
+
+  final MethodChannel _channel;
+
+  @override
+  Future<String> documentsDirectoryPath() async {
+    final path = await _channel.invokeMethod<String>('getFilesDirectory');
+    final trimmedPath = path?.trim();
+    if (trimmedPath == null || trimmedPath.isEmpty) {
+      throw StateError('Android files directory is unavailable.');
+    }
+    return trimmedPath;
   }
 }

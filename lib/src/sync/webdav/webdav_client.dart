@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -38,12 +39,15 @@ class WebDavCredentials {
 bool _isValidBasicAuthUsername(String value) {
   return value.isNotEmpty &&
       !value.contains(':') &&
-      !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
+      !_hasControlCharacter(value);
 }
 
 bool _isValidBasicAuthPassword(String value) {
-  return value.trim().isNotEmpty &&
-      !value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
+  return value.trim().isNotEmpty && !_hasControlCharacter(value);
+}
+
+bool _hasControlCharacter(String value) {
+  return value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
 }
 
 class WebDavEntry {
@@ -79,13 +83,16 @@ class WebDavClient {
     required Uri baseUri,
     required WebDavCredentials credentials,
     http.Client? httpClient,
+    Duration requestTimeout = const Duration(seconds: 30),
   })  : _baseUri = _normalizeBaseUri(baseUri),
         _credentials = credentials,
+        _requestTimeout = _normalizeRequestTimeout(requestTimeout),
         _ownsHttpClient = httpClient == null,
         _httpClient = httpClient ?? http.Client();
 
   final Uri _baseUri;
   final WebDavCredentials _credentials;
+  final Duration _requestTimeout;
   final bool _ownsHttpClient;
   final http.Client _httpClient;
   bool _closed = false;
@@ -105,6 +112,9 @@ class WebDavClient {
     final response = await _send('HEAD', path);
     if (response.statusCode == 404) {
       return null;
+    }
+    if (response.statusCode == 405 || response.statusCode == 501) {
+      return _metadataFromPropFind(path);
     }
     _throwIfUnexpected(response, expected: {200, 204});
     return WebDavResourceMetadata(
@@ -145,7 +155,7 @@ class WebDavClient {
     if (response.statusCode == 405) {
       return;
     }
-    _throwIfUnexpected(response, expected: {201});
+    _throwIfUnexpected(response, expected: {200, 201, 204});
   }
 
   Future<void> delete(String path, {String? ifMatch}) async {
@@ -162,28 +172,7 @@ class WebDavClient {
   }
 
   Future<List<WebDavEntry>> list(String path) async {
-    final body = utf8.encode('''
-<?xml version="1.0" encoding="utf-8" ?>
-<D:propfind xmlns:D="DAV:">
-  <D:prop>
-    <D:resourcetype/>
-    <D:getetag/>
-    <D:getcontentlength/>
-    <D:getlastmodified/>
-  </D:prop>
-</D:propfind>
-''');
-    final response = await _send(
-      'PROPFIND',
-      path,
-      headers: {
-        'depth': '1',
-        'content-type': 'application/xml; charset=utf-8',
-      },
-      body: body,
-    );
-    _throwIfUnexpected(response, expected: {207});
-    return _parseMultiStatusResponse(response);
+    return _propFind(path, depth: '1');
   }
 
   Future<http.Response> _send(
@@ -191,7 +180,7 @@ class WebDavClient {
     String path, {
     Map<String, String>? headers,
     Object? body,
-  }) {
+  }) async {
     if (_closed) {
       throw StateError('WebDAV client is closed.');
     }
@@ -205,14 +194,83 @@ class WebDavClient {
     } else if (body is String) {
       request.body = body;
     }
-    return _httpClient.send(request).then(http.Response.fromStream);
+    try {
+      return await _httpClient
+          .send(request)
+          .then(http.Response.fromStream)
+          .timeout(_requestTimeout, onTimeout: () {
+        throw WebDavException(
+          'WebDAV request timed out after ${_formatDuration(_requestTimeout)}.',
+          statusCode: 0,
+        );
+      });
+    } on WebDavException {
+      rethrow;
+    } on TimeoutException catch (error) {
+      throw _timeoutException(error);
+    } on http.ClientException catch (error) {
+      throw _transportException(error);
+    } on IOException catch (error) {
+      throw _transportException(error);
+    }
   }
 
   Uri _resolve(String path) {
     final segments = _normalizeRequestPathSegments(path);
     return _baseUri.resolveUri(Uri(pathSegments: segments));
   }
+
+  Future<WebDavResourceMetadata?> _metadataFromPropFind(String path) async {
+    final response = await _sendPropFind(path, depth: '0');
+    if (response.statusCode == 404) {
+      return null;
+    }
+    _throwIfUnexpected(response, expected: {207});
+    final entries = _parseMultiStatusResponse(response);
+    if (entries.isEmpty) {
+      return null;
+    }
+    final entry = entries.first;
+    return WebDavResourceMetadata(
+      etag: entry.etag,
+      contentLength: entry.contentLength,
+      lastModified: entry.lastModified,
+    );
+  }
+
+  Future<List<WebDavEntry>> _propFind(String path,
+      {required String depth}) async {
+    final response = await _sendPropFind(path, depth: depth);
+    _throwIfUnexpected(response, expected: {207});
+    return _parseMultiStatusResponse(response);
+  }
+
+  Future<http.Response> _sendPropFind(
+    String path, {
+    required String depth,
+  }) {
+    return _send(
+      'PROPFIND',
+      path,
+      headers: {
+        'depth': depth,
+        'content-type': 'application/xml; charset=utf-8',
+      },
+      body: _propFindBody,
+    );
+  }
 }
+
+final _propFindBody = utf8.encode('''<?xml version="1.0" encoding="utf-8" ?>
+<D:propfind xmlns:D="DAV:">
+  <D:prop>
+    <D:resourcetype/>
+    <D:getetag/>
+    <D:getcontentlength/>
+    <D:getlastmodified/>
+  </D:prop>
+</D:propfind>
+''');
 
 Uri _normalizeBaseUri(Uri uri) {
   final scheme = uri.scheme.toLowerCase();
@@ -241,11 +299,29 @@ Uri _normalizeBaseUri(Uri uri) {
     throw ArgumentError.value(
       uri,
       'baseUri',
-      'WebDAV base URI path must not contain dot-segments or backslashes.',
+      'WebDAV base URI path must not contain dot-segments, backslashes, or control characters.',
     );
   }
   final text = uri.toString();
   return text.endsWith('/') ? uri : Uri.parse('$text/');
+}
+
+Duration _normalizeRequestTimeout(Duration timeout) {
+  if (timeout <= Duration.zero) {
+    throw ArgumentError.value(
+      timeout,
+      'requestTimeout',
+      'WebDAV request timeout must be greater than zero.',
+    );
+  }
+  return timeout;
+}
+
+String _formatDuration(Duration duration) {
+  if (duration.inSeconds >= 1 && duration.inMilliseconds % 1000 == 0) {
+    return '${duration.inSeconds}s';
+  }
+  return '${duration.inMilliseconds}ms';
 }
 
 bool _hasUnsafeBaseUriPath(Uri uri) {
@@ -261,6 +337,9 @@ bool _hasUnsafeBaseUriPath(Uri uri) {
     return true;
   }
   return decodedPath.replaceAll('\\', '/').split('/').any((segment) {
+    if (_hasControlCharacter(segment)) {
+      return true;
+    }
     final trimmed = segment.trim();
     return trimmed == '.' || trimmed == '..';
   });
@@ -271,10 +350,58 @@ void _throwIfUnexpected(http.Response response, {required Set<int> expected}) {
     return;
   }
   throw WebDavException(
-    'Unexpected WebDAV status ${response.statusCode}.',
+    _unexpectedStatusMessage(response.statusCode),
     statusCode: response.statusCode,
     responseBody: response.body,
   );
+}
+
+String _unexpectedStatusMessage(int statusCode) {
+  return switch (statusCode) {
+    400 => 'WebDAV request was rejected by the provider.',
+    401 => 'WebDAV authentication failed. Check the username and app password.',
+    403 =>
+      'WebDAV permission denied. Check account access and remote folder permissions.',
+    404 => 'WebDAV resource was not found.',
+    409 => 'WebDAV parent folder is missing or the remote file changed.',
+    412 => 'WebDAV precondition failed because the remote file changed.',
+    423 => 'WebDAV resource is locked by the provider.',
+    429 => 'WebDAV provider rate limit reached. Try again later.',
+    500 => 'WebDAV provider returned a server error.',
+    502 ||
+    503 ||
+    504 =>
+      'WebDAV provider is temporarily unavailable. Try again later.',
+    507 => 'WebDAV storage quota is full.',
+    _ => 'Unexpected WebDAV status $statusCode.',
+  };
+}
+
+WebDavException _timeoutException(TimeoutException error) {
+  final message = error.message?.trim();
+  return WebDavException(
+    message == null || message.isEmpty
+        ? 'WebDAV request timed out.'
+        : 'WebDAV request timed out: $message',
+    statusCode: 0,
+  );
+}
+
+WebDavException _transportException(Object error) {
+  return WebDavException(
+    'WebDAV request failed: ${_transportFailureMessage(error)}',
+    statusCode: 0,
+  );
+}
+
+String _transportFailureMessage(Object error) {
+  final message = switch (error) {
+    http.ClientException(:final message) => message,
+    SocketException(:final message) => message,
+    _ => error.toString(),
+  }
+      .trim();
+  return message.isEmpty ? 'Network request failed.' : message;
 }
 
 class WebDavException implements Exception {
@@ -296,7 +423,7 @@ class WebDavException implements Exception {
 
 List<WebDavEntry> _parseMultiStatusResponse(http.Response response) {
   try {
-    return _parseMultiStatus(utf8.decode(response.bodyBytes));
+    return _parseMultiStatus(_decodeMultiStatusBody(response));
   } on FormatException catch (error) {
     throw WebDavException(
       'Malformed WebDAV multistatus response: ${error.message}',
@@ -310,6 +437,66 @@ List<WebDavEntry> _parseMultiStatusResponse(http.Response response) {
       responseBody: response.body,
     );
   }
+}
+
+String _decodeMultiStatusBody(http.Response response) {
+  final headerEncoding =
+      _encodingFromContentType(response.headers['content-type']);
+  if (headerEncoding != null) {
+    return _stripLeadingByteOrderMark(
+        headerEncoding.decode(response.bodyBytes));
+  }
+  final xmlEncoding = _encodingFromXmlDeclaration(response.bodyBytes);
+  if (xmlEncoding != null) {
+    return _stripLeadingByteOrderMark(xmlEncoding.decode(response.bodyBytes));
+  }
+  return _stripLeadingByteOrderMark(utf8.decode(response.bodyBytes));
+}
+
+String _stripLeadingByteOrderMark(String value) {
+  return value.startsWith('\uFEFF') ? value.substring(1) : value;
+}
+
+Encoding? _encodingFromContentType(String? contentType) {
+  if (contentType == null) {
+    return null;
+  }
+  for (final part in contentType.split(';')) {
+    final trimmed = part.trim();
+    final separator = trimmed.indexOf('=');
+    if (separator < 0) {
+      continue;
+    }
+    if (trimmed.substring(0, separator).trim().toLowerCase() != 'charset') {
+      continue;
+    }
+    return _encodingByName(trimmed.substring(separator + 1));
+  }
+  return null;
+}
+
+Encoding? _encodingFromXmlDeclaration(List<int> bytes) {
+  final prefixLength = bytes.length < 256 ? bytes.length : 256;
+  final prefix = ascii.decode(
+    bytes.take(prefixLength).toList(growable: false),
+    allowInvalid: true,
+  );
+  final match = RegExp(
+    r'''<\?xml\s+[^>]*encoding\s*=\s*["']([^"']+)["']''',
+    caseSensitive: false,
+  ).firstMatch(prefix);
+  return match == null ? null : _encodingByName(match.group(1)!);
+}
+
+Encoding _encodingByName(String name) {
+  final normalizedName = name.trim().replaceAll('"', '').replaceAll("'", '');
+  final encoding = Encoding.getByName(normalizedName);
+  if (encoding == null) {
+    throw FormatException(
+      'Unsupported WebDAV multistatus encoding: $normalizedName',
+    );
+  }
+  return encoding;
 }
 
 List<WebDavEntry> _parseMultiStatus(String xml) {
@@ -332,15 +519,21 @@ List<WebDavEntry> _parseMultiStatus(String xml) {
       'WebDAV multistatus response entries must use DAV: response elements.',
     );
   }
-  return responseElements.map(_parseEntry).toList(growable: false);
+  return responseElements
+      .map(_parseEntry)
+      .whereType<WebDavEntry>()
+      .toList(growable: false);
 }
 
-WebDavEntry _parseEntry(XmlElement element) {
+WebDavEntry? _parseEntry(XmlElement element) {
   final href = _firstDirectElementText(element, 'href');
   if (href == null || href.isEmpty) {
     throw const FormatException(
       'WebDAV response entries must include a DAV: href element.',
     );
+  }
+  if (!_responseStatusIsSuccessful(element)) {
+    return null;
   }
   final etag = _stripQuotes(_firstSuccessfulPropText(element, 'getetag'));
   final lengthText = _firstSuccessfulPropText(element, 'getcontentlength');
@@ -356,6 +549,15 @@ WebDavEntry _parseEntry(XmlElement element) {
         lastModifiedText == null ? null : _tryParseHttpDate(lastModifiedText),
     isCollection: _hasSuccessfulCollectionResourceType(element),
   );
+}
+
+bool _responseStatusIsSuccessful(XmlElement element) {
+  final statusText = _firstDirectElementText(element, 'status');
+  if (statusText == null || statusText.isEmpty) {
+    return true;
+  }
+  final statusCode = _webDavStatusCode(statusText);
+  return statusCode != null && statusCode >= 200 && statusCode < 300;
 }
 
 DateTime? _tryParseHttpDate(String value) {
@@ -497,6 +699,13 @@ List<String> _normalizeRequestPathSegments(String path) {
   }
   final segments = <String>[];
   for (final segment in decoded.split('/')) {
+    if (_hasControlCharacter(segment)) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'WebDAV path must not contain control characters.',
+      );
+    }
     final trimmed = segment.trim();
     if (trimmed.isEmpty || trimmed == '.') {
       continue;

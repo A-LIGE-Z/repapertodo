@@ -156,6 +156,44 @@ void main() {
     expect(result.state.papers.single.items.single.text, 'Updated keep');
   });
 
+  test('orders ready cross-device operations by creation time', () {
+    final result = applier.apply(
+      AppState(
+        papers: [
+          PaperData(id: 'paper-1', type: PaperTypes.note, title: 'Local'),
+        ],
+      ),
+      [
+        _operation(
+          deviceId: 'device-z',
+          sequence: 1,
+          kind: SyncOperationKind.deletePaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+          payload: {'paperId': 'paper-1'},
+        ),
+        _operation(
+          deviceId: 'device-a',
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 10, 5),
+          payload: {
+            'paper': PaperData(
+              id: 'paper-1',
+              type: PaperTypes.note,
+              title: 'Restored',
+            ).toJson(),
+          },
+        ),
+      ],
+    );
+
+    expect(result.appliedCount, 2);
+    expect(result.deviceSequences, {'device-z': 1, 'device-a': 1});
+    expect(
+        result.state.sync.deletedPaperTombstones, isNot(contains('paper-1')));
+    expect(result.state.papers.single.title, 'Restored');
+  });
+
   test('newer upserts restore deleted papers and todo items', () {
     final deletedAtUtc = DateTime.utc(2026, 7, 1, 9);
     final result = applier.apply(
@@ -254,6 +292,360 @@ void main() {
     expect(result.state.papers.single.content, 'Remote');
     expect(result.state.theme, 'dark');
     expect(result.state.enableToolTips, false);
+  });
+
+  test('trims payload ids before applying targeted operations', () {
+    final result = applier.apply(
+      AppState(
+        papers: [
+          PaperData(id: 'note', type: PaperTypes.note, content: 'Local'),
+          PaperData(
+            id: 'todo',
+            type: PaperTypes.todo,
+            items: [PaperItem(id: 'item-1', text: 'Remove me')],
+          ),
+          PaperData(id: 'deleted-note', type: PaperTypes.note),
+        ],
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.updateNoteContent,
+          payload: {'paperId': ' note ', 'content': 'Remote'},
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.deleteTodoItem,
+          payload: {'paperId': ' todo ', 'itemId': ' item-1 '},
+        ),
+        _operation(
+          sequence: 3,
+          kind: SyncOperationKind.deletePaper,
+          payload: {'paperId': ' deleted-note '},
+        ),
+      ],
+    );
+
+    final note = result.state.papers.firstWhere((paper) => paper.id == 'note');
+    final todo = result.state.papers.firstWhere((paper) => paper.id == 'todo');
+
+    expect(result.appliedCount, 3);
+    expect(note.content, 'Remote');
+    expect(todo.items.map((item) => item.id), isNot(contains('item-1')));
+    expect(
+      result.state.papers.map((paper) => paper.id),
+      isNot(contains('deleted-note')),
+    );
+    expect(
+      result.state.sync.deletedPaperTombstones,
+      contains('deleted-note'),
+    );
+    expect(
+      result.state.sync.deletedTodoItemTombstones['todo'],
+      contains('item-1'),
+    );
+  });
+
+  test('trims upsert payload ids before tombstone checks', () {
+    final deletedAtUtc = DateTime.utc(2026, 7, 1, 9);
+    final result = applier.apply(
+      AppState(
+        sync: SyncSettings(
+          deletedPaperTombstones: {
+            'paper-1': deletedAtUtc.toIso8601String(),
+          },
+          deletedTodoItemTombstones: {
+            'todo': {
+              'item-1': deletedAtUtc.toIso8601String(),
+            },
+          },
+        ),
+        papers: [
+          PaperData(
+            id: 'todo',
+            type: PaperTypes.todo,
+            items: [PaperItem(id: 'item-2', text: 'Keep me')],
+          ),
+        ],
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 8, 59),
+          payload: {
+            'paper': PaperData(
+              id: ' paper-1 ',
+              type: PaperTypes.note,
+              title: 'Stale remote',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.upsertTodoItem,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 8, 59),
+          payload: {
+            'paperId': 'todo',
+            'item': PaperItem(id: ' item-1 ', text: 'Stale item').toJson(),
+          },
+        ),
+        _operation(
+          sequence: 3,
+          kind: SyncOperationKind.upsertPaper,
+          createdAtUtc: DateTime.utc(2026, 7, 1, 9, 1),
+          payload: {
+            'paper': PaperData(
+              id: ' todo ',
+              type: PaperTypes.todo,
+              items: [
+                PaperItem(id: ' item-1 ', text: 'Restored item'),
+                PaperItem(id: ' item-2 ', text: 'Updated keep'),
+              ],
+            ).toJson(),
+          },
+        ),
+      ],
+    );
+
+    final todo = result.state.papers.single;
+
+    expect(result.appliedCount, 3);
+    expect(todo.id, 'todo');
+    expect(result.state.papers.map((paper) => paper.id),
+        isNot(contains('paper-1')));
+    expect(todo.items.map((item) => item.id), ['item-1', 'item-2']);
+    expect(todo.items.map((item) => item.text), [
+      'Restored item',
+      'Updated keep',
+    ]);
+    expect(result.state.sync.deletedPaperTombstones, contains('paper-1'));
+    expect(result.state.sync.deletedTodoItemTombstones['todo'],
+        isNot(contains('item-1')));
+  });
+
+  test('migrates legacy PaperTodo operation payloads', () {
+    final result = applier.apply(
+      AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'local-user',
+            password: 'local-password',
+            encryptionPassphrase: 'local-secret',
+            rootPath: 'RePaperTodo',
+          ),
+        ),
+        papers: [
+          PaperData(id: 'todo-paper', type: PaperTypes.todo),
+        ],
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'Paper': {
+              'Id': 'legacy-note',
+              'Type': 'note',
+              'Title': 'Legacy Note',
+              'Content': '# Migrated note',
+              'NoteCanvasElements': [
+                {
+                  'Id': 'legacy-code',
+                  'Text': 'Console.WriteLine();',
+                  'ZIndex': 0,
+                },
+              ],
+            },
+          },
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.upsertTodoItem,
+          payload: {
+            'PaperId': 'todo-paper',
+            'Item': {
+              'Id': 'legacy-item',
+              'Text': 'Migrated item',
+              'Done': true,
+              'TodoColumnCount': 2,
+              'TodoExtraColumns': ['source'],
+            },
+          },
+        ),
+        _operation(
+          sequence: 3,
+          kind: SyncOperationKind.updateSettings,
+          payload: {
+            'Settings': {
+              'Theme': 'dark',
+              'ShowTopBarNewPaperButtons': false,
+              'Sync': {
+                'Enabled': false,
+                'Provider': SyncProviderIds.none,
+                'WebDav': {
+                  'Endpoint': 'https://remote.example.test/',
+                  'Username': 'remote-user',
+                  'Password': 'remote-password',
+                  'EncryptionPassphrase': 'remote-secret',
+                },
+              },
+            },
+          },
+        ),
+      ],
+    );
+
+    final note = result.state.papers.firstWhere(
+      (paper) => paper.id == 'legacy-note',
+    );
+    final todo = result.state.papers.firstWhere(
+      (paper) => paper.id == 'todo-paper',
+    );
+    final item = todo.items.firstWhere(
+      (item) => item.id == 'legacy-item',
+    );
+
+    expect(note.title, 'Legacy Note');
+    expect(note.content, '# Migrated note');
+    expect(note.noteCanvasElements.single.id, 'legacy-code');
+    expect(note.noteCanvasElements.single.zIndex, 10);
+    expect(item.text, 'Migrated item');
+    expect(item.done, true);
+    expect(item.todoColumnCount, 2);
+    expect(item.todoExtraColumns, ['source']);
+    expect(result.state.theme, 'dark');
+    expect(result.state.showTopBarNewTodoButton, false);
+    expect(result.state.showTopBarNewNoteButton, false);
+    expect(result.state.sync.enabled, true);
+    expect(result.state.sync.provider, SyncProviderIds.webDav);
+    expect(result.state.sync.webDav.endpoint, 'https://dav.example.test/');
+    expect(result.state.sync.webDav.username, 'local-user');
+    expect(result.state.sync.webDav.password, 'local-password');
+    expect(result.state.sync.webDav.encryptionPassphrase, 'local-secret');
+  });
+
+  test('settings operations cannot replace local sync settings', () {
+    final deletedAtUtc = DateTime.utc(2026, 7, 1, 9);
+    final result = applier.apply(
+      AppState(
+        theme: 'light',
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'local-user',
+            password: 'local-password',
+            encryptionPassphrase: 'local-sync-secret',
+            rootPath: 'RePaperTodo',
+            requestTimeoutSeconds: 45,
+          ),
+          operationDeviceSequences: {'device-local': 7},
+          deletedPaperTombstones: {
+            'paper-1': deletedAtUtc.toIso8601String(),
+          },
+        ),
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.updateSettings,
+          payload: {
+            'settings': {
+              'theme': 'dark',
+              'sync': {
+                'enabled': false,
+                'provider': SyncProviderIds.none,
+                'operationDeviceSequences': {'remote-device': 99},
+                'deletedPaperTombstones': {
+                  'paper-2': DateTime.utc(2026, 7, 1, 10).toIso8601String(),
+                },
+                'webDav': {
+                  'endpoint': 'https://evil.example.test/',
+                  'username': 'remote-user',
+                  'password': 'remote-password',
+                  'encryptionPassphrase': 'remote-sync-secret',
+                  'rootPath': 'RemoteRoot',
+                  'requestTimeoutSeconds': 300,
+                },
+              },
+            },
+          },
+        ),
+      ],
+    );
+
+    expect(result.state.theme, 'dark');
+    expect(result.state.sync.enabled, true);
+    expect(result.state.sync.provider, SyncProviderIds.webDav);
+    expect(result.state.sync.webDav.endpoint, 'https://dav.example.test/');
+    expect(result.state.sync.webDav.username, 'local-user');
+    expect(result.state.sync.webDav.password, 'local-password');
+    expect(
+      result.state.sync.webDav.encryptionPassphrase,
+      'local-sync-secret',
+    );
+    expect(result.state.sync.webDav.rootPath, 'RePaperTodo');
+    expect(result.state.sync.webDav.requestTimeoutSeconds, 45);
+    expect(result.state.sync.operationDeviceSequences, {'device-local': 7});
+    expect(result.state.sync.deletedPaperTombstones, {
+      'paper-1': deletedAtUtc.toIso8601String(),
+    });
+  });
+
+  test('settings operations keep incomplete local WebDAV root paths', () {
+    final result = applier.apply(
+      AppState(
+        theme: 'light',
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'local-user',
+            password: 'local-password',
+            encryptionPassphrase: 'local-sync-secret',
+            rootPath: '',
+          ),
+        ),
+      ),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.updateSettings,
+          payload: {
+            'settings': {
+              'theme': 'dark',
+              'sync': {
+                'enabled': true,
+                'provider': SyncProviderIds.webDav,
+                'webDav': {
+                  'endpoint': 'https://remote.example.test/',
+                  'username': 'remote-user',
+                  'password': 'remote-password',
+                  'encryptionPassphrase': 'remote-sync-secret',
+                  'rootPath': 'RemoteRoot',
+                },
+              },
+            },
+          },
+        ),
+      ],
+    );
+
+    expect(result.state.theme, 'dark');
+    expect(result.state.sync.enabled, true);
+    expect(result.state.sync.provider, SyncProviderIds.webDav);
+    expect(result.state.sync.webDav.endpoint, 'https://dav.example.test/');
+    expect(result.state.sync.webDav.username, 'local-user');
+    expect(result.state.sync.webDav.password, 'local-password');
+    expect(result.state.sync.webDav.encryptionPassphrase, 'local-sync-secret');
+    expect(result.state.sync.webDav.rootPath, isEmpty);
+    expect(result.state.sync.webDav.isSecurelyConfigured, false);
   });
 
   test('skips snapshot markers and already applied sequences', () {

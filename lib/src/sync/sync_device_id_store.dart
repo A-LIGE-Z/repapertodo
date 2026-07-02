@@ -19,22 +19,41 @@ class SyncDeviceIdStore {
 
   Future<String> loadOrCreate() async {
     final file = File(filePath);
+    final temp = File('$filePath.tmp');
     if (await file.exists()) {
       final stored = _normalize(await file.readAsString());
       if (stored != null) {
-        await file.writeAsString(stored);
+        await _writeDeviceId(stored);
+        return stored;
+      }
+    }
+
+    if (await temp.exists()) {
+      final stored = _normalize(await temp.readAsString());
+      if (stored != null) {
+        await _writeDeviceId(stored);
         return stored;
       }
     }
 
     final created = 'device-${const Uuid().v4()}';
-    await file.parent.create(recursive: true);
-    await file.writeAsString(created);
+    await _writeDeviceId(created);
     return created;
   }
 
   String? _normalize(String value) {
     final normalized = normalizeSyncDeviceId(value, fallback: '');
     return normalized.isEmpty ? null : normalized;
+  }
+
+  Future<void> _writeDeviceId(String value) async {
+    final file = File(filePath);
+    final temp = File('$filePath.tmp');
+    await file.parent.create(recursive: true);
+    await temp.writeAsString(value);
+    if (await file.exists()) {
+      await file.delete();
+    }
+    await temp.rename(filePath);
   }
 }

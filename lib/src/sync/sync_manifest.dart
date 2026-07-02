@@ -24,14 +24,16 @@ class SyncManifest {
 
   factory SyncManifest.fromJson(JsonMap json) {
     final updatedAtUtc = _updatedAtUtcFromWire(
-      stringValue(json['updatedAtUtc'], ''),
+      stringValue(_wireValue(json, 'updatedAtUtc'), ''),
     );
     return SyncManifest(
-      schemaVersion: _schemaVersionFromWire(json['schemaVersion']),
+      schemaVersion: _schemaVersionFromWire(_wireValue(json, 'schemaVersion')),
       updatedAtUtc: updatedAtUtc,
       latestSnapshotPath:
-          _latestSnapshotPathFromWire(json['latestSnapshotPath']),
-      deviceSequences: _deviceSequencesFromWire(json['deviceSequences']),
+          _latestSnapshotPathFromWire(_wireValue(json, 'latestSnapshotPath')),
+      deviceSequences: _deviceSequencesFromWire(
+        _wireValue(json, 'deviceSequences'),
+      ),
     );
   }
 
@@ -45,9 +47,22 @@ class SyncManifest {
   }
 }
 
+Object? _wireValue(JsonMap json, String key) {
+  if (json.containsKey(key)) {
+    return json[key];
+  }
+  final normalizedKey = key.toLowerCase();
+  for (final entry in json.entries) {
+    if (entry.key.toLowerCase() == normalizedKey) {
+      return entry.value;
+    }
+  }
+  return null;
+}
+
 int _schemaVersionFromWire(Object? value) {
-  if (value is num && value.isFinite && value % 1 == 0) {
-    final schemaVersion = value.toInt();
+  final schemaVersion = _positiveIntegerFromWire(value);
+  if (schemaVersion != null) {
     if (schemaVersion == 1) {
       return schemaVersion;
     }
@@ -67,6 +82,9 @@ String _latestSnapshotPathFromWire(Object? value) {
 }
 
 Map<String, int> _deviceSequencesFromWire(Object? value) {
+  if (value == null) {
+    return const <String, int>{};
+  }
   if (value is! Map) {
     throw FormatException(
       'Sync manifest deviceSequences must be a JSON object: $value',
@@ -96,15 +114,27 @@ Map<String, int> _deviceSequencesFromWire(Object? value) {
 }
 
 int _deviceSequenceFromWire(Object? value) {
-  if (value is num && value.isFinite && value % 1 == 0) {
-    final sequence = value.toInt();
-    if (sequence > 0) {
-      return sequence;
-    }
+  final sequence = _positiveIntegerFromWire(value);
+  if (sequence != null) {
+    return sequence;
   }
   throw FormatException(
     'Sync manifest device sequence must be a positive integer: $value',
   );
+}
+
+int? _positiveIntegerFromWire(Object? value) {
+  if (value is num && value.isFinite && value % 1 == 0) {
+    final integer = value.toInt();
+    return integer > 0 ? integer : null;
+  }
+  if (value is String) {
+    final integer = int.tryParse(value.trim());
+    if (integer != null && integer > 0) {
+      return integer;
+    }
+  }
+  return null;
 }
 
 DateTime _updatedAtUtcFromWire(String value) {

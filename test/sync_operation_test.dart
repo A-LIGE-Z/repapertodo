@@ -20,6 +20,48 @@ void main() {
     expect(operation.payload, {'paperId': 'note', 'content': 'Remote'});
   });
 
+  test('decodes legacy operation wire keys case-insensitively', () {
+    final operation = SyncOperation.fromJson({
+      'ID': 'legacy-operation-id',
+      'DEVICEID': ' Device A ',
+      'SEQUENCE': '7',
+      'KIND': 'UpdateNoteContent',
+      'CREATEDATUTC': '2026-07-01T10:00:00+08:00',
+      'PAYLOAD': {'PaperId': 'note', 'Content': 'Remote'},
+    });
+
+    expect(operation.id, 'legacy-operation-id');
+    expect(operation.deviceId, 'device-a');
+    expect(operation.sequence, 7);
+    expect(operation.kind, SyncOperationKind.updateNoteContent);
+    expect(operation.createdAtUtc, DateTime.utc(2026, 7, 1, 2));
+    expect(operation.payload, {'PaperId': 'note', 'Content': 'Remote'});
+  });
+
+  test('keeps modern operation wire keys ahead of legacy duplicates', () {
+    final operation = SyncOperation.fromJson({
+      'ID': 'legacy-id',
+      'id': 'modern-id',
+      'DeviceId': 'device-legacy',
+      'deviceId': 'device-modern',
+      'Sequence': 1,
+      'sequence': 2,
+      'Kind': 'deletePaper',
+      'kind': 'updateSettings',
+      'CreatedAtUtc': '2026-07-01T09:00:00Z',
+      'createdAtUtc': '2026-07-01T10:00:00Z',
+      'Payload': {'legacy': true},
+      'payload': {'modern': true},
+    });
+
+    expect(operation.id, 'modern-id');
+    expect(operation.deviceId, 'device-modern');
+    expect(operation.sequence, 2);
+    expect(operation.kind, SyncOperationKind.updateSettings);
+    expect(operation.createdAtUtc, DateTime.utc(2026, 7, 1, 10));
+    expect(operation.payload, {'modern': true});
+  });
+
   test('keeps invalid decoded device ids empty', () {
     final operation = SyncOperation.fromJson({
       'id': 'invalid-device-id',
@@ -58,7 +100,14 @@ void main() {
   });
 
   test('rejects invalid operation sequences', () {
-    for (final sequence in const <Object?>[null, 0, -1, 1.2, '1']) {
+    for (final sequence in const <Object?>[
+      null,
+      0,
+      -1,
+      1.2,
+      '1.2',
+      'not-a-number',
+    ]) {
       expect(
         () => SyncOperation.fromJson({
           'id': 'invalid-sequence',
