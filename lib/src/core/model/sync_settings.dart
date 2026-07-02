@@ -98,8 +98,14 @@ class SyncSettings {
     if (id.isEmpty) {
       return;
     }
-    deletedPaperTombstones[id] = _tombstoneTimestamp(deletedAtUtc);
-    deletedTodoItemTombstones.remove(id);
+    final updated = _putLatestTombstone(
+      deletedPaperTombstones,
+      id,
+      _tombstoneTimestamp(deletedAtUtc),
+    );
+    if (updated) {
+      deletedTodoItemTombstones.remove(id);
+    }
   }
 
   void clearPaperDeleted(String paperId) {
@@ -133,9 +139,14 @@ class SyncSettings {
     if (normalizedPaperId.isEmpty || normalizedItemId.isEmpty) {
       return;
     }
-    deletedTodoItemTombstones.putIfAbsent(
-            normalizedPaperId, () => <String, String>{})[normalizedItemId] =
-        _tombstoneTimestamp(deletedAtUtc);
+    _putLatestTombstone(
+      deletedTodoItemTombstones.putIfAbsent(
+        normalizedPaperId,
+        () => <String, String>{},
+      ),
+      normalizedItemId,
+      _tombstoneTimestamp(deletedAtUtc),
+    );
   }
 
   void clearTodoItemDeleted(String paperId, String itemId) {
@@ -414,16 +425,20 @@ Map<String, Map<String, String>> _normalizeNestedTombstoneMap(Object? value) {
   return normalized;
 }
 
-void _putLatestTombstone(
+bool _putLatestTombstone(
   Map<String, String> target,
   String id,
   String timestamp,
 ) {
   final previous = target[id];
+  final previousTime = previous == null ? null : DateTime.tryParse(previous);
   if (previous == null ||
-      DateTime.parse(timestamp).isAfter(DateTime.parse(previous))) {
+      previousTime == null ||
+      DateTime.parse(timestamp).isAfter(previousTime)) {
     target[id] = timestamp;
+    return true;
   }
+  return false;
 }
 
 String _tombstoneTimestamp(DateTime value) {
