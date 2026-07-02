@@ -9,7 +9,9 @@ String normalizeSyncDeviceId(
   if (trimmed.length < 8) {
     return fallback;
   }
-  return trimmed.length > 64 ? trimmed.substring(0, 64) : trimmed;
+  final capped = trimmed.length > 64 ? trimmed.substring(0, 64) : trimmed;
+  final stable = capped.replaceAll(RegExp(r'^[-_]+|[-_]+$'), '');
+  return stable.length < 8 ? fallback : stable;
 }
 
 Map<String, int> normalizeSyncDeviceSequences(
