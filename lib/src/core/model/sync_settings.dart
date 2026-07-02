@@ -387,7 +387,7 @@ Map<String, String> _normalizeTombstoneMap(Object? value) {
     if (id.isEmpty || timestamp.isEmpty) {
       continue;
     }
-    normalized[id] = timestamp;
+    _putLatestTombstone(normalized, id, timestamp);
   }
   return normalized;
 }
@@ -406,9 +406,24 @@ Map<String, Map<String, String>> _normalizeNestedTombstoneMap(Object? value) {
     if (paperId.isEmpty || itemTombstones.isEmpty) {
       continue;
     }
-    normalized[paperId] = itemTombstones;
+    final existing = normalized.putIfAbsent(paperId, () => <String, String>{});
+    for (final itemEntry in itemTombstones.entries) {
+      _putLatestTombstone(existing, itemEntry.key, itemEntry.value);
+    }
   }
   return normalized;
+}
+
+void _putLatestTombstone(
+  Map<String, String> target,
+  String id,
+  String timestamp,
+) {
+  final previous = target[id];
+  if (previous == null ||
+      DateTime.parse(timestamp).isAfter(DateTime.parse(previous))) {
+    target[id] = timestamp;
+  }
 }
 
 String _tombstoneTimestamp(DateTime value) {

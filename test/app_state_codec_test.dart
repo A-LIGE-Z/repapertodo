@@ -637,6 +637,7 @@ Plain item
         },
         'deletedPaperTombstones': {
           ' old-paper ': '2026-07-01T10:00:00+08:00',
+          'old-paper': '2026-07-01T03:00:00Z',
           'bad-paper': 'not-a-date',
           '': '2026-07-01T10:00:00Z',
         },
@@ -644,6 +645,10 @@ Plain item
           ' todo-paper ': {
             ' old-item ': '2026-07-01T11:30:00+08:00',
             'bad-item': 'not-a-date',
+          },
+          'todo-paper': {
+            'old-item': '2026-07-01T04:00:00Z',
+            ' new-item ': '2026-07-01T12:30:00+08:00',
           },
           'bad-paper': 'not-a-map',
         },
@@ -668,14 +673,12 @@ Plain item
       'android-device': 2,
     });
     expect(state.sync.deletedPaperTombstones, {
-      'old-paper':
-          DateTime.parse('2026-07-01T10:00:00+08:00').toUtc().toIso8601String(),
+      'old-paper': DateTime.utc(2026, 7, 1, 3).toIso8601String(),
     });
     expect(state.sync.deletedTodoItemTombstones, {
       'todo-paper': {
-        'old-item': DateTime.parse('2026-07-01T11:30:00+08:00')
-            .toUtc()
-            .toIso8601String(),
+        'old-item': DateTime.utc(2026, 7, 1, 4).toIso8601String(),
+        'new-item': DateTime.utc(2026, 7, 1, 4, 30).toIso8601String(),
       },
     });
     expect(state.sync.webDav.presetId, WebDavPresetIds.jianguoyun);
