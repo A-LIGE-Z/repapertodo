@@ -692,7 +692,7 @@ Plain item
       endpoint: 'https://dav.example.test/dav/',
       username: 'user',
       password: 'pass',
-      rootPath: '/Team%20Space/./RePaperTodo//',
+      rootPath: '/ Team%20Space /./ RePaperTodo //',
     )..normalize();
 
     expect(safe.rootPath, 'Team Space/RePaperTodo');

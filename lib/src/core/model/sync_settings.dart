@@ -323,7 +323,7 @@ String _normalizeRootPath(String value) {
     if (trimmedSegment == '..') {
       return '';
     }
-    segments.add(segment);
+    segments.add(trimmedSegment);
   }
   final normalized = segments.join('/');
   return normalized.isEmpty ? 'repapertodo' : normalized;
