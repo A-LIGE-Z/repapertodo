@@ -99,6 +99,11 @@ if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) {
 $androidSigningMode = Get-AndroidSigningMode -RepoRoot $repoRoot
 Write-Host "Android signing mode: $androidSigningMode"
 
+$gitCommit = ""
+Invoke-Native "git rev-parse HEAD" {
+  $script:gitCommit = (& git rev-parse HEAD).Trim()
+}
+
 if (-not $SkipTests -or -not $SkipBuild) {
   Invoke-Step "Resolve Flutter packages" {
     if ($OfflinePubGet) {
@@ -145,6 +150,7 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $windowsZip = Join-Path $dist "repapertodo-windows-x64-$artifactVersion.zip"
 $androidApk = Join-Path $dist "repapertodo-android-$artifactVersion.apk"
 $checksumsFile = Join-Path $dist "repapertodo-$artifactVersion-sha256.txt"
+$metadataFile = Join-Path $dist "repapertodo-$artifactVersion-release.json"
 
 Invoke-Step "Package release artifacts" {
   if (Test-Path -LiteralPath $windowsZip) {
@@ -156,6 +162,9 @@ Invoke-Step "Package release artifacts" {
   if (Test-Path -LiteralPath $checksumsFile) {
     Remove-Item -LiteralPath $checksumsFile -Force
   }
+  if (Test-Path -LiteralPath $metadataFile) {
+    Remove-Item -LiteralPath $metadataFile -Force
+  }
   Compress-Archive `
     -Path "build\windows\x64\runner\Release\*" `
     -DestinationPath $windowsZip `
@@ -164,15 +173,44 @@ Invoke-Step "Package release artifacts" {
     -LiteralPath "build\app\outputs\flutter-apk\app-release.apk" `
     -Destination $androidApk
 
-  @($windowsZip, $androidApk) |
+  $artifactRecords = @($windowsZip, $androidApk) |
     ForEach-Object {
+      $item = Get-Item -LiteralPath $_
       $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_
-      "$($hash.Hash.ToLowerInvariant())  $(Split-Path -Leaf $_)"
-    } |
+      [ordered]@{
+        fileName = $item.Name
+        bytes = $item.Length
+        sha256 = $hash.Hash.ToLowerInvariant()
+      }
+    }
+
+  $artifactRecords |
+    ForEach-Object { "$($_.sha256)  $($_.fileName)" } |
     Set-Content -LiteralPath $checksumsFile -Encoding ascii
+
+  [ordered]@{
+    version = $version
+    tagName = $TagName
+    gitCommit = $gitCommit
+    builtAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    android = [ordered]@{
+      minSdk = 34
+      targetSdk = 37
+      signing = $androidSigningMode
+    }
+    validation = @(
+      "flutter test --no-pub",
+      "flutter analyze --no-pub",
+      "flutter build windows --release --no-pub",
+      "flutter build apk --release --no-pub"
+    )
+    artifacts = $artifactRecords
+  } |
+    ConvertTo-Json -Depth 5 |
+    Set-Content -LiteralPath $metadataFile -Encoding ascii
 }
 
-Get-Item -LiteralPath $windowsZip, $androidApk, $checksumsFile |
+Get-Item -LiteralPath $windowsZip, $androidApk, $checksumsFile, $metadataFile |
   Select-Object FullName, Length, LastWriteTime |
   Format-Table -AutoSize
 
@@ -185,14 +223,14 @@ if ($PublishGitHubRelease) {
     $ErrorActionPreference = $previousErrorActionPreference
     if ($releaseViewExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($existingRelease)) {
       Invoke-Native "gh release upload $TagName" {
-        & gh release upload $TagName $windowsZip $androidApk $checksumsFile --clobber
+        & gh release upload $TagName $windowsZip $androidApk $checksumsFile $metadataFile --clobber
       }
     } else {
       Invoke-Native "gh release create $TagName" {
-        & gh release create $TagName $windowsZip $androidApk $checksumsFile `
+        & gh release create $TagName $windowsZip $androidApk $checksumsFile $metadataFile `
           --target main `
           --title $ReleaseTitle `
-          --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n`nAndroid signing: $androidSigningMode.`n`nValidation:`n- flutter test --no-pub`n- flutter analyze --no-pub`n- flutter build windows --release --no-pub`n- flutter build apk --release --no-pub"
+          --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n- Release metadata JSON with version, commit, Android SDK/signing, validation, and artifact hashes.`n`nAndroid signing: $androidSigningMode.`n`nValidation:`n- flutter test --no-pub`n- flutter analyze --no-pub`n- flutter build windows --release --no-pub`n- flutter build apk --release --no-pub"
       }
     }
   }
