@@ -188,6 +188,9 @@ keyboard and touch users can recover without hunting through the dialog.
 Todo rows on narrow screens should keep the checkbox and text field dominant;
 secondary item actions such as due date, reminder, columns, linked notes, and
 delete belong in a per-item overflow menu.
+Todo compact item actions should switch from the current paper/editor width,
+not only the top-level window width, so narrow desktop papers keep the same
+overflow-safe layout as narrow screens.
 Todo due reminders should follow PaperTodo's timing model: without interval
 mode, each unfinished due item can remind once from 10 minutes before due time
 until 2 minutes after due time; with interval mode, reminders may repeat after
@@ -240,6 +243,11 @@ semantics: no-op when nothing is done, push one todo undo snapshot, remove every
 completed row, create a blank fallback row when all rows were completed, record
 deleted-item tombstones, and focus the previous focused survivor or first
 nonblank remaining row.
+Todo-note linking should preserve PaperTodo's item-link semantics: linking to
+an existing different note pushes one todo undo snapshot, linking the same note
+again is a no-op, unlinking is a no-op when no note is linked, unlink actions
+remain available from Todo item menus, and link or unlink operations should
+restore focus to the affected row where possible.
 Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,

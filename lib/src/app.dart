@@ -4874,64 +4874,74 @@ class _TodoEditorState extends State<_TodoEditor> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final visualSpec = _TodoVisualSpec.from(widget.visualSize);
-    final useCompactItemActions = MediaQuery.sizeOf(context).width < 600;
     final itemTextStyle = theme.textTheme.bodyMedium
         ?.apply(fontSizeFactor: visualSpec.textScale * widget.textZoom)
         .copyWith(
           height: widget.lineSpacing,
         );
-    final editor = Column(
-      children: [
-        ReorderableListView.builder(
-          buildDefaultDragHandles: false,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: widget.paper.items.length,
-          onReorderItem: _reorderTodoItem,
-          itemBuilder: (context, index) {
-            final item = widget.paper.items[index];
-            return _todoRow(
-              context: context,
-              item: item,
-              itemIndex: index,
-              itemTextStyle: itemTextStyle,
-              visualSpec: visualSpec,
-              compactActions: useCompactItemActions,
-            );
-          },
-        ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextButton.icon(
-                onPressed: _addItem,
-                icon: const Icon(Icons.add),
-                label: const Text('Add item'),
-              ),
-              IconButton(
-                tooltip:
-                    _tooltipLabel(widget.enableToolTips, 'Undo todo change'),
-                onPressed: _undoStack.isEmpty ? null : _undoTodoChange,
-                icon: const Icon(Icons.undo),
-              ),
-              IconButton(
-                tooltip:
-                    _tooltipLabel(widget.enableToolTips, 'Redo todo change'),
-                onPressed: _redoStack.isEmpty ? null : _redoTodoChange,
-                icon: const Icon(Icons.redo),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
     return Focus(
       focusNode: _todoFocusNode,
       autofocus: true,
       onKeyEvent: _handleTodoKeyEvent,
-      child: editor,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableWidth = constraints.hasBoundedWidth
+              ? constraints.maxWidth
+              : MediaQuery.sizeOf(context).width;
+          final useCompactItemActions = availableWidth < 600;
+          return Column(
+            children: [
+              ReorderableListView.builder(
+                buildDefaultDragHandles: false,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: widget.paper.items.length,
+                onReorderItem: _reorderTodoItem,
+                itemBuilder: (context, index) {
+                  final item = widget.paper.items[index];
+                  return _todoRow(
+                    context: context,
+                    item: item,
+                    itemIndex: index,
+                    itemTextStyle: itemTextStyle,
+                    visualSpec: visualSpec,
+                    compactActions: useCompactItemActions,
+                  );
+                },
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _addItem,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add item'),
+                    ),
+                    IconButton(
+                      tooltip: _tooltipLabel(
+                        widget.enableToolTips,
+                        'Undo todo change',
+                      ),
+                      onPressed: _undoStack.isEmpty ? null : _undoTodoChange,
+                      icon: const Icon(Icons.undo),
+                    ),
+                    IconButton(
+                      tooltip: _tooltipLabel(
+                        widget.enableToolTips,
+                        'Redo todo change',
+                      ),
+                      onPressed: _redoStack.isEmpty ? null : _redoTodoChange,
+                      icon: const Icon(Icons.redo),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -5041,10 +5051,13 @@ class _TodoEditorState extends State<_TodoEditor> {
   static const _compactTodoActionReminder = 'reminder';
   static const _compactTodoActionMoveUp = 'move-up';
   static const _compactTodoActionMoveDown = 'move-down';
+  static const _compactTodoActionOpenLinkedNote = 'open-linked-note';
+  static const _compactTodoActionUnlinkNote = 'unlink-note';
   static const _compactTodoActionDelete = 'delete';
   static const _compactTodoActionClearDone = 'clear-done';
   static const _compactTodoColumnActionPrefix = 'column:';
   static const _compactTodoLinkActionPrefix = 'link:';
+  static const _todoLinkActionUnlink = 'todo-link:unlink';
 
   List<Widget> _todoItemActions({
     required BuildContext context,
@@ -5053,112 +5066,152 @@ class _TodoEditorState extends State<_TodoEditor> {
     required _TodoVisualSpec visualSpec,
     required bool compact,
   }) {
+    final hasLinkedNote = item.linkedNoteId?.trim().isNotEmpty ?? false;
     if (compact) {
       return [
-        PopupMenuButton<String>(
+        SizedBox(
           key: ValueKey('${widget.paper.id}-${item.id}-actions'),
-          tooltip: _tooltipLabel(widget.enableToolTips, 'Todo item actions'),
-          iconSize: visualSpec.iconSize,
-          icon: const Icon(Icons.more_vert),
-          onSelected: (value) => _handleCompactTodoAction(
-            context: context,
-            item: item,
-            value: value,
-          ),
-          itemBuilder: (context) => [
-            _todoActionMenuItem(
-              value: _compactTodoActionDueDate,
-              icon: Icons.event_outlined,
-              label: 'Set due date',
+          width: visualSpec.controlExtent,
+          height: visualSpec.controlExtent,
+          child: PopupMenuButton<String>(
+            tooltip: _tooltipLabel(widget.enableToolTips, 'Todo item actions'),
+            iconSize: visualSpec.iconSize,
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) => _handleCompactTodoAction(
+              context: context,
+              item: item,
+              value: value,
             ),
-            _todoActionMenuItem(
-              value: _compactTodoActionReminder,
-              icon: Icons.notifications_none_outlined,
-              label: 'Set reminder',
-            ),
-            const PopupMenuDivider(),
-            _todoActionMenuItem(
-              value: _compactTodoActionMoveUp,
-              icon: Icons.keyboard_arrow_up,
-              label: 'Move item up',
-              enabled: _canMoveTodoItem(item, -1),
-            ),
-            _todoActionMenuItem(
-              value: _compactTodoActionMoveDown,
-              icon: Icons.keyboard_arrow_down,
-              label: 'Move item down',
-              enabled: _canMoveTodoItem(item, 1),
-            ),
-            const PopupMenuDivider(),
-            _todoActionMenuItem(
-              value: '$_compactTodoColumnActionPrefix$_columnActionAdd',
-              icon: Icons.add,
-              label: 'Add column',
-              enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
-            ),
-            _todoActionMenuItem(
-              value: '$_compactTodoColumnActionPrefix$_columnActionRemove',
-              icon: Icons.remove,
-              label: 'Remove last column',
-              enabled: item.todoColumnCount > 1,
-            ),
-            for (var columnIndex = 0;
-                columnIndex < item.todoColumnCount;
-                columnIndex++)
+            itemBuilder: (context) => [
               _todoActionMenuItem(
-                value:
-                    '$_compactTodoColumnActionPrefix$_columnActionInsertBeforePrefix$columnIndex',
-                icon: Icons.add_box_outlined,
-                label: 'Insert before column ${columnIndex + 1}',
+                value: _compactTodoActionDueDate,
+                icon: Icons.event_outlined,
+                label: 'Set due date',
+              ),
+              _todoActionMenuItem(
+                value: _compactTodoActionReminder,
+                icon: Icons.notifications_none_outlined,
+                label: 'Set reminder',
+              ),
+              if (widget.enableTodoNoteLinks && hasLinkedNote) ...[
+                const PopupMenuDivider(),
+                if (_linkedNoteFor(item) case final PaperData linkedNote)
+                  _todoActionMenuItem(
+                    value: _compactTodoActionOpenLinkedNote,
+                    icon: Icons.open_in_new,
+                    label: widget.runLinkedScriptCapsulesOnClick &&
+                            ScriptCapsuleSpec.tryParse(linkedNote.content) !=
+                                null
+                        ? 'Edit linked script'
+                        : 'Open linked note',
+                  ),
+                _todoActionMenuItem(
+                  value: _compactTodoActionUnlinkNote,
+                  icon: Icons.link_off_outlined,
+                  label: 'Unlink note',
+                ),
+              ],
+              if (widget.enableTodoNoteLinks &&
+                  widget.notePapers.isNotEmpty &&
+                  !hasLinkedNote) ...[
+                const PopupMenuDivider(),
+                for (final note in widget.notePapers)
+                  _todoActionMenuItem(
+                    value: '$_compactTodoLinkActionPrefix${note.id}',
+                    icon: item.linkedNoteId == note.id
+                        ? Icons.link_outlined
+                        : Icons.notes_outlined,
+                    label: _displayPaperTitle(note),
+                  ),
+              ],
+              const PopupMenuDivider(),
+              _todoActionMenuItem(
+                value: _compactTodoActionDelete,
+                icon: Icons.delete_outline,
+                label: 'Delete item',
+                enabled: widget.paper.items.length > 1,
+              ),
+              _todoActionMenuItem(
+                value: _compactTodoActionClearDone,
+                icon: Icons.delete_sweep_outlined,
+                label: 'Clear completed',
+                enabled: _hasDoneTodoItems,
+              ),
+              const PopupMenuDivider(),
+              _todoActionMenuItem(
+                value: _compactTodoActionMoveUp,
+                icon: Icons.keyboard_arrow_up,
+                label: 'Move item up',
+                enabled: _canMoveTodoItem(item, -1),
+              ),
+              _todoActionMenuItem(
+                value: _compactTodoActionMoveDown,
+                icon: Icons.keyboard_arrow_down,
+                label: 'Move item down',
+                enabled: _canMoveTodoItem(item, 1),
+              ),
+              const PopupMenuDivider(),
+              _todoActionMenuItem(
+                value: '$_compactTodoColumnActionPrefix$_columnActionAdd',
+                icon: Icons.add,
+                label: 'Add column',
                 enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
               ),
-            for (var columnIndex = 0;
-                columnIndex < item.todoColumnCount;
-                columnIndex++)
               _todoActionMenuItem(
-                value:
-                    '$_compactTodoColumnActionPrefix$_columnActionDeletePrefix$columnIndex',
-                icon: Icons.delete_sweep_outlined,
-                label: 'Delete column ${columnIndex + 1}',
+                value: '$_compactTodoColumnActionPrefix$_columnActionRemove',
+                icon: Icons.remove,
+                label: 'Remove last column',
                 enabled: item.todoColumnCount > 1,
               ),
-            _todoActionMenuItem(
-              value: '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
-              icon: Icons.view_column_outlined,
-              label: 'Equal widths',
-              enabled: item.todoColumnCount > 1,
-            ),
-            _todoActionMenuItem(
-              value: '$_compactTodoColumnActionPrefix$_columnActionWideFirst',
-              icon: Icons.view_week_outlined,
-              label: 'Wide first column',
-              enabled: item.todoColumnCount > 1,
-            ),
-            if (widget.enableTodoNoteLinks && widget.notePapers.isNotEmpty) ...[
-              const PopupMenuDivider(),
-              for (final note in widget.notePapers)
+              for (var columnIndex = 0;
+                  columnIndex < item.todoColumnCount;
+                  columnIndex++)
                 _todoActionMenuItem(
-                  value: '$_compactTodoLinkActionPrefix${note.id}',
-                  icon: item.linkedNoteId == note.id
-                      ? Icons.link_outlined
-                      : Icons.notes_outlined,
-                  label: _displayPaperTitle(note),
+                  value:
+                      '$_compactTodoColumnActionPrefix$_columnActionInsertBeforePrefix$columnIndex',
+                  icon: Icons.add_box_outlined,
+                  label: 'Insert before column ${columnIndex + 1}',
+                  enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
                 ),
+              for (var columnIndex = 0;
+                  columnIndex < item.todoColumnCount;
+                  columnIndex++)
+                _todoActionMenuItem(
+                  value:
+                      '$_compactTodoColumnActionPrefix$_columnActionDeletePrefix$columnIndex',
+                  icon: Icons.delete_sweep_outlined,
+                  label: 'Delete column ${columnIndex + 1}',
+                  enabled: item.todoColumnCount > 1,
+                ),
+              _todoActionMenuItem(
+                value:
+                    '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
+                icon: Icons.view_column_outlined,
+                label: 'Equal widths',
+                enabled: item.todoColumnCount > 1,
+              ),
+              _todoActionMenuItem(
+                value: '$_compactTodoColumnActionPrefix$_columnActionWideFirst',
+                icon: Icons.view_week_outlined,
+                label: 'Wide first column',
+                enabled: item.todoColumnCount > 1,
+              ),
+              if (widget.enableTodoNoteLinks &&
+                  widget.notePapers.isNotEmpty &&
+                  hasLinkedNote) ...[
+                const PopupMenuDivider(),
+                for (final note in widget.notePapers)
+                  _todoActionMenuItem(
+                    value: '$_compactTodoLinkActionPrefix${note.id}',
+                    icon: item.linkedNoteId == note.id
+                        ? Icons.link_outlined
+                        : Icons.notes_outlined,
+                    label: _displayPaperTitle(note),
+                  ),
+              ],
             ],
-            const PopupMenuDivider(),
-            _todoActionMenuItem(
-              value: _compactTodoActionDelete,
-              icon: Icons.delete_outline,
-              label: 'Delete item',
-              enabled: widget.paper.items.length > 1,
-            ),
-            _todoActionMenuItem(
-              value: _compactTodoActionClearDone,
-              icon: Icons.delete_sweep_outlined,
-              label: 'Clear completed',
-              enabled: _hasDoneTodoItems,
-            ),
-          ],
+          ),
         ),
       ];
     }
@@ -5270,18 +5323,37 @@ class _TodoEditorState extends State<_TodoEditor> {
       ),
       PopupMenuButton<String>(
         tooltip: _tooltipLabel(widget.enableToolTips, 'Link note'),
-        enabled: widget.enableTodoNoteLinks && widget.notePapers.isNotEmpty,
+        enabled: widget.enableTodoNoteLinks &&
+            (widget.notePapers.isNotEmpty ||
+                (item.linkedNoteId?.trim().isNotEmpty ?? false)),
         iconSize: visualSpec.iconSize,
         icon: Icon(item.linkedNoteId == null
             ? Icons.note_add_outlined
             : Icons.link_outlined),
-        onSelected: (noteId) => _linkNote(item, noteId),
+        onSelected: (value) {
+          if (value == _todoLinkActionUnlink) {
+            _clearLinkedNote(item);
+            return;
+          }
+          _linkNote(item, value);
+        },
         itemBuilder: (context) {
           return [
+            if (item.linkedNoteId?.trim().isNotEmpty ?? false) ...[
+              _todoActionMenuItem(
+                value: _todoLinkActionUnlink,
+                icon: Icons.link_off_outlined,
+                label: 'Unlink note',
+              ),
+              if (widget.notePapers.isNotEmpty) const PopupMenuDivider(),
+            ],
             for (final note in widget.notePapers)
-              PopupMenuItem(
+              _todoActionMenuItem(
                 value: note.id,
-                child: Text(_displayPaperTitle(note)),
+                icon: item.linkedNoteId == note.id
+                    ? Icons.link_outlined
+                    : Icons.notes_outlined,
+                label: _displayPaperTitle(note),
               ),
           ];
         },
@@ -5388,8 +5460,16 @@ class _TodoEditorState extends State<_TodoEditor> {
         _moveTodoItem(item, -1);
       case _compactTodoActionMoveDown:
         _moveTodoItem(item, 1);
+      case _compactTodoActionOpenLinkedNote:
+        _openLinkedNote(item);
+      case _compactTodoActionUnlinkNote:
+        _clearLinkedNote(item);
       case _compactTodoActionDelete:
-        _deleteItem(context, item);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _deleteItem(context, item);
+          }
+        });
       case _compactTodoActionClearDone:
         _clearDoneItems();
     }
@@ -5562,6 +5642,16 @@ class _TodoEditorState extends State<_TodoEditor> {
       }
       focusNode.requestFocus();
     });
+  }
+
+  void _unfocusTodoItem(PaperItem item) {
+    _todoMainFieldFocusNodes[item.id]?.unfocus();
+    final extraKeyPrefix = '${item.id}:';
+    for (final entry in _todoExtraFieldFocusNodes.entries) {
+      if (entry.key.startsWith(extraKeyPrefix)) {
+        entry.value.unfocus();
+      }
+    }
   }
 
   String? _currentFocusedTodoItemId() {
@@ -5807,8 +5897,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       return;
     }
     final widths = _normalizedTodoColumnWidths(item);
-    final totalUnits =
-        widths.fold<double>(0, (total, width) => total + width);
+    final totalUnits = widths.fold<double>(0, (total, width) => total + width);
     final columnPixels = math.max(
       1.0,
       availableWidth - ((count - 1) * _todoColumnSplitterWidth),
@@ -5843,8 +5932,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   double _roundTodoColumnWidth(double value) {
-    return (value.clamp(_minTodoColumnWidth, 10000.0) * 1000)
-            .roundToDouble() /
+    return (value.clamp(_minTodoColumnWidth, 10000.0) * 1000).roundToDouble() /
         1000;
   }
 
@@ -6197,6 +6285,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     final focusTargetId = previousItem?.id ?? nextItem?.id;
 
     _pushTodoUndoSnapshot();
+    _unfocusTodoItem(item);
     setState(() {
       widget.paper.items.removeAt(removedIndex);
       if (widget.paper.items.isEmpty) {
@@ -6236,6 +6325,9 @@ class _TodoEditorState extends State<_TodoEditor> {
     final completedIds = completedItems.map((item) => item.id).toSet();
 
     _pushTodoUndoSnapshot();
+    for (final item in completedItems) {
+      _unfocusTodoItem(item);
+    }
     String? focusTargetId;
     setState(() {
       final remainingItems = widget.paper.items
@@ -6274,6 +6366,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       return;
     }
     _pushTodoUndoSnapshot();
+    _unfocusTodoItem(item);
     setState(() {
       widget.paper.items.removeAt(removedIndex);
       widget.paper.normalize();
@@ -6371,16 +6464,49 @@ class _TodoEditorState extends State<_TodoEditor> {
     unawaited(widget.onChanged());
   }
 
+  void _openLinkedNote(PaperItem item) {
+    final noteId = item.linkedNoteId;
+    if (noteId == null) {
+      return;
+    }
+    final linkedNote = _notePaperById(noteId);
+    if (linkedNote == null) {
+      return;
+    }
+    unawaited(widget.onOpen(linkedNote));
+  }
+
   void _linkNote(PaperItem item, String noteId) {
+    if (!widget.enableTodoNoteLinks ||
+        _notePaperById(noteId) == null ||
+        item.linkedNoteId == noteId) {
+      return;
+    }
+    final focusTargetId = _currentFocusedTodoItemId() ?? item.id;
     _pushTodoUndoSnapshot();
     setState(() => item.linkedNoteId = noteId);
+    _requestTodoItemFocus(focusTargetId);
     unawaited(widget.onChanged());
   }
 
   void _clearLinkedNote(PaperItem item) {
+    if (item.linkedNoteId == null || item.linkedNoteId!.trim().isEmpty) {
+      return;
+    }
+    final focusTargetId = _currentFocusedTodoItemId() ?? item.id;
     _pushTodoUndoSnapshot();
     setState(() => item.linkedNoteId = null);
+    _requestTodoItemFocus(focusTargetId);
     unawaited(widget.onChanged());
+  }
+
+  PaperData? _notePaperById(String noteId) {
+    for (final note in widget.notePapers) {
+      if (note.id == noteId) {
+        return note;
+      }
+    }
+    return null;
   }
 
   PaperData? _linkedNoteFor(PaperItem item) {
@@ -6388,12 +6514,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (noteId == null) {
       return null;
     }
-    for (final note in widget.notePapers) {
-      if (note.id == noteId) {
-        return note;
-      }
-    }
-    return null;
+    return _notePaperById(noteId);
   }
 
   InputChip _linkedNoteChip(

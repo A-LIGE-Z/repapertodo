@@ -764,6 +764,37 @@ void main() {
     expect(app, contains('_requestTodoItemFocus(focusTargetId)'));
   });
 
+  test('Todo compact item actions use paper width', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('Todo compact item actions should switch'));
+    expect(design, contains('current paper/editor width'));
+    expect(app, contains('final availableWidth = constraints.hasBoundedWidth'));
+    expect(app, contains('final useCompactItemActions = availableWidth < 600'));
+    expect(
+        app,
+        contains(
+            "tooltip: _tooltipLabel(widget.enableToolTips, 'Todo item actions')"));
+  });
+
+  test('PaperTodo todo note link semantics are preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('Todo-note linking should preserve'));
+    expect(design, contains('linking the same note'));
+    expect(design, contains('unlinking is a no-op'));
+    expect(design, contains('remain available from Todo item menus'));
+    expect(app, contains('_compactTodoActionOpenLinkedNote'));
+    expect(app, contains('_compactTodoActionUnlinkNote'));
+    expect(app, contains('_todoLinkActionUnlink'));
+    expect(app, contains('_openLinkedNote'));
+    expect(app, contains('_notePaperById'));
+    expect(app, contains('item.linkedNoteId == noteId'));
+    expect(app, contains('_requestTodoItemFocus(focusTargetId)'));
+  });
+
   test('PaperTodo markdown note link interaction is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

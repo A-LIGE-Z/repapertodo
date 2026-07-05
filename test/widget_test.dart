@@ -6802,7 +6802,8 @@ void main() {
     await tester.enterText(firstField, 'Edited first item');
     await tester.pump();
 
-    expect(controller.state.papers.single.items.first.text, 'Edited first item');
+    expect(
+        controller.state.papers.single.items.first.text, 'Edited first item');
 
     await tester.tap(secondField);
     await tester.pumpAndSettle();
@@ -6815,7 +6816,8 @@ void main() {
     await tester.tap(find.byTooltip('Redo todo change'));
     await tester.pumpAndSettle();
 
-    expect(controller.state.papers.single.items.first.text, 'Edited first item');
+    expect(
+        controller.state.papers.single.items.first.text, 'Edited first item');
   });
 
   testWidgets('commits focused todo text before structural undo snapshots',
@@ -7639,7 +7641,11 @@ void main() {
 
     expect(item.linkedNoteId, 'mobile-note');
 
-    await tester.tap(actionsFinder);
+    final spareActionsFinder = find.byKey(
+      const ValueKey('mobile-actions-paper-mobile-action-spare-actions'),
+    );
+
+    await tester.tap(spareActionsFinder);
     await tester.pumpAndSettle();
     await tester.tap(
       find.byWidgetPredicate(
@@ -7649,8 +7655,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.first.items, hasLength(1));
-    expect(
-        controller.state.papers.first.items.single.id, 'mobile-action-spare');
+    expect(controller.state.papers.first.items.single.id, 'mobile-action-item');
   });
 
   testWidgets('disables interactive tooltips', (tester) async {
@@ -8830,6 +8835,194 @@ void main() {
 
     expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
     expect(find.text('Note Resear'), findsNothing);
+  });
+
+  testWidgets('links todo notes with PaperTodo undo and no-op semantics',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        showLinkedNoteName: true,
+        papers: [
+          PaperData(
+            id: 'todo-paper',
+            type: PaperTypes.todo,
+            title: 'Reading',
+            items: [
+              PaperItem(id: 'todo-1', text: 'Summarize paper'),
+            ],
+          ),
+          PaperData(
+            id: 'note-paper',
+            type: PaperTypes.note,
+            title: 'Research note',
+            content: 'Notes live here.',
+          ),
+          PaperData(
+            id: 'second-note',
+            type: PaperTypes.note,
+            title: 'Second note',
+            content: 'More notes.',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final todoField = find.descendant(
+      of: find.byKey(const ValueKey('todo-paper-todo-1-text')),
+      matching: find.byType(EditableText),
+    );
+
+    await tester.tap(todoField);
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Link note'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Research note').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.first.items.single.linkedNoteId,
+      'note-paper',
+    );
+    expect(tester.widget<EditableText>(todoField).focusNode.hasFocus, true);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
+
+    await tester.tap(find.byTooltip('Redo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.first.items.single.linkedNoteId,
+      'note-paper',
+    );
+
+    await tester.tap(find.byTooltip('Link note'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Research note').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
+
+    await tester.tap(find.byTooltip('Redo todo change'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Link note'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Second note').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.first.items.single.linkedNoteId,
+      'second-note',
+    );
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.first.items.single.linkedNoteId,
+      'note-paper',
+    );
+
+    await tester.tap(find.byTooltip('Redo todo change'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Link note'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unlink note').last);
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.first.items.single.linkedNoteId,
+      'second-note',
+    );
+  });
+
+  testWidgets('opens and unlinks linked notes from compact todo menu',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(520, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        showLinkedNoteName: true,
+        papers: [
+          PaperData(
+            id: 'compact-todo',
+            type: PaperTypes.todo,
+            title: 'Compact reading',
+            items: [
+              PaperItem(
+                id: 'compact-item',
+                text: 'Use compact linked menu',
+                linkedNoteId: 'compact-note',
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'compact-note',
+            type: PaperTypes.note,
+            title: 'Compact note',
+            content: 'Compact note content.',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Todo item actions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open linked note'), findsOneWidget);
+    expect(find.text('Unlink note'), findsOneWidget);
+
+    await tester.tap(find.text('Unlink note').last);
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.first.items.single.linkedNoteId, isNull);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.first.items.single.linkedNoteId,
+      'compact-note',
+    );
+
+    await tester.tap(find.byTooltip('Todo item actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open linked note').last);
+    await tester.pumpAndSettle();
+
+    expect(platform.paperWindows.shownTitles, contains('Compact note'));
   });
 
   testWidgets('runs linked script capsules from todo note chips',
