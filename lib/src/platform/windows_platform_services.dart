@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../core/model/app_state.dart';
 import '../core/model/paper_constants.dart';
 import '../core/model/paper_data.dart';
+import '../core/model/paper_titles.dart';
 import '../core/script/script_capsule.dart';
 import '../core/startup/startup_command.dart';
 import 'platform_services.dart';
@@ -365,7 +366,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   }
 
   String _windowTitle(PaperData paper) {
-    final title = paper.title.trim();
+    final title = PaperTitles.cleanCustomTitle(paper.title);
     return title.isEmpty ? 'RePaperTodo' : 'RePaperTodo - $title';
   }
 
@@ -419,7 +420,7 @@ class WindowsTrayHost implements TrayHost {
 }
 
 Map<String, Object?> _paperSurfaceRegistryEntry(PaperData paper) {
-  final title = paper.title.trim();
+  final title = PaperTitles.cleanCustomTitle(paper.title);
   return <String, Object?>{
     'id': paper.id,
     'title': title.isEmpty ? 'Untitled' : title,

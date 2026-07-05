@@ -128,6 +128,10 @@ Windows executable directory before falling back to built-in font presets.
 Missing, invalid, or unsupported runtime font files must not block startup.
 Original PaperTodo font preset migration must preserve `yahei` and `dengxian`
 instead of silently normalizing them to the default preset.
+Paper title editing should preserve PaperTodo's hard title rules: the editor
+accepts no more than 40 text elements, control characters are removed before
+the title is stored, blank titles display the default paper title, and Windows
+surface and tray titles use the same cleaned value.
 
 ## Android Priority
 

@@ -960,6 +960,23 @@ void main() {
     expect(runner, contains('invalid_script_capsule_engine'));
   });
 
+  test('PaperTodo paper title editing rules are preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+    final paperData =
+        File('lib/src/core/model/paper_data.dart').readAsStringSync();
+    final windows = File('lib/src/platform/windows_platform_services.dart')
+        .readAsStringSync();
+
+    expect(design, contains('Paper title editing should preserve PaperTodo'));
+    expect(design, contains('40 text elements'));
+    expect(design, contains('control characters are removed'));
+    expect(app, contains('_PaperTitleTextInputFormatter'));
+    expect(app, contains('PaperTitles.cleanCustomTitle(value)'));
+    expect(paperData, contains('PaperTitles.maxTitleLength'));
+    expect(windows, contains('PaperTitles.cleanCustomTitle(paper.title)'));
+  });
+
   test('release script packages Windows and Android artifacts', () {
     final script = File('scripts/release.ps1').readAsStringSync();
     final readme = File('README.md').readAsStringSync();

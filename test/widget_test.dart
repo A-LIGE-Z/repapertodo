@@ -12,6 +12,7 @@ import 'package:repapertodo/src/core/model/note_canvas_element.dart';
 import 'package:repapertodo/src/core/model/paper_constants.dart';
 import 'package:repapertodo/src/core/model/paper_data.dart';
 import 'package:repapertodo/src/core/model/paper_item.dart';
+import 'package:repapertodo/src/core/model/paper_titles.dart';
 import 'package:repapertodo/src/core/model/sync_settings.dart';
 import 'package:repapertodo/src/core/script/script_capsule.dart';
 import 'package:repapertodo/src/core/storage/state_store.dart';
@@ -265,6 +266,47 @@ void main() {
     expect(find.text('WebDAV sync'), findsOneWidget);
     expect(find.text('Jianguoyun'), findsOneWidget);
     expect(find.text('Generic'), findsOneWidget);
+  });
+
+  testWidgets('cleans paper title edits with PaperTodo hard title rules',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'title-clean-paper',
+            type: PaperTypes.note,
+            title: 'Title clean',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final longTitle =
+        '${List.filled(PaperTitles.maxTitleLength + 5, 'A').join()}\u0000B';
+    await tester.enterText(
+      find.byKey(const ValueKey('title-clean-paper-title')),
+      longTitle,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final expected = List.filled(PaperTitles.maxTitleLength, 'A').join();
+    expect(controller.state.papers.single.title, expected);
+    expect(controller.state.papers.single.title, isNot(contains('\u0000')));
+    expect(platform.paperWindows.updatedTitles, contains(expected));
   });
 
   testWidgets('renders markdown note preview controls', (tester) async {

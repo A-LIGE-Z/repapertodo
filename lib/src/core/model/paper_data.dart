@@ -105,9 +105,11 @@ class PaperData {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
     type = PaperTypes.normalize(type);
-    if (storageCompatibility) {
-      title = PaperTitles.cleanCustomTitle(title, maxLength: maxTitleLength);
-    }
+    title = PaperTitles.cleanCustomTitle(
+      title,
+      maxLength:
+          storageCompatibility ? maxTitleLength : PaperTitles.maxTitleLength,
+    );
     x = _normalizeCoordinate(x, 120);
     y = _normalizeCoordinate(y, 120);
     width = _normalizePaperDimension(

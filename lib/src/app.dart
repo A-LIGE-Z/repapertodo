@@ -2624,6 +2624,11 @@ class PaperPreview extends StatelessWidget {
                     child: TextFormField(
                       key: ValueKey('${paper.id}-title'),
                       initialValue: paper.title,
+                      inputFormatters: const [
+                        _PaperTitleTextInputFormatter(
+                          maxLength: PaperTitles.maxTitleLength,
+                        ),
+                      ],
                       decoration: const InputDecoration(
                         border: InputBorder.none,
                         hintText: 'Untitled',
@@ -2633,7 +2638,7 @@ class PaperPreview extends StatelessWidget {
                         fontSizeFactor: textZoom,
                       ),
                       onChanged: (value) {
-                        paper.title = value;
+                        paper.title = PaperTitles.cleanCustomTitle(value);
                         unawaited(onTitleChanged(paper));
                       },
                     ),
@@ -7019,6 +7024,53 @@ class _MarkdownListContinuationTextInputFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     return MarkdownListContinuation.formatEnter(oldValue, newValue);
+  }
+}
+
+class _PaperTitleTextInputFormatter extends TextInputFormatter {
+  const _PaperTitleTextInputFormatter({required this.maxLength});
+
+  final int maxLength;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final cleaned = _cleanEditingTitle(newValue.text);
+    if (cleaned == newValue.text) {
+      return newValue;
+    }
+
+    final selection = newValue.selection;
+    return newValue.copyWith(
+      text: cleaned,
+      selection: selection.copyWith(
+        baseOffset: _cleanedOffset(newValue.text, selection.baseOffset),
+        extentOffset: _cleanedOffset(newValue.text, selection.extentOffset),
+      ),
+      composing: TextRange.empty,
+    );
+  }
+
+  String _cleanEditingTitle(String value) {
+    final withoutControls = value.runes
+        .where((rune) => !_isControlRune(rune))
+        .map(String.fromCharCode)
+        .join();
+    return PaperTitles.shorten(withoutControls, maxLength);
+  }
+
+  int _cleanedOffset(String text, int offset) {
+    if (offset < 0) {
+      return -1;
+    }
+    final safeOffset = offset.clamp(0, text.length).toInt();
+    return _cleanEditingTitle(text.substring(0, safeOffset)).length;
+  }
+
+  bool _isControlRune(int rune) {
+    return rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
   }
 }
 
