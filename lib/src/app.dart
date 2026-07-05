@@ -26,6 +26,7 @@ import 'sync/app_sync_service.dart';
 import 'sync/webdav/webdav_client.dart';
 import 'sync/webdav/webdav_payload_codec.dart';
 import 'sync/webdav/webdav_state_sync_service.dart';
+import 'ui/runtime_custom_font.dart';
 import 'ui/sync_settings_dialog.dart';
 
 const _externalMarkdownExportRetention = Duration(days: 7);
@@ -36,18 +37,28 @@ class RePaperTodoApp extends StatefulWidget {
     required this.controller,
     required this.store,
     this.syncService,
+    this.customFontLoader,
     super.key,
   });
 
   final RePaperTodoController controller;
   final StateStore store;
   final AppSyncService? syncService;
+  final PaperTodoRuntimeCustomFontLoader? customFontLoader;
 
   @override
   State<RePaperTodoApp> createState() => _RePaperTodoAppState();
 }
 
 class _RePaperTodoAppState extends State<RePaperTodoApp> {
+  String? _runtimeCustomFontFamily;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadRuntimeCustomFont());
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.controller.state;
@@ -64,6 +75,19 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
         onAppThemeChanged: () => setState(() {}),
       ),
     );
+  }
+
+  Future<void> _loadRuntimeCustomFont() async {
+    final family =
+        await (widget.customFontLoader ?? PaperTodoRuntimeCustomFontLoader())
+            .load();
+    if (!mounted ||
+        family == null ||
+        family.trim().isEmpty ||
+        family == _runtimeCustomFontFamily) {
+      return;
+    }
+    setState(() => _runtimeCustomFontFamily = family);
   }
 
   ThemeData _appTheme(Brightness brightness, AppState state) {
@@ -117,14 +141,30 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
   }
 
   String? _fontFamily(AppState state) {
-    return switch (UiFontPresets.normalize(state.uiFontPreset)) {
-      UiFontPresets.serif => 'serif',
-      UiFontPresets.mono => 'monospace',
-      UiFontPresets.custom when state.systemFontFamilyName.isNotEmpty =>
-        state.systemFontFamilyName,
-      _ => null,
-    };
+    return resolveAppFontFamily(
+      state,
+      runtimeCustomFontFamily: _runtimeCustomFontFamily,
+    );
   }
+}
+
+String? resolveAppFontFamily(
+  AppState state, {
+  String? runtimeCustomFontFamily,
+}) {
+  final systemFontFamilyName = state.systemFontFamilyName.trim();
+  if (systemFontFamilyName.isNotEmpty) {
+    return systemFontFamilyName;
+  }
+  final runtimeFamily = runtimeCustomFontFamily?.trim();
+  if (runtimeFamily != null && runtimeFamily.isNotEmpty) {
+    return runtimeFamily;
+  }
+  return switch (UiFontPresets.normalize(state.uiFontPreset)) {
+    UiFontPresets.serif => 'serif',
+    UiFontPresets.mono => 'monospace',
+    _ => null,
+  };
 }
 
 String _shortenTitle(String title, int maxLength) {

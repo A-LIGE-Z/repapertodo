@@ -78,6 +78,10 @@ names, lock keys, number-pad names, and common punctuation names such as
 `Plus`, `Minus`, and `Slash`.
 Hotkey settings should strip control characters before saving or platform
 registration while preserving ordinary spaces used by aliases.
+For PaperTodo font parity, when no explicit system font family is configured,
+the app should try to load `papertodo.ttf` and then `papertodo.otf` from the
+Windows executable directory before falling back to built-in font presets.
+Missing, invalid, or unsupported runtime font files must not block startup.
 
 ## Android Priority
 

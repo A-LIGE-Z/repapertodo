@@ -440,6 +440,25 @@ void main() {
     expect(appState, contains('unit <= 0x1F || unit == 0x7F'));
   });
 
+  test('PaperTodo runtime custom font convention is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+    final runtimeFont =
+        File('lib/src/ui/runtime_custom_font.dart').readAsStringSync();
+
+    expect(design, contains('papertodo.ttf'));
+    expect(design, contains('papertodo.otf'));
+    expect(design, contains('Windows executable directory'));
+    expect(design, contains('must not block startup'));
+    expect(app, contains('PaperTodoRuntimeCustomFontLoader'));
+    expect(app, contains('resolveAppFontFamily'));
+    expect(runtimeFont, contains('paperTodoRuntimeCustomFontCandidates'));
+    expect(runtimeFont, contains("'papertodo.ttf'"));
+    expect(runtimeFont, contains("'papertodo.otf'"));
+    expect(runtimeFont, contains('FontLoader(family)'));
+    expect(runtimeFont, contains('Invalid or unsupported custom fonts'));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
