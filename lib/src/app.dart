@@ -583,13 +583,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       if (controller.state.showTopBarNewTodoButton)
         IconButton(
           tooltip: _tooltipLabel(enableToolTips, 'New todo paper'),
-          onPressed: () => _createPaper(PaperTypes.todo),
+          onPressed: () =>
+              _createPaper(PaperTypes.todo, sourcePaper: surfacePaper),
           icon: const Icon(Icons.add_task),
         ),
       if (controller.state.showTopBarNewNoteButton)
         IconButton(
           tooltip: _tooltipLabel(enableToolTips, 'New note paper'),
-          onPressed: () => _createPaper(PaperTypes.note),
+          onPressed: () =>
+              _createPaper(PaperTypes.note, sourcePaper: surfacePaper),
           icon: const Icon(Icons.note_add_outlined),
         ),
       if (controller.state.useCapsuleMode &&
@@ -647,9 +649,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           unawaited(_openPaper(surfacePaper));
         }
       case _CompactAppBarActions.newTodo:
-        unawaited(_createPaper(PaperTypes.todo));
+        unawaited(_createPaper(PaperTypes.todo, sourcePaper: surfacePaper));
       case _CompactAppBarActions.newNote:
-        unawaited(_createPaper(PaperTypes.note));
+        unawaited(_createPaper(PaperTypes.note, sourcePaper: surfacePaper));
       case _CompactAppBarActions.toggleCollapseAll:
         unawaited(_toggleCollapseAll(surfacePaper));
       case _CompactAppBarActions.recoverySnapshots:
@@ -726,10 +728,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     );
   }
 
-  Future<void> _createPaper(String type) async {
+  Future<void> _createPaper(String type, {PaperData? sourcePaper}) async {
     late final PaperData paper;
     setState(() {
-      paper = controller.createPaper(type);
+      paper = controller.createPaper(type, sourcePaper: sourcePaper);
     });
     await controller.showPaper(paper);
     await _saveState();

@@ -70,9 +70,9 @@ class RePaperTodoController {
     await _platform.tray.rebuildMenu(state);
   }
 
-  PaperData createPaper(String type) {
+  PaperData createPaper(String type, {PaperData? sourcePaper}) {
     final normalizedType = PaperTypes.normalize(type);
-    final initialPosition = _newPaperInitialPosition();
+    final initialPosition = _newPaperInitialPosition(sourcePaper);
     final paper = PaperData(
       id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
       type: normalizedType,
@@ -91,11 +91,15 @@ class RePaperTodoController {
                   id: DateTime.now().microsecondsSinceEpoch.toRadixString(16))
             ]
           : const [],
+      alwaysOnTop: sourcePaper?.alwaysOnTop ?? false,
     );
     if (state.useCapsuleMode && state.useDeepCapsuleMode) {
-      paper.capsuleSide = state.deepCapsuleSide;
-      paper.capsuleMonitorDeviceName = state.deepCapsuleMonitorDeviceName;
-      paper.y = state.deepCapsuleStartTopMargin;
+      _initializeNewPaperCapsuleQueue(paper, sourcePaper);
+      if (sourcePaper == null) {
+        paper.y = state.deepCapsuleStartTopMargin;
+      }
+    } else if (sourcePaper != null) {
+      _inheritSourcePaperCapsuleQueue(paper, sourcePaper);
     }
     state.papers.add(paper);
     if (paper.isVisible) {
@@ -268,11 +272,16 @@ class RePaperTodoController {
     return PaperTitles.defaultTitle(type, sameTypeCount);
   }
 
-  ({double x, double y}) _newPaperInitialPosition() {
-    final offset =
-        state.papers.length * PaperLayoutDefaults.newPaperCascadeOffset;
-    var x = PaperLayoutDefaults.newPaperBaseLeft + offset;
-    var y = PaperLayoutDefaults.newPaperBaseTop + offset;
+  ({double x, double y}) _newPaperInitialPosition(PaperData? sourcePaper) {
+    final offset = sourcePaper == null
+        ? state.papers.length * PaperLayoutDefaults.newPaperCascadeOffset
+        : PaperLayoutDefaults.newPaperSourceOffset;
+    var x = sourcePaper == null
+        ? PaperLayoutDefaults.newPaperBaseLeft + offset
+        : sourcePaper.x + offset;
+    var y = sourcePaper == null
+        ? PaperLayoutDefaults.newPaperBaseTop + offset
+        : sourcePaper.y + offset;
     while (state.papers.any(
       (paper) =>
           (paper.x - x).abs() <
@@ -283,6 +292,36 @@ class RePaperTodoController {
       y += PaperLayoutDefaults.newPaperCollisionNudge;
     }
     return (x: x, y: y);
+  }
+
+  void _initializeNewPaperCapsuleQueue(
+    PaperData paper,
+    PaperData? sourcePaper,
+  ) {
+    final sourceSide = sourcePaper?.capsuleSide.trim() ?? '';
+    final sourceMonitor = sourcePaper?.capsuleMonitorDeviceName.trim() ?? '';
+    paper.capsuleSide = sourceSide.isEmpty
+        ? state.deepCapsuleSide
+        : DeepCapsuleSides.normalize(sourceSide);
+    paper.capsuleMonitorDeviceName = sourceMonitor.isEmpty
+        ? state.deepCapsuleMonitorDeviceName
+        : sourceMonitor;
+  }
+
+  bool _inheritSourcePaperCapsuleQueue(
+    PaperData paper,
+    PaperData? sourcePaper,
+  ) {
+    final sourceSide = sourcePaper?.capsuleSide.trim() ?? '';
+    final sourceMonitor = sourcePaper?.capsuleMonitorDeviceName.trim() ?? '';
+    if (sourceSide.isEmpty && sourceMonitor.isEmpty) {
+      return false;
+    }
+    if (sourceSide.isNotEmpty) {
+      paper.capsuleSide = DeepCapsuleSides.normalize(sourceSide);
+    }
+    paper.capsuleMonitorDeviceName = sourceMonitor;
+    return true;
   }
 
   Future<void> _preparePendingNewPapersForFirstShow() async {

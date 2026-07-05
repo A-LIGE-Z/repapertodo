@@ -158,6 +158,7 @@ abstract final class PaperLayoutDefaults {
   static const newPaperBaseLeft = 140.0;
   static const newPaperBaseTop = 140.0;
   static const newPaperCascadeOffset = 24.0;
+  static const newPaperSourceOffset = 30.0;
   static const newPaperCollisionNudge = 30.0;
   static const newPaperCollisionThreshold = 5.0;
   static const newPaperWorkAreaMargin = 8.0;

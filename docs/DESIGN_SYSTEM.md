@@ -56,6 +56,9 @@ New visible papers created in deep capsule mode should resolve the target
 Windows work area and open away from the deep capsule edge strip when expanded
 capsules remain visible, using PaperTodo's capsule width, gap, and expanded
 edge inset constants.
+New papers created from an existing paper should follow PaperTodo's source
+paper behavior: open 30px down and right from the source, inherit always-on-top
+state, and keep the source capsule queue when one is set.
 New desktop papers should follow PaperTodo's cascade placement: start near
 `140,140`, offset each new paper by the existing paper count, and nudge again
 when the target position is already occupied.

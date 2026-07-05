@@ -77,6 +77,73 @@ void main() {
     expect(paper.y, 194);
   });
 
+  test('new papers can be spawned from a source paper like PaperTodo', () {
+    final sourcePaper = PaperData(
+      id: 'source',
+      type: PaperTypes.todo,
+      title: 'Source',
+      x: 260,
+      y: 210,
+      alwaysOnTop: true,
+      capsuleSide: DeepCapsuleSides.left,
+      capsuleMonitorDeviceName: 'Secondary monitor',
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        deepCapsuleSide: DeepCapsuleSides.right,
+        deepCapsuleMonitorDeviceName: 'Primary monitor',
+        deepCapsuleStartTopMargin: 72,
+        papers: [sourcePaper],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    final paper = controller.createPaper(
+      PaperTypes.note,
+      sourcePaper: sourcePaper,
+    );
+
+    expect(paper.x, 290);
+    expect(paper.y, 240);
+    expect(paper.alwaysOnTop, true);
+    expect(paper.capsuleSide, DeepCapsuleSides.left);
+    expect(paper.capsuleMonitorDeviceName, 'Secondary monitor');
+  });
+
+  test('source papers use PaperTodo collision nudging', () {
+    final sourcePaper = PaperData(
+      id: 'source',
+      type: PaperTypes.todo,
+      title: 'Source',
+      x: 200,
+      y: 180,
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        papers: [
+          sourcePaper,
+          PaperData(
+            id: 'near-source-offset',
+            type: PaperTypes.note,
+            title: 'Near source offset',
+            x: 230,
+            y: 210,
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    final paper = controller.createPaper(
+      PaperTypes.todo,
+      sourcePaper: sourcePaper,
+    );
+
+    expect(paper.x, 260);
+    expect(paper.y, 240);
+  });
+
   test('new papers are rescued into the Windows work area before showing',
       () async {
     final platform = _RecordingPlatformServices();

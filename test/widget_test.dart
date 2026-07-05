@@ -6824,6 +6824,55 @@ void main() {
     expect(find.byTooltip('Settings'), findsOneWidget);
   });
 
+  testWidgets('surface top bar creates papers from the current paper',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final sourcePaper = PaperData(
+      id: 'source-topbar-paper',
+      type: PaperTypes.todo,
+      title: 'Source top bar',
+      x: 220,
+      y: 180,
+      alwaysOnTop: true,
+      capsuleSide: DeepCapsuleSides.left,
+      capsuleMonitorDeviceName: 'Source monitor',
+      items: [
+        PaperItem(id: 'source-topbar-item', text: 'Create nearby'),
+      ],
+    );
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        papers: [sourcePaper],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Open paper surface'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('New note paper'));
+    await tester.pumpAndSettle();
+
+    final createdPaper = controller.state.papers.last;
+    expect(createdPaper.isNote, true);
+    expect(createdPaper.x, 250);
+    expect(createdPaper.y, 210);
+    expect(createdPaper.alwaysOnTop, true);
+    expect(createdPaper.capsuleSide, DeepCapsuleSides.left);
+    expect(createdPaper.capsuleMonitorDeviceName, 'Source monitor');
+    expect(platform.paperWindows.shownTitles.last, createdPaper.title);
+  });
+
   testWidgets('uses compact app bar overflow actions on narrow screens',
       (tester) async {
     tester.view

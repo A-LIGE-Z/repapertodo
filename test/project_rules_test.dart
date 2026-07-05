@@ -507,14 +507,18 @@ void main() {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
 
     expect(design, contains('open away from the deep capsule edge strip'));
+    expect(design, contains('created from an existing paper'));
     expect(constants, contains('capsuleWidth = 92.0'));
     expect(constants, contains('deepCapsuleExpandedEdgeInset = 36.0'));
     expect(constants, contains('deepCapsuleGap = 4.0'));
     expect(constants, contains('newPaperBaseLeft = 140.0'));
     expect(constants, contains('newPaperCascadeOffset = 24.0'));
+    expect(constants, contains('newPaperSourceOffset = 30.0'));
     expect(constants, contains('newPaperCollisionNudge = 30.0'));
     expect(constants, contains('newPaperWorkAreaResizeInset = 80.0'));
     expect(platform, contains('workAreaForPaper'));
+    expect(controller, contains('sourcePaper'));
+    expect(controller, contains('_initializeNewPaperCapsuleQueue'));
     expect(controller, contains('_rescuePapersIntoWorkAreas'));
     expect(controller, contains('_rescuePaperIntoWorkArea'));
     expect(controller, contains('_clampNewPaperAwayFromDeepCapsuleStrip'));
