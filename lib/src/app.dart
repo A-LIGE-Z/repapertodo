@@ -827,25 +827,28 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (removedIndex < 0) {
       return;
     }
+    final removedPaper = PaperData.fromJson(paper.toJson());
     final detachedLinks = <_LinkedNoteRestore>[];
+    PaperData? defaultPaper;
     setState(() {
-      controller.state.sync.markPaperDeleted(paper.id, DateTime.now().toUtc());
+      controller.state.sync
+          .markPaperDeleted(removedPaper.id, DateTime.now().toUtc());
       controller.state.papers.removeAt(removedIndex);
-      if (_surfacePaperId == paper.id) {
+      if (_surfacePaperId == removedPaper.id) {
         _surfacePaperId = null;
       }
-      if (paper.isNote) {
+      if (removedPaper.isNote) {
         for (final todoPaper in controller.state.papers) {
           if (!todoPaper.isTodo) {
             continue;
           }
           for (final item in todoPaper.items) {
-            if (item.linkedNoteId == paper.id) {
+            if (item.linkedNoteId == removedPaper.id) {
               detachedLinks.add(
                 _LinkedNoteRestore(
                   paperId: todoPaper.id,
                   itemId: item.id,
-                  noteId: paper.id,
+                  noteId: removedPaper.id,
                 ),
               );
               item.linkedNoteId = null;
@@ -853,35 +856,61 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           }
         }
       }
+      if (controller.state.papers.isEmpty) {
+        defaultPaper = controller.tryCreatePaper(PaperTypes.todo);
+      }
     });
+    await controller.hidePaper(paper);
+    final createdDefaultPaper = defaultPaper;
+    if (createdDefaultPaper != null) {
+      await controller.showPaper(createdDefaultPaper);
+    }
     unawaited(_saveState());
     if (!mounted) {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${_displayTitle(paper)} deleted.'),
+        content: Text('${_displayTitle(removedPaper)} deleted.'),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () {
-            setState(() {
-              final targetIndex = removedIndex
-                  .clamp(
-                    0,
-                    controller.state.papers.length,
-                  )
-                  .toInt();
-              controller.state.sync.clearPaperDeleted(paper.id);
-              controller.state.papers.insert(targetIndex, paper);
-              for (final link in detachedLinks) {
-                _restoreLinkedNote(link);
-              }
-            });
-            unawaited(_saveState());
-          },
+          onPressed: () => unawaited(
+            _undoDeletePaper(
+              restoredPaper: removedPaper,
+              targetIndex: removedIndex,
+              detachedLinks: detachedLinks,
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _undoDeletePaper({
+    required PaperData restoredPaper,
+    required int targetIndex,
+    required List<_LinkedNoteRestore> detachedLinks,
+  }) async {
+    if (controller.state.papers.any((paper) => paper.id == restoredPaper.id)) {
+      return;
+    }
+    setState(() {
+      final insertIndex = targetIndex
+          .clamp(
+            0,
+            controller.state.papers.length,
+          )
+          .toInt();
+      controller.state.sync.clearPaperDeleted(restoredPaper.id);
+      controller.state.papers.insert(insertIndex, restoredPaper);
+      for (final link in detachedLinks) {
+        _restoreLinkedNote(link);
+      }
+    });
+    if (restoredPaper.isVisible) {
+      await controller.showPaper(restoredPaper);
+    }
+    await _saveState();
   }
 
   void _markTodoItemDeleted(PaperData paper, PaperItem item) {
@@ -905,13 +934,13 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _hidePaper(PaperData paper) async {
+    final hideFuture = controller.hidePaper(paper);
     setState(() {
-      paper.isVisible = false;
       if (_surfacePaperId == paper.id) {
         _surfacePaperId = null;
       }
     });
-    await controller.hidePaper(paper);
+    await hideFuture;
     await _saveState();
   }
 

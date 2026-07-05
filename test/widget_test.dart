@@ -163,9 +163,14 @@ void main() {
     });
     await tester.pump(const Duration(seconds: 1));
 
-    expect(controller.state.papers, isEmpty);
+    expect(controller.state.papers, hasLength(1));
+    expect(controller.state.papers.single.id, isNot('welcome-todo'));
+    expect(controller.state.papers.single.type, PaperTypes.todo);
+    expect(controller.state.papers.single.isVisible, true);
     expect(find.byKey(const ValueKey('welcome-todo-title')), findsNothing);
     expect(controller.state.sync.isPaperDeleted('welcome-todo'), true);
+    expect(platform.paperWindows.hiddenTitles, contains('Edited title'));
+    expect(platform.paperWindows.shownTitles, contains('Todo1'));
 
     final undoAction = tester.widget<SnackBarAction>(
       find.byWidgetPredicate(
@@ -178,7 +183,7 @@ void main() {
         .hideCurrentSnackBar();
     await tester.pumpAndSettle();
 
-    expect(controller.state.papers, hasLength(1));
+    expect(controller.state.papers, hasLength(2));
     expect(find.byKey(const ValueKey('welcome-todo-title')), findsOneWidget);
     expect(controller.state.sync.isPaperDeleted('welcome-todo'), false);
 
@@ -6793,6 +6798,51 @@ void main() {
     expect(paper.isPinnedToDesktop, false);
     expect(find.byTooltip('Disable always on top'), findsOneWidget);
     expect(find.byTooltip('Pin to desktop'), findsOneWidget);
+  });
+
+  testWidgets('hiding a pinned collapsed paper restores PaperTodo state',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'hide-pinned-paper',
+            type: PaperTypes.todo,
+            title: 'Hide pinned paper',
+            isPinnedToDesktop: true,
+            items: [
+              PaperItem(id: 'hide-pinned-item', text: 'Hide me'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final paper = controller.state.papers.single;
+    paper.isCollapsed = true;
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Hide paper'));
+    await tester.pumpAndSettle();
+
+    expect(paper.isVisible, false);
+    expect(paper.isPinnedToDesktop, false);
+    expect(paper.isCollapsed, false);
+    expect(store.savedState.papers.single.isPinnedToDesktop, false);
+    expect(store.savedState.papers.single.isCollapsed, false);
+    expect(platform.paperWindows.hiddenTitles, contains('Hide pinned paper'));
+    expect(find.text('Hide pinned paper'), findsNothing);
   });
 
   testWidgets('hides disabled top bar creation buttons', (tester) async {

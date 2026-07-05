@@ -88,6 +88,10 @@ whether all papers should be shown or hidden from current visibility state.
 Pinning a paper to the desktop should follow PaperTodo's surface-mode rules:
 the paper becomes visible and expanded, always-on-top is cleared, capsule and
 deep-capsule mode are enabled, and missing capsule queue fields are initialized.
+Hiding a paper should follow PaperTodo's single-paper rules: clear desktop
+pinning, mark the paper hidden, and expand it before persisting or refreshing
+platform surfaces. Deleting the last remaining paper should immediately create
+a visible default Todo paper so the app never settles into an empty board.
 Tray-level Exit and forwarded `quit`/`exit` commands must also go through the
 Dart startup command path so the app can save local state and run the configured
 sync-before-exit flow before the native runner destroys the window.

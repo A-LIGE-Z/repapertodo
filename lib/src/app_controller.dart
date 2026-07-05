@@ -328,7 +328,11 @@ class RePaperTodoController {
   }
 
   Future<void> hidePaper(PaperData paper) async {
-    paper.isVisible = false;
+    paper
+      ..isPinnedToDesktop = false
+      ..isVisible = false
+      ..isCollapsed = false;
+    state.normalize();
     await _platform.paperWindows.hidePaper(paper);
   }
 

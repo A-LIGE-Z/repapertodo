@@ -316,6 +316,33 @@ void main() {
     expect(paper.isCollapsed, false);
   });
 
+  test('hiding a paper clears desktop pin and collapsed state like PaperTodo',
+      () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'hide-paper',
+            type: PaperTypes.todo,
+            title: 'Hide me',
+            isPinnedToDesktop: true,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final paper = controller.state.papers.single;
+    paper.isCollapsed = true;
+
+    await controller.hidePaper(paper);
+
+    expect(paper.isPinnedToDesktop, false);
+    expect(paper.isVisible, false);
+    expect(paper.isCollapsed, false);
+    expect(platform.paperWindows.hiddenIds, ['hide-paper']);
+  });
+
   test('new papers are rescued into the Windows work area before showing',
       () async {
     final platform = _RecordingPlatformServices();

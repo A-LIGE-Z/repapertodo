@@ -544,6 +544,23 @@ void main() {
     expect(runner, contains('MONITORINFOEXW'));
   });
 
+  test('PaperTodo paper hide and last-delete rules are preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final controller = File('lib/src/app_controller.dart').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design,
+        contains("Hiding a paper should follow PaperTodo's single-paper"));
+    expect(design, contains('Deleting the last remaining paper'));
+    expect(controller, contains('..isPinnedToDesktop = false'));
+    expect(controller, contains('..isVisible = false'));
+    expect(controller, contains('..isCollapsed = false'));
+    expect(app,
+        contains('defaultPaper = controller.tryCreatePaper(PaperTypes.todo)'));
+    expect(app, contains('await controller.showPaper(createdDefaultPaper)'));
+    expect(app, contains('_undoDeletePaper'));
+  });
+
   test('PaperTodo runtime custom font convention is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
