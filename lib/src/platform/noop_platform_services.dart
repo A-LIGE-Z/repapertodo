@@ -51,6 +51,9 @@ class NoopPaperWindowHost implements PaperWindowHost {
   Stream<PaperData> get surfaceUpdates => const Stream.empty();
 
   @override
+  Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async => null;
+
+  @override
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {}
 
   @override

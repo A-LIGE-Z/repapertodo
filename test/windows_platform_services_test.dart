@@ -305,6 +305,56 @@ void main() {
     expect(calls, isEmpty);
   });
 
+  test('paper host requests Windows work area for deep capsule placement',
+      () async {
+    const channel = MethodChannel('repapertodo/window_work_area_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'getWorkArea') {
+        return {
+          'x': 0,
+          'y': 0,
+          'width': 1440,
+          'height': 860,
+        };
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final paper = PaperData(
+      id: 'paper-1',
+      type: PaperTypes.todo,
+      title: 'Inbox',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+      capsuleMonitorDeviceName: r'\\.\DISPLAY2',
+    );
+
+    final workArea = await services.paperWindows.workAreaForPaper(paper);
+
+    expect(workArea?.x, 0);
+    expect(workArea?.y, 0);
+    expect(workArea?.width, 1440);
+    expect(workArea?.height, 860);
+    expect(calls.single.method, 'getWorkArea');
+    expect(calls.single.arguments, {
+      'paperId': 'paper-1',
+      'x': 10.0,
+      'y': 20.0,
+      'width': 320.0,
+      'height': 260.0,
+      'monitorDeviceName': r'\\.\DISPLAY2',
+    });
+  });
+
   test('Windows script capsule host rejects invalid requests locally',
       () async {
     const channel = MethodChannel('repapertodo/window_script_invalid_test');

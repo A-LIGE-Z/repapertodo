@@ -494,6 +494,31 @@ void main() {
     expect(runner, contains('ProcessIdForWindow(window)'));
   });
 
+  test('new Windows papers avoid the deep capsule edge strip', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final controller = File('lib/src/app_controller.dart').readAsStringSync();
+    final constants =
+        File('lib/src/core/model/paper_constants.dart').readAsStringSync();
+    final platform =
+        File('lib/src/platform/platform_services.dart').readAsStringSync();
+    final windowsPlatform =
+        File('lib/src/platform/windows_platform_services.dart')
+            .readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+
+    expect(design, contains('open away from the deep capsule edge strip'));
+    expect(constants, contains('capsuleWidth = 92.0'));
+    expect(constants, contains('deepCapsuleExpandedEdgeInset = 36.0'));
+    expect(constants, contains('deepCapsuleGap = 4.0'));
+    expect(platform, contains('workAreaForPaper'));
+    expect(controller, contains('_clampNewPaperAwayFromDeepCapsuleStrip'));
+    expect(controller, contains('workAreaForPaper'));
+    expect(windowsPlatform, contains("'getWorkArea'"));
+    expect(runner, contains('getWorkArea'));
+    expect(runner, contains('EnumDisplayMonitors'));
+    expect(runner, contains('MONITORINFOEXW'));
+  });
+
   test('PaperTodo runtime custom font convention is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

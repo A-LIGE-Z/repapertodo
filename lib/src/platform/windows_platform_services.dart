@@ -73,6 +73,26 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Stream<String> get paperOpenRequests => _paperOpenRequests.stream;
 
+  @override
+  Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async {
+    _rememberPaper(paper);
+    final workArea = await _channel.invokeMapMethod<String, Object?>(
+      'getWorkArea',
+      {
+        'paperId': paper.id,
+        'x': paper.x,
+        'y': paper.y,
+        'width': paper.width,
+        'height': paper.height,
+        'monitorDeviceName': paper.capsuleMonitorDeviceName,
+      },
+    );
+    if (workArea == null) {
+      return null;
+    }
+    return _workAreaFromMap(Map<Object?, Object?>.from(workArea));
+  }
+
   Future<void> _handleWindowEvent(MethodCall call) async {
     switch (call.method) {
       case 'paperRequested':
@@ -363,6 +383,16 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       ..width = _doubleValue(bounds['width'], paper.width)
       ..height = _doubleValue(bounds['height'], paper.height);
     paper.normalize();
+  }
+
+  PaperWorkArea? _workAreaFromMap(Map<Object?, Object?> map) {
+    final workArea = PaperWorkArea(
+      x: _doubleValue(map['x'], double.nan),
+      y: _doubleValue(map['y'], double.nan),
+      width: _doubleValue(map['width'], double.nan),
+      height: _doubleValue(map['height'], double.nan),
+    );
+    return workArea.isUsable ? workArea : null;
   }
 }
 

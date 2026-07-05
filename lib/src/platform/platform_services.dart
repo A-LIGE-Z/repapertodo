@@ -20,12 +20,38 @@ abstract interface class PaperWindowHost {
   Stream<PaperData> get surfaceUpdates;
   Stream<String> get paperOpenRequests;
 
+  Future<PaperWorkArea?> workAreaForPaper(PaperData paper);
   Future<void> showPaper(PaperData paper);
   Future<void> hidePaper(PaperData paper);
   Future<void> closePaperSurface(PaperData paper);
   Future<void> updatePaperSurface(PaperData paper);
   Future<void> capturePaperSurfaceBounds(PaperData paper);
   Future<void> restoreAll(AppState state);
+}
+
+class PaperWorkArea {
+  const PaperWorkArea({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+
+  double get right => x + width;
+  double get bottom => y + height;
+
+  bool get isUsable =>
+      x.isFinite &&
+      y.isFinite &&
+      width.isFinite &&
+      height.isFinite &&
+      width > 0 &&
+      height > 0;
 }
 
 abstract interface class TrayHost {

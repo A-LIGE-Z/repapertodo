@@ -148,6 +148,13 @@ String _normalizedValue(String? value) {
 abstract final class PaperLayoutDefaults {
   static const minWidth = 220.0;
   static const minHeight = 160.0;
+  static const capsuleWidth = 92.0;
+  static const capsuleHeight = 46.0;
+  static const deepCapsuleExpandedEdgeInset = 36.0;
+  static const deepCapsuleEdgeMargin = 8.0;
+  static const deepCapsuleTopMargin = 8.0;
+  static const deepCapsuleStartTopMargin = 48.0;
+  static const deepCapsuleGap = 4.0;
   static const todoDefaultWidth = 280.0;
   static const todoDefaultHeight = 340.0;
   static const noteDefaultWidth = 320.0;

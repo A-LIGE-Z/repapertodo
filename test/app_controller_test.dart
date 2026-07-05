@@ -35,6 +35,102 @@ void main() {
     expect(paper.y, 120);
   });
 
+  test('new right-edge deep capsule papers avoid the reserved strip', () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workArea =
+        const PaperWorkArea(x: 0, y: 0, width: 480, height: 420);
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        deepCapsuleSide: DeepCapsuleSides.right,
+        deepCapsuleStartTopMargin: 48,
+      ),
+      platform: platform,
+    );
+
+    final paper = controller.createPaper(PaperTypes.todo);
+    await controller.showPaper(paper);
+
+    expect(platform.paperWindows.workAreaRequestIds, [paper.id]);
+    expect(paper.x, 104);
+    expect(paper.y, 48);
+    expect(platform.paperWindows.shownIds, [paper.id]);
+  });
+
+  test('new left-edge deep capsule papers avoid the reserved strip', () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workArea =
+        const PaperWorkArea(x: 80, y: 0, width: 800, height: 500);
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        deepCapsuleSide: DeepCapsuleSides.left,
+        deepCapsuleStartTopMargin: 72,
+      ),
+      platform: platform,
+    );
+
+    final paper = controller.createPaper(PaperTypes.todo);
+    await controller.showPaper(paper);
+
+    expect(platform.paperWindows.workAreaRequestIds, [paper.id]);
+    expect(paper.x, 176);
+    expect(paper.y, 72);
+  });
+
+  test('new papers do not shift when expanded deep capsule strip is hidden',
+      () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workArea =
+        const PaperWorkArea(x: 0, y: 0, width: 480, height: 420);
+    final controller = RePaperTodoController(
+      initialState: AppState(showDeepCapsuleWhileExpanded: false),
+      platform: platform,
+    );
+
+    final paper = controller.createPaper(PaperTypes.todo);
+    await controller.showPaper(paper);
+
+    expect(platform.paperWindows.workAreaRequestIds, isEmpty);
+    expect(paper.x, 120);
+    expect(paper.y, 48);
+  });
+
+  test('new papers still show when deep capsule work area lookup fails',
+      () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workAreaError = StateError('work area unavailable');
+    final controller = RePaperTodoController(
+      initialState: AppState(deepCapsuleSide: DeepCapsuleSides.right),
+      platform: platform,
+    );
+
+    final paper = controller.createPaper(PaperTypes.todo);
+    await controller.showPaper(paper);
+
+    expect(platform.paperWindows.workAreaRequestIds, [paper.id]);
+    expect(platform.paperWindows.shownIds, [paper.id]);
+    expect(paper.x, 120);
+    expect(paper.y, 48);
+  });
+
+  test('startup new-paper commands use deep capsule strip avoidance', () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workArea =
+        const PaperWorkArea(x: 0, y: 0, width: 480, height: 420);
+    final controller = RePaperTodoController(
+      initialState: AppState(deepCapsuleSide: DeepCapsuleSides.right),
+      platform: platform,
+    );
+
+    await controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.newTodo),
+    );
+
+    final paper = controller.state.papers.single;
+    expect(platform.paperWindows.workAreaRequestIds, [paper.id]);
+    expect(platform.paperWindows.shownIds, [paper.id]);
+    expect(paper.x, 104);
+  });
+
   test('startup show and hide commands apply every paper', () async {
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
@@ -214,7 +310,20 @@ class _RecordingTrayHost extends NoopTrayHost {
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final shownIds = <String>[];
   final hiddenIds = <String>[];
+  final workAreaRequestIds = <String>[];
+  PaperWorkArea? workArea;
+  Object? workAreaError;
   var restoreAllCount = 0;
+
+  @override
+  Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async {
+    workAreaRequestIds.add(paper.id);
+    final error = workAreaError;
+    if (error != null) {
+      throw error;
+    }
+    return workArea;
+  }
 
   @override
   Future<void> restoreAll(AppState state) async {

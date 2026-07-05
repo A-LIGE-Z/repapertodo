@@ -52,6 +52,10 @@ plain move/resize bounds updates should not trigger extra tray rebuilds.
 Deep-capsule collapse-all follows PaperTodo's queue model: the master capsule
 acts on one `(monitor, side)` queue, while the board-level fallback may still
 toggle all papers for compatibility with the current Flutter surface.
+New visible papers created in deep capsule mode should resolve the target
+Windows work area and open away from the deep capsule edge strip when expanded
+capsules remain visible, using PaperTodo's capsule width, gap, and expanded
+edge inset constants.
 The tray icon should be resilient to Windows Explorer/taskbar restarts by
 handling the `TaskbarCreated` broadcast and re-adding the notification icon.
 For PaperTodo parity, a `PaperTodo.ico` or `RePaperTodo.ico` file next to the

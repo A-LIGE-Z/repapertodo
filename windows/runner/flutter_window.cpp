@@ -5,12 +5,14 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cctype>
 #include <cstdlib>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -1028,6 +1030,107 @@ flutter::EncodableValue BoundsValueFromRect(
   return flutter::EncodableValue(result_map);
 }
 
+struct MonitorWorkAreaLookup {
+  explicit MonitorWorkAreaLookup(std::wstring device_name)
+      : target_device_name(std::move(device_name)) {}
+
+  std::wstring target_device_name;
+  RECT work_area = {};
+  bool found = false;
+};
+
+BOOL CALLBACK FindMonitorWorkAreaByDeviceName(HMONITOR monitor,
+                                              HDC,
+                                              LPRECT,
+                                              LPARAM data) {
+  auto* context = reinterpret_cast<MonitorWorkAreaLookup*>(data);
+  if (!context) {
+    return TRUE;
+  }
+  MONITORINFOEXW monitor_info = {};
+  monitor_info.cbSize = sizeof(MONITORINFOEXW);
+  if (GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO*>(&monitor_info)) !=
+          TRUE ||
+      IsEmptyRect(monitor_info.rcWork)) {
+    return TRUE;
+  }
+
+  const bool wants_primary = context->target_device_name.empty();
+  const bool matches = wants_primary
+                           ? (monitor_info.dwFlags & MONITORINFOF_PRIMARY) != 0
+                           : context->target_device_name == monitor_info.szDevice;
+  if (!matches) {
+    return TRUE;
+  }
+
+  context->work_area = monitor_info.rcWork;
+  context->found = true;
+  return FALSE;
+}
+
+std::optional<RECT> WorkAreaForMonitorDeviceName(
+    const std::string& monitor_device_name) {
+  MonitorWorkAreaLookup context(Utf8ToWide(TrimAscii(monitor_device_name)));
+  EnumDisplayMonitors(nullptr, nullptr, FindMonitorWorkAreaByDeviceName,
+                      reinterpret_cast<LPARAM>(&context));
+  if (!context.found) {
+    return std::nullopt;
+  }
+  return context.work_area;
+}
+
+RECT BoundsRectFromArguments(const flutter::EncodableValue* arguments,
+                             const RECT& fallback) {
+  if (!arguments) {
+    return fallback;
+  }
+  if (const auto* map = std::get_if<flutter::EncodableMap>(arguments)) {
+    const double x =
+        GetNumberArgument(*map, "x", static_cast<double>(fallback.left));
+    const double y =
+        GetNumberArgument(*map, "y", static_cast<double>(fallback.top));
+    const double width = GetNumberArgument(
+        *map, "width", static_cast<double>(fallback.right - fallback.left));
+    const double height = GetNumberArgument(
+        *map, "height", static_cast<double>(fallback.bottom - fallback.top));
+    if (std::isfinite(x) && std::isfinite(y) && std::isfinite(width) &&
+        std::isfinite(height) && width > 0 && height > 0) {
+      return RECT{static_cast<LONG>(x), static_cast<LONG>(y),
+                  static_cast<LONG>(x + width),
+                  static_cast<LONG>(y + height)};
+    }
+  }
+  return fallback;
+}
+
+flutter::EncodableValue WorkAreaValueForArguments(
+    HWND window, const flutter::EncodableValue* arguments) {
+  std::string monitor_device_name;
+  if (arguments) {
+    if (const auto* map = std::get_if<flutter::EncodableMap>(arguments)) {
+      monitor_device_name = GetStringArgument(*map, "monitorDeviceName", "");
+    }
+  }
+
+  if (auto named_work_area = WorkAreaForMonitorDeviceName(monitor_device_name)) {
+    return BoundsValueFromRect(*named_work_area);
+  }
+
+  RECT window_bounds = {};
+  GetWindowRect(window, &window_bounds);
+  const RECT requested_bounds = BoundsRectFromArguments(arguments, window_bounds);
+  MONITORINFO monitor_info = {};
+  monitor_info.cbSize = sizeof(MONITORINFO);
+  HMONITOR monitor =
+      MonitorFromRect(&requested_bounds, MONITOR_DEFAULTTONEAREST);
+  if (monitor && GetMonitorInfoW(monitor, &monitor_info) == TRUE &&
+      !IsEmptyRect(monitor_info.rcWork)) {
+    return BoundsValueFromRect(monitor_info.rcWork);
+  }
+
+  return BoundsValueFromRect(requested_bounds);
+}
+
 flutter::EncodableValue WindowBoundsValue(HWND window,
                                           const std::string& paper_id = "") {
   RECT bounds;
@@ -1720,6 +1823,10 @@ bool FlutterWindow::OnCreate() {
           result->Success(BoundsValueForPaper(
               window, requested_paper_id.empty() ? active_paper_id_
                                                  : requested_paper_id));
+          return;
+        }
+        if (method == "getWorkArea") {
+          result->Success(WorkAreaValueForArguments(window, call.arguments()));
           return;
         }
 

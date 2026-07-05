@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'core/model/app_state.dart';
 import 'core/model/paper_constants.dart';
@@ -21,6 +22,7 @@ class RePaperTodoController {
   AppState state;
   final PlatformServices _platform;
   StartupCommand? _pendingUiStartupCommand;
+  final Set<String> _paperIdsPendingDeepCapsuleStripClamp = <String>{};
 
   Stream<PaperData> get paperSurfaceUpdates =>
       _platform.paperWindows.surfaceUpdates;
@@ -57,6 +59,7 @@ class RePaperTodoController {
       createPaper(PaperTypes.todo);
     }
 
+    await _clampPendingNewPapersAwayFromDeepCapsuleStrip();
     await _platform.paperWindows.restoreAll(state);
     await executeStartupCommand(startupCommand);
     if (startupCommand.kind == StartupCommandKind.exit) {
@@ -90,6 +93,9 @@ class RePaperTodoController {
       paper.y = state.deepCapsuleStartTopMargin;
     }
     state.papers.add(paper);
+    if (_canClampNewPaperAwayFromDeepCapsuleStrip(paper)) {
+      _paperIdsPendingDeepCapsuleStripClamp.add(paper.id);
+    }
     return paper;
   }
 
@@ -201,6 +207,7 @@ class RePaperTodoController {
 
   Future<void> showPaper(PaperData paper) async {
     paper.isVisible = true;
+    await _clampNewPaperAwayFromDeepCapsuleStrip(paper);
     await _platform.paperWindows.showPaper(paper);
   }
 
@@ -230,9 +237,9 @@ class RePaperTodoController {
               shouldHide ? StartupCommandKind.hide : StartupCommandKind.show),
         );
       case StartupCommandKind.newTodo:
-        await _platform.paperWindows.showPaper(createPaper(PaperTypes.todo));
+        await showPaper(createPaper(PaperTypes.todo));
       case StartupCommandKind.newNote:
-        await _platform.paperWindows.showPaper(createPaper(PaperTypes.note));
+        await showPaper(createPaper(PaperTypes.note));
       case StartupCommandKind.settings:
         _pendingUiStartupCommand = command;
         return;
@@ -249,6 +256,81 @@ class RePaperTodoController {
     final sameTypeCount =
         state.papers.where((paper) => paper.type == type).length + 1;
     return PaperTitles.defaultTitle(type, sameTypeCount);
+  }
+
+  Future<void> _clampPendingNewPapersAwayFromDeepCapsuleStrip() async {
+    if (_paperIdsPendingDeepCapsuleStripClamp.isEmpty) {
+      return;
+    }
+    for (final paper in state.papers.toList()) {
+      await _clampNewPaperAwayFromDeepCapsuleStrip(paper);
+    }
+  }
+
+  Future<void> _clampNewPaperAwayFromDeepCapsuleStrip(PaperData paper) async {
+    if (!_paperIdsPendingDeepCapsuleStripClamp.remove(paper.id) ||
+        !_canClampNewPaperAwayFromDeepCapsuleStrip(paper)) {
+      return;
+    }
+    final PaperWorkArea? area;
+    try {
+      area = await _platform.paperWindows.workAreaForPaper(paper);
+    } catch (_) {
+      return;
+    }
+    if (area == null || !area.isUsable) {
+      return;
+    }
+
+    const margin = PaperLayoutDefaults.deepCapsuleEdgeMargin;
+    final width = math.max(paper.width, PaperLayoutDefaults.minWidth);
+    final height = math.max(paper.height, PaperLayoutDefaults.minHeight);
+    final edgeInset = math.min(
+      math.max(
+        PaperLayoutDefaults.deepCapsuleExpandedEdgeInset,
+        PaperLayoutDefaults.capsuleWidth + PaperLayoutDefaults.deepCapsuleGap,
+      ),
+      math.max(0, area.width - width),
+    );
+
+    var minX = area.x + margin;
+    var maxX = math.max(minX, area.right - width - margin);
+    if (paper.capsuleSide == DeepCapsuleSides.left) {
+      minX = math.min(maxX, math.max(minX, area.x + edgeInset));
+    } else {
+      maxX = math.max(
+        minX,
+        math.min(maxX, area.right - width - edgeInset),
+      );
+    }
+
+    final minY = area.y + margin;
+    final maxY = math.max(minY, area.bottom - height - margin);
+    paper.x = paper.x.clamp(minX, maxX).roundToDouble();
+    paper.y = paper.y.clamp(minY, maxY).roundToDouble();
+  }
+
+  bool _canClampNewPaperAwayFromDeepCapsuleStrip(PaperData paper) {
+    return paper.isVisible &&
+        state.useCapsuleMode &&
+        state.useDeepCapsuleMode &&
+        state.showDeepCapsuleWhileExpanded &&
+        _canPaperDisplayAsCapsule(paper);
+  }
+
+  bool _canPaperDisplayAsCapsule(PaperData paper) {
+    if (!state.useCapsuleMode) {
+      return false;
+    }
+    if (!state.enableTodoNoteLinks ||
+        !state.hideLinkedNotesFromCapsules ||
+        !paper.isNote) {
+      return true;
+    }
+    return !state.papers
+        .where((sourcePaper) => sourcePaper.isTodo)
+        .expand((sourcePaper) => sourcePaper.items)
+        .any((item) => item.linkedNoteId == paper.id);
   }
 
   Future<void> _applyStateSettingsToPlatform({
