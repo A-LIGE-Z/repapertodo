@@ -155,6 +155,11 @@ abstract final class PaperLayoutDefaults {
   static const deepCapsuleTopMargin = 8.0;
   static const deepCapsuleStartTopMargin = 48.0;
   static const deepCapsuleGap = 4.0;
+  static const newPaperBaseLeft = 140.0;
+  static const newPaperBaseTop = 140.0;
+  static const newPaperCascadeOffset = 24.0;
+  static const newPaperCollisionNudge = 30.0;
+  static const newPaperCollisionThreshold = 5.0;
   static const todoDefaultWidth = 280.0;
   static const todoDefaultHeight = 340.0;
   static const noteDefaultWidth = 320.0;

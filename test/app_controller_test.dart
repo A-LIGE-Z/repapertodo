@@ -32,7 +32,49 @@ void main() {
 
     expect(paper.capsuleSide, isEmpty);
     expect(paper.capsuleMonitorDeviceName, isEmpty);
-    expect(paper.y, 120);
+    expect(paper.x, 140);
+    expect(paper.y, 140);
+  });
+
+  test('new papers cascade from the PaperTodo desktop origin', () {
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        papers: [
+          PaperData(id: 'existing-1', type: PaperTypes.todo, title: 'First'),
+          PaperData(id: 'existing-2', type: PaperTypes.note, title: 'Second'),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    final paper = controller.createPaper(PaperTypes.todo);
+
+    expect(paper.x, 188);
+    expect(paper.y, 188);
+  });
+
+  test('new papers nudge away from near-overlapping paper positions', () {
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        papers: [
+          PaperData(
+            id: 'near-cascade',
+            type: PaperTypes.todo,
+            title: 'Near cascade',
+            x: 164,
+            y: 164,
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    final paper = controller.createPaper(PaperTypes.note);
+
+    expect(paper.x, 194);
+    expect(paper.y, 194);
   });
 
   test('new right-edge deep capsule papers avoid the reserved strip', () async {
@@ -90,7 +132,7 @@ void main() {
     await controller.showPaper(paper);
 
     expect(platform.paperWindows.workAreaRequestIds, isEmpty);
-    expect(paper.x, 120);
+    expect(paper.x, 140);
     expect(paper.y, 48);
   });
 
@@ -108,7 +150,7 @@ void main() {
 
     expect(platform.paperWindows.workAreaRequestIds, [paper.id]);
     expect(platform.paperWindows.shownIds, [paper.id]);
-    expect(paper.x, 120);
+    expect(paper.x, 140);
     expect(paper.y, 48);
   });
 

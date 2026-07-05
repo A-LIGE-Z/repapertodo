@@ -510,8 +510,12 @@ void main() {
     expect(constants, contains('capsuleWidth = 92.0'));
     expect(constants, contains('deepCapsuleExpandedEdgeInset = 36.0'));
     expect(constants, contains('deepCapsuleGap = 4.0'));
+    expect(constants, contains('newPaperBaseLeft = 140.0'));
+    expect(constants, contains('newPaperCascadeOffset = 24.0'));
+    expect(constants, contains('newPaperCollisionNudge = 30.0'));
     expect(platform, contains('workAreaForPaper'));
     expect(controller, contains('_clampNewPaperAwayFromDeepCapsuleStrip'));
+    expect(controller, contains('_newPaperInitialPosition'));
     expect(controller, contains('workAreaForPaper'));
     expect(windowsPlatform, contains("'getWorkArea'"));
     expect(runner, contains('getWorkArea'));

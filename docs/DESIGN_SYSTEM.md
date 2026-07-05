@@ -56,6 +56,9 @@ New visible papers created in deep capsule mode should resolve the target
 Windows work area and open away from the deep capsule edge strip when expanded
 capsules remain visible, using PaperTodo's capsule width, gap, and expanded
 edge inset constants.
+New desktop papers should follow PaperTodo's cascade placement: start near
+`140,140`, offset each new paper by the existing paper count, and nudge again
+when the target position is already occupied.
 The tray icon should be resilient to Windows Explorer/taskbar restarts by
 handling the `TaskbarCreated` broadcast and re-adding the notification icon.
 For PaperTodo parity, a `PaperTodo.ico` or `RePaperTodo.ico` file next to the

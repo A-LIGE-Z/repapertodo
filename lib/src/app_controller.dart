@@ -70,10 +70,13 @@ class RePaperTodoController {
 
   PaperData createPaper(String type) {
     final normalizedType = PaperTypes.normalize(type);
+    final initialPosition = _newPaperInitialPosition();
     final paper = PaperData(
       id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
       type: normalizedType,
       title: _defaultTitle(normalizedType),
+      x: initialPosition.x,
+      y: initialPosition.y,
       width: normalizedType == PaperTypes.note
           ? PaperLayoutDefaults.noteDefaultWidth
           : PaperLayoutDefaults.todoDefaultWidth,
@@ -256,6 +259,23 @@ class RePaperTodoController {
     final sameTypeCount =
         state.papers.where((paper) => paper.type == type).length + 1;
     return PaperTitles.defaultTitle(type, sameTypeCount);
+  }
+
+  ({double x, double y}) _newPaperInitialPosition() {
+    final offset =
+        state.papers.length * PaperLayoutDefaults.newPaperCascadeOffset;
+    var x = PaperLayoutDefaults.newPaperBaseLeft + offset;
+    var y = PaperLayoutDefaults.newPaperBaseTop + offset;
+    while (state.papers.any(
+      (paper) =>
+          (paper.x - x).abs() <
+              PaperLayoutDefaults.newPaperCollisionThreshold &&
+          (paper.y - y).abs() < PaperLayoutDefaults.newPaperCollisionThreshold,
+    )) {
+      x += PaperLayoutDefaults.newPaperCollisionNudge;
+      y += PaperLayoutDefaults.newPaperCollisionNudge;
+    }
+    return (x: x, y: y);
   }
 
   Future<void> _clampPendingNewPapersAwayFromDeepCapsuleStrip() async {
