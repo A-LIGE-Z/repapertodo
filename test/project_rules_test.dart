@@ -678,6 +678,24 @@ void main() {
     expect(app, contains('item.text = item.todoExtraColumns.first'));
   });
 
+  test('PaperTodo todo column splitter resizing is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('Todo column width resizing should preserve'));
+    expect(design, contains('8px drag target'));
+    expect(design, contains('resizes only that column pair'));
+    expect(design, contains('clamped to at least 0.2'));
+    expect(design, contains('without creating a todo undo snapshot'));
+    expect(app, contains('_todoColumnSplitterWidth = 8.0'));
+    expect(app, contains('_minTodoColumnWidth = 0.2'));
+    expect(app, contains('_todoColumnSplitter'));
+    expect(app, contains('_resizeTodoColumnPair'));
+    expect(app, contains('column-splitter-'));
+    expect(app, contains('SystemMouseCursors.resizeLeftRight'));
+    expect(app, contains('unawaited(widget.onChanged())'));
+  });
+
   test('PaperTodo todo due date time precision is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

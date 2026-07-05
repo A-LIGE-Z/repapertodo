@@ -6575,6 +6575,60 @@ void main() {
     expect(item.todoColumnWidths, [2, 1]);
   });
 
+  testWidgets('drags todo column splitters like PaperTodo', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'column-width-paper',
+            type: PaperTypes.todo,
+            title: 'Column width paper',
+            width: 900,
+            items: [
+              PaperItem(
+                id: 'width-item',
+                text: 'Title',
+                todoColumnCount: 2,
+                todoExtraColumns: ['Status'],
+                todoColumnWidths: [1, 1],
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final splitter = find.byKey(
+      const ValueKey('column-width-paper-width-item-column-splitter-1'),
+    );
+    expect(splitter, findsOneWidget);
+
+    await tester.drag(splitter, const Offset(120, 0));
+    await tester.pumpAndSettle();
+
+    final item = controller.state.papers.single.items.single;
+    expect(item.todoColumnWidths[0], greaterThan(1));
+    expect(item.todoColumnWidths[1], lessThan(1));
+    expect(item.todoColumnWidths[1], greaterThanOrEqualTo(0.2));
+
+    await tester.drag(splitter, const Offset(-2000, 0));
+    await tester.pumpAndSettle();
+
+    expect(item.todoColumnWidths[0], 0.2);
+    expect(item.todoColumnWidths[1], greaterThan(1));
+  });
+
   testWidgets('splits pasted todo lists into cleaned items', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -4845,6 +4845,8 @@ class _TodoEditor extends StatefulWidget {
 
 class _TodoEditorState extends State<_TodoEditor> {
   static const _maxTodoUndoDepth = 100;
+  static const _todoColumnSplitterWidth = 8.0;
+  static const _minTodoColumnWidth = 0.2;
 
   final _todoFocusNode = FocusNode(debugLabel: 'todo-editor');
   final _todoMainFieldFocusNodes = <String, FocusNode>{};
@@ -5690,21 +5692,127 @@ class _TodoEditorState extends State<_TodoEditor> {
               ],
             );
           }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var index = 0; index < fields.length; index++) ...[
-                if (index > 0) const SizedBox(width: 8),
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Expanded(
-                  flex: _columnFlex(item, index),
-                  child: fields[index],
+                  flex: _columnFlex(item, 0),
+                  child: fields.first,
                 ),
+                for (var index = 1; index < fields.length; index++) ...[
+                  _todoColumnSplitter(
+                    context: context,
+                    item: item,
+                    leftColumnIndex: index - 1,
+                    availableWidth: constraints.maxWidth,
+                  ),
+                  Expanded(
+                    flex: _columnFlex(item, index),
+                    child: fields[index],
+                  ),
+                ],
               ],
-            ],
+            ),
           );
         },
       ),
     );
+  }
+
+  Widget _todoColumnSplitter({
+    required BuildContext context,
+    required PaperItem item,
+    required int leftColumnIndex,
+    required double availableWidth,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeLeftRight,
+      child: GestureDetector(
+        key: ValueKey(
+          '${widget.paper.id}-${item.id}-column-splitter-${leftColumnIndex + 1}',
+        ),
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: (details) => _resizeTodoColumnPair(
+          item: item,
+          leftColumnIndex: leftColumnIndex,
+          delta: details.delta.dx,
+          availableWidth: availableWidth,
+        ),
+        child: SizedBox(
+          width: _todoColumnSplitterWidth,
+          child: Center(
+            child: FractionallySizedBox(
+              heightFactor: 0.72,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+                child: const SizedBox(width: 1),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _resizeTodoColumnPair({
+    required PaperItem item,
+    required int leftColumnIndex,
+    required double delta,
+    required double availableWidth,
+  }) {
+    if (delta.abs() < 0.1) {
+      return;
+    }
+    item.normalize();
+    final count = item.todoColumnCount;
+    if (leftColumnIndex < 0 || leftColumnIndex >= count - 1) {
+      return;
+    }
+    final widths = _normalizedTodoColumnWidths(item);
+    final totalUnits =
+        widths.fold<double>(0, (total, width) => total + width);
+    final columnPixels = math.max(
+      1.0,
+      availableWidth - ((count - 1) * _todoColumnSplitterWidth),
+    );
+    final unitsPerPixel = totalUnits / columnPixels;
+    final requestedDelta = delta * unitsPerPixel;
+    final minDelta = _minTodoColumnWidth - widths[leftColumnIndex];
+    final maxDelta = widths[leftColumnIndex + 1] - _minTodoColumnWidth;
+    final appliedDelta = requestedDelta.clamp(minDelta, maxDelta).toDouble();
+    if (appliedDelta.abs() < 0.001) {
+      return;
+    }
+
+    widths[leftColumnIndex] =
+        _roundTodoColumnWidth(widths[leftColumnIndex] + appliedDelta);
+    widths[leftColumnIndex + 1] =
+        _roundTodoColumnWidth(widths[leftColumnIndex + 1] - appliedDelta);
+    setState(() => item.todoColumnWidths = widths);
+    unawaited(widget.onChanged());
+  }
+
+  List<double> _normalizedTodoColumnWidths(PaperItem item) {
+    if (item.todoColumnWidths.length == item.todoColumnCount) {
+      return [
+        for (final width in item.todoColumnWidths)
+          width.isFinite && width >= _minTodoColumnWidth
+              ? width
+              : _minTodoColumnWidth,
+      ];
+    }
+    return List.filled(item.todoColumnCount, 1);
+  }
+
+  double _roundTodoColumnWidth(double value) {
+    return (value.clamp(_minTodoColumnWidth, 10000.0) * 1000)
+            .roundToDouble() /
+        1000;
   }
 
   Widget _mainColumnField(
