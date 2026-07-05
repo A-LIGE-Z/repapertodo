@@ -5148,7 +5148,9 @@ class _TodoEditorState extends State<_TodoEditor> {
   static const _columnActionInsertBeforePrefix = 'insert-before:';
   static const _columnActionDeletePrefix = 'delete:';
   static const _compactTodoActionDueDate = 'due-date';
+  static const _compactTodoActionClearDueDate = 'clear-due-date';
   static const _compactTodoActionReminder = 'reminder';
+  static const _compactTodoActionClearReminder = 'clear-reminder';
   static const _compactTodoActionMoveUp = 'move-up';
   static const _compactTodoActionMoveDown = 'move-down';
   static const _compactTodoActionOpenLinkedNote = 'open-linked-note';
@@ -5187,13 +5189,27 @@ class _TodoEditorState extends State<_TodoEditor> {
               _todoActionMenuItem(
                 value: _compactTodoActionDueDate,
                 icon: Icons.event_outlined,
-                label: 'Set due date',
+                label: _hasDueDate(item) ? 'Change due date' : 'Set due date',
               ),
+              if (_hasDueDate(item))
+                _todoActionMenuItem(
+                  value: _compactTodoActionClearDueDate,
+                  icon: Icons.event_busy_outlined,
+                  label: 'Clear due date',
+                ),
               _todoActionMenuItem(
                 value: _compactTodoActionReminder,
                 icon: Icons.notifications_none_outlined,
-                label: 'Set reminder',
+                label: _hasReminderInterval(item)
+                    ? 'Change reminder'
+                    : 'Set reminder',
               ),
+              if (_hasReminderInterval(item))
+                _todoActionMenuItem(
+                  value: _compactTodoActionClearReminder,
+                  icon: Icons.notifications_off_outlined,
+                  label: 'Clear reminder',
+                ),
               if (widget.enableTodoNoteLinks && hasLinkedNote) ...[
                 const PopupMenuDivider(),
                 if (_linkedNoteFor(item) case final PaperData linkedNote)
@@ -5554,8 +5570,12 @@ class _TodoEditorState extends State<_TodoEditor> {
     switch (value) {
       case _compactTodoActionDueDate:
         unawaited(_pickDueDate(context, item));
+      case _compactTodoActionClearDueDate:
+        _clearDueDate(item);
       case _compactTodoActionReminder:
         unawaited(_pickReminderInterval(context, item));
+      case _compactTodoActionClearReminder:
+        _clearReminderInterval(item);
       case _compactTodoActionMoveUp:
         _moveTodoItem(item, -1);
       case _compactTodoActionMoveDown:
@@ -6411,6 +6431,14 @@ class _TodoEditorState extends State<_TodoEditor> {
         (item.linkedNoteId?.trim().isEmpty ?? true);
   }
 
+  bool _hasDueDate(PaperItem item) {
+    return item.dueAtLocal?.trim().isNotEmpty ?? false;
+  }
+
+  bool _hasReminderInterval(PaperItem item) {
+    return item.reminderIntervalValue != null;
+  }
+
   bool get _hasDoneTodoItems {
     return widget.paper.items.any((item) => item.done);
   }
@@ -6520,6 +6548,9 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _clearDueDate(PaperItem item) {
+    if (!_hasDueDate(item)) {
+      return;
+    }
     _pushTodoUndoSnapshot();
     setState(() => item.dueAtLocal = null);
     widget.onReminderReset(item);
@@ -6555,6 +6586,9 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _clearReminderInterval(PaperItem item) {
+    if (!_hasReminderInterval(item)) {
+      return;
+    }
     _pushTodoUndoSnapshot();
     setState(() {
       item.reminderIntervalValue = null;

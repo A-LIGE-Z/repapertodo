@@ -7658,6 +7658,84 @@ void main() {
     expect(controller.state.papers.first.items.single.id, 'mobile-action-item');
   });
 
+  testWidgets('clears todo due and reminder from compact menu like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'compact-due-paper',
+            type: PaperTypes.todo,
+            title: 'Compact due',
+            items: [
+              PaperItem(
+                id: 'compact-due-item',
+                text: 'Clear compact metadata',
+                dueAtLocal: '2026-06-30T09:15:00',
+                reminderIntervalValue: 30,
+                reminderIntervalUnit: TodoReminderIntervalUnits.minutes,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final actionsFinder = find.byKey(
+      const ValueKey('compact-due-paper-compact-due-item-actions'),
+    );
+    final item = controller.state.papers.single.items.single;
+
+    await tester.tap(actionsFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Change due date'), findsOneWidget);
+    expect(find.text('Clear due date'), findsOneWidget);
+    expect(find.text('Change reminder'), findsOneWidget);
+    expect(find.text('Clear reminder'), findsOneWidget);
+
+    await tester.tap(find.text('Clear due date'));
+    await tester.pumpAndSettle();
+
+    expect(item.dueAtLocal, isNull);
+    expect(item.reminderIntervalValue, 30);
+
+    await tester.tap(actionsFinder);
+    await tester.pumpAndSettle();
+    expect(find.text('Set due date'), findsOneWidget);
+    expect(find.text('Clear due date'), findsNothing);
+    await tester.tap(find.text('Clear reminder'));
+    await tester.pumpAndSettle();
+
+    expect(item.reminderIntervalValue, isNull);
+    expect(item.reminderIntervalUnit, isNull);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    var restoredItem = controller.state.papers.single.items.single;
+    expect(restoredItem.reminderIntervalValue, 30);
+    expect(
+        restoredItem.reminderIntervalUnit, TodoReminderIntervalUnits.minutes);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    restoredItem = controller.state.papers.single.items.single;
+    expect(restoredItem.dueAtLocal, '2026-06-30T09:15:00');
+  });
+
   testWidgets('disables interactive tooltips', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

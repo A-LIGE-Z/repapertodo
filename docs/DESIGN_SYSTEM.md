@@ -225,6 +225,10 @@ Todo due editing should preserve PaperTodo date-and-time precision: the picker
 must expose a calendar date plus 00-23 hour and 00-59 minute choices, default a
 new due time to roughly one hour from now, and save local values as
 `yyyy-MM-ddTHH:mm:ss` without milliseconds.
+Todo overflow actions should mirror PaperTodo item menus for due and reminder
+state: existing due dates show change plus clear actions, existing reminder
+intervals show change plus clear actions, and clear actions no-op when the
+field is already empty.
 Absolute due labels without an explicit year should follow PaperTodo's compact
 time-aware display: today is `HH:mm`, tomorrow is `Tomorrow HH:mm`, and other
 dates keep month-day plus `HH:mm`.

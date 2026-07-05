@@ -701,6 +701,8 @@ void main() {
     final app = File('lib/src/app.dart').readAsStringSync();
 
     expect(design, contains('Todo due editing should preserve PaperTodo'));
+    expect(design, contains('Todo overflow actions should mirror PaperTodo'));
+    expect(design, contains('change plus clear actions'));
     expect(design, contains('00-23 hour'));
     expect(design, contains('00-59 minute'));
     expect(design, contains('yyyy-MM-ddTHH:mm:ss'));
@@ -719,6 +721,10 @@ void main() {
     expect(app, contains("return '\$text overdue'"));
     expect(app, contains("return 'in \$text'"));
     expect(app, contains('now.add(const Duration(hours: 1))'));
+    expect(app, contains('_compactTodoActionClearDueDate'));
+    expect(app, contains('_compactTodoActionClearReminder'));
+    expect(app, contains('_hasDueDate'));
+    expect(app, contains('_hasReminderInterval'));
     expect(app, contains('shouldRefreshRelativeDueLabels'));
   });
 
