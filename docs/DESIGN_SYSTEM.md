@@ -181,6 +181,10 @@ note text may reach 100000 characters, each paste insertion is limited to
 30000 characters, incoming CR/LF line endings are preserved, and a pasted line
 longer than 6000 characters truncates that paste at the oversized line instead
 of continuing with later lines.
+Markdown list continuation should preserve PaperTodo's ordered marker parsing:
+leading zero markers continue from their numeric value, `long.MaxValue - 1`
+may continue to `long.MaxValue`, and `long.MaxValue` or larger markers fall
+back to ordinary Enter behavior instead of continuing or removing empty markers.
 Settings saves should keep ordinary app preferences while surfacing native
 integration failures such as hotkey, startup, or script-process errors.
 On narrow screens, keep one primary sync action directly reachable and move

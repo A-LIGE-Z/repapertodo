@@ -865,6 +865,23 @@ void main() {
     expect(markdownPaste, contains('_containsLineLongerThan'));
   });
 
+  test('PaperTodo markdown ordered list continuation is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final listContinuation = File(
+      'lib/src/core/model/markdown_list_continuation.dart',
+    ).readAsStringSync();
+
+    expect(design, contains('Markdown list continuation should preserve'));
+    expect(design, contains('leading zero markers'));
+    expect(design, contains('long.MaxValue - 1'));
+    expect(design, contains('ordinary Enter behavior'));
+    expect(
+      listContinuation,
+      contains('_maxContinuableOrderedListNumber = 9223372036854775806'),
+    );
+    expect(listContinuation, contains('markerEnd'));
+  });
+
   test('PaperTodo note canvas geometry gestures are preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

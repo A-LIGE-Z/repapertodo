@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 
 abstract final class MarkdownListContinuation {
+  static const _maxContinuableOrderedListNumber = 9223372036854775806;
+
   static TextEditingValue formatEnter(
     TextEditingValue oldValue,
     TextEditingValue newValue,
@@ -136,11 +138,12 @@ abstract final class MarkdownListContinuation {
       end++;
     }
     final number = int.tryParse(text.substring(start, delimiter));
-    if (number == null) {
+    if (number == null || number > _maxContinuableOrderedListNumber) {
       return null;
     }
     final style = _ListStyle.ordered(
       markerStart: start,
+      markerEnd: delimiter + 1,
       contentStart: end,
       number: number,
       delimiter: text[delimiter],
@@ -153,13 +156,12 @@ abstract final class MarkdownListContinuation {
     if (style.kind == _ListKind.unordered) {
       return '${text.substring(0, style.contentStart)}$taskSuffix';
     }
-    final markerEnd = style.markerStart + style.number.toString().length + 1;
-    if (markerEnd > style.contentStart || markerEnd > text.length) {
+    if (style.markerEnd > style.contentStart || style.markerEnd > text.length) {
       return null;
     }
     return '${text.substring(0, style.markerStart)}'
         '${style.number + 1}${style.delimiter}'
-        '${text.substring(markerEnd, style.contentStart)}'
+        '${text.substring(style.markerEnd, style.contentStart)}'
         '$taskSuffix';
   }
 
@@ -233,6 +235,7 @@ class _ListStyle {
   const _ListStyle._({
     required this.kind,
     required this.markerStart,
+    required this.markerEnd,
     required this.contentStart,
     required this.number,
     required this.delimiter,
@@ -246,6 +249,7 @@ class _ListStyle {
     return _ListStyle._(
       kind: _ListKind.unordered,
       markerStart: markerStart,
+      markerEnd: markerStart + 1,
       contentStart: contentStart,
       number: 0,
       delimiter: '',
@@ -255,6 +259,7 @@ class _ListStyle {
 
   factory _ListStyle.ordered({
     required int markerStart,
+    required int markerEnd,
     required int contentStart,
     required int number,
     required String delimiter,
@@ -262,6 +267,7 @@ class _ListStyle {
     return _ListStyle._(
       kind: _ListKind.ordered,
       markerStart: markerStart,
+      markerEnd: markerEnd,
       contentStart: contentStart,
       number: number,
       delimiter: delimiter,
@@ -271,6 +277,7 @@ class _ListStyle {
 
   final _ListKind kind;
   final int markerStart;
+  final int markerEnd;
   final int contentStart;
   final int number;
   final String delimiter;
@@ -280,6 +287,7 @@ class _ListStyle {
     return _ListStyle._(
       kind: kind,
       markerStart: markerStart,
+      markerEnd: markerEnd,
       contentStart: contentStart,
       number: number,
       delimiter: delimiter,

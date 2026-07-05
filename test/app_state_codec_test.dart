@@ -529,11 +529,22 @@ Plain item
     expect(_markdownEnter('  * Read').text, '  * Read\n  * ');
     expect(_markdownEnter('3) Read').text, '3) Read\n4) ');
     expect(_markdownEnter('  9. Read').text, '  9. Read\n  10. ');
+    expect(_markdownEnter('009. Read').text, '009. Read\n10. ');
     expect(_markdownEnter('- [x] Done').text, '- [x] Done\n- [ ] ');
     expect(_markdownEnter('1. [X] Done').text, '1. [X] Done\n2. [ ] ');
+    expect(
+      _markdownEnter('9223372036854775806. Read').text,
+      '9223372036854775806. Read\n9223372036854775807. ',
+    );
 
     final unchanged = _markdownEnter('Plain line');
     expect(unchanged.text, 'Plain line\n');
+
+    final maxLong = _markdownEnter('9223372036854775807. Read');
+    expect(maxLong.text, '9223372036854775807. Read\n');
+
+    final beyondLong = _markdownEnter('9223372036854775808. Read');
+    expect(beyondLong.text, '9223372036854775808. Read\n');
   });
 
   test('removes empty markdown list markers on enter like PaperTodo', () {
@@ -548,6 +559,10 @@ Plain item
     result = _markdownEnter('1. ');
     expect(result.text, '');
     expect(result.selection.baseOffset, 0);
+
+    result = _markdownEnter('9223372036854775807. ');
+    expect(result.text, '9223372036854775807. \n');
+    expect(result.selection.baseOffset, 22);
   });
 
   test('formats markdown selections like PaperTodo', () {
