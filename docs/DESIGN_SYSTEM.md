@@ -146,6 +146,11 @@ on an item whose main and extra text columns are blank deletes that item when
 more than one item exists, preserves at least one row, and suppresses repeated
 blank-row deletion until key up. These structural edits must use todo undo
 snapshots and deleted-item tombstones.
+Todo column editing should preserve PaperTodo per-column semantics: inserting
+before column 1 moves the current main text into the first extra column and
+creates a blank main column, while deleting column 1 promotes the next column
+into the main text. Inserting or deleting later columns should keep the other
+columns in order and preserve normalized per-column widths.
 Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,

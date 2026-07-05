@@ -5912,6 +5912,106 @@ void main() {
     expect(firstItem.todoExtraColumns, isEmpty);
   });
 
+  testWidgets('inserts and deletes todo columns like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'column-shift-paper',
+            type: PaperTypes.todo,
+            title: 'Column shift paper',
+            items: [
+              PaperItem(
+                id: 'column-shift-item',
+                text: 'Title',
+                todoColumnCount: 2,
+                todoExtraColumns: ['Status'],
+                todoColumnWidths: [2, 1],
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-todo-column-shift.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Todo columns'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is PopupMenuItem<String> &&
+            widget.value == 'insert-before:0',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final item = controller.state.papers.single.items.single;
+    expect(item.text, '');
+    expect(item.todoColumnCount, 3);
+    expect(item.todoExtraColumns, ['Title', 'Status']);
+    expect(item.todoColumnWidths, [1, 2, 1]);
+
+    await tester.tap(find.byTooltip('Todo columns'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is PopupMenuItem<String> && widget.value == 'delete:0',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(item.text, 'Title');
+    expect(item.todoColumnCount, 2);
+    expect(item.todoExtraColumns, ['Status']);
+    expect(item.todoColumnWidths, [2, 1]);
+
+    await tester.tap(find.byTooltip('Todo columns'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is PopupMenuItem<String> &&
+            widget.value == 'insert-before:1',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(item.text, 'Title');
+    expect(item.todoColumnCount, 3);
+    expect(item.todoExtraColumns, ['', 'Status']);
+    expect(item.todoColumnWidths, [2, 1, 1]);
+
+    await tester.tap(find.byTooltip('Todo columns'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is PopupMenuItem<String> && widget.value == 'delete:1',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(item.text, 'Title');
+    expect(item.todoColumnCount, 2);
+    expect(item.todoExtraColumns, ['Status']);
+    expect(item.todoColumnWidths, [2, 1]);
+  });
+
   testWidgets('splits pasted todo lists into cleaned items', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

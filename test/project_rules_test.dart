@@ -516,6 +516,21 @@ void main() {
     expect(app, contains('_suppressTodoBackspaceUntilKeyUp'));
   });
 
+  test('PaperTodo per-column todo editing is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('Todo column editing should preserve PaperTodo'));
+    expect(design, contains('before column 1 moves'));
+    expect(design, contains('deleting column 1 promotes'));
+    expect(app, contains('_columnActionInsertBeforePrefix'));
+    expect(app, contains('_columnActionDeletePrefix'));
+    expect(app, contains('_insertTodoColumnBefore'));
+    expect(app, contains('_deleteTodoColumn'));
+    expect(app, contains('item.todoExtraColumns.insert(0, item.text)'));
+    expect(app, contains('item.text = item.todoExtraColumns.first'));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

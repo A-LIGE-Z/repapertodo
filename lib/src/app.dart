@@ -4301,6 +4301,8 @@ class _TodoEditorState extends State<_TodoEditor> {
   static const _columnActionRemove = 'remove';
   static const _columnActionEqualWidths = 'equal-widths';
   static const _columnActionWideFirst = 'wide-first';
+  static const _columnActionInsertBeforePrefix = 'insert-before:';
+  static const _columnActionDeletePrefix = 'delete:';
   static const _compactTodoActionDueDate = 'due-date';
   static const _compactTodoActionReminder = 'reminder';
   static const _compactTodoActionDelete = 'delete';
@@ -4349,6 +4351,26 @@ class _TodoEditorState extends State<_TodoEditor> {
               label: 'Remove last column',
               enabled: item.todoColumnCount > 1,
             ),
+            for (var columnIndex = 0;
+                columnIndex < item.todoColumnCount;
+                columnIndex++)
+              _todoActionMenuItem(
+                value:
+                    '$_compactTodoColumnActionPrefix$_columnActionInsertBeforePrefix$columnIndex',
+                icon: Icons.add_box_outlined,
+                label: 'Insert before column ${columnIndex + 1}',
+                enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
+              ),
+            for (var columnIndex = 0;
+                columnIndex < item.todoColumnCount;
+                columnIndex++)
+              _todoActionMenuItem(
+                value:
+                    '$_compactTodoColumnActionPrefix$_columnActionDeletePrefix$columnIndex',
+                icon: Icons.delete_sweep_outlined,
+                label: 'Delete column ${columnIndex + 1}',
+                enabled: item.todoColumnCount > 1,
+              ),
             _todoActionMenuItem(
               value: '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
               icon: Icons.view_column_outlined,
@@ -4429,6 +4451,32 @@ class _TodoEditorState extends State<_TodoEditor> {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
+            const PopupMenuDivider(),
+            for (var columnIndex = 0;
+                columnIndex < item.todoColumnCount;
+                columnIndex++)
+              PopupMenuItem(
+                value: '$_columnActionInsertBeforePrefix$columnIndex',
+                enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
+                child: ListTile(
+                  leading: const Icon(Icons.add_box_outlined),
+                  title: Text('Insert before column ${columnIndex + 1}'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            for (var columnIndex = 0;
+                columnIndex < item.todoColumnCount;
+                columnIndex++)
+              PopupMenuItem(
+                value: '$_columnActionDeletePrefix$columnIndex',
+                enabled: item.todoColumnCount > 1,
+                child: ListTile(
+                  leading: const Icon(Icons.delete_sweep_outlined),
+                  title: Text('Delete column ${columnIndex + 1}'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            const PopupMenuDivider(),
             PopupMenuItem(
               value: _columnActionEqualWidths,
               enabled: item.todoColumnCount > 1,
@@ -4898,6 +4946,20 @@ class _TodoEditorState extends State<_TodoEditor> {
           item.todoColumnWidths =
               item.todoColumnWidths.take(item.todoColumnCount).toList();
         }
+      } else if (action.startsWith(_columnActionInsertBeforePrefix)) {
+        final columnIndex = int.tryParse(
+          action.substring(_columnActionInsertBeforePrefix.length),
+        );
+        if (columnIndex != null) {
+          _insertTodoColumnBefore(item, columnIndex);
+        }
+      } else if (action.startsWith(_columnActionDeletePrefix)) {
+        final columnIndex = int.tryParse(
+          action.substring(_columnActionDeletePrefix.length),
+        );
+        if (columnIndex != null) {
+          _deleteTodoColumn(item, columnIndex);
+        }
       } else if (action == _columnActionEqualWidths &&
           item.todoColumnCount > 1) {
         item.todoColumnWidths = List.filled(item.todoColumnCount, 1);
@@ -4910,6 +4972,48 @@ class _TodoEditorState extends State<_TodoEditor> {
       item.normalize();
     });
     unawaited(widget.onChanged());
+  }
+
+  void _insertTodoColumnBefore(PaperItem item, int columnIndex) {
+    item.normalize();
+    final count = item.todoColumnCount;
+    if (count >= TodoColumnLimits.maxCount) {
+      return;
+    }
+
+    final insertIndex = columnIndex.clamp(0, count).toInt();
+    if (insertIndex == 0) {
+      item.todoExtraColumns.insert(0, item.text);
+      item.text = '';
+    } else {
+      item.todoExtraColumns.insert(insertIndex - 1, '');
+    }
+    item.todoColumnCount = count + 1;
+    item.todoColumnWidths.insert(insertIndex, 1);
+  }
+
+  void _deleteTodoColumn(PaperItem item, int columnIndex) {
+    item.normalize();
+    final count = item.todoColumnCount;
+    if (count <= TodoColumnLimits.minCount) {
+      return;
+    }
+
+    final deleteIndex = columnIndex.clamp(0, count - 1).toInt();
+    if (deleteIndex == 0) {
+      if (item.todoExtraColumns.isEmpty) {
+        item.text = '';
+      } else {
+        item.text = item.todoExtraColumns.first;
+        item.todoExtraColumns.removeAt(0);
+      }
+    } else if (deleteIndex - 1 < item.todoExtraColumns.length) {
+      item.todoExtraColumns.removeAt(deleteIndex - 1);
+    }
+    if (deleteIndex < item.todoColumnWidths.length) {
+      item.todoColumnWidths.removeAt(deleteIndex);
+    }
+    item.todoColumnCount = count - 1;
   }
 
   void _addItem() {
