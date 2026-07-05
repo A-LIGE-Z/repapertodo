@@ -6065,6 +6065,8 @@ void main() {
 
     final controller = RePaperTodoController(
       initialState: AppState(
+        todoReminderIntervalValue: 3,
+        todoReminderIntervalUnit: TodoReminderIntervalUnits.hours,
         papers: [
           PaperData(
             id: 'item-reminder-paper',
@@ -6090,6 +6092,14 @@ void main() {
 
     await tester.tap(find.byTooltip('Set reminder interval'));
     await tester.pumpAndSettle();
+
+    final intervalField =
+        tester.widget<TextField>(find.widgetWithText(TextField, 'Interval'));
+    expect(intervalField.controller?.text, '3');
+    final unitSelector = tester.widget<SegmentedButton<String>>(
+      find.byType(SegmentedButton<String>),
+    );
+    expect(unitSelector.selected, {TodoReminderIntervalUnits.hours});
 
     await tester.enterText(find.widgetWithText(TextField, 'Interval'), '2');
     await tester.tap(find.text('Hours'));

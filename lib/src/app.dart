@@ -716,6 +716,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       todoLineSpacing: controller.state.todoLineSpacing,
       showTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
       todoDueYearDisplayMode: controller.state.todoDueYearDisplayMode,
+      defaultTodoReminderIntervalValue:
+          controller.state.todoReminderIntervalValue,
+      defaultTodoReminderIntervalUnit:
+          controller.state.todoReminderIntervalUnit,
       collapseAllActive: controller.state.useCapsuleMode &&
           controller.state.useCapsuleCollapseAll &&
           controller.state.isCapsuleCollapseAllActiveFor(paper),
@@ -2517,6 +2521,8 @@ class PaperPreview extends StatelessWidget {
     required this.todoLineSpacing,
     required this.showTodoDueRelativeTime,
     required this.todoDueYearDisplayMode,
+    required this.defaultTodoReminderIntervalValue,
+    required this.defaultTodoReminderIntervalUnit,
     required this.collapseAllActive,
     required this.noteLineSpacing,
     required this.onChanged,
@@ -2561,6 +2567,8 @@ class PaperPreview extends StatelessWidget {
   final double todoLineSpacing;
   final bool showTodoDueRelativeTime;
   final String todoDueYearDisplayMode;
+  final int defaultTodoReminderIntervalValue;
+  final String defaultTodoReminderIntervalUnit;
   final bool collapseAllActive;
   final double noteLineSpacing;
   final Future<void> Function() onChanged;
@@ -2767,6 +2775,9 @@ class PaperPreview extends StatelessWidget {
                   textZoom: paper.textZoom,
                   showDueRelativeTime: showTodoDueRelativeTime,
                   dueYearDisplayMode: todoDueYearDisplayMode,
+                  defaultReminderIntervalValue:
+                      defaultTodoReminderIntervalValue,
+                  defaultReminderIntervalUnit: defaultTodoReminderIntervalUnit,
                   onOpen: onOpen,
                   onRunScriptCapsule: onRunScriptCapsule,
                   onChanged: onChanged,
@@ -4891,6 +4902,8 @@ class _TodoEditor extends StatefulWidget {
     required this.textZoom,
     required this.showDueRelativeTime,
     required this.dueYearDisplayMode,
+    required this.defaultReminderIntervalValue,
+    required this.defaultReminderIntervalUnit,
     required this.onOpen,
     required this.onRunScriptCapsule,
     required this.onChanged,
@@ -4912,6 +4925,8 @@ class _TodoEditor extends StatefulWidget {
   final double textZoom;
   final bool showDueRelativeTime;
   final String dueYearDisplayMode;
+  final int defaultReminderIntervalValue;
+  final String defaultReminderIntervalUnit;
   final Future<void> Function(PaperData paper) onOpen;
   final Future<void> Function(ScriptCapsuleSpec spec) onRunScriptCapsule;
   final Future<void> Function() onChanged;
@@ -6556,8 +6571,10 @@ class _TodoEditorState extends State<_TodoEditor> {
     final result = await showDialog<_ReminderIntervalSelection>(
       context: context,
       builder: (context) => _ReminderIntervalDialog(
-        initialValue: item.reminderIntervalValue,
-        initialUnit: item.reminderIntervalUnit,
+        initialValue:
+            item.reminderIntervalValue ?? widget.defaultReminderIntervalValue,
+        initialUnit:
+            item.reminderIntervalUnit ?? widget.defaultReminderIntervalUnit,
       ),
     );
     if (result == null) {

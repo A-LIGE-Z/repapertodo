@@ -239,7 +239,9 @@ new due time to roughly one hour from now, and save local values as
 Todo overflow actions should mirror PaperTodo item menus for due and reminder
 state: existing due dates show change plus clear actions, existing reminder
 intervals show change plus clear actions, and clear actions no-op when the
-field is already empty.
+field is already empty. Creating a per-item reminder interval should default
+to the global reminder interval value and unit when the item has no custom
+interval yet.
 Absolute due labels without an explicit year should follow PaperTodo's compact
 time-aware display: today is `HH:mm`, tomorrow is `Tomorrow HH:mm`, and other
 dates keep month-day plus `HH:mm`.

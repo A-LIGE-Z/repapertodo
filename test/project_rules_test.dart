@@ -710,6 +710,7 @@ void main() {
     expect(design, contains('Todo due editing should preserve PaperTodo'));
     expect(design, contains('Todo overflow actions should mirror PaperTodo'));
     expect(design, contains('change plus clear actions'));
+    expect(design, contains('global reminder interval value and unit'));
     expect(design, contains('00-23 hour'));
     expect(design, contains('00-59 minute'));
     expect(design, contains('yyyy-MM-ddTHH:mm:ss'));
@@ -732,6 +733,8 @@ void main() {
     expect(app, contains('_compactTodoActionClearReminder'));
     expect(app, contains('_hasDueDate'));
     expect(app, contains('_hasReminderInterval'));
+    expect(app, contains('defaultReminderIntervalValue'));
+    expect(app, contains('defaultReminderIntervalUnit'));
     expect(app, contains('shouldRefreshRelativeDueLabels'));
   });
 
