@@ -695,11 +695,15 @@ std::wstring TrayPaperLabel(const flutter::EncodableMap& map) {
   const bool always_on_top = GetBoolArgument(map, "alwaysOnTop", false);
   const bool is_pinned_to_desktop =
       GetBoolArgument(map, "isPinnedToDesktop", false);
+  const bool is_script_capsule =
+      type == "note" && GetBoolArgument(map, "isScriptCapsule", false);
   std::wstring title = Utf8ToWide(GetStringArgument(map, "title", "Untitled"));
   if (title.empty()) {
     title = L"Untitled";
   }
-  std::wstring label = type == "note" ? L"Note - " : L"Todo - ";
+  std::wstring label =
+      is_script_capsule ? L"Script - " : (type == "note" ? L"Note - "
+                                                          : L"Todo - ");
   label += title;
   std::wstring status;
   auto append_status = [&status](const wchar_t* value) {

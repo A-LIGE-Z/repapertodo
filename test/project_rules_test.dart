@@ -678,6 +678,18 @@ void main() {
     expect(paperCommand, contains('SetForegroundWindow(window);'));
   });
 
+  test('Windows tray marks script capsule notes distinctly', () {
+    final dartHost = File('lib/src/platform/windows_platform_services.dart')
+        .readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+
+    expect(dartHost, contains("'isScriptCapsule'"));
+    expect(dartHost, contains('ScriptCapsuleSpec.isScriptCapsuleContent'));
+    expect(runner, contains('is_script_capsule'));
+    expect(runner, contains('L"Script - "'));
+    expect(runner, contains('GetBoolArgument(map, "isScriptCapsule"'));
+  });
+
   test('Windows runner validates external files before opening them', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
 

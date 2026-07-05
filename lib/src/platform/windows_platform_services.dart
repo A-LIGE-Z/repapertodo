@@ -402,6 +402,8 @@ Map<String, Object?> _paperSurfaceRegistryEntry(PaperData paper) {
     'isCollapsed': paper.isCollapsed,
     'alwaysOnTop': paper.alwaysOnTop,
     'isPinnedToDesktop': paper.isPinnedToDesktop,
+    'isScriptCapsule':
+        paper.isNote && ScriptCapsuleSpec.isScriptCapsuleContent(paper.content),
   };
 }
 

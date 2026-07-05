@@ -228,6 +228,7 @@ void main() {
         'isCollapsed': false,
         'alwaysOnTop': false,
         'isPinnedToDesktop': true,
+        'isScriptCapsule': false,
       },
     ]);
     expect(acquiredSingleInstance, true);
@@ -376,6 +377,7 @@ void main() {
       id: 'paper-2',
       type: PaperTypes.note,
       title: 'Second',
+      content: '!p\nWrite-Output tray',
       x: 30,
       y: 40,
       width: 420,
@@ -413,6 +415,7 @@ void main() {
         'isCollapsed': false,
         'alwaysOnTop': false,
         'isPinnedToDesktop': false,
+        'isScriptCapsule': false,
       },
       {
         'id': 'paper-2',
@@ -426,6 +429,7 @@ void main() {
         'isCollapsed': true,
         'alwaysOnTop': true,
         'isPinnedToDesktop': false,
+        'isScriptCapsule': true,
       },
     ]);
     expect(calls[1].arguments, {
@@ -515,6 +519,7 @@ void main() {
         'isCollapsed': false,
         'alwaysOnTop': false,
         'isPinnedToDesktop': false,
+        'isScriptCapsule': false,
       },
       {
         'id': 'paper-2',
@@ -528,6 +533,7 @@ void main() {
         'isCollapsed': true,
         'alwaysOnTop': true,
         'isPinnedToDesktop': false,
+        'isScriptCapsule': true,
       },
     ]);
   });
