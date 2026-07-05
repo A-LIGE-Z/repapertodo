@@ -2427,6 +2427,8 @@ class PaperPreview extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isCollapsed = collapseAllActive || paper.isCollapsed;
+    final scriptCapsuleSpec =
+        paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
     final textZoom = paper.textZoom.clamp(0.5, 1.5).toDouble();
     return Semantics(
       label: '${paper.title} ${paper.type} paper',
@@ -2453,7 +2455,9 @@ class PaperPreview extends StatelessWidget {
                   Icon(
                     paper.isTodo
                         ? Icons.check_box_outlined
-                        : Icons.notes_outlined,
+                        : scriptCapsuleSpec != null
+                            ? Icons.bolt_outlined
+                            : Icons.notes_outlined,
                     size: 18,
                     color: colorScheme.primary,
                   ),
@@ -2491,7 +2495,7 @@ class PaperPreview extends StatelessWidget {
                   ),
                 ),
               ),
-              _animatedPaperBody(isCollapsed),
+              _animatedPaperBody(isCollapsed, scriptCapsuleSpec),
             ],
           ),
         ),
@@ -2499,9 +2503,14 @@ class PaperPreview extends StatelessWidget {
     );
   }
 
-  Widget _animatedPaperBody(bool isCollapsed) {
+  Widget _animatedPaperBody(
+    bool isCollapsed,
+    ScriptCapsuleSpec? scriptCapsuleSpec,
+  ) {
     final body = isCollapsed
-        ? const SizedBox.shrink(key: ValueKey('collapsed'))
+        ? scriptCapsuleSpec == null
+            ? const SizedBox.shrink(key: ValueKey('collapsed'))
+            : _collapsedScriptCapsule(scriptCapsuleSpec)
         : Column(
             key: const ValueKey('expanded'),
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2559,6 +2568,63 @@ class PaperPreview extends StatelessWidget {
         );
       },
       child: body,
+    );
+  }
+
+  Widget _collapsedScriptCapsule(ScriptCapsuleSpec spec) {
+    return Builder(
+      key: ValueKey('${paper.id}-script-capsule'),
+      builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Tooltip(
+            message: _tooltipLabel(
+                  enableToolTips,
+                  'Run script capsule',
+                ) ??
+                '',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => unawaited(onRunScriptCapsule(spec)),
+              onSecondaryTap: _openCollapsedScriptCapsuleForEditing,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: colorScheme.primary),
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.bolt_outlined,
+                        size: 18,
+                        color: colorScheme.onPrimaryContainer,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Run ${_displayPaperTitle(paper)}',
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    color: colorScheme.onPrimaryContainer,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -2763,6 +2829,14 @@ class PaperPreview extends StatelessWidget {
     unawaited(onChanged());
   }
 
+  void _openCollapsedScriptCapsuleForEditing() {
+    if (!paper.isCollapsed) {
+      return;
+    }
+    paper.isCollapsed = false;
+    unawaited(onChanged());
+  }
+
   void _toggleAlwaysOnTop() {
     paper.alwaysOnTop = !paper.alwaysOnTop;
     if (paper.alwaysOnTop) {
@@ -2785,6 +2859,11 @@ class PaperPreview extends StatelessWidget {
     paper.textZoom = value.clamp(0.5, 1.5).toDouble();
     unawaited(onSurfaceChanged(paper));
     unawaited(onChanged());
+  }
+
+  String _displayPaperTitle(PaperData paper) {
+    final title = paper.title.trim();
+    return title.isEmpty ? 'Untitled' : title;
   }
 }
 
@@ -2835,7 +2914,7 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   late final TextEditingController _contentController;
   late final FocusNode _contentFocusNode;
-  late String _view = _defaultView(widget.markdownRenderMode);
+  late String _view = _defaultView(widget.markdownRenderMode, widget.paper);
   bool _toolbarInteractionActive = false;
   String? _selectedCanvasElementId;
 
@@ -2851,7 +2930,7 @@ class _NoteEditorState extends State<_NoteEditor> {
   void didUpdateWidget(covariant _NoteEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.markdownRenderMode != widget.markdownRenderMode) {
-      _view = _defaultView(widget.markdownRenderMode);
+      _view = _defaultView(widget.markdownRenderMode, widget.paper);
     }
     if (oldWidget.paper.id != widget.paper.id ||
         widget.paper.content != _contentController.text) {
@@ -3440,7 +3519,10 @@ class _NoteEditorState extends State<_NoteEditor> {
     return _view;
   }
 
-  String _defaultView(String mode) {
+  String _defaultView(String mode, PaperData paper) {
+    if (ScriptCapsuleSpec.tryParse(paper.content) != null) {
+      return _viewEdit;
+    }
     return MarkdownRenderModes.normalize(mode) == MarkdownRenderModes.off
         ? _viewEdit
         : _viewPreview;

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8158,6 +8159,63 @@ void main() {
     expect(request.script, 'Write-Output ok');
     expect(request.usePersistentProcess, true);
     expect(request.preferPowerShell7, true);
+  });
+
+  testWidgets('runs collapsed script capsules and right click opens editor',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        preferPowerShell7: false,
+        papers: [
+          PaperData(
+            id: 'collapsed-script-note',
+            type: PaperTypes.note,
+            title: 'Deploy script',
+            content: '!p\n  Write-Output deploy',
+            isCollapsed: true,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final capsule = find.byKey(
+      const ValueKey('collapsed-script-note-script-capsule'),
+    );
+    expect(capsule, findsOneWidget);
+    expect(find.text('Run Deploy script'), findsOneWidget);
+    expect(find.byKey(const ValueKey('collapsed-script-note-content')),
+        findsNothing);
+
+    await tester.tap(capsule);
+    await tester.pumpAndSettle();
+
+    expect(platform.scriptCapsules.requests, hasLength(1));
+    final request = platform.scriptCapsules.requests.single;
+    expect(request.engine, 'auto');
+    expect(request.script, 'Write-Output deploy');
+    expect(request.usePersistentProcess, false);
+    expect(request.preferPowerShell7, false);
+    expect(controller.state.papers.single.isCollapsed, true);
+
+    await tester.tapAt(tester.getCenter(capsule),
+        buttons: kSecondaryMouseButton);
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.isCollapsed, false);
+    expect(find.byKey(const ValueKey('collapsed-script-note-content')),
+        findsOneWidget);
   });
 
   testWidgets('reports linked script capsule failures', (tester) async {

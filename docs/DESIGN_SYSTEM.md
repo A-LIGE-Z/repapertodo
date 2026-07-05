@@ -103,6 +103,9 @@ External launches, Markdown links, and script capsules should report platform
 failures in the app instead of failing silently.
 Script capsule hosts must reject blank scripts and unsupported execution
 engines before invoking native launch paths.
+Collapsed note papers whose content starts with a PaperTodo script capsule
+marker should behave as script capsules: primary click runs the script without
+expanding the note, while secondary click opens the note for editing.
 Platform URI and external-file hosts must trim and reject blank launch
 arguments before invoking native method channels. Platform URI hosts must also
 reject raw or percent-encoded control characters.
