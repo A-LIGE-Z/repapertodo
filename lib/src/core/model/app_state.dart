@@ -378,6 +378,55 @@ class AppState {
     }
   }
 
+  String capsuleQueueKeyFor(PaperData paper) {
+    return _queueKey(paper.capsuleMonitorDeviceName, paper.capsuleSide);
+  }
+
+  bool isCapsuleCollapseAllActiveFor(PaperData paper) {
+    if (!useCapsuleMode || !useCapsuleCollapseAll) {
+      return false;
+    }
+    if (useDeepCapsuleMode && capsuleCollapseAllActiveQueues.isNotEmpty) {
+      return capsuleCollapseAllActiveQueues[capsuleQueueKeyFor(paper)] ?? false;
+    }
+    return capsuleCollapseAllActive;
+  }
+
+  void setCapsuleCollapseAllActiveFor(PaperData? paper, bool active) {
+    if (!useCapsuleMode || !useCapsuleCollapseAll) {
+      capsuleCollapseAllActive = false;
+      capsuleCollapseAllActiveQueues = <String, bool>{};
+      return;
+    }
+    if (paper == null) {
+      capsuleCollapseAllActive = active;
+      capsuleCollapseAllActiveQueues = <String, bool>{};
+      return;
+    }
+    if (!useDeepCapsuleMode) {
+      capsuleCollapseAllActive = active;
+      if (!active) {
+        capsuleCollapseAllActiveQueues = <String, bool>{};
+      }
+      return;
+    }
+
+    final queueKey = capsuleQueueKeyFor(paper);
+    if (active) {
+      capsuleCollapseAllActiveQueues[queueKey] = true;
+    } else {
+      capsuleCollapseAllActiveQueues.remove(queueKey);
+    }
+    capsuleCollapseAllActive = capsuleCollapseAllActiveQueues.isNotEmpty;
+  }
+
+  void toggleCapsuleCollapseAllFor(PaperData? paper) {
+    final active = paper == null
+        ? capsuleCollapseAllActive
+        : isCapsuleCollapseAllActiveFor(paper);
+    setCapsuleCollapseAllActiveFor(paper, !active);
+  }
+
   JsonMap toJson() {
     return {
       ...extra,

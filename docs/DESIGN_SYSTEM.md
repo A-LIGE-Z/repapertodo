@@ -49,6 +49,9 @@ visible papers are checked, while hidden, collapsed, desktop-pinned, and
 topmost states are shown in the menu label. Platform close/show/hide events
 should refresh the tray menu promptly when they change paper visibility, while
 plain move/resize bounds updates should not trigger extra tray rebuilds.
+Deep-capsule collapse-all follows PaperTodo's queue model: the master capsule
+acts on one `(monitor, side)` queue, while the board-level fallback may still
+toggle all papers for compatibility with the current Flutter surface.
 The tray icon should be resilient to Windows Explorer/taskbar restarts by
 handling the `TaskbarCreated` broadcast and re-adding the notification icon.
 For PaperTodo parity, a `PaperTodo.ico` or `RePaperTodo.ico` file next to the

@@ -505,6 +505,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     required bool enableToolTips,
     required bool compact,
   }) {
+    final collapseAllActive = _collapseAllActiveFor(surfacePaper);
     final syncButton = IconButton(
       tooltip: _tooltipLabel(enableToolTips, 'Sync now'),
       onPressed: _isSyncing ? null : () => _syncNow(),
@@ -548,12 +549,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                 controller.state.useCapsuleCollapseAll)
               _compactMenuItem(
                 value: _CompactAppBarActions.toggleCollapseAll,
-                icon: controller.state.capsuleCollapseAllActive
-                    ? Icons.unfold_more
-                    : Icons.unfold_less,
-                label: controller.state.capsuleCollapseAllActive
-                    ? 'Expand all'
-                    : 'Collapse all',
+                icon: collapseAllActive ? Icons.unfold_more : Icons.unfold_less,
+                label: collapseAllActive ? 'Expand all' : 'Collapse all',
               ),
             _compactMenuItem(
               value: _CompactAppBarActions.recoverySnapshots,
@@ -600,14 +597,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         IconButton(
           tooltip: _tooltipLabel(
             enableToolTips,
-            controller.state.capsuleCollapseAllActive
-                ? 'Expand all papers'
-                : 'Collapse all papers',
+            collapseAllActive ? 'Expand all papers' : 'Collapse all papers',
           ),
-          onPressed: _toggleCollapseAll,
-          icon: Icon(controller.state.capsuleCollapseAllActive
-              ? Icons.unfold_more
-              : Icons.unfold_less),
+          onPressed: () => _toggleCollapseAll(surfacePaper),
+          icon: Icon(collapseAllActive ? Icons.unfold_more : Icons.unfold_less),
         ),
       syncButton,
       IconButton(
@@ -658,7 +651,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       case _CompactAppBarActions.newNote:
         unawaited(_createPaper(PaperTypes.note));
       case _CompactAppBarActions.toggleCollapseAll:
-        unawaited(_toggleCollapseAll());
+        unawaited(_toggleCollapseAll(surfacePaper));
       case _CompactAppBarActions.recoverySnapshots:
         unawaited(_openRecoverySnapshots());
       case _CompactAppBarActions.showHidden:
@@ -716,7 +709,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       todoDueYearDisplayMode: controller.state.todoDueYearDisplayMode,
       collapseAllActive: controller.state.useCapsuleMode &&
           controller.state.useCapsuleCollapseAll &&
-          controller.state.capsuleCollapseAllActive,
+          controller.state.isCapsuleCollapseAllActiveFor(paper),
       noteLineSpacing: controller.state.noteLineSpacing,
       onChanged: _refreshAndSaveState,
       onTitleChanged: _updatePaperTitle,
@@ -742,10 +735,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     await _saveState();
   }
 
-  Future<void> _toggleCollapseAll() async {
+  bool _collapseAllActiveFor(PaperData? surfacePaper) {
+    if (!controller.state.useCapsuleMode ||
+        !controller.state.useCapsuleCollapseAll) {
+      return false;
+    }
+    return surfacePaper == null
+        ? controller.state.capsuleCollapseAllActive
+        : controller.state.isCapsuleCollapseAllActiveFor(surfacePaper);
+  }
+
+  Future<void> _toggleCollapseAll([PaperData? paper]) async {
     setState(() {
-      controller.state.capsuleCollapseAllActive =
-          !controller.state.capsuleCollapseAllActive;
+      controller.state.toggleCapsuleCollapseAllFor(paper);
     });
     await _saveState();
   }

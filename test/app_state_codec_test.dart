@@ -711,6 +711,43 @@ Plain item
     });
   });
 
+  test('capsule collapse all can target one deep capsule queue', () {
+    final leftPaper = PaperData(
+      id: 'left-paper',
+      type: PaperTypes.todo,
+      title: 'Left',
+      capsuleMonitorDeviceName: 'Primary',
+      capsuleSide: DeepCapsuleSides.left,
+    );
+    final rightPaper = PaperData(
+      id: 'right-paper',
+      type: PaperTypes.todo,
+      title: 'Right',
+      capsuleMonitorDeviceName: 'Primary',
+      capsuleSide: DeepCapsuleSides.right,
+    );
+    final state = AppState(
+      useCapsuleMode: true,
+      useDeepCapsuleMode: true,
+      useCapsuleCollapseAll: true,
+      papers: [leftPaper, rightPaper],
+    )..normalize();
+
+    state.setCapsuleCollapseAllActiveFor(leftPaper, true);
+
+    expect(state.capsuleCollapseAllActive, true);
+    expect(state.capsuleCollapseAllActiveQueues, {'Primary|left': true});
+    expect(state.isCapsuleCollapseAllActiveFor(leftPaper), true);
+    expect(state.isCapsuleCollapseAllActiveFor(rightPaper), false);
+
+    state.toggleCapsuleCollapseAllFor(null);
+
+    expect(state.capsuleCollapseAllActive, false);
+    expect(state.capsuleCollapseAllActiveQueues, isEmpty);
+    expect(state.isCapsuleCollapseAllActiveFor(leftPaper), false);
+    expect(state.isCapsuleCollapseAllActiveFor(rightPaper), false);
+  });
+
   test('normalizes custom theme color hex values', () {
     expect(
       AppState.fromJson({'customThemeColorHex': '336699'}).customThemeColorHex,

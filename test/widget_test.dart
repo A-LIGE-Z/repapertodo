@@ -7224,6 +7224,82 @@ void main() {
     expect(find.text('Visible note'), findsWidgets);
   });
 
+  testWidgets('surface collapse all targets current deep capsule queue',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleCollapseAll: true,
+        papers: [
+          PaperData(
+            id: 'left-queue-paper',
+            type: PaperTypes.todo,
+            title: 'Left queue',
+            capsuleMonitorDeviceName: 'Primary',
+            capsuleSide: DeepCapsuleSides.left,
+            items: [
+              PaperItem(id: 'left-queue-item', text: 'Left queue task'),
+            ],
+          ),
+          PaperData(
+            id: 'right-queue-paper',
+            type: PaperTypes.todo,
+            title: 'Right queue',
+            capsuleMonitorDeviceName: 'Primary',
+            capsuleSide: DeepCapsuleSides.right,
+            items: [
+              PaperItem(id: 'right-queue-item', text: 'Right queue task'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-collapse-queue-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Left queue task'), findsOneWidget);
+    expect(find.text('Right queue task'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Open paper surface').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Left queue task'), findsOneWidget);
+    expect(find.text('Right queue task'), findsNothing);
+
+    await tester.tap(find.byTooltip('Collapse all papers'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.capsuleCollapseAllActive, true);
+    expect(controller.state.capsuleCollapseAllActiveQueues, {
+      'Primary|left': true,
+    });
+    expect(find.text('Left queue task'), findsNothing);
+
+    await tester.tap(find.byTooltip('Back to board'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Left queue task'), findsNothing);
+    expect(find.text('Right queue task'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Expand all papers'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.capsuleCollapseAllActive, false);
+    expect(controller.state.capsuleCollapseAllActiveQueues, isEmpty);
+    expect(find.text('Left queue task'), findsOneWidget);
+    expect(find.text('Right queue task'), findsOneWidget);
+  });
+
   testWidgets('hides collapse all when capsule mode is disabled',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
