@@ -611,11 +611,14 @@ void main() {
     expect(design, contains('10 minutes before due time'));
     expect(design, contains('2 minutes after due time'));
     expect(design, contains('closest to the current time'));
+    expect(design, contains('Deleting a Todo paper should clear active'));
     expect(app, contains('_todoReminderLeadTime = Duration(minutes: 10)'));
     expect(app, contains('_todoReminderGraceTime = Duration(minutes: 2)'));
     expect(app, contains('candidate.dueAt.subtract(_todoReminderLeadTime)'));
     expect(app, contains('candidate.dueAt.add(_todoReminderGraceTime)'));
     expect(app, contains('_distanceFromNow'));
+    expect(app, contains('_activeTodoReminderItemIds'));
+    expect(app, contains('_clearTodoReminderStateForItems'));
     expect(
       app,
       contains(r"String get key => '${item.id}|${item.dueAtLocal ?? ''}'"),

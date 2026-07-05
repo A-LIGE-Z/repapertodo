@@ -229,6 +229,10 @@ String _shortenTitle(String title, int maxLength) {
   return PaperTitles.shorten(title, maxLength);
 }
 
+bool _sameStringSet(Set<String> left, Set<String> right) {
+  return left.length == right.length && left.containsAll(right);
+}
+
 String? _tooltipLabel(bool enabled, String label) => enabled ? label : null;
 
 String _readableFailureMessage(Object error) {
@@ -383,6 +387,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   String? _surfacePaperId;
   final Map<String, bool> _surfaceVisibilityByPaperId = <String, bool>{};
   final Map<String, DateTime> _lastTodoReminderAt = <String, DateTime>{};
+  final Set<String> _activeTodoReminderItemIds = <String>{};
 
   RePaperTodoController get controller => widget.controller;
 
@@ -830,6 +835,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final removedPaper = PaperData.fromJson(paper.toJson());
     final detachedLinks = <_LinkedNoteRestore>[];
     PaperData? defaultPaper;
+    if (removedPaper.isTodo) {
+      _clearTodoReminderStateForItems(
+        removedPaper.items,
+        hideActiveSnackBar: true,
+      );
+    }
     setState(() {
       controller.state.sync
           .markPaperDeleted(removedPaper.id, DateTime.now().toUtc());
@@ -2053,11 +2064,18 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   void _showTodoReminder(List<_TodoReminderCandidate> candidates) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
+    final reminderItemIds = candidates
+        .map((candidate) => candidate.item.id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    _activeTodoReminderItemIds
+      ..clear()
+      ..addAll(reminderItemIds);
     final first = candidates.first;
     final message = candidates.length == 1
         ? 'Reminder: ${_displayTitle(first.paper)} - ${_displayItemText(first.item)}'
         : 'Reminder: ${candidates.length} todo items are due.';
-    messenger.showSnackBar(
+    final snackBarController = messenger.showSnackBar(
       SnackBar(
         content: Text(message),
         duration: Duration(
@@ -2069,6 +2087,34 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         ),
       ),
     );
+    unawaited(snackBarController.closed.then((_) {
+      if (_sameStringSet(_activeTodoReminderItemIds, reminderItemIds)) {
+        _activeTodoReminderItemIds.clear();
+      }
+    }));
+  }
+
+  void _clearTodoReminderStateForItems(
+    Iterable<PaperItem> items, {
+    required bool hideActiveSnackBar,
+  }) {
+    final itemIds = items
+        .map((item) => item.id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (itemIds.isEmpty) {
+      return;
+    }
+    _lastTodoReminderAt.removeWhere((key, _) {
+      return itemIds.any((itemId) => key.startsWith('$itemId|'));
+    });
+    if (hideActiveSnackBar &&
+        _activeTodoReminderItemIds.any(itemIds.contains)) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _activeTodoReminderItemIds.clear();
+      return;
+    }
+    _activeTodoReminderItemIds.removeWhere(itemIds.contains);
   }
 
   String _displayItemText(PaperItem item) {

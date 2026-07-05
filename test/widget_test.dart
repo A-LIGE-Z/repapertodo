@@ -5765,6 +5765,59 @@ void main() {
     expect(find.byTooltip('Back to board'), findsOneWidget);
   });
 
+  testWidgets('deleting a todo paper closes its active reminders',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        todoReminderIntervalValue: 10,
+        todoReminderBubbleDurationSeconds: 30,
+        papers: [
+          PaperData(
+            id: 'delete-reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Reminder paper',
+            items: [
+              PaperItem(
+                id: 'delete-reminder-item',
+                text: 'Review before delete',
+                dueAtLocal: DateTime.now()
+                    .subtract(const Duration(minutes: 1))
+                    .toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.text('Reminder: Remind - Review before delete'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byTooltip('Delete paper'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reminder: Remind - Review before delete'), findsNothing);
+    expect(controller.state.papers.single.id, isNot('delete-reminder-paper'));
+    expect(controller.state.papers.single.type, PaperTypes.todo);
+  });
+
   testWidgets('shows one-shot reminders before todo due time', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
