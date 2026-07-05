@@ -288,6 +288,9 @@ class RePaperTodoController {
   }
 
   Future<void> showPaper(PaperData paper) async {
+    if (paper.isCollapsed && !_canPaperDisplayAsCapsule(paper)) {
+      paper.isCollapsed = false;
+    }
     paper.isVisible = true;
     await _prepareNewPaperForFirstShow(paper);
     await _platform.paperWindows.showPaper(paper);
@@ -304,13 +307,11 @@ class RePaperTodoController {
         return;
       case StartupCommandKind.show:
         for (final paper in state.papers) {
-          paper.isVisible = true;
-          await _platform.paperWindows.showPaper(paper);
+          await showPaper(paper);
         }
       case StartupCommandKind.hide:
         for (final paper in state.papers) {
-          paper.isVisible = false;
-          await _platform.paperWindows.hidePaper(paper);
+          await hidePaper(paper);
         }
       case StartupCommandKind.toggle:
         final shouldHide = state.papers.any((paper) => paper.isVisible);

@@ -511,6 +511,7 @@ void main() {
     expect(design, contains('created from an existing paper'));
     expect(design, contains("100-paper limit"));
     expect(design, contains('Disabling capsule mode'));
+    expect(design, contains('can no longer display as a capsule'));
     expect(constants, contains('capsuleWidth = 92.0'));
     expect(constants, contains('deepCapsuleExpandedEdgeInset = 36.0'));
     expect(constants, contains('deepCapsuleGap = 4.0'));
@@ -527,6 +528,7 @@ void main() {
     expect(controller, contains('_clearDeepCapsuleCollapseAllState'));
     expect(controller, contains('sourcePaper'));
     expect(controller, contains('_initializeNewPaperCapsuleQueue'));
+    expect(controller, contains('!_canPaperDisplayAsCapsule(paper)'));
     expect(controller, contains('_rescuePapersIntoWorkAreas'));
     expect(controller, contains('_rescuePaperIntoWorkArea'));
     expect(controller, contains('_clampNewPaperAwayFromDeepCapsuleStrip'));

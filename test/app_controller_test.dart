@@ -409,6 +409,67 @@ void main() {
     expect(platform.paperWindows.shownIds, isEmpty);
   });
 
+  test('showing a non-capsule-eligible paper expands it like PaperTodo',
+      () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        papers: [
+          PaperData(
+            id: 'collapsed-paper',
+            type: PaperTypes.todo,
+            title: 'Collapsed',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final paper = controller.state.papers.single;
+    paper.isCollapsed = true;
+
+    await controller.showPaper(paper);
+
+    expect(paper.isCollapsed, false);
+    expect(platform.paperWindows.shownIds, [paper.id]);
+  });
+
+  test('startup show expands linked notes hidden from capsules', () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        hideLinkedNotesFromCapsules: true,
+        papers: [
+          PaperData(
+            id: 'todo-paper',
+            type: PaperTypes.todo,
+            title: 'Todo',
+            items: [
+              PaperItem(id: 'todo-item', linkedNoteId: 'linked-note'),
+            ],
+          ),
+          PaperData(
+            id: 'linked-note',
+            type: PaperTypes.note,
+            title: 'Linked note',
+            isVisible: false,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final note = controller.state.papers.last;
+    note.isCollapsed = true;
+
+    await controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.show),
+    );
+
+    expect(note.isVisible, true);
+    expect(note.isCollapsed, false);
+    expect(platform.paperWindows.shownIds, ['todo-paper', 'linked-note']);
+  });
+
   test('startup show and hide commands apply every paper', () async {
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
