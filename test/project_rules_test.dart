@@ -746,6 +746,26 @@ void main() {
     expect(app, contains('clamp(48, maxHeight)'));
   });
 
+  test('PaperTodo note canvas placement and layer rules are preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('New note canvas blocks should follow'));
+    expect(design, contains('230x116'));
+    expect(design, contains('28px origin'));
+    expect(design, contains('12px cascade'));
+    expect(design, contains('top z-index plus 10'));
+    expect(design, contains('duplicates offset by 18px'));
+    expect(design, contains('one-step layer moves swap z-indexes'));
+    expect(app, contains('_nextNoteCanvasElementPoint'));
+    expect(app, contains('math.min(80.0, existingCount * 12.0)'));
+    expect(app, contains('math.max(220.0, widget.paper.width - 40)'));
+    expect(app, contains('_maxCanvasElementLayer(elements)'));
+    expect(app, contains('_minCanvasElementLayer(elements)'));
+    expect(app, contains('element.zIndex = maxLayer + 10'));
+    expect(app, contains('element.zIndex = minLayer - 10'));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

@@ -1016,6 +1016,8 @@ void main() {
         controller.state.papers.single.noteCanvasElements.last;
     expect(addedCodeBlock.type, NoteCanvasElementTypes.code);
     expect(addedCodeBlock.text, 'Console.WriteLine("PaperTodo");');
+    expect(addedCodeBlock.x, 10);
+    expect(addedCodeBlock.y, 64);
     expect(addedCodeBlock.width, 230);
     expect(addedCodeBlock.height, 116);
     expect(addedCodeBlock.zIndex, 15);
@@ -1027,6 +1029,8 @@ void main() {
         controller.state.papers.single.noteCanvasElements.last;
     expect(addedTextBlock.type, NoteCanvasElementTypes.text);
     expect(addedTextBlock.text, 'Canvas text 5');
+    expect(addedTextBlock.x, 10);
+    expect(addedTextBlock.y, 76);
     expect(find.text('12 chars | 1 line | 5 elements'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Delete canvas block').last);

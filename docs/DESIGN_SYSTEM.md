@@ -234,3 +234,9 @@ Note canvas element geometry should preserve PaperTodo pointer semantics:
 dragging the element header moves the block, dragging the bottom-right grip
 resizes it, movement is clamped to the visible canvas, resize keeps the minimum
 72x48 size, and geometry changes are saved when the gesture finishes.
+New note canvas blocks should follow PaperTodo placement and layer rules:
+code blocks default to 230x116 with `Console.WriteLine("PaperTodo");`, new
+blocks use the 28px origin plus a capped 12px cascade clamped to the canvas with
+a 10px margin, new and duplicated blocks use the current top z-index plus 10,
+duplicates offset by 18px on both axes, one-step layer moves swap z-indexes, and
+front/back commands assign max+10 or min-10.

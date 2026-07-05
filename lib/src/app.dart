@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -3737,23 +3738,21 @@ class _NoteEditorState extends State<_NoteEditor> {
     final elements = widget.paper.noteCanvasElements;
     final normalizedType = NoteCanvasElementTypes.normalize(type);
     final nextIndex = elements.length + 1;
-    final maxLayer = elements.fold<int>(
-      0,
-      (max, element) => element.zIndex > max ? element.zIndex : max,
-    );
+    final width = _defaultNoteCanvasElementWidth(normalizedType);
+    final height = _defaultNoteCanvasElementHeight(normalizedType);
+    final point = _nextNoteCanvasElementPoint(width, height, elements.length);
+    final maxLayer = _maxCanvasElementLayer(elements);
     setState(() {
       final elementId = _newCanvasElementId();
       elements.add(
         NoteCanvasElement(
           id: elementId,
           type: normalizedType,
-          text: normalizedType == NoteCanvasElementTypes.text
-              ? 'Canvas text $nextIndex'
-              : 'Console.WriteLine("PaperTodo");',
-          x: 32.0 + elements.length * 16.0,
-          y: 32.0 + elements.length * 16.0,
-          width: 230,
-          height: 116,
+          text: _defaultNoteCanvasElementText(normalizedType, nextIndex),
+          x: point.dx,
+          y: point.dy,
+          width: width,
+          height: height,
           zIndex: maxLayer + 10,
         ),
       );
@@ -3771,10 +3770,7 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   void _duplicateCanvasElement(NoteCanvasElement element) {
     final elements = widget.paper.noteCanvasElements;
-    final maxLayer = elements.fold<int>(
-      0,
-      (max, candidate) => candidate.zIndex > max ? candidate.zIndex : max,
-    );
+    final maxLayer = _maxCanvasElementLayer(elements);
     final duplicate = element.copyWith(
       id: _newCanvasElementId(),
       x: element.x + 18,
@@ -3800,22 +3796,21 @@ class _NoteEditorState extends State<_NoteEditor> {
     final elementIndex = orderedElements.indexWhere(
       (candidate) => candidate.id == element.id,
     );
-    final minLayer = elements.fold<int>(
-      element.zIndex,
-      (min, candidate) => candidate.zIndex < min ? candidate.zIndex : min,
-    );
-    final maxLayer = elements.fold<int>(
-      element.zIndex,
-      (max, candidate) => candidate.zIndex > max ? candidate.zIndex : max,
-    );
+    if (elementIndex < 0) {
+      return;
+    }
+    final minLayer = _minCanvasElementLayer(elements);
+    final maxLayer = _maxCanvasElementLayer(elements);
+    var didChange = false;
     setState(() {
       switch (action) {
         case _CanvasLayerAction.bringForward:
-          if (elementIndex >= 0 && elementIndex < orderedElements.length - 1) {
+          if (elementIndex < orderedElements.length - 1) {
             final nextElement = orderedElements[elementIndex + 1];
             final currentLayer = element.zIndex;
             element.zIndex = nextElement.zIndex;
             nextElement.zIndex = currentLayer;
+            didChange = true;
           }
           break;
         case _CanvasLayerAction.sendBackward:
@@ -3824,18 +3819,25 @@ class _NoteEditorState extends State<_NoteEditor> {
             final currentLayer = element.zIndex;
             element.zIndex = previousElement.zIndex;
             previousElement.zIndex = currentLayer;
+            didChange = true;
           }
           break;
         case _CanvasLayerAction.bringToFront:
-          element.zIndex = (maxLayer + 10).clamp(-10000, 10000).toInt();
+          element.zIndex = maxLayer + 10;
+          didChange = true;
           break;
         case _CanvasLayerAction.sendToBack:
-          element.zIndex = (minLayer - 10).clamp(-10000, 10000).toInt();
+          element.zIndex = minLayer - 10;
+          didChange = true;
           break;
       }
-      _selectedCanvasElementId = element.id;
+      if (didChange) {
+        _selectedCanvasElementId = element.id;
+      }
     });
-    unawaited(widget.onChanged());
+    if (didChange) {
+      unawaited(widget.onChanged());
+    }
   }
 
   void _deleteCanvasElement(NoteCanvasElement element) {
@@ -3881,6 +3883,64 @@ class _NoteEditorState extends State<_NoteEditor> {
       suffix += 1;
     }
     return id;
+  }
+
+  Offset _nextNoteCanvasElementPoint(
+    double width,
+    double height,
+    int existingCount,
+  ) {
+    final layerWidth = math.max(220.0, widget.paper.width - 40);
+    final layerHeight = math.max(160.0, widget.paper.height - 90);
+    final offset = math.min(80.0, existingCount * 12.0);
+    final x = math.max(
+      10.0,
+      math.min(layerWidth - width - 10.0, 28.0 + offset),
+    );
+    final y = math.max(
+      10.0,
+      math.min(layerHeight - height - 10.0, 28.0 + offset),
+    );
+    return Offset(x, y);
+  }
+
+  int _maxCanvasElementLayer(List<NoteCanvasElement> elements) {
+    if (elements.isEmpty) {
+      return 0;
+    }
+    return elements
+        .map((element) => element.zIndex)
+        .reduce((max, zIndex) => zIndex > max ? zIndex : max);
+  }
+
+  int _minCanvasElementLayer(List<NoteCanvasElement> elements) {
+    if (elements.isEmpty) {
+      return 0;
+    }
+    return elements
+        .map((element) => element.zIndex)
+        .reduce((min, zIndex) => zIndex < min ? zIndex : min);
+  }
+
+  double _defaultNoteCanvasElementWidth(String type) {
+    return switch (type) {
+      NoteCanvasElementTypes.text => 230,
+      _ => 230,
+    };
+  }
+
+  double _defaultNoteCanvasElementHeight(String type) {
+    return switch (type) {
+      NoteCanvasElementTypes.text => 116,
+      _ => 116,
+    };
+  }
+
+  String _defaultNoteCanvasElementText(String type, int index) {
+    if (type == NoteCanvasElementTypes.text) {
+      return 'Canvas text $index';
+    }
+    return 'Console.WriteLine("PaperTodo");';
   }
 }
 
