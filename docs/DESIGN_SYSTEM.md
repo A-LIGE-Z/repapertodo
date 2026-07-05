@@ -174,3 +174,7 @@ Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,
 and strikethrough belong in a compact overflow menu.
+Note canvas element geometry should preserve PaperTodo pointer semantics:
+dragging the element header moves the block, dragging the bottom-right grip
+resizes it, movement is clamped to the visible canvas, resize keeps the minimum
+72x48 size, and geometry changes are saved when the gesture finishes.

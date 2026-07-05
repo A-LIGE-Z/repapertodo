@@ -3412,12 +3412,20 @@ class _NoteEditorState extends State<_NoteEditor> {
       selectedElementId: _selectedCanvasElementId,
       textZoom: widget.textZoom,
       onChanged: widget.onChanged,
+      onGeometryChanging: _refreshCanvasGeometry,
       onSelect: _selectCanvasElement,
       onEdit: _editCanvasElement,
       onDuplicate: _duplicateCanvasElement,
       onLayerAction: _applyCanvasLayerAction,
       onDelete: _deleteCanvasElement,
     );
+  }
+
+  void _refreshCanvasGeometry() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
   }
 
   Widget _addCanvasButton() {
@@ -3596,6 +3604,7 @@ class _NoteCanvasPreview extends StatelessWidget {
     required this.selectedElementId,
     required this.textZoom,
     required this.onChanged,
+    required this.onGeometryChanging,
     required this.onSelect,
     required this.onEdit,
     required this.onDuplicate,
@@ -3607,6 +3616,7 @@ class _NoteCanvasPreview extends StatelessWidget {
   final String? selectedElementId;
   final double textZoom;
   final Future<void> Function() onChanged;
+  final VoidCallback onGeometryChanging;
   final void Function(NoteCanvasElement element) onSelect;
   final Future<void> Function(NoteCanvasElement element) onEdit;
   final void Function(NoteCanvasElement element) onDuplicate;
@@ -3635,8 +3645,12 @@ class _NoteCanvasPreview extends StatelessWidget {
               ? constraints.maxWidth
               : contentWidth;
           final scale = (maxWidth / contentWidth).clamp(0.2, 1.0).toDouble();
+          final visualHeight =
+              (contentHeight * scale).clamp(120, 640).toDouble();
+          final canvasWidth = maxWidth / scale;
+          final canvasHeight = visualHeight / scale;
           return SizedBox(
-            height: (contentHeight * scale).clamp(120, 640).toDouble(),
+            height: visualHeight,
             child: Stack(
               clipBehavior: Clip.hardEdge,
               children: [
@@ -3660,8 +3674,11 @@ class _NoteCanvasPreview extends StatelessWidget {
                       layerCount: sortedElements.length,
                       isSelected: sortedElements[index].id == selectedElementId,
                       scale: scale,
+                      canvasWidth: canvasWidth,
+                      canvasHeight: canvasHeight,
                       textZoom: textZoom,
                       onChanged: onChanged,
+                      onGeometryChanging: onGeometryChanging,
                       onSelect: onSelect,
                       onEdit: onEdit,
                       onDuplicate: onDuplicate,
@@ -3690,15 +3707,18 @@ class _NoteCanvasPreview extends StatelessWidget {
   }
 }
 
-class _NoteCanvasElementPreview extends StatelessWidget {
+class _NoteCanvasElementPreview extends StatefulWidget {
   const _NoteCanvasElementPreview({
     required this.element,
     required this.layerRank,
     required this.layerCount,
     required this.isSelected,
     required this.scale,
+    required this.canvasWidth,
+    required this.canvasHeight,
     required this.textZoom,
     required this.onChanged,
+    required this.onGeometryChanging,
     required this.onSelect,
     required this.onEdit,
     required this.onDuplicate,
@@ -3712,8 +3732,11 @@ class _NoteCanvasElementPreview extends StatelessWidget {
   final int layerCount;
   final bool isSelected;
   final double scale;
+  final double canvasWidth;
+  final double canvasHeight;
   final double textZoom;
   final Future<void> Function() onChanged;
+  final VoidCallback onGeometryChanging;
   final void Function(NoteCanvasElement element) onSelect;
   final Future<void> Function(NoteCanvasElement element) onEdit;
   final void Function(NoteCanvasElement element) onDuplicate;
@@ -3722,25 +3745,54 @@ class _NoteCanvasElementPreview extends StatelessWidget {
   final void Function(NoteCanvasElement element) onDelete;
 
   @override
+  State<_NoteCanvasElementPreview> createState() =>
+      _NoteCanvasElementPreviewState();
+}
+
+class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
+  static const _compactCanvasActionEdit = 'edit';
+  static const _compactCanvasActionDuplicate = 'duplicate';
+  static const _compactCanvasActionBringToFront = 'bring-to-front';
+  static const _compactCanvasActionBringForward = 'bring-forward';
+  static const _compactCanvasActionSendBackward = 'send-backward';
+  static const _compactCanvasActionSendToBack = 'send-to-back';
+  static const _compactCanvasActionDelete = 'delete';
+
+  bool _geometryChanged = false;
+  int? _geometryPointer;
+  _CanvasGeometryDragMode? _geometryDragMode;
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final element = widget.element;
     final isCode = element.type == NoteCanvasElementTypes.code;
     final style = Theme.of(context)
         .textTheme
         .bodySmall
-        ?.apply(fontSizeFactor: textZoom)
+        ?.apply(fontSizeFactor: widget.textZoom)
         .copyWith(fontFamily: isCode ? 'monospace' : null);
     final typeLabel = _noteCanvasElementTypeLabel(element.type);
-    final layerLabel = _noteCanvasLayerLabel(layerRank, layerCount);
+    final layerLabel = _noteCanvasLayerLabel(
+      widget.layerRank,
+      widget.layerCount,
+    );
+    final showInlineActions = element.width * widget.scale >= 168;
+    final compactContent = element.width * widget.scale < 120 ||
+        element.height * widget.scale < 72;
+    final elementPadding =
+        compactContent ? 4.0 : (8 * widget.scale).clamp(4, 8).toDouble();
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHigh,
         border: Border.all(
-          color: isSelected ? colorScheme.primary : colorScheme.outlineVariant,
-          width: isSelected ? 2 : 1,
+          color: widget.isSelected
+              ? colorScheme.primary
+              : colorScheme.outlineVariant,
+          width: widget.isSelected ? 2 : 1,
         ),
         borderRadius: BorderRadius.circular(6),
-        boxShadow: isSelected
+        boxShadow: widget.isSelected
             ? [
                 BoxShadow(
                   color: colorScheme.primary.withValues(alpha: 0.18),
@@ -3750,132 +3802,399 @@ class _NoteCanvasElementPreview extends StatelessWidget {
               ]
             : null,
       ),
-      child: Padding(
-        padding: EdgeInsets.all((8 * scale).clamp(4, 8).toDouble()),
-        child: Column(
-          children: [
-            Row(
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Padding(
+            padding: EdgeInsets.all(elementPadding),
+            child: Column(
               children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Tooltip(
+                        message: 'Drag canvas block',
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.move,
+                          child: Listener(
+                            key: ValueKey(
+                              'note-canvas-drag-handle-${element.id}',
+                            ),
+                            behavior: HitTestBehavior.opaque,
+                            onPointerDown: (event) => _beginGeometryGesture(
+                              event,
+                              _CanvasGeometryDragMode.move,
+                            ),
+                            onPointerMove: _updateGeometryGesture,
+                            onPointerUp: _endGeometryGesture,
+                            onPointerCancel: _endGeometryGesture,
+                            child: compactContent
+                                ? Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Icon(
+                                      Icons.open_with,
+                                      size: (16 * widget.scale)
+                                          .clamp(12, 16)
+                                          .toDouble(),
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  )
+                                : Wrap(
+                                    spacing: (6 * widget.scale)
+                                        .clamp(3, 6)
+                                        .toDouble(),
+                                    runSpacing: (4 * widget.scale)
+                                        .clamp(2, 4)
+                                        .toDouble(),
+                                    children: [
+                                      _NoteCanvasElementBadge(
+                                        label: typeLabel,
+                                        scale: widget.scale,
+                                        color: colorScheme.primaryContainer,
+                                        foregroundColor:
+                                            colorScheme.onPrimaryContainer,
+                                      ),
+                                      _NoteCanvasElementBadge(
+                                        label: layerLabel,
+                                        scale: widget.scale,
+                                        color: colorScheme.secondaryContainer,
+                                        foregroundColor:
+                                            colorScheme.onSecondaryContainer,
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (showInlineActions) ...[
+                      SizedBox.square(
+                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
+                        child: IconButton(
+                          tooltip: 'Edit canvas geometry',
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: () {
+                            widget.onSelect(element);
+                            unawaited(widget.onEdit(element));
+                          },
+                          iconSize:
+                              (18 * widget.scale).clamp(16, 18).toDouble(),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.tune_outlined),
+                        ),
+                      ),
+                      SizedBox.square(
+                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
+                        child: IconButton(
+                          tooltip: 'Duplicate canvas block',
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: () {
+                            widget.onSelect(element);
+                            widget.onDuplicate(element);
+                          },
+                          iconSize:
+                              (18 * widget.scale).clamp(16, 18).toDouble(),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.content_copy_outlined),
+                        ),
+                      ),
+                      SizedBox.square(
+                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
+                        child: PopupMenuButton<_CanvasLayerAction>(
+                          key: ValueKey(
+                            'note-canvas-layer-actions-${element.id}',
+                          ),
+                          tooltip: 'Canvas layer actions',
+                          child: Center(
+                            child: Icon(
+                              Icons.layers_outlined,
+                              size:
+                                  (18 * widget.scale).clamp(16, 18).toDouble(),
+                            ),
+                          ),
+                          onSelected: (action) {
+                            widget.onSelect(element);
+                            widget.onLayerAction(element, action);
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: _CanvasLayerAction.bringToFront,
+                              child: Text('Bring to front'),
+                            ),
+                            PopupMenuItem(
+                              value: _CanvasLayerAction.bringForward,
+                              child: Text('Bring forward'),
+                            ),
+                            PopupMenuItem(
+                              value: _CanvasLayerAction.sendBackward,
+                              child: Text('Send backward'),
+                            ),
+                            PopupMenuItem(
+                              value: _CanvasLayerAction.sendToBack,
+                              child: Text('Send to back'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox.square(
+                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
+                        child: IconButton(
+                          tooltip: 'Delete canvas block',
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: () {
+                            widget.onSelect(element);
+                            widget.onDelete(element);
+                          },
+                          iconSize:
+                              (18 * widget.scale).clamp(16, 18).toDouble(),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.close_outlined),
+                        ),
+                      ),
+                    ] else
+                      SizedBox.square(
+                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
+                        child: PopupMenuButton<String>(
+                          key: ValueKey(
+                            'note-canvas-compact-actions-${element.id}',
+                          ),
+                          tooltip: 'Canvas block actions',
+                          child: Center(
+                            child: Icon(
+                              Icons.more_vert,
+                              size:
+                                  (18 * widget.scale).clamp(16, 18).toDouble(),
+                            ),
+                          ),
+                          onSelected: _handleCompactCanvasAction,
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: _compactCanvasActionEdit,
+                              child: Text('Edit geometry'),
+                            ),
+                            PopupMenuItem(
+                              value: _compactCanvasActionDuplicate,
+                              child: Text('Duplicate'),
+                            ),
+                            PopupMenuDivider(),
+                            PopupMenuItem(
+                              value: _compactCanvasActionBringToFront,
+                              child: Text('Bring to front'),
+                            ),
+                            PopupMenuItem(
+                              value: _compactCanvasActionBringForward,
+                              child: Text('Bring forward'),
+                            ),
+                            PopupMenuItem(
+                              value: _compactCanvasActionSendBackward,
+                              child: Text('Send backward'),
+                            ),
+                            PopupMenuItem(
+                              value: _compactCanvasActionSendToBack,
+                              child: Text('Send to back'),
+                            ),
+                            PopupMenuDivider(),
+                            PopupMenuItem(
+                              value: _compactCanvasActionDelete,
+                              child: Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
                 Expanded(
-                  child: Wrap(
-                    spacing: (6 * scale).clamp(3, 6).toDouble(),
-                    runSpacing: (4 * scale).clamp(2, 4).toDouble(),
-                    children: [
-                      _NoteCanvasElementBadge(
-                        label: typeLabel,
-                        scale: scale,
-                        color: colorScheme.primaryContainer,
-                        foregroundColor: colorScheme.onPrimaryContainer,
-                      ),
-                      _NoteCanvasElementBadge(
-                        label: layerLabel,
-                        scale: scale,
-                        color: colorScheme.secondaryContainer,
-                        foregroundColor: colorScheme.onSecondaryContainer,
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox.square(
-                  dimension: (28 * scale).clamp(24, 28).toDouble(),
-                  child: IconButton(
-                    tooltip: 'Edit canvas geometry',
-                    onPressed: () {
-                      onSelect(element);
-                      unawaited(onEdit(element));
-                    },
-                    iconSize: (18 * scale).clamp(16, 18).toDouble(),
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.tune_outlined),
-                  ),
-                ),
-                SizedBox.square(
-                  dimension: (28 * scale).clamp(24, 28).toDouble(),
-                  child: IconButton(
-                    tooltip: 'Duplicate canvas block',
-                    onPressed: () {
-                      onSelect(element);
-                      onDuplicate(element);
-                    },
-                    iconSize: (18 * scale).clamp(16, 18).toDouble(),
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.content_copy_outlined),
-                  ),
-                ),
-                SizedBox.square(
-                  dimension: (28 * scale).clamp(24, 28).toDouble(),
-                  child: PopupMenuButton<_CanvasLayerAction>(
-                    key: ValueKey('note-canvas-layer-actions-${element.id}'),
-                    tooltip: 'Canvas layer actions',
-                    icon: const Icon(Icons.layers_outlined),
-                    iconSize: (18 * scale).clamp(16, 18).toDouble(),
-                    padding: EdgeInsets.zero,
-                    onSelected: (action) {
-                      onSelect(element);
-                      onLayerAction(element, action);
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: _CanvasLayerAction.bringToFront,
-                        child: Text('Bring to front'),
-                      ),
-                      PopupMenuItem(
-                        value: _CanvasLayerAction.bringForward,
-                        child: Text('Bring forward'),
-                      ),
-                      PopupMenuItem(
-                        value: _CanvasLayerAction.sendBackward,
-                        child: Text('Send backward'),
-                      ),
-                      PopupMenuItem(
-                        value: _CanvasLayerAction.sendToBack,
-                        child: Text('Send to back'),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox.square(
-                  dimension: (28 * scale).clamp(24, 28).toDouble(),
-                  child: IconButton(
-                    tooltip: 'Delete canvas block',
-                    onPressed: () {
-                      onSelect(element);
-                      onDelete(element);
-                    },
-                    iconSize: (18 * scale).clamp(16, 18).toDouble(),
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.close_outlined),
-                  ),
+                  child: compactContent
+                      ? GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => widget.onSelect(element),
+                          child: ClipRect(
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: Text(
+                                element.text,
+                                maxLines: 1,
+                                overflow: TextOverflow.fade,
+                                softWrap: false,
+                                style: style?.copyWith(
+                                  color: colorScheme.onSurface,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                      : TextFormField(
+                          key: ValueKey(
+                            'note-canvas-element-text-${element.id}',
+                          ),
+                          initialValue: element.text,
+                          expands: true,
+                          maxLines: null,
+                          minLines: null,
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                          style: style?.copyWith(
+                            color: colorScheme.onSurface,
+                            height: 1.35,
+                          ),
+                          onTap: () => widget.onSelect(element),
+                          onChanged: (value) {
+                            element.text = value;
+                            unawaited(widget.onChanged());
+                          },
+                        ),
                 ),
               ],
             ),
-            Expanded(
-              child: TextFormField(
-                key: ValueKey('note-canvas-element-text-${element.id}'),
-                initialValue: element.text,
-                expands: true,
-                maxLines: null,
-                minLines: null,
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  isDense: true,
+          ),
+          Positioned(
+            right: 3,
+            bottom: 3,
+            child: Tooltip(
+              message: 'Resize canvas block',
+              child: MouseRegion(
+                cursor: SystemMouseCursors.resizeDownRight,
+                child: Listener(
+                  key: ValueKey('note-canvas-resize-handle-${element.id}'),
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (event) => _beginGeometryGesture(
+                    event,
+                    _CanvasGeometryDragMode.resize,
+                  ),
+                  onPointerMove: _updateGeometryGesture,
+                  onPointerUp: _endGeometryGesture,
+                  onPointerCancel: _endGeometryGesture,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.32),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: SizedBox.square(
+                      dimension: (16 * widget.scale).clamp(14, 18).toDouble(),
+                      child: Icon(
+                        Icons.open_in_full,
+                        size: (11 * widget.scale).clamp(9, 11).toDouble(),
+                        color: colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
                 ),
-                style: style?.copyWith(
-                  color: colorScheme.onSurface,
-                  height: 1.35,
-                ),
-                onTap: () => onSelect(element),
-                onChanged: (value) {
-                  element.text = value;
-                  unawaited(onChanged());
-                },
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
+
+  void _beginGeometryGesture(
+    PointerDownEvent event,
+    _CanvasGeometryDragMode mode,
+  ) {
+    if (_geometryPointer != null) {
+      return;
+    }
+    _geometryPointer = event.pointer;
+    _geometryDragMode = mode;
+    _geometryChanged = false;
+    widget.onSelect(widget.element);
+  }
+
+  void _handleCompactCanvasAction(String action) {
+    final element = widget.element;
+    widget.onSelect(element);
+    switch (action) {
+      case _compactCanvasActionEdit:
+        unawaited(widget.onEdit(element));
+      case _compactCanvasActionDuplicate:
+        widget.onDuplicate(element);
+      case _compactCanvasActionBringToFront:
+        widget.onLayerAction(element, _CanvasLayerAction.bringToFront);
+      case _compactCanvasActionBringForward:
+        widget.onLayerAction(element, _CanvasLayerAction.bringForward);
+      case _compactCanvasActionSendBackward:
+        widget.onLayerAction(element, _CanvasLayerAction.sendBackward);
+      case _compactCanvasActionSendToBack:
+        widget.onLayerAction(element, _CanvasLayerAction.sendToBack);
+      case _compactCanvasActionDelete:
+        widget.onDelete(element);
+    }
+  }
+
+  void _updateGeometryGesture(PointerMoveEvent event) {
+    if (event.pointer != _geometryPointer) {
+      return;
+    }
+    switch (_geometryDragMode) {
+      case _CanvasGeometryDragMode.move:
+        _moveElement(event.delta);
+      case _CanvasGeometryDragMode.resize:
+        _resizeElement(event.delta);
+      case null:
+        break;
+    }
+  }
+
+  void _moveElement(Offset delta) {
+    final element = widget.element;
+    final dx = delta.dx / widget.scale;
+    final dy = delta.dy / widget.scale;
+    final maxX = (widget.canvasWidth - element.width).clamp(0, double.infinity);
+    final maxY =
+        (widget.canvasHeight - element.height).clamp(0, double.infinity);
+    element.x = _roundCanvasValue((element.x + dx).clamp(0, maxX).toDouble());
+    element.y = _roundCanvasValue((element.y + dy).clamp(0, maxY).toDouble());
+    _geometryChanged = true;
+    widget.onGeometryChanging();
+  }
+
+  void _resizeElement(Offset delta) {
+    final element = widget.element;
+    final dx = delta.dx / widget.scale;
+    final dy = delta.dy / widget.scale;
+    final maxWidth =
+        (widget.canvasWidth - element.x).clamp(72, double.infinity);
+    final maxHeight =
+        (widget.canvasHeight - element.y).clamp(48, double.infinity);
+    element.width =
+        _roundCanvasValue((element.width + dx).clamp(72, maxWidth).toDouble());
+    element.height = _roundCanvasValue(
+        (element.height + dy).clamp(48, maxHeight).toDouble());
+    _geometryChanged = true;
+    widget.onGeometryChanging();
+  }
+
+  void _endGeometryGesture(PointerEvent event) {
+    if (event.pointer != _geometryPointer) {
+      return;
+    }
+    _geometryPointer = null;
+    _geometryDragMode = null;
+    if (!_geometryChanged) {
+      return;
+    }
+    _geometryChanged = false;
+    unawaited(widget.onChanged());
+  }
+
+  double _roundCanvasValue(double value) => (value * 10).roundToDouble() / 10;
+}
+
+enum _CanvasGeometryDragMode {
+  move,
+  resize,
 }
 
 class _NoteCanvasElementBadge extends StatelessWidget {

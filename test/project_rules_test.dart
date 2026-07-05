@@ -595,6 +595,22 @@ void main() {
     expect(markdownLinks, contains('_htmlAnchorLinks'));
   });
 
+  test('PaperTodo note canvas geometry gestures are preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('Note canvas element geometry should preserve'));
+    expect(design, contains('dragging the element header moves the block'));
+    expect(design, contains('bottom-right grip'));
+    expect(design, contains('72x48'));
+    expect(app, contains('note-canvas-drag-handle-'));
+    expect(app, contains('note-canvas-resize-handle-'));
+    expect(app, contains('_moveElement'));
+    expect(app, contains('_resizeElement'));
+    expect(app, contains('clamp(72, maxWidth)'));
+    expect(app, contains('clamp(48, maxHeight)'));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

@@ -972,6 +972,71 @@ void main() {
     expect(find.text('12 chars | 1 line | 4 elements'), findsOneWidget);
   });
 
+  testWidgets('drags and resizes note canvas elements like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'canvas-gesture-note',
+            type: PaperTypes.note,
+            title: 'Canvas gesture note',
+            content: 'Main note body',
+            noteCanvasElements: [
+              NoteCanvasElement(
+                id: 'canvas-gesture',
+                text: 'Drag me',
+                x: 10,
+                y: 10,
+                width: 120,
+                height: 80,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final element = controller.state.papers.single.noteCanvasElements.single;
+    await tester.drag(
+      find.byKey(const ValueKey('note-canvas-drag-handle-canvas-gesture')),
+      const Offset(40, 30),
+    );
+    await tester.pumpAndSettle();
+
+    expect(element.x, 50);
+    expect(element.y, 40);
+
+    await tester.drag(
+      find.byKey(const ValueKey('note-canvas-resize-handle-canvas-gesture')),
+      const Offset(50, 25),
+    );
+    await tester.pumpAndSettle();
+
+    expect(element.width, 170);
+    expect(element.height, 105);
+
+    await tester.drag(
+      find.byKey(const ValueKey('note-canvas-resize-handle-canvas-gesture')),
+      const Offset(-400, -400),
+    );
+    await tester.pumpAndSettle();
+
+    expect(element.width, 72);
+    expect(element.height, 48);
+  });
+
   testWidgets('clips oversized markdown note input', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
