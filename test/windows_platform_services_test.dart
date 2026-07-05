@@ -387,6 +387,17 @@ void main() {
     await services.paperWindows.restoreAll(
       AppState(papers: [firstPaper, secondPaper]),
     );
+    expect(
+      calls.map((call) => call.method),
+      [
+        'setTrayMenu',
+        'setBounds',
+        'setPinnedToDesktop',
+        'show',
+        'setTitle',
+        'setAlwaysOnTop',
+      ],
+    );
     final initialTrayMenuCall =
         calls.firstWhere((call) => call.method == 'setTrayMenu');
     expect(initialTrayMenuCall.arguments, [
@@ -417,6 +428,27 @@ void main() {
         'isPinnedToDesktop': false,
       },
     ]);
+    expect(calls[1].arguments, {
+      'paperId': 'paper-1',
+      'x': 10.0,
+      'y': 20.0,
+      'width': 320.0,
+      'height': 260.0,
+    });
+    expect(calls[2].arguments, {
+      'paperId': 'paper-1',
+      'enabled': false,
+    });
+    expect(calls[3].arguments, {
+      'paperId': 'paper-1',
+      'isPinnedToDesktop': false,
+      'alwaysOnTop': false,
+    });
+    expect(calls[4].arguments, 'RePaperTodo - First');
+    expect(calls[5].arguments, {
+      'paperId': 'paper-1',
+      'enabled': false,
+    });
 
     final boundsUpdate = services.paperWindows.surfaceUpdates.first;
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
