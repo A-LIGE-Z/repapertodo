@@ -184,6 +184,9 @@ UNC, and `file:` targets open through the external-file host, while device paths
 such as `\\.\` and `\\?\` are rejected before native launch.
 Markdown link hit-testing should skip links inside closed inline code spans,
 matching PaperTodo's source editor highlighting and Ctrl+click behavior.
+Markdown image syntax should follow PaperTodo's lightweight scanner rather than
+full Markdown image rendering: `![label](url)` is still treated as a source
+link hit target on the label text.
 Markdown notes should preserve PaperTodo's focus-driven reading flow: Markdown
 enabled notes open in preview mode by default, clicking the preview body enters
 the source editor, and losing editor focus returns the note to preview mode.

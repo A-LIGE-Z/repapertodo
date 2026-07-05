@@ -844,6 +844,9 @@ void main() {
     expect(design, contains('UNC, and `file:` targets'));
     expect(design, contains('device paths'));
     expect(design, contains('closed inline code spans'));
+    expect(design, contains('Markdown image syntax should follow'));
+    expect(design, contains('treated as a source'));
+    expect(design, contains('link hit target'));
     expect(design, contains('focus-driven reading flow'));
     expect(design, contains('open in preview mode by default'));
     expect(design, contains('clicking the preview body enters'));

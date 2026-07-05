@@ -52,10 +52,6 @@ abstract final class MarkdownLinks {
       if (labelStart < 0) {
         break;
       }
-      if (labelStart > 0 && text[labelStart - 1] == '!') {
-        searchStart = labelStart + 1;
-        continue;
-      }
 
       final labelEnd = _findUnescaped(text, ']', labelStart + 1);
       if (labelEnd < 0 ||

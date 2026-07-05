@@ -13,10 +13,11 @@ void main() {
     expect(MarkdownLinks.hrefAt(text, text.indexOf(' today')), isNull);
   });
 
-  test('ignores markdown images and empty destinations', () {
+  test('treats markdown image labels as links like PaperTodo', () {
     const text = '![Alt](https://example.com/image.png) [Empty]()';
 
-    expect(MarkdownLinks.hrefAt(text, text.indexOf('Alt')), isNull);
+    expect(MarkdownLinks.hrefAt(text, text.indexOf('Alt')),
+        'https://example.com/image.png');
     expect(MarkdownLinks.hrefAt(text, text.indexOf('Empty')), isNull);
   });
 
