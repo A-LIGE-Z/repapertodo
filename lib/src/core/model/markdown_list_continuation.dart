@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import 'markdown_line_analysis.dart';
+
 abstract final class MarkdownListContinuation {
   static const _maxContinuableOrderedListNumber = 9223372036854775806;
 
@@ -13,13 +15,18 @@ abstract final class MarkdownListContinuation {
 
     final caret = oldValue.selection.baseOffset;
     final line = _lineAt(oldValue.text, caret);
-    final style = _analyzeList(line.text);
-    if (style == null) {
+    final style = MarkdownLineAnalysis.analyzeLine(line.text);
+    if (!style.isList) {
       return newValue;
     }
 
     final indexInLine = caret - line.start;
     if (indexInLine < style.contentStart.clamp(0, line.text.length)) {
+      return newValue;
+    }
+
+    final continuation = _continuationFor(style, line.text);
+    if (continuation == null) {
       return newValue;
     }
 
@@ -43,10 +50,6 @@ abstract final class MarkdownListContinuation {
       );
     }
 
-    final continuation = _continuationFor(style, line.text);
-    if (continuation == null) {
-      return newValue;
-    }
     final text = oldValue.text.replaceRange(caret, caret, '\n$continuation');
     return TextEditingValue(
       text: text,
@@ -82,114 +85,28 @@ abstract final class MarkdownListContinuation {
     return _MarkdownLine(start: start, text: text.substring(start, end));
   }
 
-  static _ListStyle? _analyzeList(String text) {
-    if (text.isEmpty) {
+  static String? _continuationFor(MarkdownLineStyle style, String text) {
+    final taskSuffix = style.isTask ? '[ ] ' : '';
+    if (style.isUnorderedList) {
+      return '${text.substring(0, style.contentStart)}$taskSuffix';
+    }
+    final numberText = style.orderedNumberText;
+    final delimiter = style.orderedDelimiter;
+    if (!style.isOrderedList ||
+        numberText == null ||
+        delimiter == null ||
+        style.markerEnd > style.contentStart ||
+        style.markerEnd > text.length) {
       return null;
     }
-    final indent = _countIndent(text);
-    final byIndent = _tryAnalyzeList(text, indent);
-    if (byIndent != null) {
-      return byIndent;
-    }
-    final leadingSpaces = _countLeadingSpaces(text);
-    if (leadingSpaces != indent) {
-      return _tryAnalyzeList(text, leadingSpaces);
-    }
-    return null;
-  }
-
-  static _ListStyle? _tryAnalyzeList(String text, int start) {
-    if (start >= text.length) {
-      return null;
-    }
-
-    final marker = text[start];
-    if (marker == '-' || marker == '*' || marker == '+') {
-      if (start + 1 < text.length && !_isWhitespace(text[start + 1])) {
-        return null;
-      }
-      var end = start + 1;
-      while (end < text.length && _isWhitespace(text[end])) {
-        end++;
-      }
-      final style = _ListStyle.unordered(
-        markerStart: start,
-        contentStart: end,
-      );
-      return style.copyWith(isTask: _isTaskList(style, text));
-    }
-
-    if (!_isDigit(marker)) {
-      return null;
-    }
-    var delimiter = start + 1;
-    while (delimiter < text.length && _isDigit(text[delimiter])) {
-      delimiter++;
-    }
-    if (delimiter >= text.length ||
-        (text[delimiter] != '.' && text[delimiter] != ')')) {
-      return null;
-    }
-    if (delimiter + 1 < text.length && !_isWhitespace(text[delimiter + 1])) {
-      return null;
-    }
-    var end = delimiter + 1;
-    while (end < text.length && _isWhitespace(text[end])) {
-      end++;
-    }
-    final number = int.tryParse(text.substring(start, delimiter));
+    final number = int.tryParse(numberText);
     if (number == null || number > _maxContinuableOrderedListNumber) {
       return null;
     }
-    final style = _ListStyle.ordered(
-      markerStart: start,
-      markerEnd: delimiter + 1,
-      contentStart: end,
-      number: number,
-      delimiter: text[delimiter],
-    );
-    return style.copyWith(isTask: _isTaskList(style, text));
-  }
-
-  static String? _continuationFor(_ListStyle style, String text) {
-    final taskSuffix = style.isTask ? '[ ] ' : '';
-    if (style.kind == _ListKind.unordered) {
-      return '${text.substring(0, style.contentStart)}$taskSuffix';
-    }
-    if (style.markerEnd > style.contentStart || style.markerEnd > text.length) {
-      return null;
-    }
     return '${text.substring(0, style.markerStart)}'
-        '${style.number + 1}${style.delimiter}'
+        '${number + 1}$delimiter'
         '${text.substring(style.markerEnd, style.contentStart)}'
         '$taskSuffix';
-  }
-
-  static int _countIndent(String text) {
-    var indent = 0;
-    while (indent < text.length && indent < 3 && text[indent] == ' ') {
-      indent++;
-    }
-    return indent;
-  }
-
-  static int _countLeadingSpaces(String text) {
-    var indent = 0;
-    while (indent < text.length && text[indent] == ' ') {
-      indent++;
-    }
-    return indent;
-  }
-
-  static bool _isTaskList(_ListStyle style, String text) {
-    if (style.contentStart + 2 >= text.length) {
-      return false;
-    }
-    final start = style.contentStart;
-    final value = text[start + 1];
-    return text[start] == '[' &&
-        text[start + 2] == ']' &&
-        (value == ' ' || value == 'x' || value == 'X');
   }
 
   static int _taskContentStart(int contentStart, String text) {
@@ -212,14 +129,6 @@ abstract final class MarkdownListContinuation {
   }
 
   static bool _isWhitespace(String value) => value.trim().isEmpty;
-
-  static bool _isDigit(String value) {
-    if (value.length != 1) {
-      return false;
-    }
-    final codeUnit = value.codeUnitAt(0);
-    return codeUnit >= 0x30 && codeUnit <= 0x39;
-  }
 }
 
 class _MarkdownLine {
@@ -227,71 +136,4 @@ class _MarkdownLine {
 
   final int start;
   final String text;
-}
-
-enum _ListKind { unordered, ordered }
-
-class _ListStyle {
-  const _ListStyle._({
-    required this.kind,
-    required this.markerStart,
-    required this.markerEnd,
-    required this.contentStart,
-    required this.number,
-    required this.delimiter,
-    required this.isTask,
-  });
-
-  factory _ListStyle.unordered({
-    required int markerStart,
-    required int contentStart,
-  }) {
-    return _ListStyle._(
-      kind: _ListKind.unordered,
-      markerStart: markerStart,
-      markerEnd: markerStart + 1,
-      contentStart: contentStart,
-      number: 0,
-      delimiter: '',
-      isTask: false,
-    );
-  }
-
-  factory _ListStyle.ordered({
-    required int markerStart,
-    required int markerEnd,
-    required int contentStart,
-    required int number,
-    required String delimiter,
-  }) {
-    return _ListStyle._(
-      kind: _ListKind.ordered,
-      markerStart: markerStart,
-      markerEnd: markerEnd,
-      contentStart: contentStart,
-      number: number,
-      delimiter: delimiter,
-      isTask: false,
-    );
-  }
-
-  final _ListKind kind;
-  final int markerStart;
-  final int markerEnd;
-  final int contentStart;
-  final int number;
-  final String delimiter;
-  final bool isTask;
-
-  _ListStyle copyWith({required bool isTask}) {
-    return _ListStyle._(
-      kind: kind,
-      markerStart: markerStart,
-      markerEnd: markerEnd,
-      contentStart: contentStart,
-      number: number,
-      delimiter: delimiter,
-      isTask: isTask,
-    );
-  }
 }

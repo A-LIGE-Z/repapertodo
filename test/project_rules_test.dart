@@ -852,6 +852,9 @@ void main() {
     expect(design, contains('backslash'));
     expect(design, contains('CommonMark angle destinations'));
     expect(design, contains('only `http`, `https`, `mailto`, `www.`'));
+    expect(design, contains('Markdown line classification'));
+    expect(design, contains('PaperTodo-compatible model'));
+    expect(design, contains('fenced code block detection'));
     expect(design, contains('focus-driven reading flow'));
     expect(design, contains('open in preview mode by default'));
     expect(design, contains('clicking the preview body enters'));
@@ -873,6 +876,15 @@ void main() {
     expect(markdownLinks, contains('_closedInlineCodeSpans'));
     expect(markdownLinks, contains("indexOf(']('"));
     expect(markdownLinks, contains("_normalizeLocalMarkdownPath"));
+    expect(
+      File('lib/src/core/model/markdown_line_analysis.dart').readAsStringSync(),
+      contains('enum MarkdownLineKind'),
+    );
+    expect(
+      File('lib/src/core/model/markdown_list_continuation.dart')
+          .readAsStringSync(),
+      contains('MarkdownLineAnalysis.analyzeLine'),
+    );
   });
 
   test('PaperTodo markdown note paste safety is preserved', () {
