@@ -160,6 +160,8 @@ abstract final class PaperLayoutDefaults {
   static const newPaperCascadeOffset = 24.0;
   static const newPaperCollisionNudge = 30.0;
   static const newPaperCollisionThreshold = 5.0;
+  static const newPaperWorkAreaMargin = 8.0;
+  static const newPaperWorkAreaResizeInset = 80.0;
   static const todoDefaultWidth = 280.0;
   static const todoDefaultHeight = 340.0;
   static const noteDefaultWidth = 320.0;

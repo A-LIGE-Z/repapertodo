@@ -513,7 +513,9 @@ void main() {
     expect(constants, contains('newPaperBaseLeft = 140.0'));
     expect(constants, contains('newPaperCascadeOffset = 24.0'));
     expect(constants, contains('newPaperCollisionNudge = 30.0'));
+    expect(constants, contains('newPaperWorkAreaResizeInset = 80.0'));
     expect(platform, contains('workAreaForPaper'));
+    expect(controller, contains('_rescuePaperIntoWorkArea'));
     expect(controller, contains('_clampNewPaperAwayFromDeepCapsuleStrip'));
     expect(controller, contains('_newPaperInitialPosition'));
     expect(controller, contains('workAreaForPaper'));

@@ -22,6 +22,7 @@ class RePaperTodoController {
   AppState state;
   final PlatformServices _platform;
   StartupCommand? _pendingUiStartupCommand;
+  final Set<String> _paperIdsPendingWorkAreaRescue = <String>{};
   final Set<String> _paperIdsPendingDeepCapsuleStripClamp = <String>{};
 
   Stream<PaperData> get paperSurfaceUpdates =>
@@ -59,7 +60,7 @@ class RePaperTodoController {
       createPaper(PaperTypes.todo);
     }
 
-    await _clampPendingNewPapersAwayFromDeepCapsuleStrip();
+    await _preparePendingNewPapersForFirstShow();
     await _platform.paperWindows.restoreAll(state);
     await executeStartupCommand(startupCommand);
     if (startupCommand.kind == StartupCommandKind.exit) {
@@ -96,6 +97,9 @@ class RePaperTodoController {
       paper.y = state.deepCapsuleStartTopMargin;
     }
     state.papers.add(paper);
+    if (paper.isVisible) {
+      _paperIdsPendingWorkAreaRescue.add(paper.id);
+    }
     if (_canClampNewPaperAwayFromDeepCapsuleStrip(paper)) {
       _paperIdsPendingDeepCapsuleStripClamp.add(paper.id);
     }
@@ -210,7 +214,7 @@ class RePaperTodoController {
 
   Future<void> showPaper(PaperData paper) async {
     paper.isVisible = true;
-    await _clampNewPaperAwayFromDeepCapsuleStrip(paper);
+    await _prepareNewPaperForFirstShow(paper);
     await _platform.paperWindows.showPaper(paper);
   }
 
@@ -278,30 +282,96 @@ class RePaperTodoController {
     return (x: x, y: y);
   }
 
-  Future<void> _clampPendingNewPapersAwayFromDeepCapsuleStrip() async {
-    if (_paperIdsPendingDeepCapsuleStripClamp.isEmpty) {
+  Future<void> _preparePendingNewPapersForFirstShow() async {
+    if (_paperIdsPendingWorkAreaRescue.isEmpty &&
+        _paperIdsPendingDeepCapsuleStripClamp.isEmpty) {
       return;
     }
     for (final paper in state.papers.toList()) {
-      await _clampNewPaperAwayFromDeepCapsuleStrip(paper);
+      await _prepareNewPaperForFirstShow(paper);
     }
   }
 
-  Future<void> _clampNewPaperAwayFromDeepCapsuleStrip(PaperData paper) async {
-    if (!_paperIdsPendingDeepCapsuleStripClamp.remove(paper.id) ||
-        !_canClampNewPaperAwayFromDeepCapsuleStrip(paper)) {
-      return;
-    }
-    final PaperWorkArea? area;
-    try {
-      area = await _platform.paperWindows.workAreaForPaper(paper);
-    } catch (_) {
-      return;
-    }
-    if (area == null || !area.isUsable) {
+  Future<void> _prepareNewPaperForFirstShow(PaperData paper) async {
+    final rescueIntoWorkArea =
+        _paperIdsPendingWorkAreaRescue.remove(paper.id) && paper.isVisible;
+    final clampAwayFromDeepCapsuleStrip =
+        _paperIdsPendingDeepCapsuleStripClamp.remove(paper.id) &&
+            _canClampNewPaperAwayFromDeepCapsuleStrip(paper);
+    if (!rescueIntoWorkArea && !clampAwayFromDeepCapsuleStrip) {
       return;
     }
 
+    final area = await _workAreaForPaper(paper);
+    if (area == null || !area.isUsable) {
+      return;
+    }
+    if (rescueIntoWorkArea) {
+      _rescuePaperIntoWorkArea(paper, area);
+    }
+    if (clampAwayFromDeepCapsuleStrip &&
+        _canClampNewPaperAwayFromDeepCapsuleStrip(paper)) {
+      _clampNewPaperAwayFromDeepCapsuleStrip(paper, area);
+    }
+  }
+
+  Future<PaperWorkArea?> _workAreaForPaper(PaperData paper) async {
+    try {
+      return await _platform.paperWindows.workAreaForPaper(paper);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _rescuePaperIntoWorkArea(PaperData paper, PaperWorkArea area) {
+    final maxWidth = math.max(
+      PaperLayoutDefaults.minWidth,
+      area.width - PaperLayoutDefaults.newPaperWorkAreaResizeInset,
+    );
+    final maxHeight = math.max(
+      PaperLayoutDefaults.minHeight,
+      area.height - PaperLayoutDefaults.newPaperWorkAreaResizeInset,
+    );
+    paper.width = _clampPaperDimension(
+      paper.width,
+      paper.isNote
+          ? PaperLayoutDefaults.noteDefaultWidth
+          : PaperLayoutDefaults.todoDefaultWidth,
+      PaperLayoutDefaults.minWidth,
+      maxWidth,
+    );
+    paper.height = _clampPaperDimension(
+      paper.height,
+      paper.isNote
+          ? PaperLayoutDefaults.noteDefaultHeight
+          : PaperLayoutDefaults.todoDefaultHeight,
+      PaperLayoutDefaults.minHeight,
+      maxHeight,
+    );
+
+    const margin = PaperLayoutDefaults.newPaperWorkAreaMargin;
+    final minX = area.x + margin;
+    final maxX = math.max(minX, area.right - paper.width - margin);
+    final minY = area.y + margin;
+    final maxY = math.max(minY, area.bottom - paper.height - margin);
+    paper.x = paper.x.clamp(minX, maxX).roundToDouble();
+    paper.y = paper.y.clamp(minY, maxY).roundToDouble();
+  }
+
+  double _clampPaperDimension(
+    double value,
+    double fallback,
+    double min,
+    double max,
+  ) {
+    final normalized = value.isFinite && value > 0 ? value : fallback;
+    return normalized.clamp(min, max).toDouble().roundToDouble();
+  }
+
+  void _clampNewPaperAwayFromDeepCapsuleStrip(
+    PaperData paper,
+    PaperWorkArea area,
+  ) {
     const margin = PaperLayoutDefaults.deepCapsuleEdgeMargin;
     final width = math.max(paper.width, PaperLayoutDefaults.minWidth);
     final height = math.max(paper.height, PaperLayoutDefaults.minHeight);

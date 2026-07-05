@@ -59,6 +59,9 @@ edge inset constants.
 New desktop papers should follow PaperTodo's cascade placement: start near
 `140,140`, offset each new paper by the existing paper count, and nudge again
 when the target position is already occupied.
+Before a new desktop paper is first shown, clamp its dimensions and position to
+the resolved Windows work area so large cascades or small screens do not create
+lost off-screen papers.
 The tray icon should be resilient to Windows Explorer/taskbar restarts by
 handling the `TaskbarCreated` broadcast and re-adding the notification icon.
 For PaperTodo parity, a `PaperTodo.ico` or `RePaperTodo.ico` file next to the

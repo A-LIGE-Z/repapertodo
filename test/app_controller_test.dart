@@ -77,6 +77,37 @@ void main() {
     expect(paper.y, 194);
   });
 
+  test('new papers are rescued into the Windows work area before showing',
+      () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workArea =
+        const PaperWorkArea(x: 0, y: 0, width: 360, height: 320);
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        papers: List.generate(
+          20,
+          (index) => PaperData(
+            id: 'existing-$index',
+            type: PaperTypes.todo,
+            title: 'Existing $index',
+          ),
+        ),
+      ),
+      platform: platform,
+    );
+
+    final paper = controller.createPaper(PaperTypes.todo);
+    await controller.showPaper(paper);
+
+    expect(platform.paperWindows.workAreaRequestIds, [paper.id]);
+    expect(paper.width, 280);
+    expect(paper.height, 240);
+    expect(paper.x, 72);
+    expect(paper.y, 72);
+    expect(platform.paperWindows.shownIds, [paper.id]);
+  });
+
   test('new right-edge deep capsule papers avoid the reserved strip', () async {
     final platform = _RecordingPlatformServices();
     platform.paperWindows.workArea =
@@ -131,7 +162,7 @@ void main() {
     final paper = controller.createPaper(PaperTypes.todo);
     await controller.showPaper(paper);
 
-    expect(platform.paperWindows.workAreaRequestIds, isEmpty);
+    expect(platform.paperWindows.workAreaRequestIds, [paper.id]);
     expect(paper.x, 140);
     expect(paper.y, 48);
   });
