@@ -501,6 +501,21 @@ void main() {
     );
   });
 
+  test('PaperTodo todo keyboard editing is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('Todo keyboard editing should follow PaperTodo'));
+    expect(design, contains('Enter with no modifiers inserts'));
+    expect(design, contains('Backspace'));
+    expect(design, contains('suppresses repeated'));
+    expect(app, contains('_handleTodoItemKeyEvent'));
+    expect(app, contains('_insertItemAfter'));
+    expect(app, contains('_deleteBlankTodoItemFromKeyboard'));
+    expect(app, contains('_allTodoTextColumnsBlank'));
+    expect(app, contains('_suppressTodoBackspaceUntilKeyUp'));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

@@ -5985,6 +5985,135 @@ void main() {
     ]);
   });
 
+  testWidgets('inserts todo items after the focused row from keyboard',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'keyboard-paper',
+            type: PaperTypes.todo,
+            title: 'Keyboard paper',
+            items: [
+              PaperItem(
+                id: 'first-item',
+                text: 'First item',
+                todoColumnCount: 2,
+                todoExtraColumns: [''],
+                todoColumnWidths: [2, 1],
+              ),
+              PaperItem(id: 'second-item', text: 'Second item', order: 1),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-todo-keyboard-insert.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('keyboard-paper-first-item-text')),
+        matching: find.byType(EditableText),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    final items = controller.state.papers.single.items;
+    expect(items.map((item) => item.text), [
+      'First item',
+      '',
+      'Second item',
+    ]);
+    expect(items[1].todoColumnCount, 2);
+    expect(items[1].todoExtraColumns, ['']);
+    expect(items[1].todoColumnWidths, [2, 1]);
+    expect(items.map((item) => item.order), [0, 1, 2]);
+  });
+
+  testWidgets('deletes blank todo items with backspace from keyboard',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'backspace-paper',
+            type: PaperTypes.todo,
+            title: 'Backspace paper',
+            items: [
+              PaperItem(id: 'before-item', text: 'Before item'),
+              PaperItem(
+                id: 'blank-item',
+                text: '   ',
+                order: 1,
+                todoColumnCount: 2,
+                todoExtraColumns: ['  '],
+                todoColumnWidths: [2, 1],
+              ),
+              PaperItem(id: 'after-item', text: 'After item', order: 2),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-todo-keyboard-backspace.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('backspace-paper-blank-item-text')),
+        matching: find.byType(EditableText),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+
+    final items = controller.state.papers.single.items;
+    expect(items.map((item) => item.id), ['before-item', 'after-item']);
+    expect(items.map((item) => item.order), [0, 1]);
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['backspace-paper']
+          ?.containsKey('blank-item'),
+      true,
+    );
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.single.items.map((item) => item.id),
+      ['before-item', 'blank-item', 'after-item'],
+    );
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['backspace-paper']
+          ?.containsKey('blank-item'),
+      isNot(true),
+    );
+  });
+
   testWidgets('toggles desktop pin and always-on-top as exclusive modes',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

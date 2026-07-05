@@ -4156,13 +4156,22 @@ class _TodoEditorState extends State<_TodoEditor> {
   static const _maxTodoUndoDepth = 100;
 
   final _todoFocusNode = FocusNode(debugLabel: 'todo-editor');
+  final _todoMainFieldFocusNodes = <String, FocusNode>{};
+  final _todoExtraFieldFocusNodes = <String, FocusNode>{};
   final _undoStack = <List<Map<String, Object?>>>[];
   final _redoStack = <List<Map<String, Object?>>>[];
   var _textFieldRevision = 0;
+  var _suppressTodoBackspaceUntilKeyUp = false;
 
   @override
   void dispose() {
     _todoFocusNode.dispose();
+    for (final focusNode in _todoMainFieldFocusNodes.values) {
+      focusNode.dispose();
+    }
+    for (final focusNode in _todoExtraFieldFocusNodes.values) {
+      focusNode.dispose();
+    }
     super.dispose();
   }
 
@@ -4583,6 +4592,45 @@ class _TodoEditorState extends State<_TodoEditor> {
     });
   }
 
+  FocusNode _mainTodoFieldFocusNode(PaperItem item) {
+    final focusNode = _todoMainFieldFocusNodes.putIfAbsent(
+      item.id,
+      () => FocusNode(debugLabel: 'todo-main-${item.id}'),
+    );
+    focusNode.onKeyEvent =
+        (node, event) => _handleTodoItemKeyEvent(node, item, event);
+    return focusNode;
+  }
+
+  FocusNode _extraTodoFieldFocusNode(PaperItem item, int index) {
+    final focusKey = '${item.id}:$index';
+    final focusNode = _todoExtraFieldFocusNodes.putIfAbsent(
+      focusKey,
+      () => FocusNode(debugLabel: 'todo-extra-$focusKey'),
+    );
+    focusNode.onKeyEvent =
+        (node, event) => _handleTodoItemKeyEvent(node, item, event);
+    return focusNode;
+  }
+
+  void _requestTodoItemFocus(String? itemId) {
+    if (itemId == null) {
+      _requestTodoFocus();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final focusNode = _todoMainFieldFocusNodes[itemId];
+      if (focusNode == null) {
+        _todoFocusNode.requestFocus();
+        return;
+      }
+      focusNode.requestFocus();
+    });
+  }
+
   void _undoTodoChange() {
     if (_undoStack.isEmpty) {
       return;
@@ -4612,6 +4660,62 @@ class _TodoEditorState extends State<_TodoEditor> {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleTodoItemKeyEvent(
+    FocusNode node,
+    PaperItem item,
+    KeyEvent event,
+  ) {
+    final editorShortcutResult = _handleTodoKeyEvent(node, event);
+    if (editorShortcutResult == KeyEventResult.handled) {
+      return editorShortcutResult;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.backspace &&
+        event is KeyUpEvent) {
+      _suppressTodoBackspaceUntilKeyUp = false;
+      return KeyEventResult.ignored;
+    }
+
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.enter &&
+        _noKeyboardModifiersPressed) {
+      _insertItemAfter(item);
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      if (_suppressTodoBackspaceUntilKeyUp) {
+        return KeyEventResult.handled;
+      }
+      if (_deleteBlankTodoItemFromKeyboard(item)) {
+        _suppressTodoBackspaceUntilKeyUp = true;
+        return KeyEventResult.handled;
+      }
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  bool get _noKeyboardModifiersPressed {
+    final keyboard = HardwareKeyboard.instance;
+    return !keyboard.isControlPressed &&
+        !keyboard.isShiftPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isMetaPressed;
+  }
+
+  Widget _todoItemKeyboardScope(PaperItem item, Widget child) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) => _handleTodoItemKeyEvent(node, item, event),
+      child: child,
+    );
   }
 
   Widget _todoColumnFields(
@@ -4669,40 +4773,44 @@ class _TodoEditorState extends State<_TodoEditor> {
     final colorScheme = Theme.of(context).colorScheme;
     return KeyedSubtree(
       key: ValueKey('${widget.paper.id}-${item.id}-text'),
-      child: TextFormField(
-        key: ValueKey(
-          '${widget.paper.id}-${item.id}-text-field-$_textFieldRevision',
-        ),
-        initialValue: item.text,
-        keyboardType: TextInputType.multiline,
-        minLines: 1,
-        maxLines: null,
-        textInputAction: TextInputAction.next,
-        decoration: InputDecoration(
-          border: item.todoColumnCount > 1
-              ? const OutlineInputBorder()
-              : InputBorder.none,
-          labelText: item.todoColumnCount > 1 ? 'Column 1' : null,
-          hintText: 'New item',
-          isDense: true,
-        ),
-        style: itemTextStyle?.copyWith(
-          color: item.done ? colorScheme.outline : colorScheme.onSurface,
-          decoration: item.done ? TextDecoration.lineThrough : null,
-        ),
-        inputFormatters: [
-          _TodoPasteTextInputFormatter(
-            onPaste: (value) => _handleMultiLinePaste(item, value),
+      child: _todoItemKeyboardScope(
+        item,
+        TextFormField(
+          key: ValueKey(
+            '${widget.paper.id}-${item.id}-text-field-$_textFieldRevision',
           ),
-        ],
-        onChanged: (value) {
-          if (_handleMultiLinePaste(item, value)) {
-            return;
-          }
-          item.text = value;
-          unawaited(widget.onChanged());
-        },
-        onFieldSubmitted: (_) => _addItem(),
+          focusNode: _mainTodoFieldFocusNode(item),
+          initialValue: item.text,
+          keyboardType: TextInputType.multiline,
+          minLines: 1,
+          maxLines: null,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(
+            border: item.todoColumnCount > 1
+                ? const OutlineInputBorder()
+                : InputBorder.none,
+            labelText: item.todoColumnCount > 1 ? 'Column 1' : null,
+            hintText: 'New item',
+            isDense: true,
+          ),
+          style: itemTextStyle?.copyWith(
+            color: item.done ? colorScheme.outline : colorScheme.onSurface,
+            decoration: item.done ? TextDecoration.lineThrough : null,
+          ),
+          inputFormatters: [
+            _TodoPasteTextInputFormatter(
+              onPaste: (value) => _handleMultiLinePaste(item, value),
+            ),
+          ],
+          onChanged: (value) {
+            if (_handleMultiLinePaste(item, value)) {
+              return;
+            }
+            item.text = value;
+            unawaited(widget.onChanged());
+          },
+          onFieldSubmitted: (_) => _insertItemAfter(item),
+        ),
       ),
     );
   }
@@ -4734,25 +4842,30 @@ class _TodoEditorState extends State<_TodoEditor> {
     TextStyle? itemTextStyle,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
-    return TextFormField(
-      key: ValueKey(
-        '${widget.paper.id}-${item.id}-column-${index + 2}',
+    return _todoItemKeyboardScope(
+      item,
+      TextFormField(
+        key: ValueKey(
+          '${widget.paper.id}-${item.id}-column-${index + 2}',
+        ),
+        focusNode: _extraTodoFieldFocusNode(item, index),
+        initialValue: item.todoExtraColumns[index],
+        textInputAction: TextInputAction.next,
+        decoration: InputDecoration(
+          border: const OutlineInputBorder(),
+          labelText: 'Column ${index + 2}',
+          isDense: true,
+        ),
+        style: itemTextStyle?.copyWith(
+          color: item.done ? colorScheme.outline : colorScheme.onSurface,
+          decoration: item.done ? TextDecoration.lineThrough : null,
+        ),
+        onChanged: (value) {
+          item.todoExtraColumns[index] = value;
+          unawaited(widget.onChanged());
+        },
+        onFieldSubmitted: (_) => _insertItemAfter(item),
       ),
-      initialValue: item.todoExtraColumns[index],
-      textInputAction: TextInputAction.next,
-      decoration: InputDecoration(
-        border: const OutlineInputBorder(),
-        labelText: 'Column ${index + 2}',
-        isDense: true,
-      ),
-      style: itemTextStyle?.copyWith(
-        color: item.done ? colorScheme.outline : colorScheme.onSurface,
-        decoration: item.done ? TextDecoration.lineThrough : null,
-      ),
-      onChanged: (value) {
-        item.todoExtraColumns[index] = value;
-        unawaited(widget.onChanged());
-      },
     );
   }
 
@@ -4800,26 +4913,30 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _addItem() {
-    _pushTodoUndoSnapshot();
     final inheritedItem =
         widget.paper.items.isEmpty ? null : widget.paper.items.last;
-    final inheritedColumnCount = inheritedItem?.todoColumnCount ?? 1;
-    final inheritedColumnWidths =
-        inheritedItem?.todoColumnWidths.length == inheritedColumnCount
-            ? inheritedItem!.todoColumnWidths
-            : <double>[];
+    _insertItemAfter(inheritedItem);
+  }
+
+  void _insertItemAfter(PaperItem? item, {String text = ''}) {
+    _pushTodoUndoSnapshot();
+    final insertIndex = item == null
+        ? widget.paper.items.length
+        : widget.paper.items.indexWhere(
+              (candidate) => candidate.id == item.id,
+            ) +
+            1;
+    final normalizedInsertIndex = insertIndex <= 0
+        ? widget.paper.items.length
+        : insertIndex.clamp(0, widget.paper.items.length).toInt();
+    final inheritedItem =
+        item ?? (widget.paper.items.isEmpty ? null : widget.paper.items.last);
+    final newItem = _newTodoItem(inheritedItem: inheritedItem, text: text);
     setState(() {
-      widget.paper.items.add(
-        PaperItem(
-          id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
-          order: widget.paper.items.length,
-          todoColumnCount: inheritedColumnCount,
-          todoExtraColumns: List.filled(inheritedColumnCount - 1, ''),
-          todoColumnWidths: [...inheritedColumnWidths],
-        ),
-      );
+      widget.paper.items.insert(normalizedInsertIndex, newItem);
       widget.paper.normalize();
     });
+    _requestTodoItemFocus(newItem.id);
     unawaited(widget.onChanged());
   }
 
@@ -4848,6 +4965,57 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
     ];
     widget.paper.items.insertAll(insertIndex + 1, newItems);
+  }
+
+  PaperItem _newTodoItem({PaperItem? inheritedItem, String text = ''}) {
+    final inheritedColumnCount = inheritedItem?.todoColumnCount ?? 1;
+    final inheritedColumnWidths =
+        inheritedItem?.todoColumnWidths.length == inheritedColumnCount
+            ? inheritedItem!.todoColumnWidths
+            : <double>[];
+    return PaperItem(
+      id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
+      text: text,
+      todoColumnCount: inheritedColumnCount,
+      todoExtraColumns: List.filled(inheritedColumnCount - 1, ''),
+      todoColumnWidths: [...inheritedColumnWidths],
+    );
+  }
+
+  bool _deleteBlankTodoItemFromKeyboard(PaperItem item) {
+    final removedIndex = widget.paper.items.indexWhere(
+      (candidate) => candidate.id == item.id,
+    );
+    if (removedIndex < 0 ||
+        widget.paper.items.length <= 1 ||
+        !_allTodoTextColumnsBlank(item)) {
+      return false;
+    }
+
+    final previousItem =
+        removedIndex > 0 ? widget.paper.items[removedIndex - 1] : null;
+    final nextItem = removedIndex + 1 < widget.paper.items.length
+        ? widget.paper.items[removedIndex + 1]
+        : null;
+    final focusTargetId = previousItem?.id ?? nextItem?.id;
+
+    _pushTodoUndoSnapshot();
+    setState(() {
+      widget.paper.items.removeAt(removedIndex);
+      if (widget.paper.items.isEmpty) {
+        widget.paper.items.add(_newTodoItem());
+      }
+      widget.paper.normalize();
+    });
+    widget.onItemDeleted(widget.paper, item);
+    _requestTodoItemFocus(focusTargetId ?? widget.paper.items.first.id);
+    unawaited(widget.onChanged());
+    return true;
+  }
+
+  bool _allTodoTextColumnsBlank(PaperItem item) {
+    return item.text.trim().isEmpty &&
+        item.todoExtraColumns.every((column) => column.trim().isEmpty);
   }
 
   void _deleteItem(BuildContext context, PaperItem item) {

@@ -140,6 +140,12 @@ until 2 minutes after due time; with interval mode, reminders may repeat after
 the configured interval once the due time is within that interval. The nearest
 scope chooses the candidate closest to the current time, not merely the oldest
 overdue item.
+Todo keyboard editing should follow PaperTodo: Enter with no modifiers inserts
+an empty item directly after the focused item and moves focus there. Backspace
+on an item whose main and extra text columns are blank deletes that item when
+more than one item exists, preserves at least one row, and suppresses repeated
+blank-row deletion until key up. These structural edits must use todo undo
+snapshots and deleted-item tombstones.
 Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,
