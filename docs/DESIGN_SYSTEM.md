@@ -65,6 +65,9 @@ edge inset constants.
 New papers created from an existing paper should follow PaperTodo's source
 paper behavior: open 30px down and right from the source, inherit always-on-top
 state, and keep the source capsule queue when one is set.
+New paper default titles should follow PaperTodo's first-unused-number rule:
+scan same-type default titles such as `Todo1` and `Todo3`, ignore custom
+titles, and assign the lowest missing positive number such as `Todo2`.
 New desktop papers should follow PaperTodo's cascade placement: start near
 `140,140`, offset each new paper by the existing paper count, and nudge again
 when the target position is already occupied.

@@ -8711,14 +8711,14 @@ void main() {
 
     expect(controller.state.papers, hasLength(2));
     expect(controller.state.papers.last.type, PaperTypes.todo);
-    expect(platform.paperWindows.shownTitles, contains('Todo2'));
+    expect(platform.paperWindows.shownTitles, contains('Todo1'));
     expect(store.savedState.papers.map((paper) => paper.id),
         contains('runtime-command-paper'));
     expect(
-        store.savedState.papers.map((paper) => paper.title), contains('Todo2'));
+        store.savedState.papers.map((paper) => paper.title), contains('Todo1'));
     expect(platform.tray.rebuildTitleSnapshots.last,
-        containsAll(['Runtime commands', 'Todo2']));
-    expect(find.text('Todo2'), findsOneWidget);
+        containsAll(['Runtime commands', 'Todo1']));
+    expect(find.text('Todo1'), findsOneWidget);
 
     startup.addCommand(const StartupCommand(StartupCommandKind.newNote));
     await tester.pumpAndSettle();
@@ -8729,9 +8729,9 @@ void main() {
     expect(store.savedState.papers.map((paper) => paper.id),
         contains('runtime-command-paper'));
     expect(store.savedState.papers.map((paper) => paper.title),
-        containsAll(['Todo2', 'Note1']));
+        containsAll(['Todo1', 'Note1']));
     expect(platform.tray.rebuildTitleSnapshots.last,
-        containsAll(['Runtime commands', 'Todo2', 'Note1']));
+        containsAll(['Runtime commands', 'Todo1', 'Note1']));
     expect(find.text('Note1'), findsOneWidget);
 
     startup.addCommand(const StartupCommand(StartupCommandKind.settings));

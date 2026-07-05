@@ -377,9 +377,34 @@ class RePaperTodoController {
   }
 
   String _defaultTitle(String type) {
-    final sameTypeCount =
-        state.papers.where((paper) => paper.type == type).length + 1;
-    return PaperTitles.defaultTitle(type, sameTypeCount);
+    return PaperTitles.defaultTitle(type, _nextTitleNumber(type));
+  }
+
+  int _nextTitleNumber(String type) {
+    final normalizedType = PaperTypes.normalize(type);
+    final defaultTitle = PaperTitles.defaultTitle(normalizedType, 1);
+    final defaultPrefix = defaultTitle.substring(0, defaultTitle.length - 1);
+    final usedNumbers = <int>{};
+
+    for (final paper in state.papers) {
+      if (PaperTypes.normalize(paper.type) != normalizedType) {
+        continue;
+      }
+      final title = PaperTitles.cleanCustomTitle(paper.title);
+      if (!title.startsWith(defaultPrefix)) {
+        continue;
+      }
+      final number = int.tryParse(title.substring(defaultPrefix.length));
+      if (number != null && number > 0) {
+        usedNumbers.add(number);
+      }
+    }
+
+    var next = 1;
+    while (usedNumbers.contains(next)) {
+      next++;
+    }
+    return next;
   }
 
   int titleNumberFor(PaperData paper) {

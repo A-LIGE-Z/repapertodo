@@ -54,6 +54,27 @@ void main() {
     expect(paper.y, 188);
   });
 
+  test('new paper titles use the first unused PaperTodo number', () {
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(id: 'todo-1', type: PaperTypes.todo, title: 'Todo1'),
+          PaperData(id: 'todo-custom', type: PaperTypes.todo, title: 'Inbox'),
+          PaperData(id: 'todo-3', type: PaperTypes.todo, title: 'Todo3'),
+          PaperData(id: 'note-1', type: PaperTypes.note, title: 'Note1'),
+          PaperData(id: 'note-3', type: PaperTypes.note, title: 'Note03'),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    final todo = controller.createPaper(PaperTypes.todo);
+    final note = controller.createPaper(PaperTypes.note);
+
+    expect(todo.title, 'Todo2');
+    expect(note.title, 'Note2');
+  });
+
   test('new papers nudge away from near-overlapping paper positions', () {
     final controller = RePaperTodoController(
       initialState: AppState(

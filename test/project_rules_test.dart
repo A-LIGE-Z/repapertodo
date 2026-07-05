@@ -509,6 +509,8 @@ void main() {
 
     expect(design, contains('open away from the deep capsule edge strip'));
     expect(design, contains('created from an existing paper'));
+    expect(design, contains('first-unused-number rule'));
+    expect(design, contains('lowest missing positive number'));
     expect(design, contains("100-paper limit"));
     expect(design, contains('Disabling capsule mode'));
     expect(design, contains('can no longer display as a capsule'));
@@ -530,6 +532,8 @@ void main() {
     expect(controller, contains('setPaperPinnedToDesktop'));
     expect(controller, contains('setPaperAlwaysOnTop'));
     expect(controller, contains('sourcePaper'));
+    expect(controller, contains('_nextTitleNumber'));
+    expect(controller, contains('usedNumbers.contains(next)'));
     expect(controller, contains('_initializeNewPaperCapsuleQueue'));
     expect(controller, contains('!_canPaperDisplayAsCapsule(paper)'));
     expect(controller, contains('_rescuePapersIntoWorkAreas'));
