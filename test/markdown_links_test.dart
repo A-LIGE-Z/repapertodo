@@ -28,6 +28,26 @@ void main() {
         'https://example.com/html');
   });
 
+  test('parses html anchor attributes like PaperTodo', () {
+    const unquoted =
+        '<a data-id=paper href=https://example.com/html class=x>HTML</a>';
+    const invalidAttribute = '<a broken href="https://example.com/bad">Bad</a>';
+    const unclosedQuote =
+        '<a href="https://example.com/bad>Bad</a> <a href="https://ok">Ok</a>';
+    const emptyContent = '<a href="https://example.com/empty"></a>';
+
+    expect(MarkdownLinks.hrefAt(unquoted, unquoted.indexOf('HTML')),
+        'https://example.com/html');
+    expect(
+        MarkdownLinks.hrefAt(invalidAttribute, invalidAttribute.indexOf('Bad')),
+        isNull);
+    expect(MarkdownLinks.hrefAt(unclosedQuote, unclosedQuote.indexOf('Bad')),
+        isNull);
+    expect(MarkdownLinks.hrefAt(unclosedQuote, unclosedQuote.indexOf('Ok')),
+        'https://ok');
+    expect(MarkdownLinks.spans(emptyContent), isEmpty);
+  });
+
   test('does not resolve links across line boundaries', () {
     const text = 'Read [PaperTodo](https://example.com\n/paper) later';
 

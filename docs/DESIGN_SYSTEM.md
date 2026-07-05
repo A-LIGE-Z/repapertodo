@@ -173,6 +173,9 @@ Markdown note link interaction should preserve PaperTodo edit/preview
 semantics: preview-mode links open directly, while edit-mode source links open
 only on Ctrl+click and otherwise keep normal text editing behavior. This applies
 to Markdown links and the supported single-line inline HTML `a href` links.
+Inline HTML anchor parsing should follow PaperTodo's small parser: attributes
+must be well-formed `name=value` pairs, quoted values must close, unquoted href
+values are allowed, and empty anchor bodies are not link hit targets.
 Markdown URL normalization should preserve PaperTodo's bare-host convenience:
 links beginning with `www.` open as `https://www...` in both preview mode and
 edit-mode source link handling before platform URI validation runs.

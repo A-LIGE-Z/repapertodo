@@ -834,6 +834,9 @@ void main() {
     expect(design, contains('edit-mode source links open'));
     expect(design, contains('Ctrl+click'));
     expect(design, contains('single-line inline HTML `a href` links'));
+    expect(design, contains('Inline HTML anchor parsing should follow'));
+    expect(design, contains('well-formed `name=value` pairs'));
+    expect(design, contains('empty anchor bodies'));
     expect(design, contains("bare-host convenience"));
     expect(design, contains('links beginning with `www.`'));
     expect(design, contains('Markdown local path links should preserve'));
@@ -856,6 +859,8 @@ void main() {
     expect(app, contains('MarkdownLinks.hrefAt'));
     expect(markdownLinks, contains('class MarkdownLinkSpan'));
     expect(markdownLinks, contains('_htmlAnchorLinks'));
+    expect(markdownLinks, contains('_tryParseHtmlOpeningAnchor'));
+    expect(markdownLinks, contains('_tryGetHtmlHrefAttribute'));
     expect(markdownLinks, contains("startsWith('www.')"));
     expect(markdownLinks, contains('_closedInlineCodeSpans'));
   });
