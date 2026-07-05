@@ -329,6 +329,86 @@ void main() {
     expect(platform.uriOpener.openedUris, ['https://example.com/paper']);
   });
 
+  testWidgets('opens editor markdown links only on control click',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'edit-link-note',
+            type: PaperTypes.note,
+            title: 'Edit link note',
+            content: '[Open edit](https://example.com/edit)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('edit-link-note-content'));
+    final editableFinder =
+        find.descendant(of: field, matching: find.byType(EditableText));
+    final editable = tester.widget<EditableText>(editableFinder);
+    editable.controller.selection = const TextSelection.collapsed(offset: 3);
+
+    await tester.tap(editableFinder);
+    await tester.pump();
+    await tester.pump();
+    expect(platform.uriOpener.openedUris, isEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    final controlPlatform = _RecordingPlatformServices();
+    final controlController = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'edit-link-note',
+            type: PaperTypes.note,
+            title: 'Edit link note',
+            content: '[Open edit](https://example.com/edit)',
+          ),
+        ],
+      ),
+      platform: controlPlatform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controlController,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final controlField = find.byKey(const ValueKey('edit-link-note-content'));
+    final controlEditableFinder =
+        find.descendant(of: controlField, matching: find.byType(EditableText));
+    final controlEditable = tester.widget<EditableText>(controlEditableFinder);
+    controlEditable.controller.selection =
+        const TextSelection.collapsed(offset: 3);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(controlEditableFinder);
+    await tester.pump();
+    await tester.pump();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+    expect(controlPlatform.uriOpener.openedUris, ['https://example.com/edit']);
+  });
+
   testWidgets('opens supported mailto markdown links', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

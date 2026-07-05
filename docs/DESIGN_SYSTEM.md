@@ -111,6 +111,10 @@ ordinary spaces in local filenames.
 Markdown links must reject raw or percent-encoded control characters and
 encoded authority separators before native URI launch while preserving ordinary
 encoded path characters.
+Markdown note link interaction should preserve PaperTodo edit/preview
+semantics: preview-mode links open directly, while edit-mode source links open
+only on Ctrl+click and otherwise keep normal text editing behavior. This applies
+to Markdown links and the supported single-line inline HTML `a href` links.
 Settings saves should keep ordinary app preferences while surfacing native
 integration failures such as hotkey, startup, or script-process errors.
 On narrow screens, keep one primary sync action directly reachable and move

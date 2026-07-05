@@ -577,6 +577,24 @@ void main() {
     expect(app, contains('_requestTodoItemFocus(item.id)'));
   });
 
+  test('PaperTodo markdown note link interaction is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+    final markdownLinks =
+        File('lib/src/core/model/markdown_links.dart').readAsStringSync();
+
+    expect(design, contains('Markdown note link interaction should preserve'));
+    expect(design, contains('preview-mode links open directly'));
+    expect(design, contains('edit-mode source links open'));
+    expect(design, contains('Ctrl+click'));
+    expect(design, contains('single-line inline HTML `a href` links'));
+    expect(app, contains('_handleEditorTap'));
+    expect(app, contains('HardwareKeyboard.instance.isControlPressed'));
+    expect(app, contains('MarkdownLinks.hrefAt'));
+    expect(markdownLinks, contains('class MarkdownLinkSpan'));
+    expect(markdownLinks, contains('_htmlAnchorLinks'));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

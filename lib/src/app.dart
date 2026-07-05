@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'app_controller.dart';
 import 'core/model/app_state.dart';
 import 'core/model/markdown_formatting.dart';
+import 'core/model/markdown_links.dart';
 import 'core/model/markdown_list_continuation.dart';
 import 'core/model/markdown_paste.dart';
 import 'core/model/note_canvas_element.dart';
@@ -2968,6 +2969,8 @@ class _NoteEditorState extends State<_NoteEditor> {
             key: ValueKey('${widget.paper.id}-content'),
             controller: _contentController,
             focusNode: _contentFocusNode,
+            onTapAlwaysCalled: true,
+            onTap: () => _handleEditorTap(context),
             minLines: minLines,
             maxLines: maxLines,
             decoration: const InputDecoration(
@@ -3192,6 +3195,27 @@ class _NoteEditorState extends State<_NoteEditor> {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  void _handleEditorTap(BuildContext context) {
+    if (!HardwareKeyboard.instance.isControlPressed) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final selection = _contentController.selection;
+      if (!selection.isValid) {
+        return;
+      }
+      final offset = selection.extentOffset;
+      final href = MarkdownLinks.hrefAt(_contentController.text, offset);
+      if (href == null) {
+        return;
+      }
+      _openMarkdownLink(context, href);
+    });
   }
 
   void _applyMarkdownFormat(
