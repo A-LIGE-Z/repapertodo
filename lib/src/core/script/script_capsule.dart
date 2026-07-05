@@ -1,3 +1,5 @@
+import 'dart:io';
+
 class ScriptCapsuleSpec {
   const ScriptCapsuleSpec({
     required this.engine,
@@ -65,7 +67,7 @@ class ScriptCapsuleSpec {
               ? commonIndent
               : _leadingWhitespaceLength(line),
         ),
-    ].join('\n');
+    ].join(Platform.lineTerminator);
   }
 
   static _ScriptCapsuleMarkerSpec? _markerSpec(String firstLine) {

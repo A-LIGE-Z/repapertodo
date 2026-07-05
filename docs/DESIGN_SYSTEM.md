@@ -157,6 +157,10 @@ engines before invoking native launch paths.
 Collapsed note papers whose content starts with a PaperTodo script capsule
 marker should behave as script capsules: primary click runs the script without
 expanding the note, while secondary click opens the note for editing.
+Script capsule parsing should preserve PaperTodo marker and indentation rules:
+recognized markers are read only from the first line, shared indentation is
+removed from the script body, and the platform line terminator is used before
+the normalized script body is handed to the host.
 Platform URI and external-file hosts must trim and reject blank launch
 arguments before invoking native method channels. Platform URI hosts must also
 reject raw or percent-encoded control characters.

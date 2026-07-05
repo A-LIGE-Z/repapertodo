@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/repapertodo.dart';
 
@@ -33,9 +35,12 @@ void main() {
 
     expect(
       spec!.script,
-      'if (\$true) {\n'
-      '  Write-Output ok\n'
-      '}\n',
+      [
+        'if (\$true) {',
+        '  Write-Output ok',
+        '}',
+        '',
+      ].join(Platform.lineTerminator),
     );
   });
 }

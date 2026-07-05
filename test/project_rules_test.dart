@@ -965,9 +965,14 @@ void main() {
     expect(design, contains('Collapsed note papers whose content starts'));
     expect(design, contains('primary click runs the script'));
     expect(design, contains('secondary click opens the note for editing'));
+    expect(design, contains('platform line terminator'));
     expect(app, contains('-script-capsule'));
     expect(app, contains('_collapsedScriptCapsule'));
     expect(app, contains('_openCollapsedScriptCapsuleForEditing'));
+    expect(
+      File('lib/src/core/script/script_capsule.dart').readAsStringSync(),
+      contains('Platform.lineTerminator'),
+    );
     expect(dartHost, contains('Windows script capsule must not be blank.'));
     expect(dartHost, contains('Unsupported Windows script capsule engine.'));
     expect(runner, contains('IsAllowedScriptCapsuleEngine'));
