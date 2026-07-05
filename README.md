@@ -38,3 +38,10 @@ To also create or update the GitHub Release for the version in `pubspec.yaml`:
 ```powershell
 .\scripts\release.ps1 -PublishGitHubRelease
 ```
+
+If dependencies are already cached and network access to pub.dev is unreliable,
+use offline package resolution:
+
+```powershell
+.\scripts\release.ps1 -OfflinePubGet
+```

@@ -1,6 +1,7 @@
 param(
   [switch]$SkipTests,
   [switch]$SkipBuild,
+  [switch]$OfflinePubGet,
   [switch]$PublishGitHubRelease,
   [string]$TagName = "",
   [string]$ReleaseTitle = ""
@@ -64,21 +65,31 @@ if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) {
   $ReleaseTitle = "RePaperTodo $version"
 }
 
+if (-not $SkipTests -or -not $SkipBuild) {
+  Invoke-Step "Resolve Flutter packages" {
+    if ($OfflinePubGet) {
+      & $flutter pub get --offline
+    } else {
+      & $flutter pub get
+    }
+  }
+}
+
 if (-not $SkipTests) {
   Invoke-Step "Run Flutter tests" {
-    & $flutter test
+    & $flutter test --no-pub
   }
   Invoke-Step "Run Flutter analyze" {
-    & $flutter analyze
+    & $flutter analyze --no-pub
   }
 }
 
 if (-not $SkipBuild) {
   Invoke-Step "Build Windows release" {
-    & $flutter build windows --release
+    & $flutter build windows --release --no-pub
   }
   Invoke-Step "Build Android release APK" {
-    & $flutter build apk --release
+    & $flutter build apk --release --no-pub
   }
 }
 

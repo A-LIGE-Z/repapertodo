@@ -655,10 +655,12 @@ void main() {
 
     expect(script, contains(r'$env:HTTPS_PROXY = ""'));
     expect(script, contains('flutter.bat'));
-    expect(script, contains(r'& $flutter test'));
-    expect(script, contains(r'& $flutter analyze'));
-    expect(script, contains(r'& $flutter build windows --release'));
-    expect(script, contains(r'& $flutter build apk --release'));
+    expect(script, contains(r'[switch]$OfflinePubGet'));
+    expect(script, contains(r'& $flutter pub get --offline'));
+    expect(script, contains(r'& $flutter test --no-pub'));
+    expect(script, contains(r'& $flutter analyze --no-pub'));
+    expect(script, contains(r'& $flutter build windows --release --no-pub'));
+    expect(script, contains(r'& $flutter build apk --release --no-pub'));
     expect(script, contains('Compress-Archive'));
     expect(script, contains('Get-FileHash -Algorithm SHA256'));
     expect(script, contains(r'Set-Content -LiteralPath $checksumsFile'));
@@ -672,6 +674,7 @@ void main() {
     expect(script, contains('Android release APK for Android 14+'));
     expect(readme, contains(r'.\scripts\release.ps1'));
     expect(readme, contains('-PublishGitHubRelease'));
+    expect(readme, contains('-OfflinePubGet'));
     expect(readme, contains('SHA-256 checksum file'));
   });
 }
