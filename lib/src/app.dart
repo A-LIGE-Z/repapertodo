@@ -31,6 +31,8 @@ import 'ui/sync_settings_dialog.dart';
 
 const _externalMarkdownExportRetention = Duration(days: 7);
 const _maxExternalMarkdownPaperIdFileNameLength = 96;
+const _todoReminderLeadTime = Duration(minutes: 10);
+const _todoReminderGraceTime = Duration(minutes: 2);
 const _yaHeiFontFamily = 'Microsoft YaHei UI';
 const _yaHeiFontFamilyFallback = [
   'Microsoft YaHei',
@@ -1293,6 +1295,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         controller.state.usePersistentPowerShellProcess;
     final previousPreferPowerShell7 = controller.state.preferPowerShell7;
     final previousHideScriptRunWindow = controller.state.hideScriptRunWindow;
+    final previousUseTodoReminderInterval =
+        controller.state.useTodoReminderInterval;
+    final previousTodoReminderIntervalValue =
+        controller.state.todoReminderIntervalValue;
+    final previousTodoReminderIntervalUnit =
+        controller.state.todoReminderIntervalUnit;
     final result = await showSyncSettingsDialog(
       context: context,
       initialSettings: controller.state.sync,
@@ -1378,6 +1386,13 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (syncSettingsChanged) {
       _localEditSyncGeneration += 1;
       _clearPendingLocalEditSync();
+    }
+    final reminderCadenceChanged = result.useTodoReminderInterval !=
+            previousUseTodoReminderInterval ||
+        result.todoReminderIntervalValue != previousTodoReminderIntervalValue ||
+        result.todoReminderIntervalUnit != previousTodoReminderIntervalUnit;
+    if (reminderCadenceChanged) {
+      _lastTodoReminderAt.clear();
     }
     setState(() {
       controller.state.sync = result.sync;
@@ -1848,9 +1863,6 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   void _restartTodoReminderTimer() {
     _todoReminderTimer?.cancel();
     _todoReminderTimer = null;
-    if (!controller.state.useTodoReminderInterval) {
-      return;
-    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _checkTodoReminders();
@@ -1863,23 +1875,25 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   void _checkTodoReminders() {
-    if (!mounted || !controller.state.useTodoReminderInterval) {
+    if (!mounted) {
       return;
     }
     final now = DateTime.now();
-    final dueItems = _dueReminderCandidates(now);
-    if (dueItems.isEmpty) {
-      return;
-    }
-    final candidates =
-        controller.state.todoReminderScope == TodoReminderScopes.nearest
-            ? [dueItems.first]
-            : dueItems;
-    final readyCandidates = candidates
+    final readyCandidates = _reminderCandidates(now)
         .where((candidate) => _shouldShowReminder(candidate, now))
         .toList();
     if (readyCandidates.isEmpty) {
       return;
+    }
+    if (controller.state.todoReminderScope == TodoReminderScopes.nearest &&
+        readyCandidates.length > 1) {
+      readyCandidates.sort((a, b) {
+        final distance = _distanceFromNow(a, now).compareTo(
+          _distanceFromNow(b, now),
+        );
+        return distance == 0 ? a.dueAt.compareTo(b.dueAt) : distance;
+      });
+      readyCandidates.removeRange(1, readyCandidates.length);
     }
     for (final candidate in readyCandidates) {
       _lastTodoReminderAt[candidate.key] = now;
@@ -1887,7 +1901,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _showTodoReminder(readyCandidates);
   }
 
-  List<_TodoReminderCandidate> _dueReminderCandidates(DateTime now) {
+  List<_TodoReminderCandidate> _reminderCandidates(DateTime now) {
     final candidates = <_TodoReminderCandidate>[];
     for (final paper in controller.state.papers) {
       if (!paper.isTodo) {
@@ -1898,7 +1912,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           continue;
         }
         final dueAt = DateTime.tryParse(item.dueAtLocal ?? '')?.toLocal();
-        if (dueAt == null || dueAt.isAfter(now)) {
+        if (dueAt == null) {
           continue;
         }
         candidates.add(_TodoReminderCandidate(paper, item, dueAt));
@@ -1910,10 +1924,26 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   bool _shouldShowReminder(_TodoReminderCandidate candidate, DateTime now) {
     final lastReminderAt = _lastTodoReminderAt[candidate.key];
-    if (lastReminderAt == null) {
-      return true;
+    if (controller.state.useTodoReminderInterval) {
+      final interval = _reminderInterval(candidate.item);
+      if (candidate.dueAt.isAfter(now.add(interval))) {
+        return false;
+      }
+      return lastReminderAt == null ||
+          now.difference(lastReminderAt) >= interval;
     }
-    return now.difference(lastReminderAt) >= _reminderInterval(candidate.item);
+    if (now.isBefore(candidate.dueAt.subtract(_todoReminderLeadTime)) ||
+        now.isAfter(candidate.dueAt.add(_todoReminderGraceTime))) {
+      return false;
+    }
+    return lastReminderAt == null;
+  }
+
+  Duration _distanceFromNow(_TodoReminderCandidate candidate, DateTime now) {
+    final difference = candidate.dueAt.difference(now);
+    return difference.isNegative
+        ? Duration(microseconds: -difference.inMicroseconds)
+        : difference;
   }
 
   Duration _reminderInterval(PaperItem item) {
@@ -1963,7 +1993,7 @@ class _TodoReminderCandidate {
   final PaperItem item;
   final DateTime dueAt;
 
-  String get key => '${paper.id}:${item.id}';
+  String get key => '${item.id}|${item.dueAtLocal ?? ''}';
 }
 
 class _ReminderIntervalSelection {

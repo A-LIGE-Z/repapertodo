@@ -134,6 +134,12 @@ keyboard and touch users can recover without hunting through the dialog.
 Todo rows on narrow screens should keep the checkbox and text field dominant;
 secondary item actions such as due date, reminder, columns, linked notes, and
 delete belong in a per-item overflow menu.
+Todo due reminders should follow PaperTodo's timing model: without interval
+mode, each unfinished due item can remind once from 10 minutes before due time
+until 2 minutes after due time; with interval mode, reminders may repeat after
+the configured interval once the due time is within that interval. The nearest
+scope chooses the candidate closest to the current time, not merely the oldest
+overdue item.
 Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,

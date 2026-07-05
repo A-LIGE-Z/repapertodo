@@ -5552,6 +5552,102 @@ void main() {
     expect(find.byTooltip('Back to board'), findsOneWidget);
   });
 
+  testWidgets('shows one-shot reminders before todo due time', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: false,
+        todoReminderBubbleDurationSeconds: 5,
+        papers: [
+          PaperData(
+            id: 'future-reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Soon',
+            items: [
+              PaperItem(
+                id: 'future-reminder-item',
+                text: 'Submit paper',
+                dueAtLocal: DateTime.now()
+                    .add(const Duration(minutes: 5))
+                    .toIso8601String(),
+              ),
+              PaperItem(
+                id: 'too-far-reminder-item',
+                text: 'Too far away',
+                dueAtLocal: DateTime.now()
+                    .add(const Duration(minutes: 20))
+                    .toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Reminder: Soon - Submit paper'), findsOneWidget);
+    expect(find.text('Reminder: Soon - Too far away'), findsNothing);
+  });
+
+  testWidgets('nearest todo reminder uses absolute due-time distance',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final now = DateTime.now();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        todoReminderIntervalValue: 10,
+        todoReminderScope: TodoReminderScopes.nearest,
+        todoReminderBubbleDurationSeconds: 5,
+        papers: [
+          PaperData(
+            id: 'nearest-reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Paper',
+            items: [
+              PaperItem(
+                id: 'far-overdue-reminder-item',
+                text: 'Far task',
+                dueAtLocal:
+                    now.subtract(const Duration(minutes: 9)).toIso8601String(),
+              ),
+              PaperItem(
+                id: 'near-overdue-reminder-item',
+                text: 'Near task',
+                dueAtLocal:
+                    now.subtract(const Duration(minutes: 1)).toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Reminder: Paper - Near task'), findsOneWidget);
+    expect(find.text('Reminder: Paper - Far task'), findsNothing);
+  });
+
   testWidgets('sets item reminder intervals', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

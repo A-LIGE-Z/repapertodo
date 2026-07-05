@@ -483,6 +483,24 @@ void main() {
     expect(app, isNot(contains('todoColumnCount < 8')));
   });
 
+  test('PaperTodo todo reminder timing is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('10 minutes before due time'));
+    expect(design, contains('2 minutes after due time'));
+    expect(design, contains('closest to the current time'));
+    expect(app, contains('_todoReminderLeadTime = Duration(minutes: 10)'));
+    expect(app, contains('_todoReminderGraceTime = Duration(minutes: 2)'));
+    expect(app, contains('candidate.dueAt.subtract(_todoReminderLeadTime)'));
+    expect(app, contains('candidate.dueAt.add(_todoReminderGraceTime)'));
+    expect(app, contains('_distanceFromNow'));
+    expect(
+      app,
+      contains(r"String get key => '${item.id}|${item.dueAtLocal ?? ''}'"),
+    );
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
