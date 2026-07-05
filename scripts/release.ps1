@@ -28,6 +28,18 @@ function Assert-Command {
   }
 }
 
+function Invoke-Native {
+  param(
+    [string]$Name,
+    [scriptblock]$Action
+  )
+
+  & $Action
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Name failed with exit code $LASTEXITCODE."
+  }
+}
+
 function Get-FlutterVersion {
   $pubspec = Get-Content -LiteralPath "pubspec.yaml"
   $versionLine = $pubspec | Where-Object { $_ -match "^version:\s*(.+)$" } | Select-Object -First 1
@@ -68,28 +80,40 @@ if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) {
 if (-not $SkipTests -or -not $SkipBuild) {
   Invoke-Step "Resolve Flutter packages" {
     if ($OfflinePubGet) {
-      & $flutter pub get --offline
+      Invoke-Native "flutter pub get --offline" {
+        & $flutter pub get --offline
+      }
     } else {
-      & $flutter pub get
+      Invoke-Native "flutter pub get" {
+        & $flutter pub get
+      }
     }
   }
 }
 
 if (-not $SkipTests) {
   Invoke-Step "Run Flutter tests" {
-    & $flutter test --no-pub
+    Invoke-Native "flutter test" {
+      & $flutter test --no-pub
+    }
   }
   Invoke-Step "Run Flutter analyze" {
-    & $flutter analyze --no-pub
+    Invoke-Native "flutter analyze" {
+      & $flutter analyze --no-pub
+    }
   }
 }
 
 if (-not $SkipBuild) {
   Invoke-Step "Build Windows release" {
-    & $flutter build windows --release --no-pub
+    Invoke-Native "flutter build windows" {
+      & $flutter build windows --release --no-pub
+    }
   }
   Invoke-Step "Build Android release APK" {
-    & $flutter build apk --release --no-pub
+    Invoke-Native "flutter build apk" {
+      & $flutter build apk --release --no-pub
+    }
   }
 }
 
@@ -132,14 +156,22 @@ Get-Item -LiteralPath $windowsZip, $androidApk, $checksumsFile |
 
 if ($PublishGitHubRelease) {
   Invoke-Step "Publish GitHub release $TagName" {
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     $existingRelease = & gh release view $TagName --json tagName 2>$null
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($existingRelease)) {
-      & gh release upload $TagName $windowsZip $androidApk $checksumsFile --clobber
+    $releaseViewExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+    if ($releaseViewExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($existingRelease)) {
+      Invoke-Native "gh release upload $TagName" {
+        & gh release upload $TagName $windowsZip $androidApk $checksumsFile --clobber
+      }
     } else {
-      & gh release create $TagName $windowsZip $androidApk $checksumsFile `
-        --target main `
-        --title $ReleaseTitle `
-        --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n`nValidation:`n- flutter test`n- flutter analyze`n- flutter build windows --release`n- flutter build apk --release"
+      Invoke-Native "gh release create $TagName" {
+        & gh release create $TagName $windowsZip $androidApk $checksumsFile `
+          --target main `
+          --title $ReleaseTitle `
+          --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n`nValidation:`n- flutter test --no-pub`n- flutter analyze --no-pub`n- flutter build windows --release --no-pub`n- flutter build apk --release --no-pub"
+      }
     }
   }
 }

@@ -4464,8 +4464,9 @@ class _TodoEditorState extends State<_TodoEditor> {
       ReorderableDragStartListener(
         key: ValueKey('${widget.paper.id}-${item.id}-drag-handle'),
         index: itemIndex,
-        child: Tooltip(
-          message: _tooltipLabel(widget.enableToolTips, 'Drag to reorder'),
+        child: _maybeTooltip(
+          enabled: widget.enableToolTips,
+          message: 'Drag to reorder',
           child: SizedBox(
             width: visualSpec.controlExtent,
             height: visualSpec.controlExtent,
@@ -4637,6 +4638,17 @@ class _TodoEditorState extends State<_TodoEditor> {
         ],
       ),
     );
+  }
+
+  Widget _maybeTooltip({
+    required bool enabled,
+    required String message,
+    required Widget child,
+  }) {
+    if (!enabled) {
+      return child;
+    }
+    return Tooltip(message: message, child: child);
   }
 
   void _handleCompactTodoAction({

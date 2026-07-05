@@ -656,6 +656,8 @@ void main() {
     expect(script, contains(r'$env:HTTPS_PROXY = ""'));
     expect(script, contains('flutter.bat'));
     expect(script, contains(r'[switch]$OfflinePubGet'));
+    expect(script, contains('function Invoke-Native'));
+    expect(script, contains(r'failed with exit code $LASTEXITCODE'));
     expect(script, contains(r'& $flutter pub get --offline'));
     expect(script, contains(r'& $flutter test --no-pub'));
     expect(script, contains(r'& $flutter analyze --no-pub'));
@@ -669,6 +671,7 @@ void main() {
     expect(script, contains(r'repapertodo-$artifactVersion-sha256.txt'));
     expect(script, contains('gh release create'));
     expect(script, contains('gh release upload'));
+    expect(script, contains(r'$releaseViewExitCode'));
     expect(script, contains(r'$checksumsFile --clobber'));
     expect(script, contains('SHA-256 checksums for release artifacts.'));
     expect(script, contains('Android release APK for Android 14+'));
