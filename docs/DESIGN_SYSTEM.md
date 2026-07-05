@@ -115,6 +115,9 @@ Markdown note link interaction should preserve PaperTodo edit/preview
 semantics: preview-mode links open directly, while edit-mode source links open
 only on Ctrl+click and otherwise keep normal text editing behavior. This applies
 to Markdown links and the supported single-line inline HTML `a href` links.
+Markdown notes should preserve PaperTodo's focus-driven reading flow: Markdown
+enabled notes open in preview mode by default, clicking the preview body enters
+the source editor, and losing editor focus returns the note to preview mode.
 Settings saves should keep ordinary app preferences while surfacing native
 integration failures such as hotkey, startup, or script-process errors.
 On narrow screens, keep one primary sync action directly reachable and move

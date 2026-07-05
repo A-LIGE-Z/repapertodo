@@ -2836,6 +2836,7 @@ class _NoteEditorState extends State<_NoteEditor> {
   late final TextEditingController _contentController;
   late final FocusNode _contentFocusNode;
   late String _view = _defaultView(widget.markdownRenderMode);
+  bool _toolbarInteractionActive = false;
   String? _selectedCanvasElementId;
 
   @override
@@ -2843,6 +2844,7 @@ class _NoteEditorState extends State<_NoteEditor> {
     super.initState();
     _contentController = TextEditingController(text: widget.paper.content);
     _contentFocusNode = FocusNode();
+    _contentFocusNode.addListener(_handleEditorFocusChange);
   }
 
   @override
@@ -2871,6 +2873,7 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   @override
   void dispose() {
+    _contentFocusNode.removeListener(_handleEditorFocusChange);
     _contentFocusNode.dispose();
     _contentController.dispose();
     super.dispose();
@@ -2997,54 +3000,57 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   Widget _markdownToolbar(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 600;
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      children: [
-        _formatButton(
-          tooltip: 'Bold (Ctrl+B)',
-          icon: Icons.format_bold,
-          onPressed: _formatBold,
-        ),
-        _formatButton(
-          tooltip: 'Italic (Ctrl+I)',
-          icon: Icons.format_italic,
-          onPressed: _formatItalic,
-        ),
-        if (!compact) ...[
+    return Listener(
+      onPointerDown: (_) => _beginToolbarInteraction(),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: [
           _formatButton(
-            tooltip: 'Strikethrough',
-            icon: Icons.strikethrough_s,
-            onPressed: _formatStrikethrough,
+            tooltip: 'Bold (Ctrl+B)',
+            icon: Icons.format_bold,
+            onPressed: _formatBold,
           ),
           _formatButton(
-            tooltip: 'Heading',
-            icon: Icons.title,
-            onPressed: _formatHeading,
+            tooltip: 'Italic (Ctrl+I)',
+            icon: Icons.format_italic,
+            onPressed: _formatItalic,
           ),
+          if (!compact) ...[
+            _formatButton(
+              tooltip: 'Strikethrough',
+              icon: Icons.strikethrough_s,
+              onPressed: _formatStrikethrough,
+            ),
+            _formatButton(
+              tooltip: 'Heading',
+              icon: Icons.title,
+              onPressed: _formatHeading,
+            ),
+            _formatButton(
+              tooltip: 'Quote',
+              icon: Icons.format_quote,
+              onPressed: _formatQuote,
+            ),
+            _formatButton(
+              tooltip: 'List',
+              icon: Icons.format_list_bulleted,
+              onPressed: _formatList,
+            ),
+            _formatButton(
+              tooltip: 'Code block',
+              icon: Icons.code,
+              onPressed: _formatCodeBlock,
+            ),
+          ],
           _formatButton(
-            tooltip: 'Quote',
-            icon: Icons.format_quote,
-            onPressed: _formatQuote,
+            tooltip: 'Insert link (Ctrl+K)',
+            icon: Icons.link,
+            onPressed: _insertMarkdownLink,
           ),
-          _formatButton(
-            tooltip: 'List',
-            icon: Icons.format_list_bulleted,
-            onPressed: _formatList,
-          ),
-          _formatButton(
-            tooltip: 'Code block',
-            icon: Icons.code,
-            onPressed: _formatCodeBlock,
-          ),
+          if (compact) _compactMarkdownActions(),
         ],
-        _formatButton(
-          tooltip: 'Insert link (Ctrl+K)',
-          icon: Icons.link,
-          onPressed: _insertMarkdownLink,
-        ),
-        if (compact) _compactMarkdownActions(),
-      ],
+      ),
     );
   }
 
@@ -3065,7 +3071,12 @@ class _NoteEditorState extends State<_NoteEditor> {
       key: const ValueKey('compact-markdown-toolbar-actions'),
       tooltip: 'More markdown actions',
       icon: const Icon(Icons.more_vert),
-      onSelected: _handleCompactMarkdownAction,
+      onOpened: _beginToolbarInteraction,
+      onCanceled: _endToolbarInteraction,
+      onSelected: (value) {
+        _handleCompactMarkdownAction(value);
+        _endToolbarInteraction();
+      },
       itemBuilder: (context) => [
         _markdownMenuItem(
           value: _markdownActionStrikethrough,
@@ -3178,6 +3189,20 @@ class _NoteEditorState extends State<_NoteEditor> {
     }
   }
 
+  void _beginToolbarInteraction() {
+    _toolbarInteractionActive = true;
+  }
+
+  void _endToolbarInteraction() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _toolbarInteractionActive = false;
+      _handleEditorFocusChange();
+    });
+  }
+
   KeyEventResult _handleMarkdownKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
       return KeyEventResult.ignored;
@@ -3216,6 +3241,17 @@ class _NoteEditorState extends State<_NoteEditor> {
       }
       _openMarkdownLink(context, href);
     });
+  }
+
+  void _handleEditorFocusChange() {
+    final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
+    if (_contentFocusNode.hasFocus ||
+        _toolbarInteractionActive ||
+        mode == MarkdownRenderModes.off ||
+        _safeView(mode) != _viewEdit) {
+      return;
+    }
+    setState(() => _view = _viewPreview);
   }
 
   void _applyMarkdownFormat(
@@ -3325,35 +3361,55 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   Widget _preview(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 112),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: MarkdownBody(
-            data: widget.paper.content.trim().isEmpty
-                ? '_No note content._'
-                : widget.paper.content,
-            onTapLink: (text, href, title) => _openMarkdownLink(context, href),
-            styleSheet:
-                MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-              p: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.apply(
-                    fontSizeFactor: widget.textZoom,
-                  )
-                  .copyWith(height: widget.lineSpacing),
+    return GestureDetector(
+      key: ValueKey('${widget.paper.id}-preview'),
+      behavior: HitTestBehavior.opaque,
+      onTap: _enterEditorFromPreview,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 112),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: MarkdownBody(
+              data: widget.paper.content.trim().isEmpty
+                  ? '_No note content._'
+                  : widget.paper.content,
+              onTapLink: (text, href, title) =>
+                  _openMarkdownLink(context, href),
+              styleSheet:
+                  MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                p: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.apply(
+                      fontSizeFactor: widget.textZoom,
+                    )
+                    .copyWith(height: widget.lineSpacing),
+              ),
+              selectable: true,
             ),
-            selectable: true,
           ),
         ),
       ),
     );
+  }
+
+  void _enterEditorFromPreview() {
+    final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
+    if (mode == MarkdownRenderModes.off) {
+      return;
+    }
+    setState(() => _view = _viewEdit);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _contentFocusNode.requestFocus();
+    });
   }
 
   void _openMarkdownLink(BuildContext context, String? href) {
@@ -3385,9 +3441,9 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   String _defaultView(String mode) {
-    return MarkdownRenderModes.normalize(mode) == MarkdownRenderModes.enhanced
-        ? _viewSplit
-        : _viewEdit;
+    return MarkdownRenderModes.normalize(mode) == MarkdownRenderModes.off
+        ? _viewEdit
+        : _viewPreview;
   }
 
   Widget _canvasSection() {

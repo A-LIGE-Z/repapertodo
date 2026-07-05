@@ -289,10 +289,66 @@ void main() {
     );
 
     expect(find.text('Edit'), findsOneWidget);
-    expect(find.text('Preview'), findsOneWidget);
-    expect(find.text('Split'), findsWidgets);
+    expect(find.byKey(const ValueKey('note-paper-preview')), findsOneWidget);
+    expect(find.text('Split'), findsOneWidget);
+    expect(find.byKey(const ValueKey('note-status-mode')), findsOneWidget);
     expect(find.text('Research note'), findsOneWidget);
     expect(find.text('Extract claims'), findsOneWidget);
+  });
+
+  testWidgets('markdown notes default to preview and click into editor',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'preview-first-note',
+            type: PaperTypes.note,
+            title: 'Preview first note',
+            content: '# Preview first\n\nClick body to edit.',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('preview-first-note-preview')),
+        findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('preview-first-note-content')), findsNothing);
+    expect(find.text('Preview first'), findsOneWidget);
+    expect(find.byKey(const ValueKey('note-status-mode')), findsOneWidget);
+    expect(find.text('Preview'), findsWidgets);
+
+    await tester.tap(find.byKey(const ValueKey('preview-first-note-preview')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('preview-first-note-content')),
+        findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('preview-first-note-preview')), findsNothing);
+    expect(find.text('Edit'), findsWidgets);
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('preview-first-note-preview')),
+        findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('preview-first-note-content')), findsNothing);
   });
 
   testWidgets('opens markdown preview links', (tester) async {
@@ -357,6 +413,7 @@ void main() {
       ),
     );
 
+    await _enterNoteEditor(tester, 'edit-link-note');
     final field = find.byKey(const ValueKey('edit-link-note-content'));
     final editableFinder =
         find.descendant(of: field, matching: find.byType(EditableText));
@@ -394,6 +451,7 @@ void main() {
       ),
     );
 
+    await _enterNoteEditor(tester, 'edit-link-note');
     final controlField = find.byKey(const ValueKey('edit-link-note-content'));
     final controlEditableFinder =
         find.descendant(of: controlField, matching: find.byType(EditableText));
@@ -828,7 +886,7 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('note-status-bar')), findsOneWidget);
-    expect(find.text('Split'), findsNWidgets(2));
+    expect(find.text('Split'), findsOneWidget);
     expect(find.text('12 chars | 1 line | 2 elements'), findsOneWidget);
     expect(find.byKey(const ValueKey('note-status-zoom')), findsOneWidget);
 
@@ -1063,6 +1121,7 @@ void main() {
       ),
     );
 
+    await _enterNoteEditor(tester, 'markdown-paste-note');
     await tester.enterText(
       find.byKey(const ValueKey('markdown-paste-note-content')),
       '${List.filled(6500, 'x').join()}\r\n'
@@ -1103,6 +1162,7 @@ void main() {
       ),
     );
 
+    await _enterNoteEditor(tester, 'markdown-toolbar-note');
     await tester.tap(find.byTooltip('Insert link (Ctrl+K)'));
     await tester.pump();
 
@@ -1148,6 +1208,7 @@ void main() {
       ),
     );
 
+    await _enterNoteEditor(tester, 'compact-markdown-note');
     expect(
       find.byKey(const ValueKey('compact-markdown-toolbar-actions')),
       findsOneWidget,
@@ -1199,6 +1260,7 @@ void main() {
       ),
     );
 
+    await _enterNoteEditor(tester, 'markdown-shortcut-note');
     await tester.enterText(field, 'Body');
     await tester.pump();
     await _pressControlShortcut(tester, LogicalKeyboardKey.keyB);
@@ -8314,6 +8376,13 @@ Future<void> _pressControlShortcut(
   await tester.sendKeyDownEvent(key);
   await tester.sendKeyUpEvent(key);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+}
+
+Future<void> _enterNoteEditor(WidgetTester tester, String paperId) async {
+  await tester.tap(find.byKey(ValueKey('$paperId-preview')));
+  await tester.pump();
+  await tester.pump();
+  expect(find.byKey(ValueKey('$paperId-content')), findsOneWidget);
 }
 
 class _RecoverySnapshotSyncService extends AppSyncService {
