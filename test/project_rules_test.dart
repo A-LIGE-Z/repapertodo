@@ -512,6 +512,7 @@ void main() {
     expect(design, contains("100-paper limit"));
     expect(design, contains('Disabling capsule mode'));
     expect(design, contains('can no longer display as a capsule'));
+    expect(design, contains('Pinning a paper to the desktop'));
     expect(constants, contains('capsuleWidth = 92.0'));
     expect(constants, contains('deepCapsuleExpandedEdgeInset = 36.0'));
     expect(constants, contains('deepCapsuleGap = 4.0'));
@@ -526,6 +527,8 @@ void main() {
     expect(controller, contains('tryCreatePaper'));
     expect(controller, contains('applyCapsuleSettings'));
     expect(controller, contains('_clearDeepCapsuleCollapseAllState'));
+    expect(controller, contains('setPaperPinnedToDesktop'));
+    expect(controller, contains('setPaperAlwaysOnTop'));
     expect(controller, contains('sourcePaper'));
     expect(controller, contains('_initializeNewPaperCapsuleQueue'));
     expect(controller, contains('!_canPaperDisplayAsCapsule(paper)'));

@@ -257,6 +257,65 @@ void main() {
     expect(controller.state.papers.single.isCollapsed, true);
   });
 
+  test('pinning to desktop applies PaperTodo surface mode rules', () {
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        useDeepCapsuleMode: false,
+        showDeepCapsuleWhileExpanded: false,
+        deepCapsuleSide: DeepCapsuleSides.left,
+        deepCapsuleMonitorDeviceName: 'Primary',
+        papers: [
+          PaperData(
+            id: 'pin-paper',
+            type: PaperTypes.todo,
+            title: 'Pin me',
+            isVisible: false,
+            alwaysOnTop: true,
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+    final paper = controller.state.papers.single;
+    paper.isCollapsed = true;
+
+    controller.setPaperPinnedToDesktop(paper, true);
+
+    expect(paper.isPinnedToDesktop, true);
+    expect(paper.isVisible, true);
+    expect(paper.isCollapsed, false);
+    expect(paper.alwaysOnTop, false);
+    expect(paper.capsuleSide, DeepCapsuleSides.left);
+    expect(paper.capsuleMonitorDeviceName, 'Primary');
+    expect(controller.state.useCapsuleMode, true);
+    expect(controller.state.useDeepCapsuleMode, true);
+    expect(controller.state.showDeepCapsuleWhileExpanded, true);
+  });
+
+  test('unpinning from desktop expands collapsed pinned papers', () {
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'pinned-paper',
+            type: PaperTypes.note,
+            title: 'Pinned',
+            isPinnedToDesktop: true,
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+    final paper = controller.state.papers.single;
+    paper.isCollapsed = true;
+
+    controller.setPaperPinnedToDesktop(paper, false);
+
+    expect(paper.isPinnedToDesktop, false);
+    expect(paper.isCollapsed, false);
+  });
+
   test('new papers are rescued into the Windows work area before showing',
       () async {
     final platform = _RecordingPlatformServices();

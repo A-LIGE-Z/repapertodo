@@ -85,6 +85,9 @@ Tray-level Show and Hide commands should be routed as startup commands so they
 apply to every paper, not just the active surface.
 Tray-level Toggle should use the same startup command path and let Dart decide
 whether all papers should be shown or hidden from current visibility state.
+Pinning a paper to the desktop should follow PaperTodo's surface-mode rules:
+the paper becomes visible and expanded, always-on-top is cleared, capsule and
+deep-capsule mode are enabled, and missing capsule queue fields are initialized.
 Tray-level Exit and forwarded `quit`/`exit` commands must also go through the
 Dart startup command path so the app can save local state and run the configured
 sync-before-exit flow before the native runner destroys the window.

@@ -723,6 +723,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       onDelete: _deletePaper,
       onTodoItemDeleted: _markTodoItemDeleted,
       onTodoItemRestored: _clearTodoItemDeleted,
+      onSetAlwaysOnTop: _setPaperAlwaysOnTop,
+      onSetPinnedToDesktop: _setPaperPinnedToDesktop,
       onSurfaceChanged: _updatePaperSurface,
       onCaptureBounds: _capturePaperBounds,
     );
@@ -892,6 +894,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   void _clearTodoItemDeleted(PaperData paper, PaperItem item) {
     controller.state.sync.clearTodoItemDeleted(paper.id, item.id);
+  }
+
+  void _setPaperAlwaysOnTop(PaperData paper, bool enabled) {
+    setState(() => controller.setPaperAlwaysOnTop(paper, enabled));
+  }
+
+  void _setPaperPinnedToDesktop(PaperData paper, bool pinned) {
+    setState(() => controller.setPaperPinnedToDesktop(paper, pinned));
   }
 
   Future<void> _hidePaper(PaperData paper) async {
@@ -2430,6 +2440,8 @@ class PaperPreview extends StatelessWidget {
     required this.onDelete,
     required this.onTodoItemDeleted,
     required this.onTodoItemRestored,
+    required this.onSetAlwaysOnTop,
+    required this.onSetPinnedToDesktop,
     required this.onSurfaceChanged,
     required this.onCaptureBounds,
     super.key,
@@ -2470,6 +2482,8 @@ class PaperPreview extends StatelessWidget {
   final Future<void> Function(PaperData paper) onDelete;
   final void Function(PaperData paper, PaperItem item) onTodoItemDeleted;
   final void Function(PaperData paper, PaperItem item) onTodoItemRestored;
+  final void Function(PaperData paper, bool enabled) onSetAlwaysOnTop;
+  final void Function(PaperData paper, bool pinned) onSetPinnedToDesktop;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
   final Future<void> Function(PaperData paper) onCaptureBounds;
 
@@ -2889,19 +2903,13 @@ class PaperPreview extends StatelessWidget {
   }
 
   void _toggleAlwaysOnTop() {
-    paper.alwaysOnTop = !paper.alwaysOnTop;
-    if (paper.alwaysOnTop) {
-      paper.isPinnedToDesktop = false;
-    }
+    onSetAlwaysOnTop(paper, !paper.alwaysOnTop);
     unawaited(onSurfaceChanged(paper));
     unawaited(onChanged());
   }
 
   void _togglePinnedToDesktop() {
-    paper.isPinnedToDesktop = !paper.isPinnedToDesktop;
-    if (paper.isPinnedToDesktop) {
-      paper.alwaysOnTop = false;
-    }
+    onSetPinnedToDesktop(paper, !paper.isPinnedToDesktop);
     unawaited(onSurfaceChanged(paper));
     unawaited(onChanged());
   }

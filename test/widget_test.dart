@@ -6754,6 +6754,8 @@ void main() {
             id: 'pin-paper',
             type: PaperTypes.todo,
             title: 'Pin paper',
+            isCollapsed: true,
+            alwaysOnTop: true,
             items: [
               PaperItem(id: 'pin-item', text: 'Choose a surface mode'),
             ],
@@ -6777,6 +6779,10 @@ void main() {
     final paper = controller.state.papers.single;
     expect(paper.isPinnedToDesktop, true);
     expect(paper.alwaysOnTop, false);
+    expect(paper.isCollapsed, false);
+    expect(controller.state.useCapsuleMode, true);
+    expect(controller.state.useDeepCapsuleMode, true);
+    expect(controller.state.showDeepCapsuleWhileExpanded, true);
     expect(find.byTooltip('Unpin from desktop'), findsOneWidget);
     expect(platform.paperWindows.updatedTitles, contains('Pin paper'));
 

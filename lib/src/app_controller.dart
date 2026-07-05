@@ -201,6 +201,37 @@ class RePaperTodoController {
     await _platform.paperWindows.capturePaperSurfaceBounds(paper);
   }
 
+  void setPaperAlwaysOnTop(PaperData paper, bool enabled) {
+    paper.alwaysOnTop = enabled;
+    if (enabled) {
+      paper.isPinnedToDesktop = false;
+    }
+    state.normalize();
+  }
+
+  void setPaperPinnedToDesktop(PaperData paper, bool pinned) {
+    paper.isPinnedToDesktop = pinned;
+    if (pinned) {
+      paper
+        ..isVisible = true
+        ..isCollapsed = false
+        ..alwaysOnTop = false;
+      state
+        ..useCapsuleMode = true
+        ..useDeepCapsuleMode = true
+        ..showDeepCapsuleWhileExpanded = true;
+      if (paper.capsuleSide.trim().isEmpty) {
+        paper.capsuleSide = state.deepCapsuleSide;
+      }
+      if (paper.capsuleMonitorDeviceName.trim().isEmpty) {
+        paper.capsuleMonitorDeviceName = state.deepCapsuleMonitorDeviceName;
+      }
+    } else if (paper.isCollapsed) {
+      paper.isCollapsed = false;
+    }
+    state.normalize();
+  }
+
   Future<void> rebuildTrayMenu() async {
     await _platform.tray.rebuildMenu(state);
   }
