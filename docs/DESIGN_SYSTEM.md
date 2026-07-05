@@ -62,6 +62,9 @@ when the target position is already occupied.
 Before a new desktop paper is first shown, clamp its dimensions and position to
 the resolved Windows work area so large cascades or small screens do not create
 lost off-screen papers.
+Startup restore should also rescue persisted papers into their resolved work
+area before native surfaces are restored, matching PaperTodo's disconnected
+monitor recovery behavior.
 The tray icon should be resilient to Windows Explorer/taskbar restarts by
 handling the `TaskbarCreated` broadcast and re-adding the notification icon.
 For PaperTodo parity, a `PaperTodo.ico` or `RePaperTodo.ico` file next to the

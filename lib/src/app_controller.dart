@@ -60,6 +60,7 @@ class RePaperTodoController {
       createPaper(PaperTypes.todo);
     }
 
+    await _rescuePapersIntoWorkAreas();
     await _preparePendingNewPapersForFirstShow();
     await _platform.paperWindows.restoreAll(state);
     await executeStartupCommand(startupCommand);
@@ -114,6 +115,8 @@ class RePaperTodoController {
   Future<void> applyCurrentStateToPlatform() async {
     state.normalize();
     await _applyStateSettingsToPlatform(stopPersistentWhenDisabled: true);
+    await _rescuePapersIntoWorkAreas();
+    await _preparePendingNewPapersForFirstShow();
     await _platform.paperWindows.restoreAll(state);
     await _platform.tray.rebuildMenu(state);
   }
@@ -289,6 +292,17 @@ class RePaperTodoController {
     }
     for (final paper in state.papers.toList()) {
       await _prepareNewPaperForFirstShow(paper);
+    }
+  }
+
+  Future<void> _rescuePapersIntoWorkAreas() async {
+    for (final paper in state.papers.toList()) {
+      final area = await _workAreaForPaper(paper);
+      if (area == null || !area.isUsable) {
+        continue;
+      }
+      _rescuePaperIntoWorkArea(paper, area);
+      _paperIdsPendingWorkAreaRescue.remove(paper.id);
     }
   }
 

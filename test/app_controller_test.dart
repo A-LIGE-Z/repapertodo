@@ -268,6 +268,38 @@ void main() {
     expect(controller.takePendingUiStartupCommand(), isNull);
   });
 
+  test('startup rescues restored papers into the Windows work area', () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workArea =
+        const PaperWorkArea(x: 0, y: 0, width: 360, height: 320);
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'paper-1',
+            type: PaperTypes.note,
+            title: 'Offscreen',
+            x: 640,
+            y: 520,
+            width: 640,
+            height: 480,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.start();
+
+    final paper = controller.state.papers.single;
+    expect(platform.paperWindows.workAreaRequestIds, [paper.id]);
+    expect(paper.width, 280);
+    expect(paper.height, 240);
+    expect(paper.x, 72);
+    expect(paper.y, 72);
+    expect(platform.paperWindows.restoreAllCount, 1);
+  });
+
   test('startup exit command cleans up platform integrations then exits',
       () async {
     final platform = _RecordingPlatformServices();
@@ -310,6 +342,7 @@ void main() {
     final platform = _RecordingPlatformServices();
     platform.systemIntegration.registerGlobalHotkeysError =
         StateError('Hotkeys unavailable');
+    platform.paperWindows.workAreaError = StateError('Work area unavailable');
     final controller = RePaperTodoController(
       initialState: AppState(
         startAtLogin: true,
@@ -325,6 +358,7 @@ void main() {
 
     await controller.start();
 
+    expect(platform.paperWindows.workAreaRequestIds, ['paper-1']);
     expect(platform.systemIntegration.registerGlobalHotkeysCalls, 1);
     expect(platform.systemIntegration.startupAtLoginValues, [true]);
     expect(platform.systemIntegration.hideFromWindowSwitcherValues, [true]);
