@@ -1234,9 +1234,50 @@ void main() {
     await tester.pump();
 
     final content = controller.state.papers.single.content;
-    expect(content.length, lessThanOrEqualTo(30000));
-    expect(content.split('\n').first, hasLength(6000));
-    expect(content.contains('\r'), isFalse);
+    expect(content, List.filled(6000, 'x').join());
+    expect(content.contains('y'), isFalse);
+  });
+
+  testWidgets('keeps long markdown notes editable up to PaperTodo limit',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final longBody = List.filled(35000, 'n').join();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.off,
+        papers: [
+          PaperData(
+            id: 'markdown-long-note',
+            type: PaperTypes.note,
+            title: 'Markdown long note',
+            content: longBody,
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-markdown-long.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('markdown-long-note-content')),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('markdown-long-note-content')),
+      '$longBody!',
+    );
+    await tester.pump();
+
+    expect(controller.state.papers.single.content, '$longBody!');
   });
 
   testWidgets('uses markdown toolbar actions in note editor', (tester) async {

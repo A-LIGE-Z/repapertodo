@@ -509,17 +509,19 @@ Plain item
     final longLine = List.filled(6500, 'a').join();
     final sanitized = MarkdownPasteText.sanitize('$longLine\r\nshort\rnext');
 
-    expect(sanitized.split('\n'), [
-      List.filled(6000, 'a').join(),
-      'short',
-      'next',
-    ]);
+    expect(sanitized, List.filled(6000, 'a').join());
+    expect(
+        MarkdownPasteText.sanitize('one\r\ntwo\rthree'), 'one\r\ntwo\rthree');
 
     final oversized = MarkdownPasteText.sanitize(
       List.filled(7, List.filled(5000, 'b').join()).join('\n'),
     );
 
     expect(oversized, hasLength(30000));
+    expect(
+      MarkdownPasteText.trimToMaxTextLength(List.filled(100050, 'c').join()),
+      hasLength(100000),
+    );
   });
 
   test('continues markdown lists on enter like PaperTodo', () {

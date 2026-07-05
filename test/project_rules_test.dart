@@ -847,6 +847,24 @@ void main() {
     expect(markdownLinks, contains('_htmlAnchorLinks'));
   });
 
+  test('PaperTodo markdown note paste safety is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+    final markdownPaste =
+        File('lib/src/core/model/markdown_paste.dart').readAsStringSync();
+
+    expect(design, contains('Markdown note paste safety should preserve'));
+    expect(design, contains('100000 characters'));
+    expect(design, contains('30000 characters'));
+    expect(design, contains('CR/LF line endings are preserved'));
+    expect(design, contains('longer than 6000 characters'));
+    expect(app, contains('MarkdownPasteText.maxTextLength'));
+    expect(app, contains('_TextEditDiff.between'));
+    expect(markdownPaste, contains('maxTextLength = 100000'));
+    expect(markdownPaste, contains('_clipPasteText'));
+    expect(markdownPaste, contains('_containsLineLongerThan'));
+  });
+
   test('PaperTodo note canvas geometry gestures are preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
