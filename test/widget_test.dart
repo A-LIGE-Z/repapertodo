@@ -9025,6 +9025,69 @@ void main() {
     expect(platform.paperWindows.shownTitles, contains('Compact note'));
   });
 
+  testWidgets('drags note handles onto todo rows to link like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        showLinkedNoteName: true,
+        papers: [
+          PaperData(
+            id: 'drag-note',
+            type: PaperTypes.note,
+            title: 'Drag source',
+            content: 'Drag me to the todo row.',
+          ),
+          PaperData(
+            id: 'drag-todo',
+            type: PaperTypes.todo,
+            title: 'Drag target',
+            items: [
+              PaperItem(id: 'drag-target-item', text: 'Receive note link'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final handle =
+        find.byKey(const ValueKey('drag-note-note-link-drag-handle'));
+    final row = find.byKey(const ValueKey('drag-todo-drag-target-item-row'));
+
+    expect(handle, findsOneWidget);
+    expect(row, findsOneWidget);
+
+    await tester.dragFrom(
+      tester.getCenter(handle),
+      tester.getCenter(row) - tester.getCenter(handle),
+    );
+    await tester.pumpAndSettle();
+
+    PaperItem linkedItem() => controller.state.papers
+        .firstWhere((paper) => paper.id == 'drag-todo')
+        .items
+        .single;
+
+    expect(linkedItem().linkedNoteId, 'drag-note');
+    expect(find.text('Note Drag s'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(linkedItem().linkedNoteId, isNull);
+    expect(find.text('Note Drag s'), findsNothing);
+  });
+
   testWidgets('runs linked script capsules from todo note chips',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

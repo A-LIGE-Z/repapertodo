@@ -248,6 +248,10 @@ an existing different note pushes one todo undo snapshot, linking the same note
 again is a no-op, unlinking is a no-op when no note is linked, unlink actions
 remain available from Todo item menus, and link or unlink operations should
 restore focus to the affected row where possible.
+Note-to-Todo drag linking should preserve PaperTodo's drop model: note papers
+expose a dedicated link drag handle, Todo rows accept only existing note IDs,
+candidate rows highlight while hovered, and dropping a note onto a Todo row uses
+the same undoable link path as menu linking.
 Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,

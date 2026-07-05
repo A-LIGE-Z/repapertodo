@@ -783,12 +783,20 @@ void main() {
     final app = File('lib/src/app.dart').readAsStringSync();
 
     expect(design, contains('Todo-note linking should preserve'));
+    expect(design, contains('Note-to-Todo drag linking should preserve'));
     expect(design, contains('linking the same note'));
     expect(design, contains('unlinking is a no-op'));
     expect(design, contains('remain available from Todo item menus'));
+    expect(design, contains('dedicated link drag handle'));
+    expect(design, contains('candidate rows highlight'));
     expect(app, contains('_compactTodoActionOpenLinkedNote'));
     expect(app, contains('_compactTodoActionUnlinkNote'));
     expect(app, contains('_todoLinkActionUnlink'));
+    expect(app, contains('_noteLinkDragHandle'));
+    expect(app, contains("ValueKey('\${paper.id}-note-link-drag-handle')"));
+    expect(app, contains('DragTarget<String>'));
+    expect(app, contains('_noteLinkDropTarget'));
+    expect(app, contains('_canAcceptNoteLinkDrop'));
     expect(app, contains('_openLinkedNote'));
     expect(app, contains('_notePaperById'));
     expect(app, contains('item.linkedNoteId == noteId'));

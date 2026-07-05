@@ -2615,6 +2615,10 @@ class PaperPreview extends StatelessWidget {
                     size: 18,
                     color: colorScheme.primary,
                   ),
+                  if (paper.isNote && enableTodoNoteLinks) ...[
+                    const SizedBox(width: 4),
+                    _noteLinkDragHandle(context),
+                  ],
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextFormField(
@@ -2653,6 +2657,72 @@ class PaperPreview extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _noteLinkDragHandle(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final handle = Semantics(
+      label: 'Drag to link note to todo',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: SizedBox.square(
+          key: ValueKey('${paper.id}-note-link-drag-handle'),
+          dimension: 28,
+          child: Icon(
+            Icons.link_outlined,
+            size: 16,
+            color: colorScheme.primary,
+          ),
+        ),
+      ),
+    );
+    return Draggable<String>(
+      data: paper.id,
+      feedback: Material(
+        color: Colors.transparent,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer,
+            border: Border.all(color: colorScheme.primary),
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(alpha: 0.16),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.link_outlined,
+                  size: 16,
+                  color: colorScheme.onPrimaryContainer,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Link ${_displayPaperTitle(paper)}',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 0.45, child: handle),
+      child: Tooltip(
+        message:
+            _tooltipLabel(enableToolTips, 'Drag to link note to todo') ?? '',
+        child: handle,
       ),
     );
   }
@@ -4953,92 +5023,122 @@ class _TodoEditorState extends State<_TodoEditor> {
     required _TodoVisualSpec visualSpec,
     required bool compactActions,
   }) {
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox.square(
+          dimension: visualSpec.controlExtent,
+          child: Transform.scale(
+            scale: visualSpec.checkboxScale,
+            child: Checkbox(
+              value: item.done,
+              onChanged: (value) {
+                _pushTodoUndoSnapshot();
+                setState(() => item.done = value ?? false);
+                unawaited(widget.onChanged());
+              },
+            ),
+          ),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _todoColumnFields(context, item, itemTextStyle),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  if (_formatDueDate(item.dueAtLocal) case final dueDate?)
+                    InputChip(
+                      avatar: Icon(
+                        Icons.event_outlined,
+                        size: visualSpec.chipIconSize,
+                      ),
+                      label: Text('Due $dueDate'),
+                      onDeleted: () => _clearDueDate(item),
+                      deleteIcon: Icon(
+                        Icons.close_outlined,
+                        size: visualSpec.chipIconSize,
+                      ),
+                      deleteButtonTooltipMessage: _tooltipLabel(
+                        widget.enableToolTips,
+                        'Clear due date',
+                      ),
+                    ),
+                  if (_formatReminderInterval(item)
+                      case final reminderInterval?)
+                    InputChip(
+                      avatar: Icon(
+                        Icons.notifications_active_outlined,
+                        size: visualSpec.chipIconSize,
+                      ),
+                      label: Text(reminderInterval),
+                      onDeleted: () => _clearReminderInterval(item),
+                      deleteIcon: Icon(
+                        Icons.close_outlined,
+                        size: visualSpec.chipIconSize,
+                      ),
+                      deleteButtonTooltipMessage: _tooltipLabel(
+                        widget.enableToolTips,
+                        'Clear reminder interval',
+                      ),
+                    ),
+                  if (widget.enableTodoNoteLinks)
+                    if (_linkedNoteFor(item) case final linkedNote?)
+                      _linkedNoteChip(
+                        linkedNote,
+                        item,
+                        visualSpec,
+                      ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        ..._todoItemActions(
+          context: context,
+          item: item,
+          itemIndex: itemIndex,
+          visualSpec: visualSpec,
+          compact: compactActions,
+        ),
+      ],
+    );
     return Padding(
       key: ValueKey('${widget.paper.id}-${item.id}-row'),
       padding: EdgeInsets.only(bottom: visualSpec.itemGap),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox.square(
-            dimension: visualSpec.controlExtent,
-            child: Transform.scale(
-              scale: visualSpec.checkboxScale,
-              child: Checkbox(
-                value: item.done,
-                onChanged: (value) {
-                  _pushTodoUndoSnapshot();
-                  setState(() => item.done = value ?? false);
-                  unawaited(widget.onChanged());
-                },
-              ),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _todoColumnFields(context, item, itemTextStyle),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    if (_formatDueDate(item.dueAtLocal) case final dueDate?)
-                      InputChip(
-                        avatar: Icon(
-                          Icons.event_outlined,
-                          size: visualSpec.chipIconSize,
-                        ),
-                        label: Text('Due $dueDate'),
-                        onDeleted: () => _clearDueDate(item),
-                        deleteIcon: Icon(
-                          Icons.close_outlined,
-                          size: visualSpec.chipIconSize,
-                        ),
-                        deleteButtonTooltipMessage: _tooltipLabel(
-                          widget.enableToolTips,
-                          'Clear due date',
-                        ),
-                      ),
-                    if (_formatReminderInterval(item)
-                        case final reminderInterval?)
-                      InputChip(
-                        avatar: Icon(
-                          Icons.notifications_active_outlined,
-                          size: visualSpec.chipIconSize,
-                        ),
-                        label: Text(reminderInterval),
-                        onDeleted: () => _clearReminderInterval(item),
-                        deleteIcon: Icon(
-                          Icons.close_outlined,
-                          size: visualSpec.chipIconSize,
-                        ),
-                        deleteButtonTooltipMessage: _tooltipLabel(
-                          widget.enableToolTips,
-                          'Clear reminder interval',
-                        ),
-                      ),
-                    if (widget.enableTodoNoteLinks)
-                      if (_linkedNoteFor(item) case final linkedNote?)
-                        _linkedNoteChip(
-                          linkedNote,
-                          item,
-                          visualSpec,
-                        ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          ..._todoItemActions(
-            context: context,
-            item: item,
-            itemIndex: itemIndex,
-            visualSpec: visualSpec,
-            compact: compactActions,
-          ),
-        ],
-      ),
+      child: widget.enableTodoNoteLinks ? _noteLinkDropTarget(item, row) : row,
     );
+  }
+
+  Widget _noteLinkDropTarget(PaperItem item, Widget row) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) =>
+          _canAcceptNoteLinkDrop(details.data),
+      onAcceptWithDetails: (details) => _linkNote(item, details.data),
+      builder: (context, candidateData, rejectedData) {
+        final highlighted =
+            candidateData.whereType<String>().any(_canAcceptNoteLinkDrop);
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: highlighted
+                ? colorScheme.primaryContainer.withValues(alpha: 0.38)
+                : Colors.transparent,
+            border: Border.all(
+              color: highlighted ? colorScheme.primary : Colors.transparent,
+            ),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: row,
+        );
+      },
+    );
+  }
+
+  bool _canAcceptNoteLinkDrop(String noteId) {
+    return widget.enableTodoNoteLinks && _notePaperById(noteId) != null;
   }
 
   static const _columnActionAdd = 'add';
