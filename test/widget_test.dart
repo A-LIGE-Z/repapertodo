@@ -1376,6 +1376,11 @@ void main() {
     expect(element.y, 24);
     expect(element.width, 130);
     expect(element.height, 90);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Add canvas block'));
+    await tester.pump();
+
+    expect(controller.state.papers.single.noteCanvasElements, hasLength(1));
   });
 
   testWidgets('clips oversized markdown note input', (tester) async {

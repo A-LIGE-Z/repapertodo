@@ -3912,6 +3912,9 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   void _addCanvasElement(String type) {
+    if (widget.paper.isPinnedToDesktop) {
+      return;
+    }
     final elements = widget.paper.noteCanvasElements;
     final normalizedType = NoteCanvasElementTypes.normalize(type);
     final nextIndex = elements.length + 1;
