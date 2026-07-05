@@ -840,6 +840,7 @@ void main() {
     expect(design, contains('drive,'));
     expect(design, contains('UNC, and `file:` targets'));
     expect(design, contains('device paths'));
+    expect(design, contains('closed inline code spans'));
     expect(design, contains('focus-driven reading flow'));
     expect(design, contains('open in preview mode by default'));
     expect(design, contains('clicking the preview body enters'));
@@ -856,6 +857,7 @@ void main() {
     expect(markdownLinks, contains('class MarkdownLinkSpan'));
     expect(markdownLinks, contains('_htmlAnchorLinks'));
     expect(markdownLinks, contains("startsWith('www.')"));
+    expect(markdownLinks, contains('_closedInlineCodeSpans'));
   });
 
   test('PaperTodo markdown note paste safety is preserved', () {

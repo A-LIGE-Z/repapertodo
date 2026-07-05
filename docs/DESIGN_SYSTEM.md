@@ -179,6 +179,8 @@ edit-mode source link handling before platform URI validation runs.
 Markdown local path links should preserve PaperTodo Windows behavior: drive,
 UNC, and `file:` targets open through the external-file host, while device paths
 such as `\\.\` and `\\?\` are rejected before native launch.
+Markdown link hit-testing should skip links inside closed inline code spans,
+matching PaperTodo's source editor highlighting and Ctrl+click behavior.
 Markdown notes should preserve PaperTodo's focus-driven reading flow: Markdown
 enabled notes open in preview mode by default, clicking the preview body enters
 the source editor, and losing editor focus returns the note to preview mode.

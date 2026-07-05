@@ -32,8 +32,17 @@ abstract final class MarkdownLinks {
   }
 
   static Iterable<MarkdownLinkSpan> spans(String text) sync* {
-    yield* _markdownLinks(text);
-    yield* _htmlAnchorLinks(text);
+    final ignoredSpans = _closedInlineCodeSpans(text).toList();
+    for (final link in _markdownLinks(text)) {
+      if (!_isIgnored(ignoredSpans, link.start, link.end)) {
+        yield link;
+      }
+    }
+    for (final link in _htmlAnchorLinks(text)) {
+      if (!_isIgnored(ignoredSpans, link.start, link.end)) {
+        yield link;
+      }
+    }
   }
 
   static Iterable<MarkdownLinkSpan> _markdownLinks(String text) sync* {
@@ -132,6 +141,35 @@ abstract final class MarkdownLinks {
     return slashCount.isOdd;
   }
 
+  static Iterable<_InlineCodeSpan> _closedInlineCodeSpans(String text) sync* {
+    var index = 0;
+    while (index < text.length) {
+      final start = text.indexOf('`', index);
+      if (start < 0) {
+        break;
+      }
+      final end = text.indexOf('`', start + 1);
+      if (end < 0) {
+        break;
+      }
+      yield _InlineCodeSpan(start: start, end: end + 1);
+      index = end + 1;
+    }
+  }
+
+  static bool _isIgnored(
+    List<_InlineCodeSpan> ignoredSpans,
+    int start,
+    int end,
+  ) {
+    for (final span in ignoredSpans) {
+      if (span.intersects(start, end)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static String? _normalizeMarkdownDestination(String rawDestination) {
     var destination = rawDestination.trim();
     if (destination.isEmpty) {
@@ -162,4 +200,13 @@ abstract final class MarkdownLinks {
     }
     return href.replaceAll(' ', '%20');
   }
+}
+
+class _InlineCodeSpan {
+  const _InlineCodeSpan({required this.start, required this.end});
+
+  final int start;
+  final int end;
+
+  bool intersects(int start, int end) => start < this.end && end > this.start;
 }

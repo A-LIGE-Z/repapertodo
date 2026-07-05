@@ -51,4 +51,18 @@ void main() {
     expect(MarkdownLinks.hrefAt(html, html.indexOf('HTML')),
         'https://www.example.com/html');
   });
+
+  test('ignores links inside closed inline code spans like PaperTodo', () {
+    const markdown =
+        '`[Code](https://example.com/code)` [Real](https://example.com/real)';
+    const html = '`<a href="https://example.com/code">Code</a>` '
+        '<a href="https://example.com/real">Real</a>';
+
+    expect(MarkdownLinks.hrefAt(markdown, markdown.indexOf('Code')), isNull);
+    expect(MarkdownLinks.hrefAt(markdown, markdown.indexOf('Real')),
+        'https://example.com/real');
+    expect(MarkdownLinks.hrefAt(html, html.indexOf('Code')), isNull);
+    expect(MarkdownLinks.hrefAt(html, html.indexOf('Real')),
+        'https://example.com/real');
+  });
 }
