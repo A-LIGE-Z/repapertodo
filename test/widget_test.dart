@@ -634,6 +634,91 @@ void main() {
     expect(platform.uriOpener.openedUris, ['https://www.example.com/paper']);
   });
 
+  testWidgets('opens local markdown links through external file host',
+      (tester) async {
+    if (!Platform.isWindows) {
+      return;
+    }
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const markdownPath = 'C:/PaperTodo/local-link.txt';
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'local-link-note',
+            type: PaperTypes.note,
+            title: 'Local link note',
+            content: '[Open file]($markdownPath)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Open file'));
+    await tester.pump();
+
+    expect(platform.uriOpener.openedUris, isEmpty);
+    expect(
+      platform.externalFiles.openedPaths.single.replaceAll('\\', '/'),
+      markdownPath,
+    );
+  });
+
+  testWidgets('opens file URI markdown links through external file host',
+      (tester) async {
+    if (!Platform.isWindows) {
+      return;
+    }
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const fileUriPath = 'C:/PaperTodo/file-uri-link.txt';
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'file-uri-link-note',
+            type: PaperTypes.note,
+            title: 'File URI link note',
+            content: '[Open file URI](file:///$fileUriPath)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Open file URI'));
+    await tester.pump();
+
+    expect(platform.uriOpener.openedUris, isEmpty);
+    expect(
+      platform.externalFiles.openedPaths.single.replaceAll('\\', '/'),
+      fileUriPath,
+    );
+  });
+
   testWidgets('blocks unsafe markdown preview links before platform open',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

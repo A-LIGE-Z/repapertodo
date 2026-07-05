@@ -308,6 +308,67 @@ String? _normalizeExternalUri(String value) {
   return null;
 }
 
+String? _normalizeMarkdownLocalPath(String value) {
+  var trimmed = value.trim();
+  if (trimmed.isEmpty || _hasRawControlCharacter(trimmed)) {
+    return null;
+  }
+
+  final uri = Uri.tryParse(trimmed);
+  if (uri != null && uri.scheme.toLowerCase() == 'file') {
+    try {
+      trimmed = uri.toFilePath(windows: Platform.isWindows);
+    } on UnsupportedError {
+      return null;
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  if (!_looksLikeLocalMarkdownPath(trimmed) || _isDeviceMarkdownPath(trimmed)) {
+    return null;
+  }
+
+  try {
+    final fullPath = p.normalize(p.absolute(trimmed));
+    return _isDeviceMarkdownPath(fullPath) ? null : fullPath;
+  } on ArgumentError {
+    return null;
+  } on FileSystemException {
+    return null;
+  }
+}
+
+bool _looksLikeLocalMarkdownPath(String value) {
+  return _isWindowsDrivePath(value) || _isUncPath(value);
+}
+
+bool _isWindowsDrivePath(String value) {
+  return value.length >= 3 &&
+      _isAsciiLetter(value.codeUnitAt(0)) &&
+      value[1] == ':' &&
+      _isDirectorySeparator(value[2]);
+}
+
+bool _isUncPath(String value) {
+  return value.length >= 3 &&
+      _isDirectorySeparator(value[0]) &&
+      _isDirectorySeparator(value[1]) &&
+      !_isDirectorySeparator(value[2]);
+}
+
+bool _isDeviceMarkdownPath(String value) {
+  final normalized = value.replaceAll('/', '\\');
+  return normalized.startsWith('\\\\.\\') || normalized.startsWith('\\\\?\\');
+}
+
+bool _isDirectorySeparator(String value) => value == '\\' || value == '/';
+
+bool _isAsciiLetter(int codeUnit) {
+  return (codeUnit >= 0x41 && codeUnit <= 0x5A) ||
+      (codeUnit >= 0x61 && codeUnit <= 0x7A);
+}
+
 bool _hasEncodedExternalUriAuthoritySeparator(String authority) {
   final normalized = authority.toLowerCase();
   for (final encodedSeparator in const [
@@ -329,6 +390,10 @@ bool _hasEncodedExternalUriAuthoritySeparator(String authority) {
 
 bool _hasUnsafeExternalUriCharacter(String value) {
   return value.codeUnits.any((unit) => unit <= 0x20 || unit == 0x7F);
+}
+
+bool _hasRawControlCharacter(String value) {
+  return value.codeUnits.any((unit) => unit < 0x20 || unit == 0x7F);
 }
 
 bool _hasEncodedUnsafeExternalUriCharacter(String value) {
@@ -1024,6 +1089,25 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _openUri(String uri) async {
+    final localPath = _normalizeMarkdownLocalPath(uri);
+    if (localPath != null) {
+      try {
+        await controller.openExternalFile(localPath);
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Open link failed: ${_readableFailureMessage(error)}',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     final normalizedUri = _normalizeExternalUri(uri);
     if (normalizedUri == null) {
       if (!mounted) {

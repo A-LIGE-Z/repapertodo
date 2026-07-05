@@ -836,6 +836,10 @@ void main() {
     expect(design, contains('single-line inline HTML `a href` links'));
     expect(design, contains("bare-host convenience"));
     expect(design, contains('links beginning with `www.`'));
+    expect(design, contains('Markdown local path links should preserve'));
+    expect(design, contains('drive,'));
+    expect(design, contains('UNC, and `file:` targets'));
+    expect(design, contains('device paths'));
     expect(design, contains('focus-driven reading flow'));
     expect(design, contains('open in preview mode by default'));
     expect(design, contains('clicking the preview body enters'));
@@ -845,6 +849,9 @@ void main() {
     expect(app, contains('_handleEditorFocusChange'));
     expect(app, contains('HardwareKeyboard.instance.isControlPressed'));
     expect(app, contains("startsWith('www.')"));
+    expect(app, contains('_normalizeMarkdownLocalPath'));
+    expect(app, contains('controller.openExternalFile(localPath)'));
+    expect(app, contains('_isDeviceMarkdownPath'));
     expect(app, contains('MarkdownLinks.hrefAt'));
     expect(markdownLinks, contains('class MarkdownLinkSpan'));
     expect(markdownLinks, contains('_htmlAnchorLinks'));

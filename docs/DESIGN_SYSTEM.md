@@ -176,6 +176,9 @@ to Markdown links and the supported single-line inline HTML `a href` links.
 Markdown URL normalization should preserve PaperTodo's bare-host convenience:
 links beginning with `www.` open as `https://www...` in both preview mode and
 edit-mode source link handling before platform URI validation runs.
+Markdown local path links should preserve PaperTodo Windows behavior: drive,
+UNC, and `file:` targets open through the external-file host, while device paths
+such as `\\.\` and `\\?\` are rejected before native launch.
 Markdown notes should preserve PaperTodo's focus-driven reading flow: Markdown
 enabled notes open in preview mode by default, clicking the preview body enters
 the source editor, and losing editor focus returns the note to preview mode.
