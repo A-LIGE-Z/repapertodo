@@ -197,6 +197,8 @@ Markdown line classification should share one PaperTodo-compatible model for
 heading, quote, unordered list, ordered list, task list, horizontal rule, fenced
 code fence, and fenced code block detection so editor rendering and Enter-key
 continuation cannot drift apart.
+Markdown insert-link commands should use PaperTodo's English fallback label
+`Link` when the selected text is blank.
 Markdown notes should preserve PaperTodo's focus-driven reading flow: Markdown
 enabled notes open in preview mode by default, clicking the preview body enters
 the source editor, and losing editor focus returns the note to preview mode.

@@ -855,6 +855,8 @@ void main() {
     expect(design, contains('Markdown line classification'));
     expect(design, contains('PaperTodo-compatible model'));
     expect(design, contains('fenced code block detection'));
+    expect(design, contains("PaperTodo's English fallback label"));
+    expect(design, contains('`Link`'));
     expect(design, contains('focus-driven reading flow'));
     expect(design, contains('open in preview mode by default'));
     expect(design, contains('clicking the preview body enters'));
@@ -884,6 +886,10 @@ void main() {
       File('lib/src/core/model/markdown_list_continuation.dart')
           .readAsStringSync(),
       contains('MarkdownLineAnalysis.analyzeLine'),
+    );
+    expect(
+      File('lib/src/core/model/markdown_formatting.dart').readAsStringSync(),
+      contains("defaultLinkLabel = 'Link'"),
     );
   });
 

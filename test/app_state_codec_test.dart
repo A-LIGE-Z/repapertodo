@@ -628,7 +628,7 @@ Plain item
     result = MarkdownFormatting.insertMarkdownLink(
       const TextEditingValue(text: 'start'),
     );
-    expect(result.text, 'start[link](https://)');
+    expect(result.text, 'start[Link](https://)');
   });
 
   test('normalizes pinned hotkeys like PaperTodo', () {

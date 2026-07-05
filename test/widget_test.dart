@@ -1430,12 +1430,12 @@ void main() {
     await tester.tap(find.byTooltip('Insert link (Ctrl+K)'));
     await tester.pump();
 
-    expect(controller.state.papers.single.content, 'Body[link](https://)');
+    expect(controller.state.papers.single.content, 'Body[Link](https://)');
 
     await tester.tap(find.byTooltip('Heading'));
     await tester.pump();
 
-    expect(controller.state.papers.single.content, '# Body[link](https://)');
+    expect(controller.state.papers.single.content, '# Body[Link](https://)');
   });
 
   testWidgets('uses compact markdown toolbar actions on narrow screens',
@@ -1483,7 +1483,7 @@ void main() {
     await tester.tap(find.byTooltip('Insert link (Ctrl+K)'));
     await tester.pump();
 
-    expect(controller.state.papers.single.content, 'Body[link](https://)');
+    expect(controller.state.papers.single.content, 'Body[Link](https://)');
 
     await tester.tap(
       find.byKey(const ValueKey('compact-markdown-toolbar-actions')),
@@ -1492,7 +1492,7 @@ void main() {
     await tester.tap(find.text('Heading'));
     await tester.pumpAndSettle();
 
-    expect(controller.state.papers.single.content, '# Body[link](https://)');
+    expect(controller.state.papers.single.content, '# Body[Link](https://)');
   });
 
   testWidgets('uses markdown keyboard shortcuts in note editor',
@@ -1537,7 +1537,7 @@ void main() {
     await _pressControlShortcut(tester, LogicalKeyboardKey.keyK);
     await tester.pump();
 
-    expect(controller.state.papers.single.content, 'Body[link](https://)');
+    expect(controller.state.papers.single.content, 'Body[Link](https://)');
   });
 
   testWidgets('saves custom theme color', (tester) async {

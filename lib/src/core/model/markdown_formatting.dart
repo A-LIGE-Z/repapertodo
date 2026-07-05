@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
 abstract final class MarkdownFormatting {
-  static const defaultLinkLabel = 'link';
+  static const defaultLinkLabel = 'Link';
 
   static TextEditingValue wrapSelection(
     TextEditingValue value,
