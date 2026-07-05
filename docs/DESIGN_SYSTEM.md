@@ -187,6 +187,12 @@ matching PaperTodo's source editor highlighting and Ctrl+click behavior.
 Markdown image syntax should follow PaperTodo's lightweight scanner rather than
 full Markdown image rendering: `![label](url)` is still treated as a source
 link hit target on the label text.
+Markdown source link scanning should stay deliberately small like PaperTodo:
+the first literal `](` and following literal `)` delimit the target, backslash
+escapes are not interpreted, CommonMark angle destinations and title suffixes
+are not source link targets, and only `http`, `https`, `mailto`, `www.`,
+Windows drive/UNC paths, and `file:` paths are accepted before the app-level
+launch validation runs.
 Markdown notes should preserve PaperTodo's focus-driven reading flow: Markdown
 enabled notes open in preview mode by default, clicking the preview body enters
 the source editor, and losing editor focus returns the note to preview mode.

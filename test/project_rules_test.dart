@@ -847,6 +847,11 @@ void main() {
     expect(design, contains('Markdown image syntax should follow'));
     expect(design, contains('treated as a source'));
     expect(design, contains('link hit target'));
+    expect(design, contains('Markdown source link scanning'));
+    expect(design, contains('first literal `](`'));
+    expect(design, contains('backslash'));
+    expect(design, contains('CommonMark angle destinations'));
+    expect(design, contains('only `http`, `https`, `mailto`, `www.`'));
     expect(design, contains('focus-driven reading flow'));
     expect(design, contains('open in preview mode by default'));
     expect(design, contains('clicking the preview body enters'));
@@ -866,6 +871,8 @@ void main() {
     expect(markdownLinks, contains('_tryGetHtmlHrefAttribute'));
     expect(markdownLinks, contains("startsWith('www.')"));
     expect(markdownLinks, contains('_closedInlineCodeSpans'));
+    expect(markdownLinks, contains("indexOf(']('"));
+    expect(markdownLinks, contains("_normalizeLocalMarkdownPath"));
   });
 
   test('PaperTodo markdown note paste safety is preserved', () {

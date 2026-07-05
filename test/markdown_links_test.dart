@@ -56,11 +56,42 @@ void main() {
     expect(MarkdownLinks.hrefAt(text, text.indexOf('/paper')), isNull);
   });
 
-  test('normalizes angle-bracket markdown destinations with spaces', () {
-    const text = '[Spaced](<https://example.com/a b>)';
+  test('uses PaperTodo lightweight markdown delimiter scanning', () {
+    const escapedLabel = r'[Escaped \](https://example.com/escaped-label)';
+    const escapedDestination =
+        r'[Escaped destination](https://example.com/a\)b)';
 
-    expect(MarkdownLinks.hrefAt(text, text.indexOf('Spaced')),
-        'https://example.com/a%20b');
+    expect(
+      MarkdownLinks.hrefAt(escapedLabel, escapedLabel.indexOf('Escaped')),
+      'https://example.com/escaped-label',
+    );
+    expect(
+      MarkdownLinks.hrefAt(
+        escapedDestination,
+        escapedDestination.indexOf('Escaped destination'),
+      ),
+      'https://example.com/a/',
+    );
+  });
+
+  test('keeps PaperTodo source scanner smaller than CommonMark', () {
+    const angleDestination = '[Spaced](<https://example.com/a b>)';
+    const titledDestination = '[Titled](https://example.com "title")';
+
+    expect(
+      MarkdownLinks.hrefAt(
+        angleDestination,
+        angleDestination.indexOf('Spaced'),
+      ),
+      isNull,
+    );
+    expect(
+      MarkdownLinks.hrefAt(
+        titledDestination,
+        titledDestination.indexOf('Titled'),
+      ),
+      isNull,
+    );
   });
 
   test('normalizes bare www links like PaperTodo', () {
@@ -71,6 +102,29 @@ void main() {
         'https://www.example.com/paper');
     expect(MarkdownLinks.hrefAt(html, html.indexOf('HTML')),
         'https://www.example.com/html');
+  });
+
+  test('accepts only PaperTodo markdown URL target families', () {
+    const localPath = r'[Local](C:/PaperTodo/My File.md)';
+    const fileUri = '[File](file:///C:/PaperTodo/File%20Uri.md)';
+    const mailto = '[Mail](mailto:paper@example.com)';
+    const ftp = '[FTP](ftp://example.com/file)';
+    const script = '[Script](javascript:alert(1))';
+
+    expect(
+      MarkdownLinks.hrefAt(localPath, localPath.indexOf('Local'))
+          ?.replaceAll(r'\', '/'),
+      'C:/PaperTodo/My File.md',
+    );
+    expect(
+      MarkdownLinks.hrefAt(fileUri, fileUri.indexOf('File'))
+          ?.replaceAll(r'\', '/'),
+      'C:/PaperTodo/File Uri.md',
+    );
+    expect(MarkdownLinks.hrefAt(mailto, mailto.indexOf('Mail')),
+        'mailto:paper@example.com');
+    expect(MarkdownLinks.hrefAt(ftp, ftp.indexOf('FTP')), isNull);
+    expect(MarkdownLinks.hrefAt(script, script.indexOf('Script')), isNull);
   });
 
   test('ignores links inside closed inline code spans like PaperTodo', () {

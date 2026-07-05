@@ -1,3 +1,7 @@
+import 'package:path/path.dart' as p;
+
+final _windowsPathContext = p.Context(style: p.Style.windows);
+
 class MarkdownLinkSpan {
   const MarkdownLinkSpan({
     required this.start,
@@ -53,19 +57,15 @@ abstract final class MarkdownLinks {
         break;
       }
 
-      final labelEnd = _findUnescaped(text, ']', labelStart + 1);
-      if (labelEnd < 0 ||
-          labelEnd + 1 >= text.length ||
-          text[labelEnd + 1] != '(') {
-        searchStart = labelStart + 1;
-        continue;
+      final labelEnd = text.indexOf('](', labelStart + 1);
+      if (labelEnd < 0) {
+        break;
       }
 
       final destinationStart = labelEnd + 2;
-      final destinationEnd = _findUnescaped(text, ')', destinationStart);
+      final destinationEnd = text.indexOf(')', destinationStart);
       if (destinationEnd < 0) {
-        searchStart = labelStart + 1;
-        continue;
+        break;
       }
 
       final href = _normalizeMarkdownDestination(
@@ -260,21 +260,6 @@ abstract final class MarkdownLinks {
         value == '_';
   }
 
-  static int _findUnescaped(String text, String character, int start) {
-    var index = start;
-    while (index < text.length) {
-      index = text.indexOf(character, index);
-      if (index < 0) {
-        return -1;
-      }
-      if (!_isEscaped(text, index)) {
-        return index;
-      }
-      index++;
-    }
-    return -1;
-  }
-
   static int _lineStartBefore(String text, int offset) {
     final searchFrom = offset <= 0 ? 0 : offset - 1;
     final previousBreak = text.lastIndexOf('\n', searchFrom);
@@ -284,16 +269,6 @@ abstract final class MarkdownLinks {
   static int _lineEndAfter(String text, int offset) {
     final nextBreak = text.indexOf('\n', offset);
     return nextBreak < 0 ? text.length : nextBreak;
-  }
-
-  static bool _isEscaped(String text, int index) {
-    var slashCount = 0;
-    var cursor = index - 1;
-    while (cursor >= 0 && text[cursor] == r'\') {
-      slashCount++;
-      cursor--;
-    }
-    return slashCount.isOdd;
   }
 
   static Iterable<_InlineCodeSpan> _closedInlineCodeSpans(String text) sync* {
@@ -326,23 +301,7 @@ abstract final class MarkdownLinks {
   }
 
   static String? _normalizeMarkdownDestination(String rawDestination) {
-    var destination = rawDestination.trim();
-    if (destination.isEmpty) {
-      return null;
-    }
-    if (destination.startsWith('<')) {
-      final closingBracket = destination.indexOf('>');
-      if (closingBracket <= 0) {
-        return null;
-      }
-      return _normalizeHref(destination.substring(1, closingBracket));
-    }
-
-    final whitespace = RegExp(r'\s').firstMatch(destination);
-    if (whitespace != null) {
-      destination = destination.substring(0, whitespace.start);
-    }
-    return _normalizeHref(destination);
+    return _normalizeHref(rawDestination);
   }
 
   static String? _normalizeHref(String? rawHref) {
@@ -353,7 +312,118 @@ abstract final class MarkdownLinks {
     if (href.toLowerCase().startsWith('www.')) {
       href = 'https://$href';
     }
-    return href.replaceAll(' ', '%20');
+
+    final localPath = _normalizeLocalMarkdownPath(href);
+    if (localPath != null) {
+      return localPath;
+    }
+
+    final uri = Uri.tryParse(href);
+    if (uri == null) {
+      return null;
+    }
+    if (uri.scheme.toLowerCase() == 'file') {
+      return _normalizeFileUriMarkdownPath(uri);
+    }
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https' && scheme != 'mailto') {
+      return null;
+    }
+    if ((scheme == 'http' || scheme == 'https') &&
+        !_hasValidRawUriAuthority(href)) {
+      return null;
+    }
+    return uri.toString();
+  }
+
+  static String? _normalizeFileUriMarkdownPath(Uri uri) {
+    try {
+      return _normalizeLocalMarkdownPath(uri.toFilePath(windows: true));
+    } on UnsupportedError {
+      return null;
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  static String? _normalizeLocalMarkdownPath(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty ||
+        _hasRawControlCharacter(trimmed) ||
+        !_looksLikeLocalMarkdownPath(trimmed) ||
+        _isDeviceMarkdownPath(trimmed)) {
+      return null;
+    }
+
+    try {
+      final fullPath = _windowsPathContext.normalize(
+        _windowsPathContext.absolute(trimmed),
+      );
+      return _isDeviceMarkdownPath(fullPath) ? null : fullPath;
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  static bool _looksLikeLocalMarkdownPath(String value) {
+    return _isWindowsDrivePath(value) || _isUncPath(value);
+  }
+
+  static bool _isWindowsDrivePath(String value) {
+    return value.length >= 3 &&
+        _isAsciiLetter(value[0]) &&
+        value[1] == ':' &&
+        _isDirectorySeparator(value[2]);
+  }
+
+  static bool _isUncPath(String value) {
+    return value.length >= 3 &&
+        _isDirectorySeparator(value[0]) &&
+        _isDirectorySeparator(value[1]) &&
+        !_isDirectorySeparator(value[2]);
+  }
+
+  static bool _isDeviceMarkdownPath(String value) {
+    final normalized = value.replaceAll('/', r'\');
+    return normalized.startsWith(r'\\.\') || normalized.startsWith(r'\\?\');
+  }
+
+  static bool _isDirectorySeparator(String value) {
+    return value == r'\' || value == '/';
+  }
+
+  static bool _hasValidRawUriAuthority(String value) {
+    final separator = value.indexOf('://');
+    if (separator < 0) {
+      return false;
+    }
+    final authorityStart = separator + 3;
+    var authorityEnd = value.length;
+    for (final delimiter in const ['/', '?', '#']) {
+      final delimiterIndex = value.indexOf(delimiter, authorityStart);
+      if (delimiterIndex >= 0 && delimiterIndex < authorityEnd) {
+        authorityEnd = delimiterIndex;
+      }
+    }
+    final authority = value.substring(authorityStart, authorityEnd);
+    return authority.isNotEmpty && !_hasRawWhitespaceOrControl(authority);
+  }
+
+  static bool _isAsciiLetter(String value) {
+    if (value.length != 1) {
+      return false;
+    }
+    final codeUnit = value.codeUnitAt(0);
+    return (codeUnit >= 0x41 && codeUnit <= 0x5A) ||
+        (codeUnit >= 0x61 && codeUnit <= 0x7A);
+  }
+
+  static bool _hasRawControlCharacter(String value) {
+    return value.codeUnits.any((unit) => unit < 0x20 || unit == 0x7F);
+  }
+
+  static bool _hasRawWhitespaceOrControl(String value) {
+    return value.codeUnits.any((unit) => unit <= 0x20 || unit == 0x7F);
   }
 }
 
