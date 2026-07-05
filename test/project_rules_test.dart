@@ -459,6 +459,41 @@ void main() {
     expect(runner, contains('return has_modifier && *key != 0'));
   });
 
+  test('Windows fullscreen avoidance uses PaperTodo defensive detection', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final cmake = File('windows/runner/CMakeLists.txt').readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+
+    expect(design, contains('prefer DWM extended frame bounds'));
+    expect(design, contains('ignore'));
+    expect(design, contains('tool, cloaked, shell, hidden, minimized'));
+    expect(
+      design,
+      contains('foreground-process top-level windows'),
+    );
+    expect(cmake, contains('dwmapi.lib'));
+    expect(runner, contains('#include <dwmapi.h>'));
+    expect(runner, contains('g_last_external_foreground_window'));
+    expect(runner, contains('kFullscreenTolerance'));
+    expect(runner, contains('kFullscreenMinCandidateSize'));
+    expect(runner, contains('TryGetDwmWindowBounds'));
+    expect(runner, contains('DWMWA_EXTENDED_FRAME_BOUNDS'));
+    expect(runner, contains('TryGetRawWindowBounds'));
+    expect(runner, contains('DwmGetWindowAttribute(window, DWMWA_CLOAKED'));
+    expect(runner, contains('IsToolWindow'));
+    expect(runner, contains('WS_EX_TOOLWINDOW'));
+    expect(runner, contains('IsShellClassWindow'));
+    expect(runner, contains('Shell_TrayWnd'));
+    expect(runner, contains('GetShellWindow()'));
+    expect(runner, contains('IsCurrentProcessWindow'));
+    expect(runner, contains('IsCandidateExternalWindow'));
+    expect(
+      runner,
+      contains('EnumWindows(FindForegroundRelatedFullscreenWindow'),
+    );
+    expect(runner, contains('ProcessIdForWindow(window)'));
+  });
+
   test('PaperTodo runtime custom font convention is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

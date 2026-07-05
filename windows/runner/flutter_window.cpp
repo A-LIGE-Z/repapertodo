@@ -1,5 +1,7 @@
 #include "flutter_window.h"
 
+#include <dwmapi.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -25,6 +27,9 @@ struct PersistentScriptProcess {
 
 std::mutex g_persistent_script_processes_mutex;
 std::vector<PersistentScriptProcess> g_persistent_script_processes;
+HWND g_last_external_foreground_window = nullptr;
+constexpr LONG kFullscreenTolerance = 2;
+constexpr LONG kFullscreenMinCandidateSize = 160;
 
 double GetNumberArgument(const flutter::EncodableMap& map,
                          const std::string& key,
@@ -784,31 +789,225 @@ void SetHideFromWindowSwitcher(HWND window, bool enabled) {
                    SWP_FRAMECHANGED);
 }
 
+bool IsEmptyRect(const RECT& rect) {
+  return rect.right <= rect.left || rect.bottom <= rect.top;
+}
+
+bool TryGetDwmWindowBounds(HWND window, RECT* bounds) {
+  if (!bounds) {
+    return false;
+  }
+  RECT rect = {};
+  const HRESULT result =
+      DwmGetWindowAttribute(window, DWMWA_EXTENDED_FRAME_BOUNDS, &rect,
+                            sizeof(RECT));
+  if (FAILED(result) || IsEmptyRect(rect)) {
+    return false;
+  }
+  *bounds = rect;
+  return true;
+}
+
+bool TryGetRawWindowBounds(HWND window, RECT* bounds) {
+  if (!bounds) {
+    return false;
+  }
+  RECT rect = {};
+  if (!GetWindowRect(window, &rect) || IsEmptyRect(rect)) {
+    return false;
+  }
+  *bounds = rect;
+  return true;
+}
+
+bool TryGetWindowBounds(HWND window, RECT* bounds) {
+  return TryGetDwmWindowBounds(window, bounds) ||
+         TryGetRawWindowBounds(window, bounds);
+}
+
+bool TryGetMonitorInfoForRect(const RECT& rect, MONITORINFO* monitor_info) {
+  if (!monitor_info || IsEmptyRect(rect) ||
+      rect.right - rect.left < kFullscreenMinCandidateSize ||
+      rect.bottom - rect.top < kFullscreenMinCandidateSize) {
+    return false;
+  }
+  HMONITOR monitor = MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
+  if (!monitor) {
+    return false;
+  }
+  monitor_info->cbSize = sizeof(MONITORINFO);
+  return GetMonitorInfoW(monitor, monitor_info) == TRUE;
+}
+
+bool CoversMonitor(const RECT& window_bounds, const RECT& monitor_bounds) {
+  return window_bounds.left <= monitor_bounds.left + kFullscreenTolerance &&
+         window_bounds.top <= monitor_bounds.top + kFullscreenTolerance &&
+         window_bounds.right >= monitor_bounds.right - kFullscreenTolerance &&
+         window_bounds.bottom >= monitor_bounds.bottom - kFullscreenTolerance;
+}
+
+bool IsFullscreenRect(const RECT& window_bounds) {
+  MONITORINFO monitor_info = {};
+  if (!TryGetMonitorInfoForRect(window_bounds, &monitor_info)) {
+    return false;
+  }
+  const RECT& monitor_bounds = monitor_info.rcMonitor;
+  return CoversMonitor(window_bounds, monitor_bounds);
+}
+
+bool IsFullscreenWindow(HWND window) {
+  RECT bounds = {};
+  if (TryGetDwmWindowBounds(window, &bounds) && IsFullscreenRect(bounds)) {
+    return true;
+  }
+  return TryGetRawWindowBounds(window, &bounds) && IsFullscreenRect(bounds);
+}
+
+DWORD ProcessIdForWindow(HWND window) {
+  if (!window) {
+    return 0;
+  }
+  DWORD process_id = 0;
+  GetWindowThreadProcessId(window, &process_id);
+  return process_id;
+}
+
+bool IsCurrentProcessWindow(HWND window) {
+  return ProcessIdForWindow(window) == GetCurrentProcessId();
+}
+
+bool IsCloakedWindow(HWND window) {
+  int cloaked = 0;
+  return SUCCEEDED(DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked,
+                                         sizeof(cloaked))) &&
+         cloaked != 0;
+}
+
+std::wstring WindowClassName(HWND window) {
+  std::array<wchar_t, 256> class_name = {};
+  const int length = GetClassNameW(window, class_name.data(),
+                                  static_cast<int>(class_name.size()));
+  if (length <= 0) {
+    return std::wstring();
+  }
+  return std::wstring(class_name.data(), static_cast<size_t>(length));
+}
+
+bool IsShellClassWindow(HWND window) {
+  const std::wstring class_name = WindowClassName(window);
+  return class_name == L"Progman" || class_name == L"WorkerW" ||
+         class_name == L"Shell_TrayWnd" ||
+         class_name == L"Shell_SecondaryTrayWnd";
+}
+
+bool IsToolWindow(HWND window) {
+  const LONG_PTR extended_style = GetWindowLongPtrW(window, GWL_EXSTYLE);
+  return (extended_style & WS_EX_TOOLWINDOW) != 0;
+}
+
+bool IsCandidateExternalWindow(HWND window, HWND own_window) {
+  if (!window || window == own_window || !IsWindow(window) ||
+      window == GetShellWindow() || IsCurrentProcessWindow(window) ||
+      !IsWindowVisible(window) || IsIconic(window) || IsToolWindow(window) ||
+      IsCloakedWindow(window) || IsShellClassWindow(window)) {
+    return false;
+  }
+  return true;
+}
+
+bool TryGetTrackedExternalForegroundFullscreen(HWND own_window,
+                                               HWND* fullscreen_window) {
+  if (fullscreen_window) {
+    *fullscreen_window = nullptr;
+  }
+  if (!g_last_external_foreground_window) {
+    return false;
+  }
+  if (!IsWindow(g_last_external_foreground_window) ||
+      IsCurrentProcessWindow(g_last_external_foreground_window)) {
+    g_last_external_foreground_window = nullptr;
+    return false;
+  }
+  if (IsCandidateExternalWindow(g_last_external_foreground_window,
+                                own_window) &&
+      IsFullscreenWindow(g_last_external_foreground_window)) {
+    if (fullscreen_window) {
+      *fullscreen_window = g_last_external_foreground_window;
+    }
+    return true;
+  }
+  return false;
+}
+
+struct ForegroundScanState {
+  HWND own_window = nullptr;
+  HWND foreground_window = nullptr;
+  DWORD foreground_process_id = 0;
+  HWND found_window = nullptr;
+};
+
+BOOL CALLBACK FindForegroundRelatedFullscreenWindow(HWND window,
+                                                    LPARAM parameter) {
+  auto* state = reinterpret_cast<ForegroundScanState*>(parameter);
+  if (!state || !IsCandidateExternalWindow(window, state->own_window)) {
+    return TRUE;
+  }
+  if (window != state->foreground_window &&
+      ProcessIdForWindow(window) != state->foreground_process_id) {
+    return TRUE;
+  }
+  if (!IsFullscreenWindow(window)) {
+    return TRUE;
+  }
+  g_last_external_foreground_window = window;
+  state->found_window = window;
+  return FALSE;
+}
+
+bool TryGetAnyForegroundRelatedFullscreenWindow(HWND own_window,
+                                                HWND foreground_window,
+                                                HWND* fullscreen_window) {
+  if (fullscreen_window) {
+    *fullscreen_window = nullptr;
+  }
+  const DWORD foreground_process_id = ProcessIdForWindow(foreground_window);
+  if (foreground_process_id == 0) {
+    return false;
+  }
+  ForegroundScanState state = {
+      own_window,
+      foreground_window,
+      foreground_process_id,
+      nullptr,
+  };
+  EnumWindows(FindForegroundRelatedFullscreenWindow,
+              reinterpret_cast<LPARAM>(&state));
+  if (!state.found_window) {
+    return false;
+  }
+  if (fullscreen_window) {
+    *fullscreen_window = state.found_window;
+  }
+  return true;
+}
+
 bool IsForegroundFullscreen(HWND own_window) {
   HWND foreground_window = GetForegroundWindow();
-  if (!foreground_window || foreground_window == own_window ||
-      IsIconic(foreground_window)) {
-    return false;
+  const bool has_external_foreground =
+      IsCandidateExternalWindow(foreground_window, own_window);
+  if (has_external_foreground) {
+    g_last_external_foreground_window = foreground_window;
   }
 
-  RECT foreground_bounds;
-  if (!GetWindowRect(foreground_window, &foreground_bounds)) {
-    return false;
+  HWND fullscreen_window = nullptr;
+  if (TryGetTrackedExternalForegroundFullscreen(own_window,
+                                                &fullscreen_window)) {
+    return true;
   }
 
-  HMONITOR monitor =
-      MonitorFromWindow(foreground_window, MONITOR_DEFAULTTONEAREST);
-  MONITORINFO monitor_info;
-  monitor_info.cbSize = sizeof(MONITORINFO);
-  if (!GetMonitorInfoW(monitor, &monitor_info)) {
-    return false;
-  }
-
-  const RECT& monitor_bounds = monitor_info.rcMonitor;
-  return foreground_bounds.left <= monitor_bounds.left &&
-         foreground_bounds.top <= monitor_bounds.top &&
-         foreground_bounds.right >= monitor_bounds.right &&
-         foreground_bounds.bottom >= monitor_bounds.bottom;
+  return has_external_foreground &&
+         TryGetAnyForegroundRelatedFullscreenWindow(
+             own_window, foreground_window, &fullscreen_window);
 }
 
 flutter::EncodableValue BoundsValueFromRect(

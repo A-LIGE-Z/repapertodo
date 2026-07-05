@@ -75,6 +75,11 @@ topmost paper should temporarily leave the topmost band while another
 application owns a fullscreen foreground window, then return to topmost after
 that fullscreen window is gone. Desktop-pinned papers stay at the bottom and do
 not participate in topmost recovery.
+Fullscreen detection should match PaperTodo's defensive Windows behavior:
+prefer DWM extended frame bounds, tolerate small border differences, ignore
+tool, cloaked, shell, hidden, minimized, and current-process windows, and scan
+foreground-process top-level windows when the foreground handle itself is not
+the fullscreen surface.
 Global hotkey settings are entered as text for now, so the Windows runner
 should accept forgiving key aliases: spaced names such as `Page Up`, arrow-key
 names, lock keys, number-pad names, and common punctuation names such as
