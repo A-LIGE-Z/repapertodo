@@ -49,6 +49,9 @@ class AppBootstrap {
       platform: resolvedPlatform,
     );
     await controller.start(startupCommand: startupCommand);
+    if (startupCommand.kind == StartupCommandKind.exit) {
+      return null;
+    }
     if (controller.state.sync.enabled &&
         controller.state.sync.webDav.autoSyncOnStart) {
       try {

@@ -465,7 +465,14 @@ double _normalizeZoom(double value) {
 }
 
 String _normalizeHotKeyForSettings(String value) {
-  final text = value.trim();
+  final cleaned = StringBuffer();
+  for (final unit in value.codeUnits) {
+    if (unit <= 0x1F || unit == 0x7F) {
+      continue;
+    }
+    cleaned.writeCharCode(unit);
+  }
+  final text = cleaned.toString().trim();
   return text.length > 64 ? text.substring(0, 64) : text;
 }
 
@@ -547,7 +554,7 @@ String _normalizeExtension(String extension) {
 bool _hasInvalidFileNameCharacter(String value) {
   const invalid = {'<', '>', ':', '"', '/', '\\', '|', '?', '*'};
   return value.runes.any((rune) {
-    if (rune < 0x20) {
+    if (rune < 0x20 || rune == 0x7F) {
       return true;
     }
     return invalid.contains(String.fromCharCode(rune));

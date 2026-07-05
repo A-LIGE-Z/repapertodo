@@ -73,6 +73,32 @@ void main() {
     expect(platform.paperWindows.shownIds, ['paper-1', 'paper-2']);
   });
 
+  test('startup settings command is retained for the UI layer', () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'paper-1',
+            type: PaperTypes.todo,
+            title: 'Todo',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.start(
+      startupCommand: const StartupCommand(StartupCommandKind.settings),
+    );
+
+    expect(
+      controller.takePendingUiStartupCommand()?.kind,
+      StartupCommandKind.settings,
+    );
+    expect(controller.takePendingUiStartupCommand(), isNull);
+  });
+
   test('startup exit command cleans up platform integrations then exits',
       () async {
     final platform = _RecordingPlatformServices();
@@ -91,6 +117,23 @@ void main() {
 
     expect(platform.systemIntegration.unregisterGlobalHotkeysCount, 1);
     expect(platform.tray.disposeCount, 1);
+    expect(platform.systemIntegration.exitApplicationCount, 1);
+  });
+
+  test('startup exit command does not create a default paper', () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(papers: const []),
+      platform: platform,
+    );
+
+    await controller.start(
+      startupCommand: const StartupCommand(StartupCommandKind.exit),
+    );
+
+    expect(controller.state.papers, isEmpty);
+    expect(platform.paperWindows.restoreAllCount, 1);
+    expect(platform.tray.rebuildMenuCount, 0);
     expect(platform.systemIntegration.exitApplicationCount, 1);
   });
 

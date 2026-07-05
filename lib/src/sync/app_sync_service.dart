@@ -1,5 +1,6 @@
 import '../core/model/app_state.dart';
 import '../core/model/sync_settings.dart';
+import '../core/model/sync_wire_datetime.dart';
 import '../core/storage/state_store.dart';
 import 'sync_device_id.dart';
 import 'sync_device_id_store.dart';
@@ -438,13 +439,18 @@ class AppSyncService {
     }
 
     try {
-      final operations = _operationDiffBuilder.build(
-        before: normalizedBeforeState,
-        after: uploadState,
-        deviceId: context.deviceId,
-        startSequence: previousSequences[context.deviceId] ?? 0,
-        createdAtUtc: createdAtUtc,
-      );
+      final List<SyncOperation> operations;
+      try {
+        operations = _operationDiffBuilder.build(
+          before: normalizedBeforeState,
+          after: uploadState,
+          deviceId: context.deviceId,
+          startSequence: previousSequences[context.deviceId] ?? 0,
+          createdAtUtc: createdAtUtc,
+        );
+      } on RangeError catch (error) {
+        throw WebDavSyncConfigurationException(_rangeErrorMessage(error));
+      }
       if (operations.isEmpty) {
         return AppSyncLocalOperationUploadResult(
           state: uploadState,
@@ -688,7 +694,8 @@ bool _isLegacyPlainOperationLogDownload(
 }
 
 bool _canAttemptLegacyPlainPayloadMigration(WebDavStateSyncResult result) {
-  return result.manifest != null && (result.manifestEtag ?? '').isNotEmpty;
+  return result.manifest != null &&
+      _strongRemoteEtagValue(result.manifestEtag) != null;
 }
 
 Future<bool> _migrateLegacyPlainPayload({
@@ -698,8 +705,8 @@ Future<bool> _migrateLegacyPlainPayload({
   required StateStore store,
 }) async {
   final manifest = downloadedResult.manifest;
-  final manifestEtag = downloadedResult.manifestEtag;
-  if (manifest == null || manifestEtag == null || manifestEtag.isEmpty) {
+  final manifestEtag = _strongRemoteEtagValue(downloadedResult.manifestEtag);
+  if (manifest == null || manifestEtag == null) {
     return false;
   }
 
@@ -713,19 +720,39 @@ Future<bool> _migrateLegacyPlainPayload({
     );
   } on WebDavException {
     return false;
+  } on WebDavSyncConfigurationException {
+    return false;
+  } on FormatException {
+    return false;
   }
   if (uploadResult.status != WebDavStateSyncStatus.uploaded) {
     return false;
   }
   final uploadedManifest = uploadResult.manifest;
   if (uploadedManifest != null) {
-    state.sync.operationDeviceSequences = normalizeSyncDeviceSequences(
-      uploadedManifest.deviceSequences,
-    );
+    final migratedState = AppState.fromJson(state.toJson())
+      ..sync.operationDeviceSequences = normalizeSyncDeviceSequences(
+        uploadedManifest.deviceSequences,
+      )
+      ..normalize();
+    try {
+      await store.save(migratedState);
+    } on StateStoreException {
+      return false;
+    }
+    state.sync.operationDeviceSequences =
+        migratedState.sync.operationDeviceSequences;
     state.normalize();
-    await store.save(state);
   }
   return true;
+}
+
+String? _strongRemoteEtagValue(String? etag) {
+  final trimmed = etag?.trim();
+  if (trimmed == null || trimmed.isEmpty) {
+    return null;
+  }
+  return trimmed.toLowerCase().startsWith('w/') ? null : trimmed;
 }
 
 Future<bool> _migrateLegacyPlainOperationLog({
@@ -739,6 +766,10 @@ Future<bool> _migrateLegacyPlainOperationLog({
       downloadedResult: downloadResult,
     );
   } on WebDavException {
+    return false;
+  } on WebDavSyncConfigurationException {
+    return false;
+  } on FormatException {
     return false;
   }
 }
@@ -770,6 +801,14 @@ String _downloadedMessage({
 String _formatExceptionMessage(FormatException error) {
   final message = error.message.trim();
   return message.isEmpty ? 'Remote sync data is not readable.' : message;
+}
+
+String _rangeErrorMessage(RangeError error) {
+  final message = error.message?.toString().trim();
+  if (message != null && message.isNotEmpty) {
+    return message;
+  }
+  return error.toString();
 }
 
 bool _deviceSequencesEqual(Map<String, int> left, Map<String, int> right) {
@@ -850,11 +889,11 @@ void _putLatestTombstone(
   String rawTimestamp,
 ) {
   final id = rawId.trim();
-  final timestamp = DateTime.tryParse(rawTimestamp.trim())?.toUtc();
+  final timestamp = tryParseStrictSyncWireDateTimeUtc(rawTimestamp);
   if (id.isEmpty || timestamp == null) {
     return;
   }
-  final previous = DateTime.tryParse(target[id] ?? '')?.toUtc();
+  final previous = tryParseStrictSyncWireDateTimeUtc(target[id] ?? '');
   if (previous == null || timestamp.isAfter(previous)) {
     target[id] = timestamp.toIso8601String();
   }
@@ -880,6 +919,9 @@ List<WebDavOperationLogRecord> _contiguousOperationRecords(
     if (deviceId.isEmpty) {
       continue;
     }
+    if (!isSyncDeviceSequenceInRange(record.sequence)) {
+      continue;
+    }
     if (record.sequence <= (previousSequences[deviceId] ?? 0)) {
       continue;
     }
@@ -890,7 +932,29 @@ List<WebDavOperationLogRecord> _contiguousOperationRecords(
     if (deviceComparison != 0) {
       return deviceComparison;
     }
-    return a.record.sequence.compareTo(b.record.sequence);
+    final sequenceComparison = a.record.sequence.compareTo(b.record.sequence);
+    if (sequenceComparison != 0) {
+      return sequenceComparison;
+    }
+    final pathComparison = a.record.path.compareTo(b.record.path);
+    if (pathComparison != 0) {
+      return pathComparison;
+    }
+    final etagComparison = (a.record.etag ?? '').compareTo(b.record.etag ?? '');
+    if (etagComparison != 0) {
+      return etagComparison;
+    }
+    final contentLengthComparison =
+        (a.record.contentLength ?? -1).compareTo(b.record.contentLength ?? -1);
+    if (contentLengthComparison != 0) {
+      return contentLengthComparison;
+    }
+    return (a.record.lastModifiedUtc?.toUtc() ??
+            DateTime.fromMillisecondsSinceEpoch(0, isUtc: true))
+        .compareTo(
+      b.record.lastModifiedUtc?.toUtc() ??
+          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    );
   });
 
   final selected = <WebDavOperationLogRecord>[];

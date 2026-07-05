@@ -33,6 +33,35 @@ void main() {
     expect(localState.toJson(), originalLocalStateJson);
   });
 
+  test('syncAndMergeNow returns disabled without merging when sync is off',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_run_disabled_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) =>
+          throw StateError('WebDAV should not be created'),
+    );
+    final localState = AppState(
+      papers: [
+        PaperData(id: '', type: 'unknown-paper-type', title: 'Draft'),
+      ],
+    );
+    final originalLocalStateJson = localState.toJson();
+
+    final result = await service.syncAndMergeNow(
+      localState: localState,
+      store: store,
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.disabled);
+    expect(result.state, same(localState));
+    expect(result.operationMergeResult, isNull);
+    expect(result.operationAppliedCount, 0);
+    expect(localState.toJson(), originalLocalStateJson);
+  });
+
   test('requires an encryption passphrase for configured WebDAV sync',
       () async {
     final directory = await Directory.systemTemp
@@ -62,6 +91,38 @@ void main() {
     expect(localState.toJson(), originalLocalStateJson);
   });
 
+  test('syncAndMergeNow returns configuration missing without merging',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_run_missing_passphrase_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) =>
+          throw StateError('WebDAV should not be created'),
+    );
+
+    final localState = AppState(
+      papers: [
+        PaperData(id: '', type: 'unknown-paper-type', title: 'Draft'),
+      ],
+      sync: _configuredSyncSettings(encryptionPassphrase: ''),
+    );
+    final originalLocalStateJson = localState.toJson();
+
+    final result = await service.syncAndMergeNow(
+      localState: localState,
+      store: store,
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.configurationMissing);
+    expect(result.syncResult.message, contains('encryption passphrase'));
+    expect(result.state, same(localState));
+    expect(result.operationMergeResult, isNull);
+    expect(result.operationAppliedCount, 0);
+    expect(localState.toJson(), originalLocalStateJson);
+  });
+
   test('does not create WebDAV clients for unsafe sync settings', () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_unsafe_settings_');
@@ -82,6 +143,7 @@ void main() {
       _configuredSyncSettings(username: 'user:name'),
       _configuredSyncSettings(password: 'bad\npass'),
       _configuredSyncSettings(rootPath: 'repapertodo/%0Aother'),
+      _configuredSyncSettings(rootPath: 'repapertodo//other'),
     ]) {
       final localState = AppState(
         papers: [
@@ -217,6 +279,64 @@ void main() {
     expect(stored.sync.operationDeviceSequences, {'remote-device': 7});
   });
 
+  test('normalizes downloaded snapshot and manifest device sequences',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_download_normalize_sequences_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final remoteState = AppState(
+      papers: [
+        PaperData(id: 'paper-remote', type: PaperTypes.note, title: 'Remote'),
+      ],
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {
+          ' Remote Device ': 3,
+          '!!!': 9,
+          'too-high': maxSyncDeviceSequence + 1,
+        },
+    );
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: remoteState,
+            snapshotPath: 'repapertodo/snapshots/remote.json',
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
+              latestSnapshotPath: 'repapertodo/snapshots/remote.json',
+              deviceSequences: {
+                ' Remote Device ': 7,
+                ' Manifest Device ': 2,
+                'bad': 5,
+                'zero-device': 0,
+                'negative-device': -1,
+              },
+            ),
+          );
+        },
+      ),
+    );
+
+    final result = await service.syncNow(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 6, 30),
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(result.state?.sync.operationDeviceSequences, {
+      'remote-device': 7,
+      'manifest-device': 2,
+    });
+    expect((await store.load()).sync.operationDeviceSequences, {
+      'remote-device': 7,
+      'manifest-device': 2,
+    });
+  });
+
   test('reports legacy plain WebDAV payloads when encryption is enabled',
       () async {
     final directory = await Directory.systemTemp
@@ -266,6 +386,70 @@ void main() {
     expect(stored.sync.operationDeviceSequences, {'remote-device': 9});
   });
 
+  test('does not migrate legacy plain WebDAV payloads with weak manifest ETags',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_legacy_plain_weak_etag_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final remoteState = AppState(
+      papers: [
+        PaperData(id: 'paper-remote', type: PaperTypes.note, title: 'Remote'),
+      ],
+    );
+    var pushCalls = 0;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: remoteState,
+            snapshotPath: 'repapertodo/snapshots/plain.json',
+            snapshotPayloadFormat: WebDavPayloadFormat.plainJson,
+            manifestEtag: ' w/"manifest-v1" ',
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 7, 2, 12),
+              latestSnapshotPath: 'repapertodo/snapshots/plain.json',
+              deviceSequences: {'remote-device': 9},
+            ),
+          );
+        },
+        onPush: (
+          state, {
+          updatedAtUtc,
+          expectedManifestEtag,
+          manifestKnownMissing = false,
+          previousDeviceSequences,
+          requireManifestCondition = false,
+        }) async {
+          pushCalls += 1;
+          return const WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+          );
+        },
+      ),
+    );
+
+    final result = await service.syncNow(
+      localState: AppState(
+        sync: _configuredSyncSettings(
+          encryptionPassphrase: 'shared sync secret',
+        ),
+      ),
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 2, 11),
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(result.legacyPlainPayloadDetected, true);
+    expect(result.legacyPlainPayloadMigrated, false);
+    expect(result.message, contains('next successful upload'));
+    expect(pushCalls, 0);
+    final stored = await store.load();
+    expect(stored.sync.operationDeviceSequences, {'remote-device': 9});
+  });
+
   test('migrates legacy plain WebDAV payloads when manifest ETag is available',
       () async {
     final directory = await Directory.systemTemp
@@ -294,7 +478,7 @@ void main() {
             state: remoteState,
             snapshotPath: 'repapertodo/snapshots/plain.json',
             snapshotPayloadFormat: WebDavPayloadFormat.plainJson,
-            manifestEtag: '"manifest-v1"',
+            manifestEtag: ' "manifest-v1" ',
             manifest: SyncManifest(
               schemaVersion: 1,
               updatedAtUtc: remoteUpdatedAtUtc,
@@ -309,6 +493,7 @@ void main() {
           expectedManifestEtag,
           manifestKnownMissing = false,
           previousDeviceSequences,
+          requireManifestCondition = false,
         }) async {
           pushCalls += 1;
           pushExpectedManifestEtag = expectedManifestEtag;
@@ -398,6 +583,7 @@ void main() {
           expectedManifestEtag,
           manifestKnownMissing = false,
           previousDeviceSequences,
+          requireManifestCondition = false,
         }) async {
           pushCalls += 1;
           return const WebDavStateSyncResult(
@@ -426,6 +612,158 @@ void main() {
     final stored = await store.load();
     expect(
         stored.papers.single.content, 'Downloaded despite migration conflict');
+    expect(stored.sync.operationDeviceSequences, {'remote-device': 9});
+  });
+
+  test('keeps downloaded state when legacy plain migration throws', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_migrate_legacy_plain_throw_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final remoteState = AppState(
+      papers: [
+        PaperData(
+          id: 'paper-remote',
+          type: PaperTypes.note,
+          title: 'Remote',
+          content: 'Downloaded despite migration failure',
+        ),
+      ],
+    );
+    var pushCalls = 0;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: remoteState,
+            snapshotPath: 'repapertodo/snapshots/plain.json',
+            snapshotPayloadFormat: WebDavPayloadFormat.plainJson,
+            manifestEtag: '"manifest-v1"',
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 7, 2, 12),
+              latestSnapshotPath: 'repapertodo/snapshots/plain.json',
+              deviceSequences: {'remote-device': 9},
+            ),
+          );
+        },
+        onPush: (
+          state, {
+          updatedAtUtc,
+          expectedManifestEtag,
+          manifestKnownMissing = false,
+          previousDeviceSequences,
+          requireManifestCondition = false,
+        }) async {
+          pushCalls += 1;
+          throw const FormatException('Legacy snapshot rewrite failed.');
+        },
+      ),
+    );
+
+    final result = await service.syncNow(
+      localState: AppState(
+        sync: _configuredSyncSettings(
+          encryptionPassphrase: 'shared sync secret',
+        ),
+      ),
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 2, 11),
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(result.legacyPlainPayloadDetected, true);
+    expect(result.legacyPlainPayloadMigrated, false);
+    expect(result.message, contains('could not complete'));
+    expect(pushCalls, 1);
+    final stored = await store.load();
+    expect(
+        stored.papers.single.content, 'Downloaded despite migration failure');
+    expect(stored.sync.operationDeviceSequences, {'remote-device': 9});
+  });
+
+  test('keeps downloaded state when migrated metadata save fails', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_migrate_legacy_plain_save_fail_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = _FailingSaveStateStore(
+      filePath: p.join(directory.path, 'data.json'),
+      failOnSaveCall: 2,
+    );
+    final remoteState = AppState(
+      papers: [
+        PaperData(
+          id: 'paper-remote',
+          type: PaperTypes.note,
+          title: 'Remote',
+          content: 'Downloaded before migration metadata save failed',
+        ),
+      ],
+    );
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: remoteState,
+            snapshotPath: 'repapertodo/snapshots/plain.json',
+            snapshotPayloadFormat: WebDavPayloadFormat.plainJson,
+            manifestEtag: '"manifest-v1"',
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 7, 2, 12),
+              latestSnapshotPath: 'repapertodo/snapshots/plain.json',
+              deviceSequences: {'remote-device': 9},
+            ),
+          );
+        },
+        onPush: (
+          state, {
+          updatedAtUtc,
+          expectedManifestEtag,
+          manifestKnownMissing = false,
+          previousDeviceSequences,
+          requireManifestCondition = false,
+        }) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+            snapshotPath: 'repapertodo/snapshots/encrypted.json',
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: updatedAtUtc ?? DateTime.utc(2026, 7, 2, 12),
+              latestSnapshotPath: 'repapertodo/snapshots/encrypted.json',
+              deviceSequences: {
+                'remote-device': 9,
+                deviceId ?? 'device-local': 1,
+              },
+            ),
+          );
+        },
+      ),
+    );
+
+    final result = await service.syncNow(
+      localState: AppState(
+        sync: _configuredSyncSettings(
+          encryptionPassphrase: 'shared sync secret',
+        ),
+      ),
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 2, 11),
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(result.legacyPlainPayloadDetected, true);
+    expect(result.legacyPlainPayloadMigrated, false);
+    expect(result.message, contains('could not complete'));
+    expect(result.state?.sync.operationDeviceSequences, {'remote-device': 9});
+    final stored = await store.load();
+    expect(stored.papers.single.content,
+        'Downloaded before migration metadata save failed');
     expect(stored.sync.operationDeviceSequences, {'remote-device': 9});
   });
 
@@ -572,7 +910,10 @@ void main() {
         .createTemp('repapertodo_app_sync_download_keep_sync_');
     addTearDown(() => directory.delete(recursive: true));
     final store = StateStore(filePath: p.join(directory.path, 'data.json'));
-    final localSync = _configuredSyncSettings();
+    final localSync = _configuredSyncSettings(
+      rootPath: 'LocalRoot',
+      autoSyncIntervalMinutes: 60,
+    );
     localSync.markPaperDeleted(
       'local-deleted',
       DateTime.utc(2026, 7, 1, 9),
@@ -580,10 +921,25 @@ void main() {
     final remoteSync = SyncSettings(
       enabled: false,
       provider: SyncProviderIds.none,
-      webDav: WebDavSyncSettings(),
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://remote.example.test/dav/',
+        username: 'remote-user',
+        password: 'remote-pass',
+        encryptionPassphrase: 'remote-secret',
+        rootPath: 'RemoteRoot',
+        autoSyncIntervalMinutes: 5,
+        requestTimeoutSeconds: 10,
+      ),
       operationDeviceSequences: {'snapshot-device': 3},
       deletedPaperTombstones: {
         'remote-deleted': DateTime.utc(2026, 7, 1, 10).toIso8601String(),
+        'overflow-deleted': '2026-13-01T10:00:00Z',
+      },
+      deletedTodoItemTombstones: {
+        'remote-todo': {
+          'remote-item': DateTime.utc(2026, 7, 1, 10, 30).toIso8601String(),
+          'overflow-item': '2026-07-01T24:00:00Z',
+        },
       },
     );
     final remoteState = AppState(
@@ -632,6 +988,9 @@ void main() {
     expect(stored.sync.webDav.endpoint, 'https://dav.example.test/');
     expect(stored.sync.webDav.username, 'user');
     expect(stored.sync.webDav.password, 'pass');
+    expect(stored.sync.webDav.encryptionPassphrase, 'shared sync secret');
+    expect(stored.sync.webDav.rootPath, 'LocalRoot');
+    expect(stored.sync.webDav.autoSyncIntervalMinutes, 60);
     expect(stored.sync.webDav.requestTimeoutSeconds, 45);
     expect(stored.sync.operationDeviceSequences, {
       'local-device': 5,
@@ -640,6 +999,10 @@ void main() {
     });
     expect(stored.sync.isPaperDeleted('local-deleted'), true);
     expect(stored.sync.isPaperDeleted('remote-deleted'), true);
+    expect(stored.sync.isPaperDeleted('overflow-deleted'), false);
+    expect(stored.sync.isTodoItemDeleted('remote-todo', 'remote-item'), true);
+    expect(
+        stored.sync.isTodoItemDeleted('remote-todo', 'overflow-item'), false);
   });
 
   test('closes configured WebDAV clients after sync and merge', () async {
@@ -768,6 +1131,40 @@ void main() {
 
     expect(result.status, AppSyncStatus.payloadUnreadable);
     expect(result.message, contains('sync encryption passphrase'));
+    expect(await File(store.filePath).exists(), isFalse);
+  });
+
+  test('reports malformed encrypted payloads separately from passphrase errors',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_malformed_encrypted_payload_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          throw const WebDavPayloadDecryptionException(
+            'Encrypted WebDAV sync payload is unsupported or corrupted.',
+          );
+        },
+      ),
+    );
+    final localState = AppState(
+      papers: [
+        PaperData(id: 'local', type: PaperTypes.note, title: 'Local'),
+      ],
+      sync: _configuredSyncSettings(),
+    );
+
+    final result = await service.syncNow(
+      localState: localState,
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.status, AppSyncStatus.payloadUnreadable);
+    expect(result.message, contains('unsupported or corrupted'));
+    expect(result.message, isNot(contains('passphrase')));
     expect(await File(store.filePath).exists(), isFalse);
   });
 
@@ -903,6 +1300,85 @@ void main() {
     expect((await store.load()).papers.single.title, 'Merged');
   });
 
+  test('syncAndMergeNow merges remote operations after manifest progress',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_and_merge_manifest_progress_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final downloadedPaths = <String>[];
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+            snapshotPath: 'repapertodo/snapshots/local.json',
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 7, 1, 8),
+              latestSnapshotPath: 'repapertodo/snapshots/local.json',
+              deviceSequences: {'device-a': 1},
+            ),
+          );
+        },
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000002.jsonl',
+              deviceId: 'device-a',
+              sequence: 2,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          downloadedPaths.add(operationLogPath);
+          if (operationLogPath.endsWith('000000000001.jsonl')) {
+            throw StateError('Covered operation log should not be downloaded.');
+          }
+          return [
+            SyncOperation(
+              id: 'device-a-2',
+              deviceId: 'device-a',
+              sequence: 2,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote-note',
+                  type: PaperTypes.note,
+                  title: 'Seq2',
+                  content: 'Merged from sequence 2',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.uploaded);
+    expect(result.operationAppliedCount, 1);
+    expect(downloadedPaths, [
+      'repapertodo/ops/device-a-000000000002.jsonl',
+    ]);
+    expect(result.state.sync.operationDeviceSequences, {'device-a': 2});
+    expect(result.state.papers.single.content, 'Merged from sequence 2');
+    final stored = await store.load();
+    expect(stored.sync.operationDeviceSequences, {'device-a': 2});
+    expect(stored.papers.single.content, 'Merged from sequence 2');
+  });
+
   test('syncAndMergeNow reports unreadable operation logs without merging',
       () async {
     final directory = await Directory.systemTemp
@@ -910,7 +1386,10 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     final store = StateStore(filePath: p.join(directory.path, 'data.json'));
     final localState = AppState(
-      sync: _configuredSyncSettings(),
+      sync: _configuredSyncSettings(
+        rootPath: 'LocalRoot',
+        autoSyncIntervalMinutes: 60,
+      ),
       papers: [
         PaperData(id: 'local', type: PaperTypes.note, title: 'Local'),
       ],
@@ -953,12 +1432,79 @@ void main() {
     expect((await store.load()).papers.single.title, 'Local');
   });
 
+  test(
+      'syncAndMergeNow reports malformed encrypted operation logs separately from passphrase errors',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_malformed_encrypted_op_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final localState = AppState(
+      sync: _configuredSyncSettings(
+        rootPath: 'LocalRoot',
+        autoSyncIntervalMinutes: 60,
+      ),
+      papers: [
+        PaperData(id: 'local', type: PaperTypes.note, title: 'Local'),
+      ],
+    );
+    var createdCount = 0;
+    var closedCount = 0;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) {
+        createdCount += 1;
+        return _FakeWebDavStateSyncService(
+          onSync: ({required localState, localUpdatedAtUtc}) async {
+            return const WebDavStateSyncResult(
+              status: WebDavStateSyncStatus.uploaded,
+              snapshotPath: 'repapertodo/snapshots/local.json',
+            );
+          },
+          onListOperationLogs: () async {
+            return const [
+              WebDavOperationLogRecord(
+                path: 'repapertodo/ops/device-a-000000000001.jsonl',
+                deviceId: 'device-a',
+                sequence: 1,
+              ),
+            ];
+          },
+          onDownloadOperationLog: (operationLogPath) async {
+            throw const WebDavPayloadDecryptionException(
+              'Encrypted WebDAV sync payload is unsupported or corrupted.',
+            );
+          },
+          onClose: () {
+            closedCount += 1;
+          },
+        );
+      },
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: localState,
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.payloadUnreadable);
+    expect(result.syncResult.message, contains('unsupported or corrupted'));
+    expect(result.syncResult.message, isNot(contains('passphrase')));
+    expect(result.operationMergeResult, isNull);
+    expect(result.state.papers.single.title, 'Local');
+    expect((await store.load()).papers.single.title, 'Local');
+    expect(createdCount, 2);
+    expect(closedCount, 2);
+  });
+
   test('syncAndMergeNow reports malformed operation logs without merging',
       () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_merge_malformed_operation_');
     addTearDown(() => directory.delete(recursive: true));
     final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var createdCount = 0;
+    var closedCount = 0;
     final localState = AppState(
       sync: _configuredSyncSettings(),
       papers: [
@@ -966,26 +1512,32 @@ void main() {
       ],
     );
     final service = AppSyncService(
-      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
-        onSync: ({required localState, localUpdatedAtUtc}) async {
-          return const WebDavStateSyncResult(
-            status: WebDavStateSyncStatus.uploaded,
-            snapshotPath: 'repapertodo/snapshots/local.json',
-          );
-        },
-        onListOperationLogs: () async {
-          return const [
-            WebDavOperationLogRecord(
-              path: 'repapertodo/ops/device-a-000000000001.jsonl',
-              deviceId: 'device-a',
-              sequence: 1,
-            ),
-          ];
-        },
-        onDownloadOperationLog: (operationLogPath) async {
-          throw const FormatException('Operation log is not valid JSON.');
-        },
-      ),
+      webDavFactory: (_, {deviceId}) {
+        createdCount += 1;
+        return _FakeWebDavStateSyncService(
+          onSync: ({required localState, localUpdatedAtUtc}) async {
+            return const WebDavStateSyncResult(
+              status: WebDavStateSyncStatus.uploaded,
+              snapshotPath: 'repapertodo/snapshots/local.json',
+            );
+          },
+          onListOperationLogs: () async {
+            return const [
+              WebDavOperationLogRecord(
+                path: 'repapertodo/ops/device-a-000000000001.jsonl',
+                deviceId: 'device-a',
+                sequence: 1,
+              ),
+            ];
+          },
+          onDownloadOperationLog: (operationLogPath) async {
+            throw const FormatException('Operation log is not valid JSON.');
+          },
+          onClose: () {
+            closedCount += 1;
+          },
+        );
+      },
     );
 
     final result = await service.syncAndMergeNow(
@@ -999,6 +1551,62 @@ void main() {
     expect(result.operationMergeResult, isNull);
     expect(result.state.papers.single.title, 'Local');
     expect((await store.load()).papers.single.title, 'Local');
+    expect(createdCount, 2);
+    expect(closedCount, 2);
+  });
+
+  test('syncAndMergeNow reports unsafe operation logs without merging',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_unsafe_operation_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var createdCount = 0;
+    var closedCount = 0;
+    final localState = AppState(
+      sync: _configuredSyncSettings(),
+      papers: [
+        PaperData(id: 'local', type: PaperTypes.note, title: 'Local'),
+      ],
+    );
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) {
+        createdCount += 1;
+        return _FakeWebDavStateSyncService(
+          onSync: ({required localState, localUpdatedAtUtc}) async {
+            return const WebDavStateSyncResult(
+              status: WebDavStateSyncStatus.uploaded,
+              snapshotPath: 'repapertodo/snapshots/local.json',
+            );
+          },
+          onListOperationLogs: () async {
+            throw const WebDavSyncConfigurationException(
+              'Operation log path must be inside repapertodo/ops.',
+            );
+          },
+          onClose: () {
+            closedCount += 1;
+          },
+        );
+      },
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: localState,
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.payloadUnreadable);
+    expect(
+      result.syncResult.message,
+      'Operation log path must be inside repapertodo/ops.',
+    );
+    expect(result.operationMergeResult, isNull);
+    expect(result.state.papers.single.title, 'Local');
+    expect((await store.load()).papers.single.title, 'Local');
+    expect(createdCount, 2);
+    expect(closedCount, 2);
   });
 
   test('syncAndMergeNow skips remote operations after sync conflict', () async {
@@ -1074,6 +1682,34 @@ void main() {
     expect(forwardedDeviceId, snapshots.single.deviceId);
   });
 
+  test('closes WebDAV client when listing recovery snapshots fails', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_list_error_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var closed = false;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListSnapshots: () async {
+          throw StateError('snapshot list failed');
+        },
+        onClose: () {
+          closed = true;
+        },
+      ),
+    );
+
+    await expectLater(
+      service.listRecoverySnapshots(
+        localState: AppState(sync: _configuredSyncSettings()),
+        store: store,
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(closed, isTrue);
+  });
+
   test('lists operation logs through configured WebDAV', () async {
     final directory =
         await Directory.systemTemp.createTemp('repapertodo_app_sync_ops_');
@@ -1111,6 +1747,34 @@ void main() {
     expect(forwardedDeviceId, logs.single.deviceId);
   });
 
+  test('closes WebDAV client when listing operation logs fails', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_ops_list_error_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var closed = false;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          throw StateError('operation log list failed');
+        },
+        onClose: () {
+          closed = true;
+        },
+      ),
+    );
+
+    await expectLater(
+      service.listRemoteOperationLogs(
+        localState: AppState(sync: _configuredSyncSettings()),
+        store: store,
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(closed, isTrue);
+  });
+
   test('downloads operation logs through configured WebDAV', () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_download_ops_');
@@ -1143,6 +1807,76 @@ void main() {
     expect(operations.single.kind, SyncOperationKind.stateSnapshot);
     expect(operations.single.payload['path'],
         'repapertodo/ops/device-000000000001.jsonl');
+  });
+
+  test('closes WebDAV client when downloading operation logs fails', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_ops_download_error_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var closed = false;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadOperationLog: (operationLogPath) async {
+          throw const WebDavPayloadDecryptionException(
+            'Unable to decrypt WebDAV sync payload. Check the sync encryption passphrase.',
+          );
+        },
+        onClose: () {
+          closed = true;
+        },
+      ),
+    );
+
+    await expectLater(
+      service.downloadRemoteOperationLog(
+        localState: AppState(sync: _configuredSyncSettings()),
+        store: store,
+        operationLogPath: 'repapertodo/ops/device-000000000001.jsonl',
+      ),
+      throwsA(isA<WebDavPayloadDecryptionException>()),
+    );
+
+    expect(closed, isTrue);
+  });
+
+  test('closes WebDAV client when downloading malformed operation logs fails',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_ops_download_malformed_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var closed = false;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadOperationLog: (operationLogPath) async {
+          throw FormatException(
+            'Sync operation sequence must be a positive integer no greater than '
+            '$maxSyncDeviceSequence.',
+          );
+        },
+        onClose: () {
+          closed = true;
+        },
+      ),
+    );
+
+    await expectLater(
+      service.downloadRemoteOperationLog(
+        localState: AppState(sync: _configuredSyncSettings()),
+        store: store,
+        operationLogPath: 'repapertodo/ops/device-000000000001.jsonl',
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('sequence must be a positive integer no greater than'),
+        ),
+      ),
+    );
+
+    expect(closed, isTrue);
   });
 
   test('merges remote operation logs and saves applied state', () async {
@@ -1216,6 +1950,129 @@ void main() {
     final stored = await store.load();
     expect(stored.papers.single.content, 'Merged body');
     expect(stored.sync.operationDeviceSequences, {'device-a': 2});
+  });
+
+  test('merge does not return applied state when saving fails', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_save_fail_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = _FailingSaveStateStore(
+      filePath: p.join(directory.path, 'data.json'),
+      failOnSaveCall: 1,
+    );
+    final localState = AppState(sync: _configuredSyncSettings());
+    final originalLocalStateJson = localState.toJson();
+    var closed = false;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote-note',
+                  type: PaperTypes.note,
+                  title: 'Remote',
+                  content: 'Unsaved merge',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+        onClose: () {
+          closed = true;
+        },
+      ),
+    );
+
+    await expectLater(
+      service.mergeRemoteOperations(
+        localState: localState,
+        store: store,
+      ),
+      throwsA(isA<StateStoreException>()),
+    );
+
+    expect(localState.toJson(), originalLocalStateJson);
+    expect(await File(store.filePath).exists(), isFalse);
+    expect(closed, isTrue);
+  });
+
+  test('merge does not save conflicting duplicate operation sequences',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_conflicting_duplicate_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'first',
+                  type: PaperTypes.note,
+                  title: 'First',
+                ).toJson(),
+              },
+            ),
+            SyncOperation(
+              id: 'device-a-1-conflict',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'conflict',
+                  type: PaperTypes.note,
+                  title: 'Conflict',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+    );
+
+    expect(result.appliedCount, 0);
+    expect(result.deviceSequences, isEmpty);
+    expect(result.state.papers, isEmpty);
+    expect(await File(store.filePath).exists(), isFalse);
   });
 
   test('merges legacy-cased WebDAV operation log wire payloads', () async {
@@ -1374,6 +2231,72 @@ void main() {
     expect((await store.load()).papers.single.content, 'Plain op 2');
   });
 
+  test('merge keeps legacy plain operation logs when migration fails',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_legacy_plain_op_migrate_fail_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+              etag: 'op-v1',
+            ),
+          ];
+        },
+        onDownloadOperationLogWithMetadata: (operationLogPath) async {
+          return WebDavOperationLogDownloadResult(
+            path: operationLogPath,
+            payloadFormat: WebDavPayloadFormat.plainJson,
+            operations: [
+              SyncOperation(
+                id: 'device-a-1',
+                deviceId: 'device-a',
+                sequence: 1,
+                kind: SyncOperationKind.upsertPaper,
+                createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+                payload: {
+                  'paper': PaperData(
+                    id: 'remote-note',
+                    type: PaperTypes.note,
+                    title: 'Remote',
+                    content: 'Plain op still merges',
+                  ).toJson(),
+                },
+              ),
+            ],
+          );
+        },
+        onMigrateLegacyPlainOperationLog: (
+          record, {
+          downloadedResult,
+        }) async {
+          throw const FormatException('Legacy operation rewrite failed.');
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(
+        sync: _configuredSyncSettings(
+          encryptionPassphrase: 'shared sync secret',
+        ),
+      ),
+      store: store,
+    );
+
+    expect(result.appliedCount, 1);
+    expect(result.legacyPlainOperationLogCount, 1);
+    expect(result.legacyPlainOperationLogMigratedCount, 0);
+    expect(result.state.papers.single.content, 'Plain op still merges');
+    expect((await store.load()).papers.single.content, 'Plain op still merges');
+  });
+
   test('merge waits at gaps in remote operation sequences', () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_merge_gap_');
@@ -1467,6 +2390,8 @@ void main() {
         ),
       ],
     );
+    final originalBeforeStateJson = beforeState.toJson();
+    final originalAfterStateJson = afterState.toJson();
     var forwardedDeviceId = '';
     WebDavSyncSettings? forwardedSettings;
     Map<String, int>? previousSequences;
@@ -1521,6 +2446,8 @@ void main() {
     expect(result.stateChanged, true);
     expect(result.deviceSequences, {'device-local': 5});
     expect(result.state.sync.operationDeviceSequences, {'device-local': 5});
+    expect(beforeState.toJson(), originalBeforeStateJson);
+    expect(afterState.toJson(), originalAfterStateJson);
     expect((await store.load()).sync.operationDeviceSequences, {
       'device-local': 5,
     });
@@ -1558,6 +2485,8 @@ void main() {
         ),
       ],
     );
+    final originalBeforeStateJson = beforeState.toJson();
+    final originalAfterStateJson = afterState.toJson();
     final service = AppSyncService(
       deviceIdStore: SyncDeviceIdStore(
         filePath: p.join(directory.path, 'sync-device-id'),
@@ -1594,9 +2523,87 @@ void main() {
     expect(result.stateChanged, true);
     expect(result.deviceSequences, {'device-local': 5});
     expect(result.state.sync.operationDeviceSequences, {'device-local': 5});
+    expect(beforeState.toJson(), originalBeforeStateJson);
+    expect(afterState.toJson(), originalAfterStateJson);
     expect((await store.load()).sync.operationDeviceSequences, {
       'device-local': 5,
     });
+  });
+
+  test('does not advance local upload state when sequence save fails',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_upload_ops_save_fail_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = _FailingSaveStateStore(
+      filePath: p.join(directory.path, 'data.json'),
+      failOnSaveCall: 1,
+    );
+    await File(p.join(directory.path, 'sync-device-id'))
+        .writeAsString('device-local');
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'Before',
+        ),
+      ],
+    );
+    final afterState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'After',
+        ),
+      ],
+    );
+    final originalBeforeStateJson = beforeState.toJson();
+    final originalAfterStateJson = afterState.toJson();
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) {
+        return _FakeWebDavStateSyncService(
+          onUploadOperationLogs: (
+            operations, {
+            previousDeviceSequences,
+          }) async {
+            expect(operations, hasLength(1));
+            return WebDavOperationLogUploadResult(
+              deviceSequences: {
+                ...?previousDeviceSequences,
+                deviceId ?? '': operations.single.sequence,
+              },
+              uploadedCount: 0,
+            );
+          },
+        );
+      },
+    );
+
+    await expectLater(
+      service.uploadLocalOperations(
+        beforeState: beforeState,
+        afterState: afterState,
+        store: store,
+        createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+      ),
+      throwsA(isA<StateStoreException>()),
+    );
+
+    expect(beforeState.toJson(), originalBeforeStateJson);
+    expect(afterState.toJson(), originalAfterStateJson);
+    expect(afterState.sync.operationDeviceSequences, {'device-local': 4});
+    expect(await File(store.filePath).exists(), isFalse);
   });
 
   test('does not infer device sequence progress from uploaded count alone',
@@ -1707,6 +2714,8 @@ void main() {
         ),
       ],
     );
+    final originalBeforeStateJson = beforeState.toJson();
+    final originalAfterStateJson = afterState.toJson();
     final service = AppSyncService(
       deviceIdStore: SyncDeviceIdStore(
         filePath: p.join(directory.path, 'sync-device-id'),
@@ -1747,9 +2756,97 @@ void main() {
       'device-local': 5,
       'remote-device': 2,
     });
+    expect(beforeState.toJson(), originalBeforeStateJson);
+    expect(afterState.toJson(), originalAfterStateJson);
     expect((await store.load()).sync.operationDeviceSequences, {
       'device-local': 5,
       'remote-device': 2,
+    });
+  });
+
+  test('normalizes device sequences from operation upload results', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_upload_ops_normalize_sequences_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await File(p.join(directory.path, 'sync-device-id'))
+        .writeAsString('device-local');
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'Before',
+        ),
+      ],
+    );
+    final afterState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'After',
+        ),
+      ],
+    );
+    final originalBeforeStateJson = beforeState.toJson();
+    final originalAfterStateJson = afterState.toJson();
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) {
+        return _FakeWebDavStateSyncService(
+          onUploadOperationLogs: (
+            operations, {
+            previousDeviceSequences,
+          }) async {
+            expect(operations, hasLength(1));
+            return const WebDavOperationLogUploadResult(
+              deviceSequences: {
+                ' Device Local ': 5,
+                '!!!': 9,
+                'too-high': maxSyncDeviceSequence + 1,
+                'zero-device': 0,
+              },
+              uploadedCount: 1,
+              acceptedDeviceSequences: {
+                ' Remote Device ': 3,
+                'bad': 7,
+                'negative-device': -1,
+              },
+            );
+          },
+        );
+      },
+    );
+
+    final result = await service.uploadLocalOperations(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(result.deviceSequences, {
+      'device-local': 5,
+      'remote-device': 3,
+    });
+    expect(result.state.sync.operationDeviceSequences, {
+      'device-local': 5,
+      'remote-device': 3,
+    });
+    expect(beforeState.toJson(), originalBeforeStateJson);
+    expect(afterState.toJson(), originalAfterStateJson);
+    expect((await store.load()).sync.operationDeviceSequences, {
+      'device-local': 5,
+      'remote-device': 3,
     });
   });
 
@@ -1848,6 +2945,94 @@ void main() {
     );
   });
 
+  test('does not report local delete upload success when tombstone save fails',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_upload_delete_save_fail_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = _FailingSaveStateStore(
+      filePath: p.join(directory.path, 'data.json'),
+      failOnSaveCall: 1,
+    );
+    await File(p.join(directory.path, 'sync-device-id'))
+        .writeAsString('device-local');
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 8},
+      papers: [
+        PaperData(id: 'old-note', type: PaperTypes.note, title: 'Remove'),
+        PaperData(
+          id: 'todo',
+          type: PaperTypes.todo,
+          items: [
+            PaperItem(id: 'item-1', text: 'Remove item'),
+            PaperItem(id: 'item-2', text: 'Keep item'),
+          ],
+        ),
+      ],
+    );
+    final afterState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 8},
+      papers: [
+        PaperData(
+          id: 'todo',
+          type: PaperTypes.todo,
+          items: [
+            PaperItem(id: 'item-2', text: 'Keep item'),
+          ],
+        ),
+      ],
+    );
+    final originalBeforeStateJson = beforeState.toJson();
+    final originalAfterStateJson = afterState.toJson();
+    var closed = false;
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) {
+        return _FakeWebDavStateSyncService(
+          onUploadOperationLogs: (
+            operations, {
+            previousDeviceSequences,
+          }) async {
+            expect(operations.map((operation) => operation.kind), [
+              SyncOperationKind.deletePaper,
+              SyncOperationKind.deleteTodoItem,
+              SyncOperationKind.upsertTodoItem,
+            ]);
+            return WebDavOperationLogUploadResult(
+              deviceSequences: {
+                ...?previousDeviceSequences,
+                deviceId ?? '': operations.last.sequence,
+              },
+              uploadedCount: operations.length,
+            );
+          },
+          onClose: () {
+            closed = true;
+          },
+        );
+      },
+    );
+
+    await expectLater(
+      service.uploadLocalOperations(
+        beforeState: beforeState,
+        afterState: afterState,
+        store: store,
+        createdAtUtc: DateTime.utc(2026, 7, 1, 12),
+      ),
+      throwsA(isA<StateStoreException>()),
+    );
+
+    expect(beforeState.toJson(), originalBeforeStateJson);
+    expect(afterState.toJson(), originalAfterStateJson);
+    expect(await File(store.filePath).exists(), isFalse);
+    expect(closed, isTrue);
+  });
+
   test('keeps pending local upload states unchanged when WebDAV upload fails',
       () async {
     final directory = await Directory.systemTemp
@@ -1886,6 +3071,7 @@ void main() {
     );
     final originalBeforeStateJson = beforeState.toJson();
     final originalAfterStateJson = afterState.toJson();
+    var closed = false;
     final service = AppSyncService(
       deviceIdStore: SyncDeviceIdStore(
         filePath: p.join(directory.path, 'sync-device-id'),
@@ -1906,6 +3092,9 @@ void main() {
               statusCode: 0,
             );
           },
+          onClose: () {
+            closed = true;
+          },
         );
       },
     );
@@ -1923,6 +3112,88 @@ void main() {
     expect(beforeState.toJson(), originalBeforeStateJson);
     expect(afterState.toJson(), originalAfterStateJson);
     expect(await File(store.filePath).exists(), isFalse);
+    expect(closed, isTrue);
+  });
+
+  test('rejects exhausted local operation sequences before upload', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_upload_ops_exhausted_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await File(p.join(directory.path, 'sync-device-id'))
+        .writeAsString('device-local');
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': maxSyncDeviceSequence},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'Before',
+        ),
+      ],
+    );
+    final afterState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': maxSyncDeviceSequence},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'After',
+        ),
+      ],
+    );
+    final originalBeforeStateJson = beforeState.toJson();
+    final originalAfterStateJson = afterState.toJson();
+    var uploadInvoked = false;
+    var closed = false;
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) {
+        return _FakeWebDavStateSyncService(
+          onUploadOperationLogs: (
+            operations, {
+            previousDeviceSequences,
+          }) async {
+            uploadInvoked = true;
+            return const WebDavOperationLogUploadResult(
+              deviceSequences: {},
+              uploadedCount: 0,
+            );
+          },
+          onClose: () {
+            closed = true;
+          },
+        );
+      },
+    );
+
+    await expectLater(
+      service.uploadLocalOperations(
+        beforeState: beforeState,
+        afterState: afterState,
+        store: store,
+        createdAtUtc: DateTime.utc(2026, 7, 1, 12),
+      ),
+      throwsA(
+        isA<WebDavSyncConfigurationException>().having(
+          (error) => error.message,
+          'message',
+          contains('Sync operation sequence must be between 1 and'),
+        ),
+      ),
+    );
+
+    expect(uploadInvoked, false);
+    expect(beforeState.toJson(), originalBeforeStateJson);
+    expect(afterState.toJson(), originalAfterStateJson);
+    expect(await File(store.filePath).exists(), isFalse);
+    expect(closed, isTrue);
   });
 
   test('saves updated tombstones when delete operation uploads are idempotent',
@@ -2108,6 +3379,220 @@ void main() {
     expect(await File(store.filePath).exists(), isFalse);
   });
 
+  test('merge normalizes explicit device sequences before selecting logs',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_normalize_sequences_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote',
+                  type: PaperTypes.note,
+                  title: 'Remote',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+      deviceSequences: {
+        ' Device A ': maxSyncDeviceSequence + 1,
+        'bad': 9,
+      },
+    );
+
+    expect(result.appliedCount, 1);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.papers.single.title, 'Remote');
+    expect((await store.load()).sync.operationDeviceSequences, {'device-a': 1});
+  });
+
+  test('merge normalizes stored device sequences before selecting logs',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_normalize_stored_sequences_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote',
+                  type: PaperTypes.note,
+                  title: 'Remote',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(
+        sync: _configuredSyncSettings()
+          ..operationDeviceSequences = {
+            ' Device A ': maxSyncDeviceSequence + 1,
+            'bad': 9,
+          },
+      ),
+      store: store,
+    );
+
+    expect(result.appliedCount, 1);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.papers.single.title, 'Remote');
+    expect((await store.load()).sync.operationDeviceSequences, {'device-a': 1});
+  });
+
+  test('merge selects duplicate operation log records deterministically',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_duplicate_records_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final downloadedPaths = <String>[];
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/z-device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+              etag: 'z',
+            ),
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/a-device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+              etag: 'a',
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          downloadedPaths.add(operationLogPath);
+          if (operationLogPath !=
+              'repapertodo/ops/a-device-a-000000000001.jsonl') {
+            throw StateError('Unexpected duplicate record selected.');
+          }
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote',
+                  type: PaperTypes.note,
+                  title: 'Remote',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+    );
+
+    expect(downloadedPaths, [
+      'repapertodo/ops/a-device-a-000000000001.jsonl',
+    ]);
+    expect(result.appliedCount, 1);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.papers.single.title, 'Remote');
+  });
+
+  test('merge skips operation logs outside the remote sequence range',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_skip_range_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return [
+            WebDavOperationLogRecord(
+              path:
+                  'repapertodo/ops/device-a-${maxSyncDeviceSequence + 1}.jsonl',
+              deviceId: 'device-a',
+              sequence: maxSyncDeviceSequence + 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          throw StateError(
+            'Out-of-range operation logs should not be downloaded.',
+          );
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(
+        papers: [
+          PaperData(id: 'local', type: PaperTypes.todo, title: 'Local'),
+        ],
+        sync: _configuredSyncSettings(),
+      ),
+      store: store,
+    );
+
+    expect(result.appliedCount, 0);
+    expect(result.deviceSequences, isEmpty);
+    expect(result.state.papers.single.title, 'Local');
+    expect(await File(store.filePath).exists(), isFalse);
+  });
+
   test('restores a selected recovery snapshot', () async {
     final directory =
         await Directory.systemTemp.createTemp('repapertodo_app_sync_restore_');
@@ -2124,7 +3609,10 @@ void main() {
           endpoint: 'https://remote.example.test/',
           username: 'remote-user',
           password: 'remote-password',
+          encryptionPassphrase: 'remote-secret',
           rootPath: 'RemoteRoot',
+          autoSyncIntervalMinutes: 5,
+          requestTimeoutSeconds: 10,
         ),
       ),
     );
@@ -2142,7 +3630,12 @@ void main() {
     );
 
     final result = await service.restoreRecoverySnapshot(
-      localState: AppState(sync: _configuredSyncSettings()),
+      localState: AppState(
+        sync: _configuredSyncSettings(
+          rootPath: 'LocalRoot',
+          autoSyncIntervalMinutes: 60,
+        ),
+      ),
       store: store,
       snapshotPath: 'repapertodo/snapshots/snapshot.json',
     );
@@ -2159,13 +3652,245 @@ void main() {
     expect(stored.sync.webDav.username, 'user');
     expect(stored.sync.webDav.password, 'pass');
     expect(stored.sync.webDav.encryptionPassphrase, 'shared sync secret');
+    expect(stored.sync.webDav.rootPath, 'LocalRoot');
+    expect(stored.sync.webDav.autoSyncIntervalMinutes, 60);
     expect(stored.sync.webDav.requestTimeoutSeconds, 45);
   });
 
-  test('reports unreadable recovery snapshots without replacing local state',
+  test('normalizes recovery snapshot device sequences before saving', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_restore_normalize_sequences_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final snapshotState = AppState(
+      papers: [
+        PaperData(id: 'snapshot-paper', type: PaperTypes.note, title: 'Snap'),
+      ],
+      sync: SyncSettings(
+        operationDeviceSequences: {
+          ' Device Local ': 5,
+          ' Snapshot Device ': 3,
+          '!!!': 9,
+          'too-high': maxSyncDeviceSequence + 1,
+          'zero-device': 0,
+        },
+      ),
+    );
+    final originalSnapshotStateJson = snapshotState.toJson();
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadSnapshot: (snapshotPath) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: snapshotState,
+            snapshotPath: snapshotPath,
+          );
+        },
+      ),
+    );
+
+    final result = await service.restoreRecoverySnapshot(
+      localState: AppState(
+        sync: _configuredSyncSettings()
+          ..operationDeviceSequences = {
+            ' Device Local ': 7,
+            ' Local Only ': 2,
+            'bad': 8,
+            'negative-device': -1,
+          },
+      ),
+      store: store,
+      snapshotPath: 'repapertodo/snapshots/snapshot.json',
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(snapshotState.toJson(), originalSnapshotStateJson);
+    expect(result.state?.sync.operationDeviceSequences, {
+      'device-local': 7,
+      'local-only': 2,
+      'snapshot-device': 3,
+    });
+    expect((await store.load()).sync.operationDeviceSequences, {
+      'device-local': 7,
+      'local-only': 2,
+      'snapshot-device': 3,
+    });
+  });
+
+  test('normalizes recovery snapshot tombstones before saving', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_restore_normalize_tombstones_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final localPaperDeletedAt = DateTime.utc(2026, 7, 1, 9);
+    final snapshotPaperDeletedAt = DateTime.utc(2026, 7, 1, 10);
+    final localItemDeletedAt = DateTime.utc(2026, 7, 1, 9, 30);
+    final snapshotItemDeletedAt = DateTime.utc(2026, 7, 1, 10, 30);
+    final snapshotState = AppState(
+      papers: [
+        PaperData(id: 'snapshot-paper', type: PaperTypes.note, title: 'Snap'),
+      ],
+      sync: SyncSettings(
+        deletedPaperTombstones: {
+          ' paper-a ': snapshotPaperDeletedAt.toIso8601String(),
+          'bad-paper': '2026-13-01T00:00:00.000Z',
+          'no-zone': '2026-07-01T00:00:00.000',
+          'edge-space-paper': ' ${snapshotPaperDeletedAt.toIso8601String()} ',
+        },
+        deletedTodoItemTombstones: {
+          'todo-a': {
+            ' item-a ': snapshotItemDeletedAt.toIso8601String(),
+            'bad-item': '2026-07-01T00:00:00.000',
+            'edge-space-item': ' ${snapshotItemDeletedAt.toIso8601String()} ',
+          },
+          'covered-paper': {
+            'covered-item': DateTime.utc(2026, 7, 1, 9).toIso8601String(),
+          },
+        },
+      ),
+    );
+    final originalSnapshotStateJson = snapshotState.toJson();
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadSnapshot: (snapshotPath) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: snapshotState,
+            snapshotPath: snapshotPath,
+          );
+        },
+      ),
+    );
+
+    final result = await service.restoreRecoverySnapshot(
+      localState: AppState(
+        sync: _configuredSyncSettings()
+          ..deletedPaperTombstones = {
+            'paper-a': localPaperDeletedAt.toIso8601String(),
+            'covered-paper': DateTime.utc(2026, 7, 1, 10).toIso8601String(),
+          }
+          ..deletedTodoItemTombstones = {
+            'todo-a': {
+              'item-a': localItemDeletedAt.toIso8601String(),
+              'local-only': localItemDeletedAt.toIso8601String(),
+            },
+          },
+      ),
+      store: store,
+      snapshotPath: 'repapertodo/snapshots/snapshot.json',
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(snapshotState.toJson(), originalSnapshotStateJson);
+    final stored = await store.load();
+    expect(stored.sync.deletedPaperTombstones, {
+      'paper-a': snapshotPaperDeletedAt.toIso8601String(),
+      'covered-paper': DateTime.utc(2026, 7, 1, 10).toIso8601String(),
+    });
+    expect(stored.sync.deletedTodoItemTombstones, {
+      'todo-a': {
+        'item-a': snapshotItemDeletedAt.toIso8601String(),
+        'local-only': localItemDeletedAt.toIso8601String(),
+      },
+    });
+  });
+
+  test('closes configured WebDAV client after restoring recovery snapshots',
       () async {
     final directory = await Directory.systemTemp
-        .createTemp('repapertodo_app_sync_restore_unreadable_payload_');
+        .createTemp('repapertodo_app_sync_restore_closes_client_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    var closed = false;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadSnapshot: (snapshotPath) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: AppState(
+              papers: [
+                PaperData(
+                  id: 'snapshot-paper',
+                  type: PaperTypes.note,
+                  title: 'Snap',
+                ),
+              ],
+            ),
+            snapshotPath: snapshotPath,
+          );
+        },
+        onClose: () {
+          closed = true;
+        },
+      ),
+    );
+
+    final result = await service.restoreRecoverySnapshot(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+      snapshotPath: 'repapertodo/snapshots/snapshot.json',
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(closed, isTrue);
+  });
+
+  test('does not report recovery restore success when saving fails', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_restore_save_fail_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = _FailingSaveStateStore(
+      filePath: p.join(directory.path, 'data.json'),
+      failOnSaveCall: 2,
+    );
+    final localState = AppState(
+      sync: _configuredSyncSettings(),
+      papers: [
+        PaperData(id: 'local', type: PaperTypes.note, title: 'Local'),
+      ],
+    );
+    await store.save(localState);
+    var closed = false;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadSnapshot: (snapshotPath) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: AppState(
+              papers: [
+                PaperData(
+                  id: 'snapshot-paper',
+                  type: PaperTypes.note,
+                  title: 'Snap',
+                ),
+              ],
+            ),
+            snapshotPath: snapshotPath,
+          );
+        },
+        onClose: () {
+          closed = true;
+        },
+      ),
+    );
+
+    await expectLater(
+      service.restoreRecoverySnapshot(
+        localState: localState,
+        store: store,
+        snapshotPath: 'repapertodo/snapshots/snapshot.json',
+      ),
+      throwsA(isA<StateStoreException>()),
+    );
+
+    expect((await store.load()).papers.single.title, 'Local');
+    expect(closed, isTrue);
+  });
+
+  test('reports empty recovery snapshots without replacing local state',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_restore_empty_snapshot_');
     addTearDown(() => directory.delete(recursive: true));
     final store = StateStore(filePath: p.join(directory.path, 'data.json'));
     final localState = AppState(
@@ -2175,12 +3900,59 @@ void main() {
       ],
     );
     await store.save(localState);
+    var closed = false;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadSnapshot: (snapshotPath) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            snapshotPath: snapshotPath,
+          );
+        },
+        onClose: () {
+          closed = true;
+        },
+      ),
+    );
+
+    final result = await service.restoreRecoverySnapshot(
+      localState: localState,
+      store: store,
+      snapshotPath: 'repapertodo/snapshots/snapshot.json',
+    );
+
+    expect(result.status, AppSyncStatus.configurationMissing);
+    expect(result.message, 'Remote snapshot is empty.');
+    expect((await store.load()).papers.single.title, 'Local');
+    expect(closed, isTrue);
+  });
+
+  test('reports unreadable recovery snapshots without replacing local state',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_restore_unreadable_payload_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final localState = AppState(
+      sync: _configuredSyncSettings(
+        rootPath: 'LocalRoot',
+        autoSyncIntervalMinutes: 60,
+      ),
+      papers: [
+        PaperData(id: 'local', type: PaperTypes.note, title: 'Local'),
+      ],
+    );
+    await store.save(localState);
+    var closed = false;
     final service = AppSyncService(
       webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
         onDownloadSnapshot: (snapshotPath) async {
           throw const WebDavPayloadDecryptionException(
             'Unable to decrypt WebDAV sync payload. Check the sync encryption passphrase.',
           );
+        },
+        onClose: () {
+          closed = true;
         },
       ),
     );
@@ -2193,7 +3965,59 @@ void main() {
 
     expect(result.status, AppSyncStatus.payloadUnreadable);
     expect(result.message, contains('sync encryption passphrase'));
+    final stored = await store.load();
+    expect(stored.papers.single.title, 'Local');
+    expect(stored.sync.enabled, true);
+    expect(stored.sync.provider, SyncProviderIds.webDav);
+    expect(stored.sync.webDav.endpoint, 'https://dav.example.test/');
+    expect(stored.sync.webDav.username, 'user');
+    expect(stored.sync.webDav.password, 'pass');
+    expect(stored.sync.webDav.encryptionPassphrase, 'shared sync secret');
+    expect(stored.sync.webDav.rootPath, 'LocalRoot');
+    expect(stored.sync.webDav.autoSyncIntervalMinutes, 60);
+    expect(stored.sync.webDav.requestTimeoutSeconds, 45);
+    expect(closed, isTrue);
+  });
+
+  test(
+      'reports malformed encrypted recovery snapshots separately from passphrase errors',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_restore_malformed_encrypted_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final localState = AppState(
+      sync: _configuredSyncSettings(),
+      papers: [
+        PaperData(id: 'local', type: PaperTypes.note, title: 'Local'),
+      ],
+    );
+    await store.save(localState);
+    var closed = false;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadSnapshot: (snapshotPath) async {
+          throw const WebDavPayloadDecryptionException(
+            'Encrypted WebDAV sync payload is unsupported or corrupted.',
+          );
+        },
+        onClose: () {
+          closed = true;
+        },
+      ),
+    );
+
+    final result = await service.restoreRecoverySnapshot(
+      localState: localState,
+      store: store,
+      snapshotPath: 'repapertodo/snapshots/snapshot.json',
+    );
+
+    expect(result.status, AppSyncStatus.payloadUnreadable);
+    expect(result.message, contains('unsupported or corrupted'));
+    expect(result.message, isNot(contains('passphrase')));
     expect((await store.load()).papers.single.title, 'Local');
+    expect(closed, isTrue);
   });
 
   test('reports malformed recovery snapshots without replacing local state',
@@ -2251,6 +4075,123 @@ void main() {
     expect(snapshots, isEmpty);
   });
 
+  test('does not restore recovery snapshots when sync is disabled', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_restore_disabled_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final localState = AppState(
+      papers: [
+        PaperData(id: 'local-note', type: PaperTypes.note, title: 'Local'),
+      ],
+    );
+    await store.save(localState);
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) =>
+          throw StateError('WebDAV should not be created'),
+    );
+
+    final result = await service.restoreRecoverySnapshot(
+      localState: localState,
+      store: store,
+      snapshotPath: 'repapertodo/snapshots/snapshot.json',
+    );
+
+    expect(result.status, AppSyncStatus.disabled);
+    expect(result.message, 'Sync is disabled.');
+    expect((await store.load()).papers.single.title, 'Local');
+  });
+
+  test('does not merge remote operations when sync is disabled', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_disabled_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final localState = AppState(
+      sync: SyncSettings(
+        operationDeviceSequences: {
+          ' Device Local ': 4,
+          'bad': 8,
+        },
+      ),
+      papers: [
+        PaperData(id: 'local-note', type: PaperTypes.note, title: 'Local'),
+      ],
+    );
+    final originalLocalStateJson = localState.toJson();
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) =>
+          throw StateError('WebDAV should not be created'),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: localState,
+      store: store,
+    );
+
+    expect(result.appliedCount, 0);
+    expect(result.state, same(localState));
+    expect(result.deviceSequences, {'device-local': 4});
+    expect(localState.toJson(), originalLocalStateJson);
+    expect(await File(store.filePath).exists(), isFalse);
+  });
+
+  test('does not upload local operations when sync is disabled', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_upload_disabled_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final beforeState = AppState(
+      sync: SyncSettings(
+        operationDeviceSequences: {' Device Local ': 4},
+      ),
+      papers: [
+        PaperData(
+          id: 'local-note',
+          type: PaperTypes.note,
+          title: 'Before',
+        ),
+      ],
+    );
+    final afterState = AppState(
+      sync: SyncSettings(
+        operationDeviceSequences: {
+          ' Device Local ': 4,
+          'bad': 8,
+        },
+      ),
+      papers: [
+        PaperData(
+          id: 'local-note',
+          type: PaperTypes.note,
+          title: 'After',
+        ),
+      ],
+    );
+    final originalBeforeStateJson = beforeState.toJson();
+    final originalAfterStateJson = afterState.toJson();
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) =>
+          throw StateError('WebDAV should not be created'),
+    );
+
+    final result = await service.uploadLocalOperations(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(result.generatedCount, 0);
+    expect(result.uploadedCount, 0);
+    expect(result.stateChanged, false);
+    expect(result.deviceSequences, {'device-local': 4});
+    expect(result.state.sync.operationDeviceSequences, {'device-local': 4});
+    expect(beforeState.toJson(), originalBeforeStateJson);
+    expect(afterState.toJson(), originalAfterStateJson);
+    expect(await File(store.filePath).exists(), isFalse);
+  });
+
   test('skips WebDAV helper entrypoints for unsafe sync settings', () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_unsafe_helpers_');
@@ -2280,6 +4221,7 @@ void main() {
         endpoint: 'https://dav.example.test/dav/%0Afiles',
       ),
       _configuredSyncSettings(rootPath: 'repapertodo/%0Aother'),
+      _configuredSyncSettings(rootPath: 'repapertodo//other'),
     ]) {
       final localState = unsafeState(sync: syncSettings);
       final editedState = unsafeState(sync: syncSettings, title: 'Edited');
@@ -2357,6 +4299,7 @@ SyncSettings _configuredSyncSettings({
   String password = 'pass',
   String encryptionPassphrase = 'shared sync secret',
   String rootPath = 'repapertodo',
+  int autoSyncIntervalMinutes = 15,
   int requestTimeoutSeconds = 45,
 }) {
   return SyncSettings(
@@ -2368,6 +4311,7 @@ SyncSettings _configuredSyncSettings({
       password: password,
       encryptionPassphrase: encryptionPassphrase,
       rootPath: rootPath,
+      autoSyncIntervalMinutes: autoSyncIntervalMinutes,
       requestTimeoutSeconds: requestTimeoutSeconds,
     ),
   );
@@ -2404,6 +4348,7 @@ typedef _FakePush = Future<WebDavStateSyncResult> Function(
   String? expectedManifestEtag,
   bool manifestKnownMissing,
   Map<String, int>? previousDeviceSequences,
+  bool requireManifestCondition,
 });
 
 typedef _FakeListSnapshots = Future<List<WebDavSnapshotRecord>> Function();
@@ -2436,6 +4381,28 @@ typedef _FakeUploadOperationLogs = Future<WebDavOperationLogUploadResult>
 });
 
 typedef _FakeClose = void Function();
+
+class _FailingSaveStateStore extends StateStore {
+  _FailingSaveStateStore({
+    required super.filePath,
+    required this.failOnSaveCall,
+  });
+
+  final int failOnSaveCall;
+  var saveCalls = 0;
+
+  @override
+  Future<void> save(AppState state) async {
+    saveCalls += 1;
+    if (saveCalls == failOnSaveCall) {
+      throw const StateStoreException(
+        'Unable to save PaperTodo state.',
+        'simulated save failure',
+      );
+    }
+    await super.save(state);
+  }
+}
 
 class _FakeWebDavStateSyncService extends WebDavStateSyncService {
   _FakeWebDavStateSyncService({
@@ -2508,6 +4475,7 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
     String? expectedManifestEtag,
     bool manifestKnownMissing = false,
     Map<String, int>? previousDeviceSequences,
+    bool requireManifestCondition = false,
   }) {
     final onPush = _onPush;
     if (onPush == null) {
@@ -2519,6 +4487,7 @@ class _FakeWebDavStateSyncService extends WebDavStateSyncService {
       expectedManifestEtag: expectedManifestEtag,
       manifestKnownMissing: manifestKnownMissing,
       previousDeviceSequences: previousDeviceSequences,
+      requireManifestCondition: requireManifestCondition,
     );
   }
 

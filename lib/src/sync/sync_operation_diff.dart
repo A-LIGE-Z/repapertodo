@@ -27,6 +27,14 @@ class SyncOperationDiffBuilder {
 
     void add(SyncOperationKind kind, JsonMap payload) {
       sequence += 1;
+      if (!isSyncDeviceSequenceInRange(sequence)) {
+        throw RangeError.value(
+          sequence,
+          'sequence',
+          'Sync operation sequence must be between 1 and '
+              '$maxSyncDeviceSequence.',
+        );
+      }
       operations.add(
         SyncOperation(
           id: '$normalizedDeviceId-$sequence',

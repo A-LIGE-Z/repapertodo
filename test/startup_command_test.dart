@@ -23,6 +23,25 @@ void main() {
     expect(StartupCommand.parse(['close']).kind, StartupCommandKind.hide);
   });
 
+  test('collapses repeated separators like the Windows entrypoint', () {
+    expect(
+      StartupCommand.parse(['--new---todo']).kind,
+      StartupCommandKind.newTodo,
+    );
+    expect(
+      StartupCommand.parse(['/add___note']).kind,
+      StartupCommandKind.newNote,
+    );
+    expect(
+      StartupCommand.parse([' preferences  ']).kind,
+      StartupCommandKind.settings,
+    );
+    expect(
+      StartupCommand.parse(['new', ' task ']).kind,
+      StartupCommandKind.newTodo,
+    );
+  });
+
   test('parses option-style startup command spellings', () {
     expect(
       StartupCommand.parse(['--new=todo']).kind,

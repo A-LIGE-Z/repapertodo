@@ -1,3 +1,5 @@
+import 'package:collection/collection.dart';
+
 import '../core/model/app_state.dart';
 import '../core/model/json_helpers.dart';
 import '../core/model/paper_data.dart';
@@ -40,6 +42,7 @@ class SyncOperationApplier {
     }
 
     var appliedCount = 0;
+    final blockedDevices = <String>{};
     final cursors = <String, int>{
       for (final deviceId in operationsByDevice.keys) deviceId: 0,
     };
@@ -51,6 +54,9 @@ class SyncOperationApplier {
       SyncOperation? nextOperation;
       for (final entry in operationsByDevice.entries) {
         final deviceId = entry.key;
+        if (blockedDevices.contains(deviceId)) {
+          continue;
+        }
         final deviceOperations = entry.value;
         var cursor = cursors[deviceId] ?? 0;
         final expectedSequence = expectedSequences[deviceId] ?? 1;
@@ -64,6 +70,10 @@ class SyncOperationApplier {
         }
         final candidate = deviceOperations[cursor];
         if (candidate.sequence > expectedSequence) {
+          continue;
+        }
+        if (_hasConflictingDuplicateAt(deviceOperations, cursor)) {
+          blockedDevices.add(deviceId);
           continue;
         }
         if (nextOperation == null ||
@@ -91,7 +101,7 @@ class SyncOperationApplier {
 
   SyncOperation? _normalizeOperation(SyncOperation operation) {
     final deviceId = normalizeSyncDeviceId(operation.deviceId, fallback: '');
-    if (deviceId.isEmpty || operation.sequence <= 0) {
+    if (deviceId.isEmpty || !isSyncDeviceSequenceInRange(operation.sequence)) {
       return null;
     }
     return SyncOperation(
@@ -354,6 +364,32 @@ class SyncOperationApplier {
   bool _isNewerOperation(DateTime operationTime, DateTime tombstoneTime) {
     return operationTime.toUtc().isAfter(tombstoneTime.toUtc());
   }
+}
+
+bool _hasConflictingDuplicateAt(
+  List<SyncOperation> operations,
+  int cursor,
+) {
+  final operation = operations[cursor];
+  for (var index = cursor + 1; index < operations.length; index += 1) {
+    final duplicate = operations[index];
+    if (duplicate.sequence != operation.sequence) {
+      break;
+    }
+    if (!_operationsMatch(operation, duplicate)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _operationsMatch(SyncOperation left, SyncOperation right) {
+  return left.id == right.id &&
+      left.deviceId == right.deviceId &&
+      left.sequence == right.sequence &&
+      left.kind == right.kind &&
+      left.createdAtUtc.toUtc().isAtSameMomentAs(right.createdAtUtc.toUtc()) &&
+      const DeepCollectionEquality().equals(left.payload, right.payload);
 }
 
 JsonMap? _jsonMapOrNull(Object? value) {

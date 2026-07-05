@@ -336,6 +336,11 @@ void main() {
       '.md',
     );
     expect(
+      AppState.fromJson({'externalMarkdownExtension': 'm\u007Fd'})
+          .externalMarkdownExtension,
+      '.md',
+    );
+    expect(
       AppState.fromJson({
         'externalMarkdownExtension': '.${List.filled(40, 'x').join()}',
       }).externalMarkdownExtension,
@@ -410,6 +415,30 @@ void main() {
     expect(state.sync.webDav.autoSyncOnStart, true);
     expect(state.sync.webDav.autoSyncIntervalMinutes, 20);
     expect(state.sync.webDav.requestTimeoutSeconds, 45);
+  });
+
+  test('defaults invalid hand-edited WebDAV numeric settings', () {
+    final blankInterval = AppState.fromJson({
+      'sync': {
+        'webDav': {
+          'autoSyncIntervalMinutes': '   ',
+          'requestTimeoutSeconds': 'not-a-number',
+        },
+      },
+    });
+    final nonNumericTypes = AppState.fromJson({
+      'sync': {
+        'webDav': {
+          'autoSyncIntervalMinutes': <Object?>['15'],
+          'requestTimeoutSeconds': {'seconds': 30},
+        },
+      },
+    });
+
+    expect(blankInterval.sync.webDav.autoSyncIntervalMinutes, 15);
+    expect(blankInterval.sync.webDav.requestTimeoutSeconds, 30);
+    expect(nonNumericTypes.sync.webDav.autoSyncIntervalMinutes, 15);
+    expect(nonNumericTypes.sync.webDav.requestTimeoutSeconds, 30);
   });
 
   test('normalizes PaperTodo titles by visible text elements', () {
@@ -577,8 +606,8 @@ Plain item
   test('normalizes pinned hotkeys like PaperTodo', () {
     final longHotKey = 'Ctrl+Alt+${List.filled(80, 'A').join()}';
     final state = AppState.fromJson({
-      'pinnedTodoHotKey': '  Ctrl+Alt+T  ',
-      'pinnedNoteHotKey': longHotKey,
+      'pinnedTodoHotKey': '  Ctrl+\nAlt+\u007FT  ',
+      'pinnedNoteHotKey': '$longHotKey\n',
     });
 
     expect(state.pinnedTodoHotKey, 'Ctrl+Alt+T');
@@ -952,6 +981,7 @@ Plain item
           ' win-device ': 3,
           'Win Device': 4,
           'android-device': 2.4,
+          'phone-device': 2.0,
           'bad': 9,
           'stale-device': 0,
           '': 7,
@@ -960,12 +990,15 @@ Plain item
           ' old-paper ': '2026-07-01T10:00:00+08:00',
           'old-paper': '2026-07-01T03:00:00Z',
           'bad-paper': 'not-a-date',
+          'overflow-month': '2026-13-01T10:00:00Z',
+          'overflow-day': '2026-02-30T10:00:00Z',
           '': '2026-07-01T10:00:00Z',
         },
         'deletedTodoItemTombstones': {
           ' todo-paper ': {
             ' old-item ': '2026-07-01T11:30:00+08:00',
             'bad-item': 'not-a-date',
+            'overflow-time': '2026-07-01T24:00:00Z',
           },
           'todo-paper': {
             'old-item': '2026-07-01T04:00:00Z',
@@ -993,7 +1026,7 @@ Plain item
     expect(state.sync.extra['futureSyncField'], 'keep-sync');
     expect(state.sync.operationDeviceSequences, {
       'win-device': 4,
-      'android-device': 2,
+      'phone-device': 2,
     });
     expect(state.sync.deletedPaperTombstones, {
       'old-paper': DateTime.utc(2026, 7, 1, 3).toIso8601String(),

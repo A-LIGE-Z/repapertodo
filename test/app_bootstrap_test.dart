@@ -92,6 +92,57 @@ void main() {
     ]);
   });
 
+  test('keeps startup settings request after startup WebDAV sync', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'repapertodo_bootstrap_settings_sync_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await store.save(
+      AppState(
+        papers: [
+          PaperData(id: 'paper-local', type: PaperTypes.todo, title: 'Local'),
+        ],
+        sync: _configuredSyncSettings(autoSyncOnStart: true),
+      ),
+    );
+    final platform = _RecordingBootstrapPlatformServices();
+    final syncService = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: AppState(
+              papers: [
+                PaperData(
+                  id: 'paper-remote',
+                  type: PaperTypes.note,
+                  title: 'Remote',
+                ),
+              ],
+              sync: _configuredSyncSettings(autoSyncOnStart: true),
+            ),
+          );
+        },
+        onListOperationLogs: () async => const [],
+      ),
+    );
+
+    final bootstrap = await AppBootstrap.load(
+      const ['--settings'],
+      store: store,
+      platform: platform,
+      syncService: syncService,
+    );
+
+    expect(bootstrap, isNotNull);
+    expect(
+      bootstrap!.controller.takePendingUiStartupCommand()?.kind,
+      StartupCommandKind.settings,
+    );
+    expect(bootstrap.controller.state.papers.single.title, 'Remote');
+  });
+
   test('keeps local data usable when startup WebDAV sync fails', () async {
     final directory = await Directory.systemTemp.createTemp(
       'repapertodo_bootstrap_sync_failure_',
@@ -181,6 +232,26 @@ void main() {
     expect(platform.startup.forwardedArgs, [
       ['--new-note'],
     ]);
+  });
+
+  test('returns null after primary startup exit command', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('repapertodo_bootstrap_exit_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await store.save(AppState(papers: const []));
+    final platform = _RecordingBootstrapPlatformServices();
+
+    final bootstrap = await AppBootstrap.load(
+      const ['--exit'],
+      store: store,
+      platform: platform,
+    );
+
+    expect(bootstrap, isNull);
+    expect(platform.systemIntegration.exitApplicationCount, 1);
+    expect(platform.tray.rebuiltTitles, isEmpty);
+    expect((await store.load()).papers, isEmpty);
   });
 
   test('keeps desktop state file beside the executable', () async {
@@ -461,9 +532,15 @@ class _RecordingBootstrapSystemIntegrationHost
   bool get supportsGlobalHotkeys => true;
 
   final registeredTodoHotkeys = <String>[];
+  var exitApplicationCount = 0;
 
   @override
   Future<void> registerGlobalHotkeys(AppState state) async {
     registeredTodoHotkeys.add(state.pinnedTodoHotKey);
+  }
+
+  @override
+  Future<void> exitApplication() async {
+    exitApplicationCount += 1;
   }
 }

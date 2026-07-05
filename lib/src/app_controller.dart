@@ -20,6 +20,7 @@ class RePaperTodoController {
 
   AppState state;
   final PlatformServices _platform;
+  StartupCommand? _pendingUiStartupCommand;
 
   Stream<PaperData> get paperSurfaceUpdates =>
       _platform.paperWindows.surfaceUpdates;
@@ -50,12 +51,17 @@ class RePaperTodoController {
     await _platform.tray.initialize();
     await _applyStateSettingsToPlatform();
 
-    if (state.papers.isEmpty && !startupCommand.createsPaper) {
+    if (state.papers.isEmpty &&
+        !startupCommand.createsPaper &&
+        startupCommand.kind != StartupCommandKind.exit) {
       createPaper(PaperTypes.todo);
     }
 
     await _platform.paperWindows.restoreAll(state);
     await executeStartupCommand(startupCommand);
+    if (startupCommand.kind == StartupCommandKind.exit) {
+      return;
+    }
     await _platform.tray.rebuildMenu(state);
   }
 
@@ -109,6 +115,12 @@ class RePaperTodoController {
 
   Future<void> rebuildTrayMenu() async {
     await _platform.tray.rebuildMenu(state);
+  }
+
+  StartupCommand? takePendingUiStartupCommand() {
+    final command = _pendingUiStartupCommand;
+    _pendingUiStartupCommand = null;
+    return command;
   }
 
   Future<void> setStartupAtLogin(bool enabled) async {
@@ -222,6 +234,7 @@ class RePaperTodoController {
       case StartupCommandKind.newNote:
         await _platform.paperWindows.showPaper(createPaper(PaperTypes.note));
       case StartupCommandKind.settings:
+        _pendingUiStartupCommand = command;
         return;
       case StartupCommandKind.exit:
         if (_platform.systemIntegration.supportsGlobalHotkeys) {

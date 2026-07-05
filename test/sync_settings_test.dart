@@ -130,6 +130,37 @@ void main() {
     });
   });
 
+  test('drops tombstones with invalid timestamps during normalization', () {
+    final settings = SyncSettings.fromJson({
+      'deletedPaperTombstones': {
+        'valid-paper': '2026-07-01T10:00:00Z',
+        'overflow-month': '2026-13-01T10:00:00Z',
+        'overflow-day': '2026-02-30T10:00:00Z',
+        'missing-zone': '2026-07-01T10:00:00',
+        'too-precise': '2026-07-01T10:00:00.1234567Z',
+        'edge-space': ' 2026-07-01T10:00:00Z ',
+      },
+      'deletedTodoItemTombstones': {
+        'todo': {
+          'valid-item': '2026-07-01T10:30:00Z',
+          'overflow-time': '2026-07-01T24:00:00Z',
+          'missing-zone': '2026-07-01T10:30:00',
+          'too-precise': '2026-07-01T10:30:00.1234567Z',
+          'edge-space': ' 2026-07-01T10:30:00Z ',
+        },
+      },
+    });
+
+    expect(settings.deletedPaperTombstones, {
+      'valid-paper': DateTime.utc(2026, 7, 1, 10).toIso8601String(),
+    });
+    expect(settings.deletedTodoItemTombstones, {
+      'todo': {
+        'valid-item': DateTime.utc(2026, 7, 1, 10, 30).toIso8601String(),
+      },
+    });
+  });
+
   test('normalizes WebDAV provider values case-insensitively', () {
     expect(SyncProviderIds.normalize(' WEBDAV '), SyncProviderIds.webDav);
     expect(SyncProviderIds.normalize('webdav'), SyncProviderIds.webDav);
@@ -142,6 +173,21 @@ void main() {
 
     expect(settings.enabled, true);
     expect(settings.provider, SyncProviderIds.webDav);
+  });
+
+  test('keeps generic WebDAV settings generic after normalization', () {
+    final settings = WebDavSyncSettings(
+      presetId: WebDavPresetIds.custom,
+      endpoint: ' https://dav.jianguoyun.com/dav/ ',
+      username: 'user@example.com',
+      password: 'app-password',
+      encryptionPassphrase: ' shared sync secret ',
+      rootPath: 'RePaperTodo',
+    )..normalize();
+
+    expect(settings.presetId, WebDavPresetIds.custom);
+    expect(settings.endpoint, 'https://dav.jianguoyun.com/dav/');
+    expect(settings.isSecurelyConfigured, true);
   });
 
   test('requires encryption passphrase for secure WebDAV configuration', () {
@@ -162,6 +208,88 @@ void main() {
     expect(settings.encryptionPassphrase, 'shared sync secret');
     expect(settings.usesEncryptedPayloads, true);
     expect(settings.isSecurelyConfigured, true);
+  });
+
+  test('normalizes WebDAV Basic Auth username while preserving password', () {
+    final settings = WebDavSyncSettings(
+      endpoint: 'https://dav.example.test/dav/',
+      username: ' user@example.com ',
+      password: ' app:password ',
+      encryptionPassphrase: 'shared sync secret',
+      rootPath: 'repapertodo',
+    )..normalize();
+    final copied = settings.copy();
+
+    expect(settings.username, 'user@example.com');
+    expect(settings.password, ' app:password ');
+    expect(settings.toJson()['username'], 'user@example.com');
+    expect(settings.toJson()['password'], ' app:password ');
+    expect(copied.username, 'user@example.com');
+    expect(copied.password, ' app:password ');
+    expect(settings.isSecurelyConfigured, true);
+  });
+
+  test('rejects invalid WebDAV encryption passphrases', () {
+    for (final passphrase in const [
+      'shared\nsecret',
+      'shared\u007Fsecret',
+    ]) {
+      final settings = WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/dav/',
+        username: 'user',
+        password: 'pass',
+        rootPath: 'repapertodo',
+        encryptionPassphrase: passphrase,
+      )..normalize();
+
+      expect(settings.isConfigured, true);
+      expect(settings.usesEncryptedPayloads, false);
+      expect(settings.isSecurelyConfigured, false);
+      expect(
+        settings.secureConfigurationIssues,
+        contains(WebDavSyncConfigurationIssue.encryptionPassphrase),
+      );
+    }
+  });
+
+  test('normalizes WebDAV auto-sync interval minutes', () {
+    final defaults = WebDavSyncSettings();
+    final tooLow = WebDavSyncSettings(autoSyncIntervalMinutes: 0)..normalize();
+    final tooHigh = WebDavSyncSettings(autoSyncIntervalMinutes: 2000)
+      ..normalize();
+    final parsed = WebDavSyncSettings.fromJson({
+      'autoSyncIntervalMinutes': 45,
+    });
+    final copied = WebDavSyncSettings(autoSyncIntervalMinutes: 75).copy();
+
+    expect(defaults.autoSyncIntervalMinutes, 15);
+    expect(tooLow.autoSyncIntervalMinutes, 1);
+    expect(tooHigh.autoSyncIntervalMinutes, 1440);
+    expect(parsed.autoSyncIntervalMinutes, 45);
+    expect(parsed.toJson()['autoSyncIntervalMinutes'], 45);
+    expect(copied.autoSyncIntervalMinutes, 75);
+  });
+
+  test('normalizes sync operation device sequences from strict integers', () {
+    final settings = SyncSettings.fromJson({
+      'operationDeviceSequences': {
+        ' Device A ': '7',
+        'device-a': 8,
+        'device-b': 2.0,
+        'device-c': 1.2,
+        'device-d': '1.2',
+        'device-e': 0,
+        'device-f': maxSyncDeviceSequence + 1,
+        'device-g': ' 9',
+        'device-h': '9 ',
+        'bad': 9,
+      },
+    });
+
+    expect(settings.operationDeviceSequences, {
+      'device-a': 8,
+      'device-b': 2,
+    });
   });
 
   test('normalizes WebDAV request timeout seconds', () {
@@ -206,6 +334,10 @@ void main() {
       'RePaperTodo/%2e%2e/Other',
       'RePaperTodo/bad%',
       'RePaperTodo/%0AOther',
+      'RePaperTodo/%7FOther',
+      'RePaperTodo/%20/Other',
+      'RePaperTodo/ /Other',
+      'RePaperTodo//Other',
     ]) {
       final settings = WebDavSyncSettings(rootPath: rootPath)..normalize();
 
@@ -264,6 +396,41 @@ void main() {
       username: 'user',
       password: 'pass',
     )..normalize();
+    final delCharacterPath = WebDavSyncSettings(
+      endpoint: ' https://dav.example.test/dav/%7Ffiles ',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
+    final encodedSeparatorPath = WebDavSyncSettings(
+      endpoint: ' https://dav.example.test/dav%2Ffiles ',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
+    final blankSegmentPath = WebDavSyncSettings(
+      endpoint: ' https://dav.example.test/dav/%20/files ',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
+    final emptySegmentPath = WebDavSyncSettings(
+      endpoint: ' https://dav.example.test/dav//files ',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
+    final leadingWhitespaceSegmentPath = WebDavSyncSettings(
+      endpoint: ' https://dav.example.test/dav/%20files ',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
+    final trailingWhitespaceSegmentPath = WebDavSyncSettings(
+      endpoint: ' https://dav.example.test/dav/files%20 ',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
+    final encodedAuthorityAtSign = WebDavSyncSettings(
+      endpoint: ' https://dav.example%40evil.test/dav/ ',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
 
     expect(mixedCase.endpoint, 'https://dav.example.test/dav/');
     expect(mixedCase.isConfigured, true);
@@ -276,6 +443,24 @@ void main() {
     expect(
         controlCharacterPath.endpoint, 'https://dav.example.test/dav/%0Afiles');
     expect(controlCharacterPath.isConfigured, false);
+    expect(delCharacterPath.endpoint, 'https://dav.example.test/dav/%7Ffiles');
+    expect(delCharacterPath.isConfigured, false);
+    expect(
+        encodedSeparatorPath.endpoint, 'https://dav.example.test/dav%2Ffiles');
+    expect(encodedSeparatorPath.isConfigured, false);
+    expect(blankSegmentPath.endpoint, 'https://dav.example.test/dav/%20/files');
+    expect(blankSegmentPath.isConfigured, false);
+    expect(emptySegmentPath.endpoint, 'https://dav.example.test/dav//files');
+    expect(emptySegmentPath.isConfigured, false);
+    expect(leadingWhitespaceSegmentPath.endpoint,
+        'https://dav.example.test/dav/%20files');
+    expect(leadingWhitespaceSegmentPath.isConfigured, false);
+    expect(trailingWhitespaceSegmentPath.endpoint,
+        'https://dav.example.test/dav/files%20');
+    expect(trailingWhitespaceSegmentPath.isConfigured, false);
+    expect(encodedAuthorityAtSign.endpoint,
+        'https://dav.example%40evil.test/dav/');
+    expect(encodedAuthorityAtSign.isConfigured, false);
   });
 
   test('reports WebDAV configuration issues for field-level recovery', () {
@@ -299,5 +484,27 @@ void main() {
       WebDavSyncConfigurationIssue.rootPath,
       WebDavSyncConfigurationIssue.encryptionPassphrase,
     });
+  });
+
+  test('rejects whitespace-only WebDAV Basic Auth usernames', () {
+    final settings = WebDavSyncSettings(
+      endpoint: 'https://dav.example.test/dav/',
+      username: '   ',
+      password: 'pass',
+      rootPath: 'repapertodo',
+      encryptionPassphrase: 'shared sync secret',
+    );
+
+    expect(settings.configurationIssues,
+        contains(WebDavSyncConfigurationIssue.username));
+    expect(settings.secureConfigurationIssues,
+        contains(WebDavSyncConfigurationIssue.username));
+
+    settings.normalize();
+
+    expect(settings.username, isEmpty);
+    expect(settings.isSecurelyConfigured, false);
+    expect(settings.secureConfigurationIssues,
+        contains(WebDavSyncConfigurationIssue.username));
   });
 }

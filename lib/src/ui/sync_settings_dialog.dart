@@ -1540,7 +1540,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     return switch (issue) {
       WebDavSyncConfigurationIssue.endpoint => settings.endpoint.trim().isEmpty
           ? 'Enter a WebDAV URL.'
-          : 'Use a full http:// or https:// WebDAV URL without user info, query, fragment, unsafe path segments, or control characters.',
+          : 'Use a full http:// or https:// WebDAV URL without user info, query, fragment, backslashes, control characters, encoded authority or path separators, blank path segments, or path segment edge spaces.',
       WebDavSyncConfigurationIssue.username => settings.username.isEmpty
           ? 'Enter a WebDAV username.'
           : 'Username cannot contain colons or control characters.',
@@ -1548,7 +1548,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
           ? 'Enter a WebDAV password or app password.'
           : 'Password cannot contain control characters.',
       WebDavSyncConfigurationIssue.rootPath =>
-        'Use a remote folder without parent-directory segments, backslashes, invalid percent escapes, or control characters.',
+        'Use a remote folder without parent-directory segments, invalid percent escapes, control characters, or blank path segments.',
       WebDavSyncConfigurationIssue.encryptionPassphrase =>
         'Enter a sync encryption passphrase.',
     };
@@ -1752,7 +1752,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   bool _hasInvalidFileNameCharacter(String value) {
     const invalid = {'<', '>', ':', '"', '/', '\\', '|', '?', '*'};
     return value.runes.any((rune) {
-      if (rune < 0x20) {
+      if (rune < 0x20 || rune == 0x7F) {
         return true;
       }
       return invalid.contains(String.fromCharCode(rune));

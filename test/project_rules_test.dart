@@ -35,15 +35,74 @@ void main() {
     expect(mainActivity, contains('FileProvider.getUriForFile'));
     expect(mainActivity, contains('ClipData.newUri'));
     expect(mainActivity, contains('val trimmedUri = uri.trim()'));
+    expect(mainActivity, contains('val parsedUri = try'));
+    expect(mainActivity, contains('The URI is not valid.'));
     expect(mainActivity, contains('val trimmedPath = path.trim()'));
     expect(mainActivity, contains('!file.isFile'));
     expect(mainActivity, contains('parsedUri.scheme'));
+    expect(mainActivity, contains('uri.userInfo.isNullOrBlank()'));
+    expect(mainActivity, contains('uri.encodedAuthority'));
+    expect(mainActivity, contains('hasEncodedExternalUriAuthoritySeparator'));
     expect(mainActivity, contains('hasUnsafeExternalUriCharacter'));
+    expect(mainActivity, contains('hasEncodedUnsafeExternalUriCharacter'));
+    expect(mainActivity, contains('hasUnsafeExternalFilePathCharacter'));
     expect(mainActivity, contains('isAllowedExternalUri'));
     expect(mainActivity, contains('"mailto"'));
     expect(mainActivity, contains('Intent.CATEGORY_BROWSABLE'));
     expect(mainActivity, contains('file_provider_failed'));
     expect(mainActivity, contains('SecurityException'));
+  });
+
+  test('platform launch hosts reject blank native channel arguments', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+    final android = File('lib/src/platform/android_platform_services.dart')
+        .readAsStringSync();
+    final windows = File('lib/src/platform/windows_platform_services.dart')
+        .readAsStringSync();
+
+    expect(design, contains('reject blank launch\narguments'));
+    expect(design, contains('percent-encoded control characters'));
+    expect(design, contains('encoded authority separators'));
+    expect(design, contains('external-file paths must reject raw control'));
+    expect(design, contains('Generated external Markdown export filenames'));
+    expect(design, contains('External Markdown extension settings'));
+    expect(design, contains('including DEL'));
+    expect(app, contains(r'[<>:"/\\|?*\x00-\x1F\x7F]'));
+    expect(app, contains('_hasEncodedUnsafeExternalUriCharacter'));
+    expect(app, contains('_hasEncodedExternalUriAuthoritySeparator'));
+    expect(android, contains('Android URI must not be blank.'));
+    expect(
+        android, contains('Android URI must not contain control characters.'));
+    expect(android,
+        contains('Android URI must not contain encoded control characters.'));
+    expect(android,
+        contains('Android URI must not contain encoded authority separators.'));
+    expect(android, contains('_hasEncodedExternalUriAuthoritySeparator'));
+    expect(android, contains('Android external file path must not be blank.'));
+    expect(
+        android,
+        contains(
+            'Android external file path must not contain control characters.'));
+    expect(windows, contains('Windows URI must not be blank.'));
+    expect(
+        windows, contains('Windows URI must not contain control characters.'));
+    expect(windows,
+        contains('Windows URI must not contain encoded control characters.'));
+    expect(windows,
+        contains('Windows URI must not contain encoded authority separators.'));
+    expect(windows, contains('_hasEncodedExternalUriAuthoritySeparator'));
+    expect(windows, contains('Windows external file path must not be blank.'));
+    expect(
+        windows,
+        contains(
+            'Windows external file path must not contain control characters.'));
+    final appState =
+        File('lib/src/core/model/app_state.dart').readAsStringSync();
+    final settingsDialog =
+        File('lib/src/ui/sync_settings_dialog.dart').readAsStringSync();
+    expect(appState, contains('rune < 0x20 || rune == 0x7F'));
+    expect(settingsDialog, contains('rune < 0x20 || rune == 0x7F'));
   });
 
   test('sync design preserves merge safety rules', () {
@@ -55,19 +114,284 @@ void main() {
         syncDesign, contains('Settings operations are intentionally limited'));
     expect(syncDesign,
         contains('Local device sequence progress must never move backward'));
-    expect(syncDesign, contains('sparse or stale manifest cannot drop'));
+    expect(syncDesign, contains('Upload result sequence maps'));
+    expect(syncDesign, contains('fractional numbers and leading/trailing'));
+    expect(syncDesign, contains('instead of rounded or trimmed'));
+    expect(syncDesign, contains('cannot pollute local sync progress'));
+    expect(syncDesign, contains('Downloaded or restored snapshot'));
+    expect(syncDesign, contains('cannot drop known device progress'));
+    expect(syncDesign, contains('save invalid device IDs'));
+    expect(syncDesign, contains('locally'));
+    expect(syncDesign, contains('must not return applied state as accepted'));
+    expect(syncDesign, contains('unsaved remote operation progress'));
+    expect(syncDesign, contains('Local delete operation uploads'));
+    expect(syncDesign, contains('tombstone save failures'));
+    expect(
+        syncDesign, contains('Recovery snapshot restores must also surface'));
+    expect(syncDesign, contains('preserving the previous local state on disk'));
     expect(
         syncDesign,
         contains(
             'Require a sync encryption passphrase before user-facing WebDAV sync runs'));
-    expect(syncDesign, contains('defaults to 30 seconds'));
-    expect(syncDesign, contains('normalized to 1 through'));
     expect(syncDesign,
-        contains('Endpoint paths with dot-segments, raw or percent-encoded'));
+        contains('Sync encryption passphrases must be trimmed, non-empty'));
+    expect(syncDesign,
+        contains('Malformed, unsupported, or\ncorrupted encrypted envelopes'));
+    expect(syncDesign, contains('Legacy\nsnapshot migration failures'));
+    expect(syncDesign, contains('manifest has a strong ETag'));
+    expect(syncDesign, contains('no strong ETag is available'));
+    expect(syncDesign, contains('preserving the downloaded state'));
+    expect(syncDesign, contains('migration metadata save'));
+    expect(syncDesign, contains('failures must not advance'));
+    expect(syncDesign, contains('durably saved'));
+    expect(syncDesign, contains('fields must be present and non-empty'));
+    expect(syncDesign, contains('nonce, and MAC field sizes'));
+    expect(syncDesign, contains('defaults to 30 seconds'));
+    expect(syncDesign, contains('default to 15\nminutes'));
+    expect(syncDesign, contains('normalized to 1 through 1440 minutes'));
+    expect(syncDesign, contains('normalized to 1 through'));
+    expect(syncDesign, contains('Endpoint authority values'));
+    expect(syncDesign, contains('endpoint paths\nwith dot-segments'));
+    expect(syncDesign, contains('percent-encoded separators'));
     expect(syncDesign, contains('percent-encoded control characters'));
-    expect(syncDesign, contains('empty root folder values remain incomplete'));
+    expect(syncDesign, contains('usernames are trimmed before storage'));
+    expect(syncDesign, contains('must\ncontain a non-whitespace character'));
+    expect(syncDesign, contains('Passwords are preserved as entered'));
+    expect(syncDesign, contains('may contain\ncolons'));
+    expect(syncDesign, contains('percent-encoded\npath separators'));
+    expect(syncDesign, contains('leading or trailing'));
+    expect(syncDesign, contains('whitespace inside\ndecoded segments'));
+    expect(syncDesign, contains('blank path segments'));
+    expect(syncDesign, contains('non-empty segments that collapse to blank'));
+    expect(syncDesign, contains('empty root folder'));
+    expect(syncDesign, contains('values remain incomplete'));
     expect(syncDesign, contains('unsafe base URI paths including control'));
-    expect(syncDesign, contains('characters, and resolves all accepted paths'));
+    expect(syncDesign, contains('unsafe base URI authorities'));
+    expect(syncDesign, contains('request path'));
+    expect(syncDesign, contains('segments that decode to path\nseparators'));
+    expect(
+        syncDesign, contains('Request path segments that collapse to blank'));
+    expect(syncDesign,
+        contains('decoded segments must not contain leading or trailing'));
+    expect(syncDesign,
+        contains('whitespace, so low-level callers cannot silently'));
+    expect(syncDesign, contains('resolves all accepted paths'));
+    expect(syncDesign, contains('metadata must be taken from the entry'));
+    expect(syncDesign, contains('same-time snapshot appears first'));
+    expect(syncDesign, contains('requested resource path'));
+    expect(syncDesign, contains('before direct snapshot'));
+    expect(syncDesign, contains('filename-safe lowercase tokens'));
+    expect(syncDesign, contains('8 through 64 characters'));
+    expect(syncDesign, contains('invalid for remote path generation'));
+    expect(syncDesign,
+        contains('Manifest-referenced\nsnapshot file names must contain'));
+    expect(
+        syncDesign, contains('remains non-empty after\ndisplay normalization'));
+    expect(syncDesign, contains('same filename-safe cleanup'));
+    expect(syncDesign, contains('maximum length cap'));
+    expect(syncDesign, contains('does not apply the minimum device-ID'));
+    expect(
+      syncDesign,
+      contains('Manifest-referenced snapshot timestamps must parse\nstrictly'),
+    );
+    expect(
+        syncDesign, contains('Manifest-referenced snapshot sequence suffixes'));
+    expect(syncDesign, contains('inside the supported remote sequence range'));
+    expect(syncDesign,
+        contains('Generated snapshot and operation-log paths must reject'));
+    expect(syncDesign, contains('device IDs that normalize\nto blank'));
+    expect(syncDesign, contains('12-digit remote sequence range'));
+    expect(syncDesign, contains('Next device sequences must stay inside'));
+    expect(
+        syncDesign, contains('Operation upload queues must skip operations'));
+    expect(syncDesign, contains('whose device ID normalizes to blank'));
+    expect(syncDesign, contains('local persistence of accepted'));
+    expect(syncDesign, contains('pending local edits can retry'));
+    expect(
+        syncDesign, contains('Manifest device sequences must reject values'));
+    expect(syncDesign, contains('Manifest `updatedAtUtc` wire timestamps'));
+    expect(syncDesign,
+        contains('Local operation diff generation and merge application'));
+    expect(syncDesign,
+        contains('Merge application must apply matching duplicate'));
+    expect(syncDesign, contains('conflicting duplicate operations must block'));
+    expect(syncDesign, contains('Operation `createdAtUtc` wire timestamps'));
+    expect(syncDesign,
+        contains('Operation sequence numbers accept positive integer'));
+    expect(syncDesign, contains('overflow dates or times'));
+    expect(syncDesign, contains('invalid time-zone offsets'));
+    expect(syncDesign, contains('leading or\ntrailing whitespace'));
+    expect(syncDesign, contains('operation-log'));
+    expect(syncDesign, contains('does not match their\noperation-log path'));
+    expect(syncDesign, contains('downloaded result path does not match'));
+    expect(syncDesign, contains('not legacy plain JSON'));
+    expect(syncDesign, contains('exactly one operation'));
+    expect(syncDesign, contains('operation-log migration'));
+    expect(syncDesign, contains('failures must be counted'));
+    expect(syncDesign, contains('applying the downloaded'));
+    expect(syncDesign, contains('Merge candidate selection must skip'));
+    expect(syncDesign, contains('already\ncovered sequences'));
+    expect(syncDesign, contains('before downloading\noperation log payloads'));
+    expect(syncDesign, contains('previous device sequence\nmaps'));
+    expect(syncDesign, contains('cannot hide valid remote sequence `1`'));
+    expect(syncDesign, contains('provider listing order cannot decide'));
+    expect(syncDesign, contains('Downloaded, decoded, or restored tombstone'));
+    expect(syncDesign, contains('are discarded instead of'));
+    expect(syncDesign, contains('normalized to a different instant'));
+    expect(syncDesign, contains('Opening settings must pause pending'));
+    expect(syncDesign, contains('canceling settings or saving settings'));
+    expect(
+        syncDesign, contains('without changing sync configuration restores'));
+    expect(syncDesign, contains('platform setting application reports errors'));
+    expect(syncDesign, contains('saving sync setting changes clears'));
+    expect(syncDesign, contains('Settings save failures must surface'));
+    expect(syncDesign, contains('later local edits blocked'));
+    expect(syncDesign, contains('downloads can reach the network'));
+    expect(syncDesign, contains('direct child files'));
+    expect(syncDesign, contains('Direct remote path segments'));
+    expect(syncDesign, contains('decode to path separators'));
+    expect(syncDesign, contains('Listing `href` path segments'));
+    expect(syncDesign, contains('must keep their decoded edge characters'));
+    expect(syncDesign, contains('Remote layout components'));
+    expect(syncDesign, contains('must not normalize to blank paths'));
+    expect(syncDesign, contains('single path segments'));
+    expect(syncDesign, contains('extra nested remote folders'));
+    expect(syncDesign, contains('Direct state sync root paths'));
+    expect(syncDesign, contains('must not normalize to blank'));
+    expect(syncDesign, contains('recovery listings'));
+    expect(syncDesign, contains('direct recovery downloads'));
+    expect(syncDesign, contains('uploads can reach WebDAV'));
+    expect(syncDesign, contains('Downloaded migration results'));
+    expect(syncDesign, contains('Absolute metadata `href` matches'));
+    expect(syncDesign, contains('same WebDAV origin'));
+    expect(syncDesign, contains('Metadata `href` matches with query'));
+    expect(syncDesign, contains('silently dropping non-path URI parts'));
+    expect(syncDesign,
+        contains('paths can be compared with the requested resource'));
+    expect(syncDesign, contains('percent-encoded dot-segments'));
+    expect(syncDesign, contains('different resource path'));
+    expect(syncDesign, contains('Relative metadata `href` matches'));
+    expect(syncDesign, contains('not an arbitrary suffix'));
+    expect(syncDesign, contains('404 Not Found'));
+    expect(syncDesign, contains('410 Gone'));
+    expect(syncDesign, contains('direct payload downloads must still fail'));
+    expect(syncDesign, contains('If `manifest.json` disappears'));
+    expect(syncDesign, contains('`If-None-Match: *`'));
+    expect(syncDesign, contains('explicit `Accept` headers'));
+    expect(syncDesign, contains('stable `User-Agent`'));
+    expect(syncDesign, contains('`PROPFIND` prefers XML responses'));
+    expect(syncDesign, contains('Provider `Retry-After` hints'));
+    expect(syncDesign, contains('Missing or weak ETags must not be used for'));
+    expect(syncDesign, contains('Provider `409` or `412` create-only'));
+    expect(syncDesign, contains('original create-only conflict is preserved'));
+    expect(syncDesign, contains('localized already-exists wording'));
+    expect(syncDesign, contains('retryable WebDAV error messages'));
+    expect(syncDesign, contains('Absolute `href` values are accepted only'));
+    expect(syncDesign, contains('cross-origin or'));
+    expect(syncDesign, contains('base-path-escaping listing entries'));
+    expect(syncDesign, contains('decode to path separators or dot-segments'));
+    expect(syncDesign, contains('relative and server-absolute'));
+    expect(syncDesign, contains('collapse to blank'));
+    expect(syncDesign, contains('percent-encoded control characters'));
+    expect(syncDesign, contains('local\nsnapshot or operation-log records'));
+    expect(syncDesign, contains('Network-path `href` values'));
+    expect(syncDesign, contains('decode into network-path or'));
+    expect(syncDesign, contains('Plain relative'));
+    expect(syncDesign, contains('must already start at the sync root'));
+    expect(syncDesign, contains('query components, or fragments'));
+    expect(
+        syncDesign, contains('must not follow HTTP redirects automatically'));
+    expect(syncDesign, contains('configured endpoint'));
+    final syncSettings =
+        File('lib/src/core/model/sync_settings.dart').readAsStringSync();
+    final webDavClient =
+        File('lib/src/sync/webdav/webdav_client.dart').readAsStringSync();
+    expect(syncSettings, contains('_hasUnsafeEndpointAuthority'));
+    expect(syncSettings, contains('value.trim().isNotEmpty'));
+    expect(syncSettings, contains("'%40'"));
+    expect(webDavClient, contains('_hasUnsafeBaseUriAuthority'));
+    expect(webDavClient, contains('_hrefRawPathHasDotSegments'));
+    expect(webDavClient, contains('_rawHrefPath'));
+    expect(webDavClient, contains('value.trim().isNotEmpty'));
+    expect(webDavClient, contains("'%40'"));
+    expect(webDavClient, contains('segment != trimmed'));
+    expect(
+      webDavClient,
+      contains(
+        'WebDAV path segments must not contain leading or trailing whitespace.',
+      ),
+    );
+    final syncDeviceId =
+        File('lib/src/core/model/sync_device_id.dart').readAsStringSync();
+    final webDavStateSync =
+        File('lib/src/sync/webdav/webdav_state_sync_service.dart')
+            .readAsStringSync();
+    expect(syncDeviceId, contains('syncDeviceSequenceWireWidth'));
+    expect(syncDeviceId, contains('maxSyncDeviceSequence'));
+    expect(syncDeviceId, contains('minSyncDeviceIdLength'));
+    expect(syncDeviceId, contains('maxSyncDeviceIdLength'));
+    expect(syncDeviceId, contains('normalizeSyncDeviceIdForDisplay'));
+    expect(syncDeviceId, isNot(contains('length < 8')));
+    expect(syncDeviceId, isNot(contains('substring(0, 64')));
+    expect(webDavStateSync, contains('syncDeviceSequenceWireWidth'));
+    expect(webDavStateSync, contains('normalizeSyncDeviceIdForDisplay'));
+    expect(webDavStateSync, contains('trimmed != decoded'));
+    expect(webDavStateSync, contains('_compareSnapshotRecordOrder'));
+    expect(webDavStateSync, isNot(contains('padLeft(12')));
+    expect(webDavStateSync, isNot(contains(r'\d{12}')));
+    expect(webDavStateSync, isNot(contains('length <= 64')));
+    expect(webDavStateSync, isNot(contains('substring(0, 64')));
+    expect(webDavStateSync, isNot(contains(r"RegExp(r'[^a-z0-9_-]+')")));
+    final wireDateTime =
+        File('lib/src/core/model/sync_wire_datetime.dart').readAsStringSync();
+    final syncManifest =
+        File('lib/src/sync/sync_manifest.dart').readAsStringSync();
+    final syncOperation =
+        File('lib/src/sync/sync_operation.dart').readAsStringSync();
+    final syncOperationApplier =
+        File('lib/src/sync/sync_operation_applier.dart').readAsStringSync();
+    final appSyncService =
+        File('lib/src/sync/app_sync_service.dart').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+    final webDavPayloadCodec =
+        File('lib/src/sync/webdav/webdav_payload_codec.dart')
+            .readAsStringSync();
+    expect(wireDateTime, contains('parseStrictSyncWireDateTimeUtc'));
+    expect(wireDateTime, contains('tryParseStrictSyncWireDateTimeUtc'));
+    expect(syncSettings, contains('tryParseStrictSyncWireDateTimeUtc'));
+    expect(syncSettings, isNot(contains('DateTime.tryParse')));
+    expect(syncSettings, contains('_syncDeviceSequencesFromWire'));
+    expect(syncSettings, isNot(contains('operationDeviceSequences: intMap')));
+    expect(syncSettings, isNot(contains('int.tryParse(value.trim())')));
+    expect(syncManifest, contains('parseStrictSyncWireDateTimeUtc'));
+    expect(syncManifest, isNot(contains('DateTime.tryParse')));
+    expect(syncManifest, isNot(contains('int.tryParse(value.trim())')));
+    expect(syncOperation, contains('parseStrictSyncWireDateTimeUtc'));
+    expect(syncOperation, isNot(contains('DateTime.tryParse')));
+    expect(syncOperation, isNot(contains('int.tryParse(value.trim())')));
+    expect(syncOperationApplier, contains('_hasConflictingDuplicateAt'));
+    expect(syncOperationApplier, contains('_operationsMatch'));
+    expect(appSyncService, contains('tryParseStrictSyncWireDateTimeUtc'));
+    expect(appSyncService, isNot(contains('DateTime.tryParse')));
+    expect(
+      appSyncService,
+      contains('isSyncDeviceSequenceInRange(record.sequence)'),
+    );
+    expect(appSyncService, contains('normalizeSyncDeviceSequences('));
+    expect(appSyncService, contains('path.compareTo'));
+    expect(appSyncService, contains("record.etag ?? ''"));
+    expect(
+      appSyncService,
+      contains('deviceSequences ?? localState.sync.operationDeviceSequences'),
+    );
+    expect(app, contains('_isSettingsOpen'));
+    expect(app, contains('_clearPendingLocalEditSync'));
+    expect(app, contains('_localEditSyncGeneration'));
+    expect(webDavPayloadCodec, contains('_saltLength'));
+    expect(webDavPayloadCodec, contains('_nonceLength'));
+    expect(webDavPayloadCodec, contains('_macLength'));
+    expect(webDavPayloadCodec, contains('invalid envelope field sizes'));
+    expect(webDavPayloadCodec, contains('_stringField'));
   });
 
   test('Windows runner preserves startup command parsing parity', () {
@@ -81,25 +405,71 @@ void main() {
     expect(dartParser, contains('_createdPaperKind'));
   });
 
+  test('hotkey settings keep forgiving aliases without control characters', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final appState =
+        File('lib/src/core/model/app_state.dart').readAsStringSync();
+
+    expect(design, contains('Hotkey settings should strip control characters'));
+    expect(design, contains('preserving ordinary spaces used by aliases'));
+    expect(appState, contains('_normalizeHotKeyForSettings'));
+    expect(appState, contains('unit <= 0x1F || unit == 0x7F'));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
 
     expect(app, contains('_hasUnsafeExternalUriCharacter'));
+    expect(app, contains('_hasEncodedUnsafeExternalUriCharacter'));
+    expect(app, contains('uri.userInfo.isNotEmpty'));
+    expect(app, contains('_hasEncodedExternalUriAuthoritySeparator'));
     expect(runner, contains('IsAllowedExternalUri'));
+    expect(runner, contains('HasEncodedUnsafeExternalUriCharacter'));
+    expect(runner, contains('HasEncodedExternalUriAuthoritySeparator'));
     expect(runner, contains('ascii <= 0x20'));
+    expect(runner, contains("authority.find('@')"));
+    expect(runner, contains('authority_host'));
+    expect(runner, contains("authority.front() == '['"));
     expect(runner, contains('scheme == "mailto"'));
     expect(runner, contains('scheme != "http" && scheme != "https"'));
     expect(runner, contains('ShellExecuteW'));
+  });
+
+  test('Windows tray settings command shows the app window', () {
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final settingsCaseStart = runner.indexOf('case kTraySettingsCommand:');
+    final settingsCaseEnd = runner.indexOf('break;', settingsCaseStart);
+
+    expect(settingsCaseStart, isNonNegative);
+    expect(settingsCaseEnd, greaterThan(settingsCaseStart));
+    final settingsCase = runner.substring(settingsCaseStart, settingsCaseEnd);
+    expect(settingsCase, contains('SendStartupCommandRequested("settings");'));
+    expect(settingsCase, contains('ShowWindow(window, SW_SHOWNORMAL);'));
+    expect(settingsCase, contains('SetForegroundWindow(window);'));
   });
 
   test('Windows runner validates external files before opening them', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
 
     expect(runner, contains('path = TrimAscii(path)'));
+    expect(runner, contains('HasUnsafeExternalFilePathCharacter'));
     expect(runner, contains('FileExists'));
     expect(runner, contains('FILE_ATTRIBUTE_DIRECTORY'));
     expect(runner, contains('file_not_found'));
     expect(runner, contains('ShellExecuteW'));
+  });
+
+  test('Windows script capsule hosts validate launch requests', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final dartHost = File('lib/src/platform/windows_platform_services.dart')
+        .readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+
+    expect(design, contains('Script capsule hosts must reject blank scripts'));
+    expect(dartHost, contains('Windows script capsule must not be blank.'));
+    expect(dartHost, contains('Unsupported Windows script capsule engine.'));
+    expect(runner, contains('IsAllowedScriptCapsuleEngine'));
+    expect(runner, contains('invalid_script_capsule_engine'));
   });
 }

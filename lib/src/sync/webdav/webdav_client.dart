@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
 const _webDavNamespace = 'DAV:';
+const _webDavUserAgent = 'RePaperTodo/1 WebDAV';
 
 class WebDavCredentials {
   const WebDavCredentials({
@@ -31,13 +32,13 @@ class WebDavCredentials {
         'WebDAV Basic Auth password must not be blank or contain control characters.',
       );
     }
-    final token = base64Encode(utf8.encode('$username:$password'));
+    final token = base64Encode(utf8.encode('${username.trim()}:$password'));
     return 'Basic $token';
   }
 }
 
 bool _isValidBasicAuthUsername(String value) {
-  return value.isNotEmpty &&
+  return value.trim().isNotEmpty &&
       !value.contains(':') &&
       !_hasControlCharacter(value);
 }
@@ -97,6 +98,8 @@ class WebDavClient {
   final http.Client _httpClient;
   bool _closed = false;
 
+  Uri get baseUri => _baseUri;
+
   void close() {
     if (_ownsHttpClient && !_closed) {
       _closed = true;
@@ -110,21 +113,21 @@ class WebDavClient {
 
   Future<WebDavResourceMetadata?> metadata(String path) async {
     final response = await _send('HEAD', path);
-    if (response.statusCode == 404) {
+    if (_isMissingResourceStatus(response.statusCode)) {
       return null;
     }
     if (response.statusCode == 405 || response.statusCode == 501) {
       return _metadataFromPropFind(path);
     }
     _throwIfUnexpected(response, expected: {200, 204});
+    final lastModified = _headerValue(response.headers, 'last-modified');
     return WebDavResourceMetadata(
-      etag: _nonBlankHeaderValue(response.headers['etag']),
+      etag: _nonBlankHeaderValue(_headerValue(response.headers, 'etag')),
       contentLength: _tryParseContentLength(
-        response.headers['content-length'],
+        _headerValue(response.headers, 'content-length'),
       ),
-      lastModified: response.headers['last-modified'] == null
-          ? null
-          : _tryParseHttpDate(response.headers['last-modified']!),
+      lastModified:
+          lastModified == null ? null : _tryParseHttpDate(lastModified),
     );
   }
 
@@ -152,7 +155,8 @@ class WebDavClient {
 
   Future<void> makeCollection(String path) async {
     final response = await _send('MKCOL', path);
-    if (response.statusCode == 405) {
+    if (response.statusCode == 405 ||
+        _isAlreadyExistingCollectionResponse(response)) {
       return;
     }
     _throwIfUnexpected(response, expected: {200, 201, 204});
@@ -165,7 +169,7 @@ class WebDavClient {
       path,
       headers: {if (normalizedIfMatch != null) 'if-match': normalizedIfMatch},
     );
-    if (response.statusCode == 404) {
+    if (_isMissingResourceStatus(response.statusCode)) {
       return;
     }
     _throwIfUnexpected(response, expected: {200, 202, 204});
@@ -185,8 +189,11 @@ class WebDavClient {
       throw StateError('WebDAV client is closed.');
     }
     final request = http.Request(method, _resolve(path));
+    request.followRedirects = false;
     request.headers.addAll({
+      'accept': '*/*',
       'authorization': _credentials.authorizationHeader,
+      'user-agent': _webDavUserAgent,
       ...?headers,
     });
     if (body is List<int>) {
@@ -222,7 +229,7 @@ class WebDavClient {
 
   Future<WebDavResourceMetadata?> _metadataFromPropFind(String path) async {
     final response = await _sendPropFind(path, depth: '0');
-    if (response.statusCode == 404) {
+    if (_isMissingResourceStatus(response.statusCode)) {
       return null;
     }
     _throwIfUnexpected(response, expected: {207});
@@ -230,7 +237,10 @@ class WebDavClient {
     if (entries.isEmpty) {
       return null;
     }
-    final entry = entries.first;
+    final entry = _entryForRequestPath(entries, _resolve(path), _baseUri);
+    if (entry == null) {
+      return null;
+    }
     return WebDavResourceMetadata(
       etag: entry.etag,
       contentLength: entry.contentLength,
@@ -254,11 +264,138 @@ class WebDavClient {
       path,
       headers: {
         'depth': depth,
+        'accept': 'application/xml, text/xml, */*',
         'content-type': 'application/xml; charset=utf-8',
       },
       body: _propFindBody,
     );
   }
+}
+
+WebDavEntry? _entryForRequestPath(
+  List<WebDavEntry> entries,
+  Uri requestUri,
+  Uri baseUri,
+) {
+  for (final entry in entries) {
+    if (_hrefMatchesRequestPath(entry.href, requestUri, baseUri)) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+bool _hrefMatchesRequestPath(String href, Uri requestUri, Uri baseUri) {
+  final trimmedHref = href.trim();
+  final uri = Uri.tryParse(trimmedHref);
+  if (uri == null) {
+    return false;
+  }
+  if (uri.hasQuery || uri.hasFragment) {
+    return false;
+  }
+  if (_hrefRawPathHasDotSegments(trimmedHref, uri)) {
+    return false;
+  }
+  if (uri.hasScheme || uri.hasAuthority) {
+    if (!_hrefHasSameOrigin(uri, requestUri) || uri.userInfo.isNotEmpty) {
+      return false;
+    }
+  }
+  final path = uri.path;
+  final requestPath = requestUri.path;
+  if (path == requestPath) {
+    return true;
+  }
+  if (path.startsWith('/')) {
+    return false;
+  }
+  final relativeRequestPath = _relativeRequestPath(requestUri, baseUri);
+  return path.isNotEmpty && path == relativeRequestPath;
+}
+
+bool _hrefRawPathHasDotSegments(String href, Uri uri) {
+  final path = _rawHrefPath(href, uri);
+  for (final segment in path.split('/')) {
+    late final String decodedSegment;
+    try {
+      decodedSegment = Uri.decodeComponent(segment);
+    } on ArgumentError {
+      return true;
+    } on FormatException {
+      return true;
+    }
+    if (decodedSegment == '.' || decodedSegment == '..') {
+      return true;
+    }
+  }
+  return false;
+}
+
+String _rawHrefPath(String href, Uri uri) {
+  final pathEnd = _firstIndexOfAny(href, ['?', '#']) ?? href.length;
+  if (uri.hasScheme) {
+    final schemeEnd = href.indexOf(':');
+    if (schemeEnd < 0) {
+      return href.substring(0, pathEnd);
+    }
+    final afterScheme = schemeEnd + 1;
+    if (href.startsWith('//', afterScheme)) {
+      return _rawPathAfterAuthority(href, afterScheme + 2, pathEnd);
+    }
+    return href.substring(afterScheme, pathEnd);
+  }
+  if (uri.hasAuthority) {
+    return _rawPathAfterAuthority(href, 2, pathEnd);
+  }
+  return href.substring(0, pathEnd);
+}
+
+String _rawPathAfterAuthority(String href, int authorityStart, int pathEnd) {
+  final pathStart = href.indexOf('/', authorityStart);
+  if (pathStart < 0 || pathStart > pathEnd) {
+    return '';
+  }
+  return href.substring(pathStart, pathEnd);
+}
+
+int? _firstIndexOfAny(String value, List<String> needles) {
+  int? first;
+  for (final needle in needles) {
+    final index = value.indexOf(needle);
+    if (index >= 0 && (first == null || index < first)) {
+      first = index;
+    }
+  }
+  return first;
+}
+
+String _relativeRequestPath(Uri requestUri, Uri baseUri) {
+  final requestPath = requestUri.path;
+  final basePath = baseUri.path;
+  if (requestPath.startsWith(basePath)) {
+    return requestPath.substring(basePath.length);
+  }
+  return requestPath.startsWith('/') ? requestPath.substring(1) : requestPath;
+}
+
+bool _hrefHasSameOrigin(Uri hrefUri, Uri requestUri) {
+  return hrefUri.hasScheme &&
+      hrefUri.hasAuthority &&
+      hrefUri.scheme.toLowerCase() == requestUri.scheme.toLowerCase() &&
+      hrefUri.host.toLowerCase() == requestUri.host.toLowerCase() &&
+      _effectivePort(hrefUri) == _effectivePort(requestUri);
+}
+
+int _effectivePort(Uri uri) {
+  if (uri.hasPort) {
+    return uri.port;
+  }
+  return switch (uri.scheme.toLowerCase()) {
+    'http' => 80,
+    'https' => 443,
+    _ => 0,
+  };
 }
 
 final _propFindBody = utf8.encode('''<?xml version="1.0" encoding="utf-8" ?>
@@ -288,6 +425,13 @@ Uri _normalizeBaseUri(Uri uri) {
       'WebDAV base URI must not include embedded credentials.',
     );
   }
+  if (_hasUnsafeBaseUriAuthority(uri)) {
+    throw ArgumentError.value(
+      uri,
+      'baseUri',
+      'WebDAV base URI authority must not contain encoded separators.',
+    );
+  }
   if (uri.hasQuery || uri.hasFragment) {
     throw ArgumentError.value(
       uri,
@@ -299,11 +443,30 @@ Uri _normalizeBaseUri(Uri uri) {
     throw ArgumentError.value(
       uri,
       'baseUri',
-      'WebDAV base URI path must not contain dot-segments, backslashes, or control characters.',
+      'WebDAV base URI path must not contain dot-segments, backslashes, control characters, encoded path separators, blank path segments, or path segments with leading or trailing whitespace.',
     );
   }
   final text = uri.toString();
   return text.endsWith('/') ? uri : Uri.parse('$text/');
+}
+
+bool _hasUnsafeBaseUriAuthority(Uri uri) {
+  final authority = uri.authority.toLowerCase();
+  for (final encodedSeparator in const [
+    '%23',
+    '%2f',
+    '%3a',
+    '%3f',
+    '%40',
+    '%5b',
+    '%5c',
+    '%5d',
+  ]) {
+    if (authority.contains(encodedSeparator)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 Duration _normalizeRequestTimeout(Duration timeout) {
@@ -328,21 +491,38 @@ bool _hasUnsafeBaseUriPath(Uri uri) {
   if (uri.toString().contains('\\')) {
     return true;
   }
-  late final String decodedPath;
-  try {
-    decodedPath = Uri.decodeComponent(uri.path);
-  } on ArgumentError {
-    return true;
-  } on FormatException {
-    return true;
-  }
-  return decodedPath.replaceAll('\\', '/').split('/').any((segment) {
+  final rawSegments = uri.path.split('/');
+  for (var index = 0; index < rawSegments.length; index += 1) {
+    final rawSegment = rawSegments[index];
+    if (rawSegment.isEmpty && index > 0 && index < rawSegments.length - 1) {
+      return true;
+    }
+    late final String segment;
+    try {
+      segment = Uri.decodeComponent(rawSegment);
+    } on ArgumentError {
+      return true;
+    } on FormatException {
+      return true;
+    }
     if (_hasControlCharacter(segment)) {
       return true;
     }
+    if (segment.contains('/') || segment.contains('\\')) {
+      return true;
+    }
     final trimmed = segment.trim();
-    return trimmed == '.' || trimmed == '..';
-  });
+    if (segment != trimmed) {
+      return true;
+    }
+    if (rawSegment.isNotEmpty && trimmed.isEmpty) {
+      return true;
+    }
+    if (trimmed == '.' || trimmed == '..') {
+      return true;
+    }
+  }
+  return false;
 }
 
 void _throwIfUnexpected(http.Response response, {required Set<int> expected}) {
@@ -350,20 +530,27 @@ void _throwIfUnexpected(http.Response response, {required Set<int> expected}) {
     return;
   }
   throw WebDavException(
-    _unexpectedStatusMessage(response.statusCode),
+    _unexpectedStatusMessage(response),
     statusCode: response.statusCode,
     responseBody: response.body,
   );
 }
 
-String _unexpectedStatusMessage(int statusCode) {
-  return switch (statusCode) {
+String _unexpectedStatusMessage(http.Response response) {
+  final message = switch (response.statusCode) {
     400 => 'WebDAV request was rejected by the provider.',
     401 => 'WebDAV authentication failed. Check the username and app password.',
     403 =>
       'WebDAV permission denied. Check account access and remote folder permissions.',
+    301 ||
+    302 ||
+    303 ||
+    307 ||
+    308 =>
+      'WebDAV provider redirected the request. Check the endpoint URL.',
     404 => 'WebDAV resource was not found.',
     409 => 'WebDAV parent folder is missing or the remote file changed.',
+    410 => 'WebDAV resource is gone.',
     412 => 'WebDAV precondition failed because the remote file changed.',
     423 => 'WebDAV resource is locked by the provider.',
     429 => 'WebDAV provider rate limit reached. Try again later.',
@@ -373,8 +560,72 @@ String _unexpectedStatusMessage(int statusCode) {
     504 =>
       'WebDAV provider is temporarily unavailable. Try again later.',
     507 => 'WebDAV storage quota is full.',
-    _ => 'Unexpected WebDAV status $statusCode.',
+    _ => 'Unexpected WebDAV status ${response.statusCode}.',
   };
+  return '$message${_retryAfterSuffix(
+    _headerValue(response.headers, 'retry-after'),
+  )}';
+}
+
+String? _headerValue(Map<String, String> headers, String name) {
+  final directValue = headers[name];
+  if (directValue != null) {
+    return directValue;
+  }
+  final normalizedName = name.toLowerCase();
+  for (final entry in headers.entries) {
+    if (entry.key.toLowerCase() == normalizedName) {
+      return entry.value;
+    }
+  }
+  return null;
+}
+
+String _retryAfterSuffix(String? retryAfter) {
+  final value = retryAfter?.trim();
+  if (value == null || value.isEmpty) {
+    return '';
+  }
+  final seconds = int.tryParse(value);
+  if (seconds != null && seconds > 0) {
+    return ' Retry after $seconds ${seconds == 1 ? 'second' : 'seconds'}.';
+  }
+  try {
+    final date = HttpDate.parse(value).toUtc();
+    return ' Retry after ${date.toIso8601String()}.';
+  } on HttpException {
+    return '';
+  }
+}
+
+bool _isMissingResourceStatus(int statusCode) {
+  return statusCode == 404 || statusCode == 410;
+}
+
+bool _isAlreadyExistingCollectionResponse(http.Response response) {
+  if (response.statusCode != 409 && response.statusCode != 412) {
+    return false;
+  }
+  return _responseBodyCandidates(response).any((body) {
+    return body.contains('already') ||
+        body.contains('exist') ||
+        body.contains('\u5df2\u5b58\u5728') ||
+        body.contains('\u5df2\u7ecf\u5b58\u5728') ||
+        body.contains('已存在') ||
+        body.contains('已经存在');
+  });
+}
+
+Iterable<String> _responseBodyCandidates(http.Response response) sync* {
+  yield response.body.toLowerCase();
+  try {
+    final utf8Body = utf8.decode(response.bodyBytes).toLowerCase();
+    if (utf8Body != response.body.toLowerCase()) {
+      yield utf8Body;
+    }
+  } on FormatException {
+    return;
+  }
 }
 
 WebDavException _timeoutException(TimeoutException error) {
@@ -441,7 +692,7 @@ List<WebDavEntry> _parseMultiStatusResponse(http.Response response) {
 
 String _decodeMultiStatusBody(http.Response response) {
   final headerEncoding =
-      _encodingFromContentType(response.headers['content-type']);
+      _encodingFromContentType(_headerValue(response.headers, 'content-type'));
   if (headerEncoding != null) {
     return _stripLeadingByteOrderMark(
         headerEncoding.decode(response.bodyBytes));
@@ -673,7 +924,15 @@ String? _nonBlankHeaderValue(String? value) {
 }
 
 List<String> _normalizeRequestPathSegments(String path) {
-  final withForwardSlashes = path.trim().replaceAll('\\', '/');
+  final trimmedPath = path.trim();
+  if (path != trimmedPath) {
+    throw ArgumentError.value(
+      path,
+      'path',
+      'WebDAV path must not contain leading or trailing whitespace.',
+    );
+  }
+  final withForwardSlashes = trimmedPath.replaceAll('\\', '/');
   late final String decoded;
   try {
     decoded = Uri.decodeComponent(withForwardSlashes);
@@ -698,7 +957,32 @@ List<String> _normalizeRequestPathSegments(String path) {
     );
   }
   final segments = <String>[];
-  for (final segment in decoded.split('/')) {
+  final rawSegments = withForwardSlashes.split('/');
+  for (var index = 0; index < rawSegments.length; index += 1) {
+    final rawSegment = rawSegments[index];
+    if (rawSegment.isEmpty && index > 0 && index < rawSegments.length - 1) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'WebDAV path must not contain blank path segments.',
+      );
+    }
+    late final String segment;
+    try {
+      segment = Uri.decodeComponent(rawSegment);
+    } on ArgumentError catch (error) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'WebDAV path contains invalid percent encoding: ${error.message}',
+      );
+    } on FormatException catch (error) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'WebDAV path contains invalid percent encoding: ${error.message}',
+      );
+    }
     if (_hasControlCharacter(segment)) {
       throw ArgumentError.value(
         path,
@@ -706,7 +990,28 @@ List<String> _normalizeRequestPathSegments(String path) {
         'WebDAV path must not contain control characters.',
       );
     }
+    if (segment.contains('/') || segment.contains('\\')) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'WebDAV path segments must not decode to path separators.',
+      );
+    }
     final trimmed = segment.trim();
+    if (segment != trimmed) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'WebDAV path segments must not contain leading or trailing whitespace.',
+      );
+    }
+    if (rawSegment.isNotEmpty && trimmed.isEmpty) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'WebDAV path segments must not collapse to blank.',
+      );
+    }
     if (trimmed.isEmpty || trimmed == '.') {
       continue;
     }

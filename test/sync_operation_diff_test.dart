@@ -70,6 +70,65 @@ void main() {
     expect(result.state.papers.single.content, 'New body');
   });
 
+  test('excludes local sync settings from generated settings operations', () {
+    final before = AppState(
+      theme: 'light',
+      sync: SyncSettings(
+        enabled: true,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/',
+          username: 'local-user',
+          password: 'local-password',
+          encryptionPassphrase: 'local-secret',
+          rootPath: 'RePaperTodo',
+          autoSyncIntervalMinutes: 15,
+          requestTimeoutSeconds: 45,
+        ),
+        operationDeviceSequences: {'device-a': 7},
+      ),
+    );
+    final syncOnlyAfter = AppState(
+      theme: 'light',
+      sync: SyncSettings(
+        enabled: true,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/changed/',
+          username: 'changed-user',
+          password: 'changed-password',
+          encryptionPassphrase: 'changed-secret',
+          rootPath: 'ChangedRoot',
+          autoSyncIntervalMinutes: 60,
+          requestTimeoutSeconds: 90,
+        ),
+        operationDeviceSequences: {'device-a': 8},
+      ),
+    );
+    final settingsAfter = AppState.fromJson(syncOnlyAfter.toJson())
+      ..theme = 'dark';
+
+    final syncOnlyOperations = builder.build(
+      before: before,
+      after: syncOnlyAfter,
+      deviceId: 'device-a',
+      startSequence: 7,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+    final settingsOperations = builder.build(
+      before: before,
+      after: settingsAfter,
+      deviceId: 'device-a',
+      startSequence: 7,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(syncOnlyOperations, isEmpty);
+    expect(settingsOperations, hasLength(1));
+    expect(settingsOperations.single.kind, SyncOperationKind.updateSettings);
+    expect(settingsOperations.single.payload['settings'], {'theme': 'dark'});
+  });
+
   test('builds paper add delete and todo item operations', () {
     final before = AppState(
       papers: [
@@ -365,6 +424,51 @@ void main() {
         startSequence: 0,
       ),
       isEmpty,
+    );
+  });
+
+  test('rejects generated operation sequences outside the remote range', () {
+    final noteBefore = AppState(
+      papers: [
+        PaperData(id: 'note', type: PaperTypes.note, content: 'Before'),
+      ],
+    );
+    final noteAfter = AppState(
+      papers: [
+        PaperData(id: 'note', type: PaperTypes.note, content: 'After'),
+      ],
+    );
+
+    expect(
+      () => builder.build(
+        before: noteBefore,
+        after: noteAfter,
+        deviceId: 'device-a',
+        startSequence: maxSyncDeviceSequence,
+      ),
+      throwsA(isA<RangeError>()),
+    );
+
+    final multiBefore = AppState(
+      papers: [
+        PaperData(id: 'note', type: PaperTypes.note, content: 'Before'),
+      ],
+    );
+    final multiAfter = AppState(
+      theme: 'dark',
+      papers: [
+        PaperData(id: 'note', type: PaperTypes.note, content: 'After'),
+      ],
+    );
+
+    expect(
+      () => builder.build(
+        before: multiBefore,
+        after: multiAfter,
+        deviceId: 'device-a',
+        startSequence: maxSyncDeviceSequence - 1,
+      ),
+      throwsA(isA<RangeError>()),
     );
   });
 }

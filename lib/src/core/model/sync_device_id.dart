@@ -1,17 +1,29 @@
+const int maxSyncDeviceSequence = 999999999999;
+const int syncDeviceSequenceWireWidth = 12;
+const int minSyncDeviceIdLength = 8;
+const int maxSyncDeviceIdLength = 64;
+
+bool isSyncDeviceSequenceInRange(int sequence) {
+  return sequence > 0 && sequence <= maxSyncDeviceSequence;
+}
+
 String normalizeSyncDeviceId(
   String value, {
   String fallback = 'local-device',
 }) {
+  final stable = normalizeSyncDeviceIdForDisplay(value);
+  return stable.length < minSyncDeviceIdLength ? fallback : stable;
+}
+
+String normalizeSyncDeviceIdForDisplay(String value) {
   final normalized = value.trim().toLowerCase();
   final cleaned = normalized.replaceAll(RegExp(r'[^a-z0-9_-]+'), '-');
   final collapsed = cleaned.replaceAll(RegExp('-+'), '-');
   final trimmed = collapsed.replaceAll(RegExp(r'^[-_]+|[-_]+$'), '');
-  if (trimmed.length < 8) {
-    return fallback;
-  }
-  final capped = trimmed.length > 64 ? trimmed.substring(0, 64) : trimmed;
-  final stable = capped.replaceAll(RegExp(r'^[-_]+|[-_]+$'), '');
-  return stable.length < 8 ? fallback : stable;
+  final capped = trimmed.length > maxSyncDeviceIdLength
+      ? trimmed.substring(0, maxSyncDeviceIdLength)
+      : trimmed;
+  return capped.replaceAll(RegExp(r'^[-_]+|[-_]+$'), '');
 }
 
 Map<String, int> normalizeSyncDeviceSequences(
@@ -19,7 +31,7 @@ Map<String, int> normalizeSyncDeviceSequences(
 ) {
   final normalized = <String, int>{};
   for (final entry in (source ?? const <String, int>{}).entries) {
-    if (entry.value <= 0) {
+    if (!isSyncDeviceSequenceInRange(entry.value)) {
       continue;
     }
     final deviceId = normalizeSyncDeviceId(entry.key, fallback: '');

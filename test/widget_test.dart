@@ -20,6 +20,7 @@ import 'package:repapertodo/src/platform/noop_platform_services.dart';
 import 'package:repapertodo/src/platform/platform_services.dart';
 import 'package:repapertodo/src/sync/app_sync_service.dart';
 import 'package:repapertodo/src/sync/webdav/webdav_client.dart';
+import 'package:repapertodo/src/sync/webdav/webdav_payload_codec.dart';
 import 'package:repapertodo/src/sync/webdav/webdav_state_sync_service.dart';
 
 void main() {
@@ -398,6 +399,187 @@ void main() {
       find.textContaining('unsupported link target'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('blocks credentialed markdown preview links before platform open',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'credentialed-link-note',
+            type: PaperTypes.note,
+            title: 'Credentialed link note',
+            content: '[Open private link](https://user:pass@example.com/path)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Open private link'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, isEmpty);
+    expect(find.textContaining('unsupported link target'), findsOneWidget);
+  });
+
+  testWidgets('blocks encoded credential markdown links before platform open',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'encoded-credential-link-note',
+            type: PaperTypes.note,
+            title: 'Encoded credential link note',
+            content:
+                '[Open encoded link](https://example.com%40evil.test/path)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Open encoded link'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, isEmpty);
+    expect(find.textContaining('unsupported link target'), findsOneWidget);
+  });
+
+  testWidgets('blocks encoded authority separator markdown links',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'encoded-authority-separator-link-note',
+            type: PaperTypes.note,
+            title: 'Encoded authority separator link note',
+            content: '[Open encoded separator](https://example.com%3A443/path)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Open encoded separator'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, isEmpty);
+    expect(find.textContaining('unsupported link target'), findsOneWidget);
+  });
+
+  testWidgets('blocks encoded control markdown links before platform open',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'encoded-control-link-note',
+            type: PaperTypes.note,
+            title: 'Encoded control link note',
+            content: '[Open encoded control link](https://example.com/%0Apath)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Open encoded control link'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, isEmpty);
+    expect(find.textContaining('unsupported link target'), findsOneWidget);
+  });
+
+  testWidgets('blocks hostless markdown preview links before platform open',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'hostless-link-note',
+            type: PaperTypes.note,
+            title: 'Hostless link note',
+            content: '[Open hostless link](https://:443/path)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Open hostless link'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, isEmpty);
+    expect(find.textContaining('unsupported link target'), findsOneWidget);
   });
 
   testWidgets('opens markdown preview links with encoded whitespace',
@@ -1003,6 +1185,138 @@ void main() {
     expect(controller.state.sync.webDav.requestTimeoutSeconds, 45);
   });
 
+  testWidgets('clamps WebDAV sync interval and timeout settings',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+            autoSyncIntervalMinutes: 15,
+            requestTimeoutSeconds: 30,
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'sync-numeric-settings-paper',
+            type: PaperTypes.todo,
+            title: 'Sync numeric settings',
+            items: [
+              PaperItem(
+                id: 'sync-numeric-settings-item',
+                text: 'Clamp sync numbers',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Interval minutes'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Interval minutes'),
+      '0',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Request timeout seconds'),
+      '999',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.sync.webDav.autoSyncIntervalMinutes, 1);
+    expect(controller.state.sync.webDav.requestTimeoutSeconds, 300);
+  });
+
+  testWidgets('defaults blank WebDAV sync interval and timeout settings',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+            autoSyncIntervalMinutes: 45,
+            requestTimeoutSeconds: 90,
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'sync-blank-numeric-settings-paper',
+            type: PaperTypes.todo,
+            title: 'Sync blank numeric settings',
+            items: [
+              PaperItem(
+                id: 'sync-blank-numeric-settings-item',
+                text: 'Default sync numbers',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Interval minutes'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Interval minutes'),
+      '',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Request timeout seconds'),
+      '',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.sync.webDav.autoSyncIntervalMinutes, 15);
+    expect(controller.state.sync.webDav.requestTimeoutSeconds, 30);
+  });
+
   testWidgets('shows inline error when WebDAV passphrase is missing',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -1077,10 +1391,280 @@ void main() {
         'shared sync secret');
   });
 
+  testWidgets('shows inline error for whitespace WebDAV username',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'sync-username-error-paper',
+            type: PaperTypes.todo,
+            title: 'Sync username error',
+            items: [
+              PaperItem(
+                id: 'sync-username-error-item',
+                text: 'Require username',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(TextField, 'Username'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Username'),
+      '   ',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Enter a WebDAV username.'), findsOneWidget);
+    expect(
+      find.textContaining('Complete the WebDAV URL'),
+      findsOneWidget,
+    );
+    expect(controller.state.sync.webDav.username, 'user');
+  });
+
+  testWidgets('shows inline error for whitespace WebDAV password',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'sync-password-error-paper',
+            type: PaperTypes.todo,
+            title: 'Sync password error',
+            items: [
+              PaperItem(
+                id: 'sync-password-error-item',
+                text: 'Require password',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(TextField, 'Password'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      '   ',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+    expect(
+        find.text('Enter a WebDAV password or app password.'), findsOneWidget);
+    expect(
+      find.textContaining('Complete the WebDAV URL'),
+      findsOneWidget,
+    );
+    expect(controller.state.sync.webDav.password, 'pass');
+  });
+
+  testWidgets('trims WebDAV username while preserving password on save',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'sync-basic-auth-save-paper',
+            type: PaperTypes.todo,
+            title: 'Sync Basic Auth save',
+            items: [
+              PaperItem(
+                id: 'sync-basic-auth-save-item',
+                text: 'Keep credentials intentional',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(TextField, 'Username'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Username'),
+      ' user@example.com ',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      ' app:password ',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.sync.webDav.username, 'user@example.com');
+    expect(controller.state.sync.webDav.password, ' app:password ');
+  });
+
+  testWidgets('shows inline error for whitespace sync passphrase',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'sync-passphrase-whitespace-paper',
+            type: PaperTypes.todo,
+            title: 'Sync passphrase whitespace',
+            items: [
+              PaperItem(
+                id: 'sync-passphrase-whitespace-item',
+                text: 'Reject blank passphrase',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(TextField, 'Sync encryption passphrase'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Sync encryption passphrase'),
+      '   ',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Enter a sync encryption passphrase.'), findsOneWidget);
+    expect(
+      find.textContaining('Complete the WebDAV URL'),
+      findsOneWidget,
+    );
+    expect(
+      controller.state.sync.webDav.encryptionPassphrase,
+      'shared sync secret',
+    );
+  });
+
   testWidgets('shows inline errors for incomplete WebDAV settings',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    const endpointErrorText =
+        'Use a full http:// or https:// WebDAV URL without user info, query, '
+        'fragment, backslashes, control characters, encoded authority or path '
+        'separators, blank path segments, or path segment edge spaces.';
+    const rootPathErrorText =
+        'Use a remote folder without parent-directory segments, invalid percent '
+        'escapes, control characters, or blank path segments.';
 
     final controller = RePaperTodoController(
       initialState: AppState(
@@ -1150,14 +1734,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sync settings'), findsOneWidget);
-    expect(
-        find.textContaining('Use a full http:// or https://'), findsOneWidget);
-    expect(
-      find.text(
-        'Use a remote folder without parent-directory segments, backslashes, invalid percent escapes, or control characters.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text(endpointErrorText), findsOneWidget);
+    expect(find.text(rootPathErrorText), findsOneWidget);
     expect(
       find.text('Username cannot contain colons or control characters.'),
       findsOneWidget,
@@ -1186,7 +1764,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Use a full http:// or https://'), findsNothing);
+    expect(find.text(endpointErrorText), findsNothing);
     expect(
       find.text('Username cannot contain colons or control characters.'),
       findsOneWidget,
@@ -1201,22 +1779,12 @@ void main() {
       '',
     );
     await tester.pumpAndSettle();
-    expect(
-      find.text(
-        'Use a remote folder without parent-directory segments, backslashes, invalid percent escapes, or control characters.',
-      ),
-      findsNothing,
-    );
+    expect(find.text(rootPathErrorText), findsNothing);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-        'Use a remote folder without parent-directory segments, backslashes, invalid percent escapes, or control characters.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text(rootPathErrorText), findsOneWidget);
     expect(controller.state.sync.webDav.rootPath, 'repapertodo');
   });
 
@@ -1950,8 +2518,8 @@ void main() {
     );
     final syncService = _RecoverySnapshotSyncService(
       firstListError: const WebDavException(
-        'WebDAV request failed: offline',
-        statusCode: 0,
+        'WebDAV provider is temporarily unavailable. Try again later. Retry after 2026-07-01T09:01:00.000Z.',
+        statusCode: 503,
       ),
       snapshots: [
         WebDavSnapshotRecord(
@@ -1976,7 +2544,13 @@ void main() {
 
     expect(syncService.listCalls, 1);
     expect(
-        find.textContaining('WebDAV request failed: offline'), findsOneWidget);
+      find.textContaining('WebDAV provider is temporarily unavailable.'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Retry after 2026-07-01T09:01:00.000Z.'),
+      findsOneWidget,
+    );
     expect(find.textContaining('WebDavException'), findsNothing);
     expect(
       find.byKey(const ValueKey('retry-recovery-snapshots')),
@@ -1987,7 +2561,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(syncService.listCalls, 2);
-    expect(find.textContaining('WebDAV request failed: offline'), findsNothing);
+    expect(
+      find.textContaining('WebDAV provider is temporarily unavailable.'),
+      findsNothing,
+    );
     expect(find.textContaining(snapshotPath), findsOneWidget);
   });
 
@@ -2126,6 +2703,70 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sync settings'), findsOneWidget);
+  });
+
+  testWidgets('recovery snapshot malformed encrypted payload keeps message',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final localState = AppState(
+      sync: SyncSettings(
+        enabled: true,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/',
+          username: 'user',
+          password: 'pass',
+          encryptionPassphrase: 'shared sync secret',
+          rootPath: 'repapertodo',
+        ),
+      ),
+      papers: [
+        PaperData(id: 'local-paper', type: PaperTypes.todo, title: 'Local'),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: localState,
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: 'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json',
+          deviceId: 'phone',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+        ),
+      ],
+      restoredState: localState,
+      restoreStatus: AppSyncStatus.payloadUnreadable,
+      restoreMessage:
+          'Encrypted WebDAV sync payload is unsupported or corrupted.',
+      includeRestoredState: false,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(
+        'restore-snapshot-repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(controller.state.papers.single.title, 'Local');
+    expect(find.textContaining('unsupported or corrupted'), findsOneWidget);
+    expect(find.textContaining('Check the sync encryption passphrase'),
+        findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Settings'), findsOneWidget);
   });
 
   testWidgets('uses compact recovery snapshot rows on narrow screens',
@@ -2434,6 +3075,59 @@ void main() {
     expect(find.textContaining('Sync failed:'), findsNothing);
   });
 
+  testWidgets('manual sync keeps malformed encrypted payload messages',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final localState = AppState(
+      papers: [
+        PaperData(
+          id: 'local-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: localState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-sync-malformed-encrypted.json');
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.payloadUnreadable,
+          state: localState,
+          message: 'Encrypted WebDAV sync payload is unsupported or corrupted.',
+        ),
+        state: localState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Local');
+    expect(find.textContaining('unsupported or corrupted'), findsOneWidget);
+    expect(find.textContaining('Check the sync encryption passphrase'),
+        findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Settings'), findsOneWidget);
+    expect(find.textContaining('Sync failed:'), findsNothing);
+  });
+
   testWidgets('manual sync failure can retry from snackbar', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -2519,8 +3213,8 @@ void main() {
     );
     final syncService = _ManualSyncService(
       firstSyncError: const WebDavException(
-        'WebDAV request timed out after 30s.',
-        statusCode: 0,
+        'WebDAV provider rate limit reached. Try again later. Retry after 120 seconds.',
+        statusCode: 429,
       ),
       result: AppSyncRunResult(
         syncResult: AppSyncResult(
@@ -2543,8 +3237,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.textContaining('WebDAV request timed out after 30s.'),
-        findsOneWidget);
+    expect(
+      find.textContaining('WebDAV provider rate limit reached.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Retry after 120 seconds.'), findsOneWidget);
     expect(find.textContaining('WebDavException'), findsNothing);
     expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
   });
@@ -2729,6 +3426,8 @@ void main() {
       initialState: initialState,
       platform: _RecordingPlatformServices(),
     );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
     final syncService = _ManualSyncService(
       result: AppSyncRunResult(
         syncResult: const AppSyncResult(
@@ -2752,7 +3451,7 @@ void main() {
     await tester.pumpWidget(
       RePaperTodoApp(
         controller: controller,
-        store: _MemoryStateStore(),
+        store: store,
         syncService: syncService,
       ),
     );
@@ -2927,6 +3626,105 @@ void main() {
       ['Synced'],
     ]);
     expect(platform.tray.rebuildTitleSnapshots.last, ['Synced']);
+    expect(find.text('Remote data downloaded.'), findsOneWidget);
+  });
+
+  testWidgets('manual sync keeps malformed local upload payload messages',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'manual-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'manual-note',
+          type: PaperTypes.note,
+          title: 'Synced after retry',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+      ),
+      firstLocalUploadError: const WebDavPayloadDecryptionException(
+        'Encrypted WebDAV sync payload is unsupported or corrupted.',
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('manual-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.events, ['upload']);
+    expect(syncService.localUploadCalls, 1);
+    expect(syncService.calls, 0);
+    expect(controller.state.papers.single.title, 'Draft');
+    expect(find.textContaining('Sync failed:'), findsOneWidget);
+    expect(find.textContaining('unsupported or corrupted'), findsOneWidget);
+    expect(find.textContaining('Check the sync encryption passphrase'),
+        findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Retry'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.events, ['upload', 'upload', 'sync']);
+    expect(syncService.localUploadCalls, 2);
+    expect(syncService.calls, 1);
+    expect(syncService.localUploadBeforeTitles, ['Local', 'Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft', 'Draft']);
+    expect(controller.state.papers.single.title, 'Synced after retry');
     expect(find.text('Remote data downloaded.'), findsOneWidget);
   });
 
@@ -3294,6 +4092,222 @@ void main() {
     expect(find.text('Local data uploaded.'), findsNothing);
   });
 
+  testWidgets('local edits retry after silent upload failure', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'retry-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'retry-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      firstLocalUploadError: const WebDavPayloadDecryptionException(
+        'Encrypted WebDAV sync payload is unsupported or corrupted.',
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        papers: [
+          PaperData(
+            id: 'retry-note',
+            type: PaperTypes.note,
+            title: 'Two',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('retry-note-title')),
+      'One',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+
+    expect(syncService.events, ['upload']);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['One']);
+    expect(syncService.calls, 0);
+    expect(controller.state.papers.single.title, 'One');
+    expect(find.textContaining('unsupported or corrupted'), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('retry-note-title')),
+      'Two',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+
+    expect(syncService.events, ['upload', 'upload', 'sync']);
+    expect(syncService.localUploadCalls, 2);
+    expect(syncService.localUploadBeforeTitles, ['Local', 'Local']);
+    expect(syncService.localUploadAfterTitles, ['One', 'Two']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
+  testWidgets('manual sync retries pending edits after silent upload failure',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'manual-retry-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'manual-retry-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+      ),
+      firstLocalUploadError: const WebDavPayloadDecryptionException(
+        'Encrypted WebDAV sync payload is unsupported or corrupted.',
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        papers: [
+          PaperData(
+            id: 'manual-retry-note',
+            type: PaperTypes.note,
+            title: 'Draft',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('manual-retry-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+
+    expect(syncService.events, ['upload']);
+    expect(syncService.calls, 0);
+    expect(controller.state.papers.single.title, 'Draft');
+    expect(find.textContaining('unsupported or corrupted'), findsNothing);
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.events, ['upload', 'upload', 'sync']);
+    expect(syncService.localUploadCalls, 2);
+    expect(syncService.calls, 1);
+    expect(syncService.localUploadBeforeTitles, ['Local', 'Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft', 'Draft']);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(find.text('Remote data downloaded.'), findsOneWidget);
+    expect(find.textContaining('Sync failed:'), findsNothing);
+  });
+
   testWidgets('local edits retry upload when sync is busy', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -3488,6 +4502,788 @@ void main() {
     expect(find.text('Local data uploaded.'), findsNothing);
   });
 
+  testWidgets('exit command continues cleanup when local edit sync fails',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final startup = _RecordingStartupHost();
+    final platform = _RecordingPlatformServices(startup: startup);
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'exit-failure-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: platform,
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: initialState,
+          message: 'Local data uploaded.',
+        ),
+        state: initialState,
+      ),
+      firstLocalUploadError: const WebDavPayloadDecryptionException(
+        'Encrypted WebDAV sync payload is unsupported or corrupted.',
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    controller.state.papers.single.title = 'Draft';
+    startup.addCommand(const StartupCommand(StartupCommandKind.exit));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.events, ['upload']);
+    expect(syncService.localUploadCalls, 1);
+    expect(syncService.calls, 0);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect((await store.load()).papers.single.title, 'Draft');
+    expect(platform.systemIntegration.unregisterGlobalHotkeysCount, 1);
+    expect(platform.systemIntegration.exitApplicationCount, 1);
+    expect(platform.tray.disposeCount, 1);
+    expect(find.textContaining('unsupported or corrupted'), findsNothing);
+    expect(find.textContaining('Sync failed:'), findsNothing);
+  });
+
+  testWidgets('exit command saves local edits without sync when disabled',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final startup = _RecordingStartupHost();
+    final platform = _RecordingPlatformServices(startup: startup);
+    final initialState = AppState(
+      sync: SyncSettings(
+        enabled: false,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/',
+          username: 'user',
+          password: 'pass',
+          encryptionPassphrase: 'shared sync secret',
+          rootPath: 'repapertodo',
+          autoSyncIntervalMinutes: 15,
+        ),
+      ),
+      papers: [
+        PaperData(
+          id: 'exit-disabled-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: platform,
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: initialState,
+          message: 'Local data uploaded.',
+        ),
+        state: initialState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    controller.state.papers.single.title = 'Draft';
+    startup.addCommand(const StartupCommand(StartupCommandKind.exit));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.localUploadCalls, 0);
+    expect(syncService.calls, 0);
+    expect((await store.load()).papers.single.title, 'Draft');
+    expect(platform.systemIntegration.unregisterGlobalHotkeysCount, 1);
+    expect(platform.systemIntegration.exitApplicationCount, 1);
+    expect(platform.tray.disposeCount, 1);
+    expect(find.text('Local data uploaded.'), findsNothing);
+    expect(find.textContaining('Sync failed:'), findsNothing);
+  });
+
+  testWidgets('disabling sync clears pending local edit uploads',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'disable-sync-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: initialState,
+          message: 'Local data uploaded.',
+        ),
+        state: initialState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('disable-sync-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('WebDAV sync'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('WebDAV sync'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.sync.enabled, false);
+    expect(syncService.localUploadCalls, 0);
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('WebDAV sync'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('WebDAV sync'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.sync.enabled, true);
+    expect(syncService.localUploadCalls, 0);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+
+    expect(syncService.localUploadCalls, 0);
+    expect(syncService.calls, 0);
+    expect(controller.state.papers.single.title, 'Draft');
+    expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
+  testWidgets('canceling settings restores pending local edit upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'cancel-settings-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'cancel-settings-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        papers: [
+          PaperData(
+            id: 'cancel-settings-note',
+            type: PaperTypes.note,
+            title: 'Draft',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('cancel-settings-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
+  testWidgets('non-sync settings save restores pending local edit upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'non-sync-settings-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      customThemeColorHex: '#336699',
+      papers: [
+        PaperData(
+          id: 'non-sync-settings-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        customThemeColorHex: '#336699',
+        papers: [
+          PaperData(
+            id: 'non-sync-settings-note',
+            type: PaperTypes.note,
+            title: 'Draft',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('non-sync-settings-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Custom theme color'),
+      '336699',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(controller.state.customThemeColorHex, '#336699');
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
+  testWidgets('unchanged sync settings save restores pending local edit upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'unchanged-sync-settings-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'unchanged-sync-settings-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        papers: [
+          PaperData(
+            id: 'unchanged-sync-settings-note',
+            type: PaperTypes.note,
+            title: 'Draft',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('unchanged-sync-settings-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
+  testWidgets('platform setting failure preserves pending local edit upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    platform.systemIntegration.registerGlobalHotkeysError =
+        StateError('Hotkey registration failed');
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      pinnedTodoHotKey: '',
+      papers: [
+        PaperData(
+          id: 'platform-failure-pending-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      pinnedTodoHotKey: 'Ctrl+Alt+T',
+      papers: [
+        PaperData(
+          id: 'platform-failure-pending-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: platform,
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        pinnedTodoHotKey: 'Ctrl+Alt+T',
+        papers: [
+          PaperData(
+            id: 'platform-failure-pending-note',
+            type: PaperTypes.note,
+            title: 'Draft',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('platform-failure-pending-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Pinned todo hotkey'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pinned todo hotkey'),
+      'Ctrl+Alt+T',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(controller.state.pinnedTodoHotKey, 'Ctrl+Alt+T');
+    expect(platform.systemIntegration.registeredHotkeys, isEmpty);
+    expect(find.textContaining('Platform settings failed:'), findsOneWidget);
+    expect(find.textContaining('Hotkey registration failed'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect(syncService.calls, 1);
+    expect(controller.state.pinnedTodoHotKey, 'Ctrl+Alt+T');
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
+  testWidgets('settings save failure does not block later local edit upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      customThemeColorHex: '#112233',
+      papers: [
+        PaperData(
+          id: 'settings-save-failure-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      customThemeColorHex: '#336699',
+      papers: [
+        PaperData(
+          id: 'settings-save-failure-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        customThemeColorHex: '#336699',
+        papers: [
+          PaperData(
+            id: 'settings-save-failure-note',
+            type: PaperTypes.note,
+            title: 'Draft',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Custom theme color'),
+      '336699',
+    );
+    store.nextSaveError =
+        const StateStoreException('settings save failed', 'disk full');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('Settings save failed:'), findsOneWidget);
+    expect(find.textContaining('settings save failed'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-save-failure-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
   testWidgets('opens note markdown externally', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -3542,7 +5338,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     final longPaperId =
-        '${List.filled(90, 'a').join()}/bad:${List.filled(70, 'z').join()}?tail';
+        '${List.filled(90, 'a').join()}/bad:${List.filled(65, 'z').join()}\u007Ftail';
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
       initialState: AppState(
@@ -3578,7 +5374,7 @@ void main() {
     expect(fileName.length, lessThanOrEqualTo('paper-'.length + 96 + 3));
     expect(fileName, startsWith('paper-${List.filled(72, 'a').join()}_'));
     expect(fileName, endsWith('.md'));
-    expect(fileName, isNot(contains(RegExp(r'[<>:"/\\|?*\x00-\x1F]'))));
+    expect(fileName, isNot(contains(RegExp(r'[<>:"/\\|?*\x00-\x1F\x7F]'))));
     expect(openedFile.readAsStringSync(), '# Long export');
   });
 
@@ -5170,6 +6966,98 @@ void main() {
     expect(find.text('Sync settings'), findsOneWidget);
   });
 
+  testWidgets('opens settings requested during initial startup',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'initial-settings-paper',
+            type: PaperTypes.todo,
+            title: 'Initial settings',
+            items: [
+              PaperItem(id: 'initial-settings-item', text: 'Open settings'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.start(
+      startupCommand: const StartupCommand(StartupCommandKind.settings),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+  });
+
+  testWidgets('runtime visibility startup commands are saved', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final startup = _RecordingStartupHost();
+    final platform = _RecordingPlatformServices(startup: startup);
+    final store = _MemoryStateStore();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'runtime-visible-a',
+            type: PaperTypes.todo,
+            title: 'Visible A',
+            isVisible: true,
+            items: [
+              PaperItem(id: 'runtime-visible-a-item', text: 'Alpha'),
+            ],
+          ),
+          PaperData(
+            id: 'runtime-visible-b',
+            type: PaperTypes.note,
+            title: 'Visible B',
+            isVisible: true,
+            content: 'Beta',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    startup.addCommand(const StartupCommand(StartupCommandKind.hide));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.every((paper) => !paper.isVisible), true);
+    expect(store.savedState.papers.every((paper) => !paper.isVisible), true);
+    expect(platform.paperWindows.hiddenTitles,
+        containsAll(['Visible A', 'Visible B']));
+
+    startup.addCommand(const StartupCommand(StartupCommandKind.toggle));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.every((paper) => paper.isVisible), true);
+    expect(store.savedState.papers.every((paper) => paper.isVisible), true);
+    expect(platform.paperWindows.shownTitles,
+        containsAll(['Visible A', 'Visible B']));
+  });
+
   testWidgets('refreshes tray immediately for platform visibility updates',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -5214,6 +7102,48 @@ void main() {
     await tester.pump();
 
     expect(platform.tray.rebuildVisibilitySnapshots, hasLength(1));
+  });
+
+  testWidgets('paper open requests show hidden papers and save state',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'tray-open-hidden-paper',
+            type: PaperTypes.todo,
+            title: 'Tray hidden',
+            isVisible: false,
+            items: [
+              PaperItem(id: 'tray-open-hidden-item', text: 'Restore me'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Tray hidden'), findsNothing);
+
+    platform.paperWindows.emitPaperOpenRequest('tray-open-hidden-paper');
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.isVisible, true);
+    expect(store.savedState.papers.single.isVisible, true);
+    expect(platform.paperWindows.shownTitles, contains('Tray hidden'));
+    expect(find.text('Tray hidden'), findsOneWidget);
   });
 
   testWidgets('links todo items to note papers', (tester) async {
@@ -5630,6 +7560,7 @@ class _ManualSyncService extends AppSyncService {
     required this.result,
     this.firstSyncGate,
     this.firstSyncError,
+    this.firstLocalUploadError,
     this.localUploadState,
     this.localUploadUploadedCount = 1,
     this.localUploadStateChanged = false,
@@ -5639,6 +7570,7 @@ class _ManualSyncService extends AppSyncService {
   final AppSyncRunResult result;
   final Future<void>? firstSyncGate;
   final Object? firstSyncError;
+  final Object? firstLocalUploadError;
   final AppState? localUploadState;
   final int localUploadUploadedCount;
   final bool localUploadStateChanged;
@@ -5684,6 +7616,10 @@ class _ManualSyncService extends AppSyncService {
     events.add('upload');
     localUploadBeforeTitles.add(beforeState.papers.single.title);
     localUploadAfterTitles.add(afterState.papers.single.title);
+    final error = firstLocalUploadError;
+    if (localUploadCalls == 1 && error != null) {
+      throw error;
+    }
     final state = localUploadState ?? afterState;
     await store.save(state);
     return AppSyncLocalOperationUploadResult(
@@ -5710,6 +7646,7 @@ class _MemoryStateStore extends StateStore {
 
   final _codec = const AppStateCodec();
   AppState savedState = AppState();
+  Object? nextSaveError;
 
   @override
   Future<DateTime?> lastModifiedUtc() async {
@@ -5723,6 +7660,11 @@ class _MemoryStateStore extends StateStore {
 
   @override
   Future<void> save(AppState state) async {
+    final error = nextSaveError;
+    if (error != null) {
+      nextSaveError = null;
+      throw error;
+    }
     savedState = _codec.decode(_codec.encode(state));
   }
 }
@@ -5800,13 +7742,22 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final restoredTitleSnapshots = <List<String>>[];
   final updatedTitles = <String>[];
   final shownTitles = <String>[];
+  final hiddenTitles = <String>[];
   final _surfaceUpdates = StreamController<PaperData>.broadcast();
+  final _paperOpenRequests = StreamController<String>.broadcast();
 
   @override
   Stream<PaperData> get surfaceUpdates => _surfaceUpdates.stream;
 
+  @override
+  Stream<String> get paperOpenRequests => _paperOpenRequests.stream;
+
   void emitSurfaceUpdate(PaperData paper) {
     _surfaceUpdates.add(paper);
+  }
+
+  void emitPaperOpenRequest(String paperId) {
+    _paperOpenRequests.add(paperId);
   }
 
   @override
@@ -5819,6 +7770,11 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   @override
   Future<void> showPaper(PaperData paper) async {
     shownTitles.add(paper.title);
+  }
+
+  @override
+  Future<void> hidePaper(PaperData paper) async {
+    hiddenTitles.add(paper.title);
   }
 
   @override

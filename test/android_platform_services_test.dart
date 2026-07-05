@@ -29,8 +29,8 @@ void main() {
     expect(services.scriptCapsules.supportsScriptCapsules, false);
 
     final documentsPath = await services.storage.documentsDirectoryPath();
-    await services.uriOpener.openUri('https://example.com/paper');
-    await services.externalFiles.openFile('/tmp/RePaperTodo/paper-1.md');
+    await services.uriOpener.openUri(' https://example.com/paper ');
+    await services.externalFiles.openFile(' /tmp/RePaperTodo/paper-1.md ');
 
     expect(calls.map((call) => call.method), [
       'getFilesDirectory',
@@ -40,5 +40,49 @@ void main() {
     expect(documentsPath, '/data/user/0/com.aligez.repapertodo/files');
     expect(calls[1].arguments, 'https://example.com/paper');
     expect(calls[2].arguments, '/tmp/RePaperTodo/paper-1.md');
+  });
+
+  test('Android platform services reject blank channel arguments locally',
+      () async {
+    const channel = MethodChannel('repapertodo/android_blank_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final services = AndroidPlatformServices(channel: channel);
+
+    await expectLater(
+      services.uriOpener.openUri('   '),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.uriOpener.openUri('https://example.com/%0Apath'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.uriOpener.openUri('https://example.com%3A443/path'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.uriOpener.openUri('https://example.com/\npath'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.externalFiles.openFile('   '),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.externalFiles.openFile('/tmp/RePaperTodo/bad\nnote.md'),
+      throwsA(isA<ArgumentError>()),
+    );
+
+    expect(calls, isEmpty);
   });
 }

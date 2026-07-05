@@ -18,6 +18,16 @@ void main() {
     expect(operation.kind, SyncOperationKind.updateNoteContent);
     expect(operation.createdAtUtc, DateTime.utc(2026, 7, 1, 2));
     expect(operation.payload, {'paperId': 'note', 'content': 'Remote'});
+
+    final lowerZOperation = SyncOperation.fromJson({
+      'id': 'lower-z-operation',
+      'deviceId': 'device-a',
+      'sequence': 3,
+      'kind': 'updateSettings',
+      'createdAtUtc': '2026-07-01T10:00:00z',
+      'payload': const <String, Object?>{},
+    });
+    expect(lowerZOperation.createdAtUtc, DateTime.utc(2026, 7, 1, 10));
   });
 
   test('decodes legacy operation wire keys case-insensitively', () {
@@ -76,6 +86,24 @@ void main() {
     expect(operation.kind, SyncOperationKind.deletePaper);
   });
 
+  test('accepts maximum operation sequence wire values', () {
+    for (final sequence in const <Object?>[
+      maxSyncDeviceSequence,
+      '$maxSyncDeviceSequence',
+    ]) {
+      final operation = SyncOperation.fromJson({
+        'id': 'max-sequence',
+        'deviceId': 'device-a',
+        'sequence': sequence,
+        'kind': 'updateSettings',
+        'createdAtUtc': '2026-07-01T09:00:00Z',
+        'payload': const <String, Object?>{},
+      });
+
+      expect(operation.sequence, maxSyncDeviceSequence, reason: '$sequence');
+    }
+  });
+
   test('rejects unknown operation kinds', () {
     for (final kind in const ['', 'futureOperation']) {
       expect(
@@ -106,7 +134,11 @@ void main() {
       -1,
       1.2,
       '1.2',
+      ' 1',
+      '1 ',
       'not-a-number',
+      maxSyncDeviceSequence + 1,
+      '${maxSyncDeviceSequence + 1}',
     ]) {
       expect(
         () => SyncOperation.fromJson({
@@ -157,7 +189,17 @@ void main() {
   });
 
   test('rejects invalid operation timestamps', () {
-    for (final createdAtUtc in const ['', 'not-a-date']) {
+    for (final createdAtUtc in const [
+      '',
+      'not-a-date',
+      '2026-13-01T09:00:00Z',
+      '2026-02-30T09:00:00Z',
+      '2026-07-01T24:00:00Z',
+      '2026-07-01T09:00:00',
+      '2026-07-01T09:00:00.1234567Z',
+      ' 2026-07-01T09:00:00Z',
+      '2026-07-01T09:00:00Z ',
+    ]) {
       expect(
         () => SyncOperation.fromJson({
           'id': 'invalid-timestamp',

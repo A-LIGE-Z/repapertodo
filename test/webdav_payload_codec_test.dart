@@ -58,6 +58,52 @@ void main() {
     });
   });
 
+  test('encrypted payload codec rejects unsafe passphrases', () {
+    for (final passphrase in const [
+      '   ',
+      'shared\nsecret',
+      'shared\u007Fsecret',
+    ]) {
+      expect(
+        () => EncryptedWebDavPayloadCodec(passphrase: passphrase),
+        throwsA(isA<ArgumentError>()),
+      );
+    }
+  });
+
+  test('encrypted payload codec trims passphrases before encryption', () async {
+    final encoder = EncryptedWebDavPayloadCodec(
+      passphrase: ' shared sync secret ',
+      kdfIterations: 100000,
+      random: Random(2),
+    );
+    final decoder = EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(3),
+    );
+    const stateCodec = AppStateCodec();
+    final state = AppState(
+      papers: [
+        PaperData(
+          id: 'trimmed-passphrase-paper',
+          type: PaperTypes.note,
+          title: 'Trimmed passphrase',
+          content: 'Edge spaces do not change the key',
+        ),
+      ],
+    );
+
+    final snapshotBytes = await encoder.encodeSnapshot(state, stateCodec);
+    final decodedState =
+        await decoder.decodeSnapshot(snapshotBytes, stateCodec);
+
+    expect(
+      decodedState.papers.single.content,
+      'Edge spaces do not change the key',
+    );
+  });
+
   test('encrypted payload codec can read legacy plain payloads', () async {
     final encryptedCodec = EncryptedWebDavPayloadCodec(
       passphrase: 'shared sync secret',
@@ -223,6 +269,162 @@ void main() {
           'message',
           contains('sync encryption passphrase'),
         ),
+      ),
+    );
+  });
+
+  test('encrypted payload codec reports malformed envelopes separately',
+      () async {
+    final codec = EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(7),
+    );
+    final unsupportedEnvelope = utf8.encode(
+      'RePaperTodo-Encrypted-Payload-v1\n'
+      '${jsonEncode({
+            'version': 2,
+            'algorithm': 'aes-gcm-256',
+            'kdf': 'pbkdf2-hmac-sha256',
+            'kdfIterations': 100000,
+            'salt': base64Url.encode(List.filled(16, 1)).replaceAll('=', ''),
+            'nonce': base64Url.encode(List.filled(12, 2)).replaceAll('=', ''),
+            'cipherText':
+                base64Url.encode(List.filled(8, 3)).replaceAll('=', ''),
+            'mac': base64Url.encode(List.filled(16, 4)).replaceAll('=', ''),
+          })}\n',
+    );
+
+    expect(
+      codec.decodeSnapshot(unsupportedEnvelope, const AppStateCodec()),
+      throwsA(
+        isA<WebDavPayloadDecryptionException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('unsupported or corrupted'),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              isNot(contains('passphrase')),
+            ),
+      ),
+    );
+  });
+
+  test('encrypted payload codec reports malformed nonce separately', () async {
+    final codec = EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(8),
+    );
+    final malformedEnvelope = utf8.encode(
+      'RePaperTodo-Encrypted-Payload-v1\n'
+      '${jsonEncode({
+            'version': 1,
+            'algorithm': 'aes-gcm-256',
+            'kdf': 'pbkdf2-hmac-sha256',
+            'kdfIterations': 100000,
+            'salt': base64Url.encode(List.filled(16, 1)).replaceAll('=', ''),
+            'nonce': base64Url.encode(List.filled(4, 2)).replaceAll('=', ''),
+            'cipherText':
+                base64Url.encode(List.filled(8, 3)).replaceAll('=', ''),
+            'mac': base64Url.encode(List.filled(16, 4)).replaceAll('=', ''),
+          })}\n',
+    );
+
+    expect(
+      codec.decodeSnapshot(malformedEnvelope, const AppStateCodec()),
+      throwsA(
+        isA<WebDavPayloadDecryptionException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('unsupported or corrupted'),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              isNot(contains('passphrase')),
+            ),
+      ),
+    );
+  });
+
+  test('encrypted payload codec reports malformed MAC separately', () async {
+    final codec = EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(9),
+    );
+    final malformedEnvelope = utf8.encode(
+      'RePaperTodo-Encrypted-Payload-v1\n'
+      '${jsonEncode({
+            'version': 1,
+            'algorithm': 'aes-gcm-256',
+            'kdf': 'pbkdf2-hmac-sha256',
+            'kdfIterations': 100000,
+            'salt': base64Url.encode(List.filled(16, 1)).replaceAll('=', ''),
+            'nonce': base64Url.encode(List.filled(12, 2)).replaceAll('=', ''),
+            'cipherText':
+                base64Url.encode(List.filled(8, 3)).replaceAll('=', ''),
+            'mac': base64Url.encode(List.filled(4, 4)).replaceAll('=', ''),
+          })}\n',
+    );
+
+    expect(
+      codec.decodeOperationLog(malformedEnvelope),
+      throwsA(
+        isA<WebDavPayloadDecryptionException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('unsupported or corrupted'),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              isNot(contains('passphrase')),
+            ),
+      ),
+    );
+  });
+
+  test('encrypted payload codec reports empty ciphertext separately', () async {
+    final codec = EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(10),
+    );
+    final malformedEnvelope = utf8.encode(
+      'RePaperTodo-Encrypted-Payload-v1\n'
+      '${jsonEncode({
+            'version': 1,
+            'algorithm': 'aes-gcm-256',
+            'kdf': 'pbkdf2-hmac-sha256',
+            'kdfIterations': 100000,
+            'salt': base64Url.encode(List.filled(16, 1)).replaceAll('=', ''),
+            'nonce': base64Url.encode(List.filled(12, 2)).replaceAll('=', ''),
+            'cipherText': '',
+            'mac': base64Url.encode(List.filled(16, 4)).replaceAll('=', ''),
+          })}\n',
+    );
+
+    expect(
+      codec.decodeSnapshot(malformedEnvelope, const AppStateCodec()),
+      throwsA(
+        isA<WebDavPayloadDecryptionException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('unsupported or corrupted'),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              isNot(contains('passphrase')),
+            ),
       ),
     );
   });

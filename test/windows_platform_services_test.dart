@@ -136,8 +136,8 @@ void main() {
     );
     final foregroundFullscreen =
         await services.systemIntegration.isForegroundFullscreen();
-    await services.externalFiles.openFile('C:\\Temp\\note.md');
-    await services.uriOpener.openUri('https://example.com/paper');
+    await services.externalFiles.openFile(' C:\\Temp\\note.md ');
+    await services.uriOpener.openUri(' https://example.com/paper ');
     await services.scriptCapsules.runScriptCapsule(
       const ScriptCapsuleRunRequest(
         engine: 'pwsh',
@@ -258,6 +258,96 @@ void main() {
       'hideScriptRunWindow': false,
     });
     expect(calls.last.arguments, isNull);
+  });
+
+  test('Windows platform services reject blank channel arguments locally',
+      () async {
+    const channel = MethodChannel('repapertodo/window_blank_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final services = WindowsPlatformServices(channel: channel);
+
+    await expectLater(
+      services.uriOpener.openUri('   '),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.uriOpener.openUri('https://example.com/%0Apath'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.uriOpener.openUri('https://example.com%3A443/path'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.uriOpener.openUri('https://example.com/\npath'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.externalFiles.openFile('   '),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.externalFiles.openFile('C:\\Temp\\bad\nnote.md'),
+      throwsA(isA<ArgumentError>()),
+    );
+
+    expect(calls, isEmpty);
+  });
+
+  test('Windows script capsule host rejects invalid requests locally',
+      () async {
+    const channel = MethodChannel('repapertodo/window_script_invalid_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final services = WindowsPlatformServices(channel: channel);
+
+    await expectLater(
+      services.scriptCapsules.runScriptCapsule(
+        const ScriptCapsuleRunRequest(
+          engine: 'auto',
+          script: '   ',
+          usePersistentProcess: false,
+          usePersistentPowerShellProcess: false,
+          preferPowerShell7: true,
+          hideScriptRunWindow: true,
+        ),
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.scriptCapsules.runScriptCapsule(
+        const ScriptCapsuleRunRequest(
+          engine: 'cmd',
+          script: 'Write-Output ok',
+          usePersistentProcess: false,
+          usePersistentPowerShellProcess: false,
+          preferPowerShell7: true,
+          hideScriptRunWindow: true,
+        ),
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+
+    expect(calls, isEmpty);
   });
 
   test('paper host routes paper-id events to known window surfaces', () async {
@@ -407,6 +497,50 @@ void main() {
         'alwaysOnTop': true,
         'isPinnedToDesktop': false,
       },
+    ]);
+  });
+
+  test('startup command events accept string, list, and map arguments',
+      () async {
+    const channel = MethodChannel('repapertodo/window_startup_event_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final commands = <StartupCommandKind>[];
+    final subscription = services.startup.commands.listen(
+      (command) => commands.add(command.kind),
+    );
+    addTearDown(subscription.cancel);
+
+    Future<void> send(Object? arguments) async {
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('startupCommandRequested', arguments),
+        ),
+        (_) {},
+      );
+    }
+
+    await send('settings');
+    await send(['--unknown', '--new---todo']);
+    await send({'command': '/add___note'});
+    await send({
+      'args': ['--preferences=true'],
+    });
+    await send({'command': 'unknown'});
+    await pumpEventQueue();
+
+    expect(commands, [
+      StartupCommandKind.settings,
+      StartupCommandKind.newTodo,
+      StartupCommandKind.newNote,
+      StartupCommandKind.settings,
     ]);
   });
 

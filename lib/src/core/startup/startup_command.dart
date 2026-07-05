@@ -47,8 +47,8 @@ String _normalize(String arg) {
   return arg
       .trim()
       .replaceFirst(RegExp(r'^[-/]+'), '')
-      .replaceAll('_', '-')
-      .replaceAll(RegExp(r'\s+'), '-')
+      .replaceAll(RegExp(r'[\s_-]+'), '-')
+      .replaceFirst(RegExp(r'-$'), '')
       .toLowerCase();
 }
 

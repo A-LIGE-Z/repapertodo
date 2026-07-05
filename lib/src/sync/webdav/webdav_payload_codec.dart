@@ -98,6 +98,13 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
         'WebDAV encryption passphrase must not be empty.',
       );
     }
+    if (_hasControlCharacter(_passphrase)) {
+      throw ArgumentError.value(
+        passphrase,
+        'passphrase',
+        'WebDAV encryption passphrase must not contain control characters.',
+      );
+    }
     if (kdfIterations < _minimumKdfIterations) {
       throw ArgumentError.value(
         kdfIterations,
@@ -112,6 +119,9 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
   static const _kdfName = 'pbkdf2-hmac-sha256';
   static const _defaultKdfIterations = 210000;
   static const _minimumKdfIterations = 100000;
+  static const _saltLength = 16;
+  static const _nonceLength = 12;
+  static const _macLength = 16;
 
   final String _passphrase;
   final int _kdfIterations;
@@ -164,7 +174,7 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
   }
 
   Future<List<int>> _encrypt(List<int> clearBytes) async {
-    final salt = _randomBytes(16);
+    final salt = _randomBytes(_saltLength);
     final nonce = _cipher.newNonce();
     final secretKey = await _deriveKey(salt, _kdfIterations);
     final secretBox = await _cipher.encrypt(
@@ -190,6 +200,11 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
       return await _decrypt(encryptedBytes);
     } on WebDavPayloadDecryptionException {
       rethrow;
+    } on FormatException catch (error) {
+      throw WebDavPayloadDecryptionException(
+        'Encrypted WebDAV sync payload is unsupported or corrupted.',
+        error,
+      );
     } on Object catch (error) {
       throw WebDavPayloadDecryptionException(
         'Unable to decrypt WebDAV sync payload. Check the sync encryption passphrase.',
@@ -220,6 +235,13 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
     final nonce = _base64UrlDecode(_stringField(envelope, 'nonce'));
     final cipherText = _base64UrlDecode(_stringField(envelope, 'cipherText'));
     final mac = _base64UrlDecode(_stringField(envelope, 'mac'));
+    if (salt.length != _saltLength ||
+        nonce.length != _nonceLength ||
+        mac.length != _macLength) {
+      throw const FormatException(
+        'Encrypted WebDAV payload has invalid envelope field sizes.',
+      );
+    }
     final secretKey = await _deriveKey(salt, iterations);
     return _cipher.decrypt(
       SecretBox(cipherText, nonce: nonce, mac: Mac(mac)),
@@ -279,6 +301,10 @@ bool _looksLikePlainJsonPayload(List<int> bytes) {
     return false;
   }
   return text.startsWith('{') || text.startsWith('[');
+}
+
+bool _hasControlCharacter(String value) {
+  return value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
 }
 
 String _stringField(Map<Object?, Object?> map, String key) {

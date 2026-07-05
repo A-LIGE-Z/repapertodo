@@ -19,6 +19,13 @@ void main() {
       'win-device': 2,
       'device-a': 3,
     });
+
+    final lowerZManifest = SyncManifest.fromJson({
+      'schemaVersion': 1,
+      'updatedAtUtc': '2026-07-01T10:30:00z',
+      'latestSnapshotPath': 'repapertodo/snapshots/local.json',
+    });
+    expect(lowerZManifest.updatedAtUtc, DateTime.utc(2026, 7, 1, 10, 30));
   });
 
   test('decodes manifest wire keys case-insensitively', () {
@@ -77,8 +84,36 @@ void main() {
     expect(manifest.deviceSequences, isEmpty);
   });
 
+  test('accepts maximum manifest device sequence wire values', () {
+    for (final sequence in const <Object?>[
+      maxSyncDeviceSequence,
+      '$maxSyncDeviceSequence',
+    ]) {
+      final manifest = SyncManifest.fromJson({
+        'schemaVersion': 1,
+        'updatedAtUtc': '2026-07-01T10:30:00Z',
+        'latestSnapshotPath': 'repapertodo/snapshots/local.json',
+        'deviceSequences': {'device-a': sequence},
+      });
+
+      expect(
+        manifest.deviceSequences,
+        {'device-a': maxSyncDeviceSequence},
+        reason: '$sequence',
+      );
+    }
+  });
+
   test('rejects unsupported manifest schema versions', () {
-    for (final schemaVersion in const <Object?>[null, 0, 2, 1.2, '1.2']) {
+    for (final schemaVersion in const <Object?>[
+      null,
+      0,
+      2,
+      1.2,
+      '1.2',
+      ' 1',
+      '1 ',
+    ]) {
       expect(
         () => SyncManifest.fromJson({
           'schemaVersion': schemaVersion,
@@ -132,6 +167,10 @@ void main() {
       {'device-a': -1},
       {'device-a': 1.2},
       {'device-a': '1.2'},
+      {'device-a': ' 1'},
+      {'device-a': '1 '},
+      {'device-a': maxSyncDeviceSequence + 1},
+      {'device-a': '${maxSyncDeviceSequence + 1}'},
       {'device-a': 'not-a-number'},
     ]) {
       expect(
@@ -148,7 +187,17 @@ void main() {
   });
 
   test('rejects invalid manifest timestamps', () {
-    for (final updatedAtUtc in const ['', 'not-a-date']) {
+    for (final updatedAtUtc in const [
+      '',
+      'not-a-date',
+      '2026-13-01T10:30:00Z',
+      '2026-02-30T10:30:00Z',
+      '2026-07-01T24:00:00Z',
+      '2026-07-01T10:30:00',
+      '2026-07-01T10:30:00.1234567Z',
+      ' 2026-07-01T10:30:00Z',
+      '2026-07-01T10:30:00Z ',
+    ]) {
       expect(
         () => SyncManifest.fromJson({
           'schemaVersion': 1,

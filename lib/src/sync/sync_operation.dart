@@ -1,4 +1,5 @@
 import '../core/model/json_helpers.dart';
+import '../core/model/sync_wire_datetime.dart';
 import 'sync_device_id.dart';
 
 enum SyncOperationKind {
@@ -89,20 +90,21 @@ Object? _wireValue(JsonMap json, String key) {
 }
 
 int _sequenceFromWire(Object? value) {
-  if (value is String) {
-    final sequence = int.tryParse(value.trim());
-    if (sequence != null && sequence > 0) {
+  if (value is String && value.trim() == value) {
+    final sequence = int.tryParse(value);
+    if (sequence != null && isSyncDeviceSequenceInRange(sequence)) {
       return sequence;
     }
   }
   if (value is num && value.isFinite && value % 1 == 0) {
     final sequence = value.toInt();
-    if (sequence > 0) {
+    if (isSyncDeviceSequenceInRange(sequence)) {
       return sequence;
     }
   }
   throw FormatException(
-    'Sync operation sequence must be a positive integer: $value',
+    'Sync operation sequence must be a positive integer no greater than '
+    '$maxSyncDeviceSequence: $value',
   );
 }
 
@@ -116,11 +118,10 @@ JsonMap _payloadFromWire(Object? value) {
 }
 
 DateTime _createdAtUtcFromWire(String value) {
-  final parsed = DateTime.tryParse(value.trim())?.toUtc();
-  if (parsed == null) {
-    throw FormatException('Sync operation createdAtUtc must be valid: $value');
-  }
-  return parsed;
+  return parseStrictSyncWireDateTimeUtc(
+    value,
+    fieldName: 'Sync operation createdAtUtc',
+  );
 }
 
 String _kindToWire(SyncOperationKind kind) {

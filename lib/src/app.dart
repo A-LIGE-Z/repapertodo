@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -180,13 +181,20 @@ String? _normalizeExternalUri(String value) {
   if (_hasUnsafeExternalUriCharacter(trimmed)) {
     return null;
   }
+  if (_hasEncodedUnsafeExternalUriCharacter(trimmed)) {
+    return null;
+  }
   final uri = Uri.tryParse(trimmed);
   if (uri == null) {
     return null;
   }
   final scheme = uri.scheme.toLowerCase();
   if (scheme == 'http' || scheme == 'https') {
-    return uri.host.trim().isEmpty ? null : trimmed;
+    return uri.host.trim().isEmpty ||
+            uri.userInfo.isNotEmpty ||
+            _hasEncodedExternalUriAuthoritySeparator(uri.authority)
+        ? null
+        : trimmed;
   }
   if (scheme == 'mailto') {
     return uri.path.trim().isEmpty ? null : trimmed;
@@ -194,8 +202,37 @@ String? _normalizeExternalUri(String value) {
   return null;
 }
 
+bool _hasEncodedExternalUriAuthoritySeparator(String authority) {
+  final normalized = authority.toLowerCase();
+  for (final encodedSeparator in const [
+    '%23',
+    '%2f',
+    '%3a',
+    '%3f',
+    '%40',
+    '%5b',
+    '%5c',
+    '%5d',
+  ]) {
+    if (normalized.contains(encodedSeparator)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool _hasUnsafeExternalUriCharacter(String value) {
   return value.codeUnits.any((unit) => unit <= 0x20 || unit == 0x7F);
+}
+
+bool _hasEncodedUnsafeExternalUriCharacter(String value) {
+  for (final match in RegExp(r'%([0-9a-fA-F]{2})').allMatches(value)) {
+    final unit = int.parse(match.group(1)!, radix: 16);
+    if (unit < 0x20 || unit == 0x7F) {
+      return true;
+    }
+  }
+  return false;
 }
 
 class _CompactAppBarActions {
@@ -231,6 +268,7 @@ class PaperBoardScreen extends StatefulWidget {
 class _PaperBoardScreenState extends State<PaperBoardScreen>
     with WidgetsBindingObserver {
   bool _isSyncing = false;
+  bool _isSettingsOpen = false;
   Future<void> _saveQueue = Future<void>.value();
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
   StreamSubscription<String>? _paperOpenSubscription;
@@ -240,8 +278,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   Timer? _surfaceSaveDebounce;
   Timer? _titleSurfaceDebounce;
   Timer? _todoReminderTimer;
+  int _localEditSyncGeneration = 0;
   AppState? _pendingLocalEditBaseState;
   AppState? _pendingLocalEditLatestState;
+  int? _pendingLocalEditGeneration;
   String? _surfacePaperId;
   final Map<String, bool> _surfaceVisibilityByPaperId = <String, bool>{};
   final Map<String, DateTime> _lastTodoReminderAt = <String, DateTime>{};
@@ -260,6 +300,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _startupCommandSubscription = controller.startupCommands.listen((command) {
       unawaited(_handleStartupCommand(command));
     });
+    final pendingStartupCommand = controller.takePendingUiStartupCommand();
+    if (pendingStartupCommand != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        unawaited(_handleStartupCommand(pendingStartupCommand));
+      });
+    }
     _refreshSurfaceVisibilitySnapshot();
     _restartAutoSyncTimer();
     _restartTodoReminderTimer();
@@ -603,8 +652,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     await _saveState();
   }
 
-  Future<void> _saveState() async {
+  Future<void> _saveState({bool scheduleLocalEditSync = true}) async {
     AppState? beforeState;
+    final saveLocalEditSyncGeneration = _localEditSyncGeneration;
     _saveQueue = _saveQueue.catchError((_) {}).then((_) async {
       try {
         final loadedState = await widget.store.load();
@@ -618,7 +668,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     });
     await _saveQueue;
     final localBeforeState = beforeState;
-    if (localBeforeState != null) {
+    if (scheduleLocalEditSync &&
+        localBeforeState != null &&
+        saveLocalEditSyncGeneration == _localEditSyncGeneration &&
+        !_isSettingsOpen) {
       _scheduleLocalEditSync(
         beforeState: localBeforeState,
         afterState: _stateSnapshot(controller.state),
@@ -856,7 +909,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   String _safeFilename(String value) {
-    final safe = value.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_').trim();
+    final safe =
+        value.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F\x7F]'), '_').trim();
     if (safe.length <= _maxExternalMarkdownPaperIdFileNameLength) {
       return safe;
     }
@@ -1131,6 +1185,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _openSettings() async {
+    final hadPendingLocalEditSync = _pendingLocalEditBaseState != null &&
+        _pendingLocalEditLatestState != null;
+    _localEditSyncDebounce?.cancel();
+    _localEditSyncDebounce = null;
+    final previousSyncJson = jsonEncode(controller.state.sync.toJson());
+    _isSettingsOpen = true;
     final previousUsePersistentPowerShellProcess =
         controller.state.usePersistentPowerShellProcess;
     final previousPreferPowerShell7 = controller.state.preferPowerShell7;
@@ -1209,7 +1269,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           controller.state.hideLinkedNotesFromCapsules,
     );
     if (result == null) {
+      _isSettingsOpen = false;
+      if (hadPendingLocalEditSync) {
+        _reschedulePendingLocalEditSync();
+      }
       return;
+    }
+    final syncSettingsChanged =
+        jsonEncode(result.sync.toJson()) != previousSyncJson;
+    if (syncSettingsChanged) {
+      _localEditSyncGeneration += 1;
+      _clearPendingLocalEditSync();
     }
     setState(() {
       controller.state.sync = result.sync;
@@ -1340,8 +1410,27 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     }
     widget.onAppThemeChanged?.call();
     _restartAutoSyncTimer();
+    if (syncSettingsChanged || !_canRunAutoSync()) {
+      _clearPendingLocalEditSync();
+    } else if (hadPendingLocalEditSync) {
+      _reschedulePendingLocalEditSync();
+    }
     _restartTodoReminderTimer();
-    await _saveState();
+    try {
+      await _saveState(scheduleLocalEditSync: false);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Settings save failed: ${_readableFailureMessage(error)}',
+            ),
+          ),
+        );
+      }
+    } finally {
+      _isSettingsOpen = false;
+    }
   }
 
   void _showSyncSnackBar({
@@ -1516,12 +1605,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _localEditSyncDebounce?.cancel();
     _localEditSyncDebounce = null;
     if (!_canRunAutoSync()) {
-      _pendingLocalEditBaseState = null;
-      _pendingLocalEditLatestState = null;
+      _clearPendingLocalEditSync();
       return;
     }
     _pendingLocalEditBaseState ??= beforeState;
     _pendingLocalEditLatestState = afterState;
+    _pendingLocalEditGeneration = _localEditSyncGeneration;
     _localEditSyncDebounce = Timer(const Duration(seconds: 5), () {
       _localEditSyncDebounce = null;
       unawaited(_uploadLocalEditsThenSync());
@@ -1530,8 +1619,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   Future<void> _uploadLocalEditsThenSync() async {
     if (!_canRunAutoSync()) {
-      _pendingLocalEditBaseState = null;
-      _pendingLocalEditLatestState = null;
+      _clearPendingLocalEditSync();
       return;
     }
     if (_isSyncing) {
@@ -1548,9 +1636,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   Future<bool> _uploadPendingLocalEdits({bool reportFailures = false}) async {
     final beforeState = _pendingLocalEditBaseState;
     final afterState = _pendingLocalEditLatestState;
+    final generation = _pendingLocalEditGeneration;
     _pendingLocalEditBaseState = null;
     _pendingLocalEditLatestState = null;
+    _pendingLocalEditGeneration = null;
     if (beforeState == null || afterState == null) {
+      return true;
+    }
+    if (generation != _localEditSyncGeneration) {
       return true;
     }
     try {
@@ -1569,6 +1662,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     } catch (error) {
       _pendingLocalEditBaseState = beforeState;
       _pendingLocalEditLatestState = afterState;
+      _pendingLocalEditGeneration = generation;
       if (reportFailures) {
         rethrow;
       }
@@ -1586,6 +1680,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       _localEditSyncDebounce = null;
       unawaited(_uploadLocalEditsThenSync());
     });
+  }
+
+  void _clearPendingLocalEditSync() {
+    _localEditSyncDebounce?.cancel();
+    _localEditSyncDebounce = null;
+    _pendingLocalEditBaseState = null;
+    _pendingLocalEditLatestState = null;
+    _pendingLocalEditGeneration = null;
   }
 
   AppState _stateSnapshot(AppState state) {
@@ -1941,15 +2043,21 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
               );
             }
             if (snapshot.hasError) {
-              return SizedBox(
-                height: 132,
+              return ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: 132,
+                  maxHeight: 240,
+                ),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'Unable to load snapshots: '
-                      '${_readableFailureMessage(snapshot.error!)}',
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Text(
+                          'Unable to load snapshots: '
+                          '${_readableFailureMessage(snapshot.error!)}',
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Align(

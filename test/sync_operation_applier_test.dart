@@ -542,6 +542,7 @@ void main() {
             password: 'local-password',
             encryptionPassphrase: 'local-sync-secret',
             rootPath: 'RePaperTodo',
+            autoSyncIntervalMinutes: 60,
             requestTimeoutSeconds: 45,
           ),
           operationDeviceSequences: {'device-local': 7},
@@ -570,6 +571,7 @@ void main() {
                   'password': 'remote-password',
                   'encryptionPassphrase': 'remote-sync-secret',
                   'rootPath': 'RemoteRoot',
+                  'autoSyncIntervalMinutes': 5,
                   'requestTimeoutSeconds': 300,
                 },
               },
@@ -590,6 +592,7 @@ void main() {
       'local-sync-secret',
     );
     expect(result.state.sync.webDav.rootPath, 'RePaperTodo');
+    expect(result.state.sync.webDav.autoSyncIntervalMinutes, 60);
     expect(result.state.sync.webDav.requestTimeoutSeconds, 45);
     expect(result.state.sync.operationDeviceSequences, {'device-local': 7});
     expect(result.state.sync.deletedPaperTombstones, {
@@ -694,6 +697,73 @@ void main() {
     expect(result.state.papers.single.title, 'Fresh');
   });
 
+  test('skips operations outside the remote sequence range', () {
+    final result = applier.apply(
+      AppState(
+        papers: [
+          PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'Local'),
+        ],
+      ),
+      [
+        _operation(
+          sequence: maxSyncDeviceSequence + 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'paper-1',
+              type: PaperTypes.todo,
+              title: 'Too far',
+            ).toJson(),
+          },
+        ),
+      ],
+      deviceSequences: {'device-a': maxSyncDeviceSequence},
+    );
+
+    expect(result.appliedCount, 0);
+    expect(result.deviceSequences, {'device-a': maxSyncDeviceSequence});
+    expect(result.state.papers.single.title, 'Local');
+  });
+
+  test('applies valid operations before skipping out-of-range sequences', () {
+    final result = applier.apply(
+      AppState(
+        papers: [
+          PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'Local'),
+        ],
+      ),
+      [
+        _operation(
+          sequence: maxSyncDeviceSequence,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'paper-1',
+              type: PaperTypes.todo,
+              title: 'Accepted max',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: maxSyncDeviceSequence + 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'paper-1',
+              type: PaperTypes.todo,
+              title: 'Too far',
+            ).toJson(),
+          },
+        ),
+      ],
+      deviceSequences: {'device-a': maxSyncDeviceSequence - 1},
+    );
+
+    expect(result.appliedCount, 1);
+    expect(result.deviceSequences, {'device-a': maxSyncDeviceSequence});
+    expect(result.state.papers.single.title, 'Accepted max');
+  });
+
   test('stops applying a device after a sequence gap', () {
     final result = applier.apply(
       AppState(),
@@ -741,6 +811,102 @@ void main() {
       'device-a-first',
       'device-b-first',
     ]);
+  });
+
+  test('applies matching duplicate operation sequences once', () {
+    final operation = _operation(
+      sequence: 1,
+      kind: SyncOperationKind.upsertPaper,
+      payload: {
+        'paper': PaperData(
+          id: 'paper-1',
+          type: PaperTypes.note,
+          title: 'Remote',
+        ).toJson(),
+      },
+    );
+    final result = applier.apply(
+      AppState(),
+      [
+        operation,
+        SyncOperation.fromJson(operation.toJson()),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'paper-2',
+              type: PaperTypes.note,
+              title: 'Next',
+            ).toJson(),
+          },
+        ),
+      ],
+    );
+
+    expect(result.appliedCount, 2);
+    expect(result.deviceSequences, {'device-a': 2});
+    expect(result.state.papers.map((paper) => paper.id), [
+      'paper-1',
+      'paper-2',
+    ]);
+  });
+
+  test('blocks conflicting duplicate operation sequences per device', () {
+    final result = applier.apply(
+      AppState(),
+      [
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'device-a-first',
+              type: PaperTypes.note,
+              title: 'First',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'device-a-conflict',
+              type: PaperTypes.note,
+              title: 'Conflict',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          sequence: 2,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'device-a-next',
+              type: PaperTypes.note,
+              title: 'Blocked',
+            ).toJson(),
+          },
+        ),
+        _operation(
+          deviceId: 'device-b',
+          sequence: 1,
+          kind: SyncOperationKind.upsertPaper,
+          payload: {
+            'paper': PaperData(
+              id: 'device-b-first',
+              type: PaperTypes.note,
+              title: 'Other device',
+            ).toJson(),
+          },
+        ),
+      ],
+    );
+
+    expect(result.appliedCount, 1);
+    expect(result.deviceSequences, {'device-b': 1});
+    expect(result.state.papers.map((paper) => paper.id), ['device-b-first']);
   });
 }
 

@@ -48,11 +48,13 @@ class WebDavStateSyncPaths {
     String deviceId, {
     int? sequence,
   }) {
+    if (sequence != null) {
+      _validateRemoteSequence(sequence, 'Snapshot path sequence');
+    }
     final stamp = _formatSnapshotStamp(updatedAtUtc);
     final safeDeviceId = _normalizeRemotePathSegment(deviceId);
-    final safeSequence = sequence == null
-        ? ''
-        : '-seq-${(sequence < 0 ? 0 : sequence).toString().padLeft(12, '0')}';
+    final safeSequence =
+        sequence == null ? '' : '-seq-${_formatRemoteSequence(sequence)}';
     return _joinRemotePath(
       snapshotCollectionPath,
       'snapshot-$stamp-$safeDeviceId$safeSequence.json',
@@ -60,13 +62,29 @@ class WebDavStateSyncPaths {
   }
 
   String operationLogPath(String deviceId, int sequence) {
+    _validateRemoteSequence(sequence, 'Operation log sequence');
     final safeDeviceId = _normalizeRemotePathSegment(deviceId);
-    final safeSequence = sequence < 0 ? 0 : sequence;
     return _joinRemotePath(
       operationCollectionPath,
-      '$safeDeviceId-${safeSequence.toString().padLeft(12, '0')}.jsonl',
+      '$safeDeviceId-${_formatRemoteSequence(sequence)}.jsonl',
     );
   }
+}
+
+void _validateRemoteSequence(int sequence, String label) {
+  if (!_isRemoteSequenceInRange(sequence)) {
+    throw WebDavSyncConfigurationException(
+      '$label must be a 1 through $maxSyncDeviceSequence integer.',
+    );
+  }
+}
+
+bool _isRemoteSequenceInRange(int sequence) {
+  return isSyncDeviceSequenceInRange(sequence);
+}
+
+String _formatRemoteSequence(int sequence) {
+  return sequence.toString().padLeft(syncDeviceSequenceWireWidth, '0');
 }
 
 class WebDavStateSyncResult {
@@ -211,13 +229,17 @@ class WebDavStateSyncService {
     String? expectedManifestEtag,
     bool manifestKnownMissing = false,
     Map<String, int>? previousDeviceSequences,
+    bool requireManifestCondition = false,
   }) async {
-    final stamp = (updatedAtUtc ?? DateTime.now().toUtc()).toUtc();
-    await _ensureCollections();
+    _validateLocalDeviceId();
+    _validatePaths();
     final deviceSequences =
         normalizeSyncDeviceSequences(previousDeviceSequences);
     final nextSequence = (deviceSequences[_deviceId] ?? 0) + 1;
+    _validateRemoteSequence(nextSequence, 'Next device sequence');
     deviceSequences[_deviceId] = nextSequence;
+    final stamp = (updatedAtUtc ?? DateTime.now().toUtc()).toUtc();
+    await _ensureCollections();
     final snapshotPath = _paths.snapshotPath(
       stamp,
       _deviceId,
@@ -242,6 +264,7 @@ class WebDavStateSyncService {
       manifest,
       expectedManifestEtag: expectedManifestEtag,
       createOnly: manifestKnownMissing,
+      requireCondition: requireManifestCondition,
     );
     if (!manifestUploaded) {
       if (snapshotOperationUploaded) {
@@ -296,10 +319,12 @@ class WebDavStateSyncService {
       updatedAtUtc: localStamp,
       expectedManifestEtag: remoteManifest?.etag,
       previousDeviceSequences: manifest.deviceSequences,
+      requireManifestCondition: true,
     );
   }
 
   Future<List<WebDavSnapshotRecord>> listSnapshots() async {
+    _validatePaths();
     try {
       final entries = await _client.list(_paths.snapshotCollectionPath);
       final snapshots = _deduplicateSnapshotRecords(
@@ -308,10 +333,10 @@ class WebDavStateSyncService {
             .map(_snapshotRecordFromEntry)
             .whereType<WebDavSnapshotRecord>(),
       );
-      snapshots.sort((a, b) => b.updatedAtUtc.compareTo(a.updatedAtUtc));
+      snapshots.sort(_compareSnapshotRecordOrder);
       return snapshots;
     } on WebDavException catch (error) {
-      if (error.statusCode == 404) {
+      if (_isMissingRemoteCollectionStatus(error.statusCode)) {
         return const [];
       }
       rethrow;
@@ -341,10 +366,54 @@ class WebDavStateSyncService {
     if (metadataComparison != 0) {
       return metadataComparison;
     }
-    return (left.etag ?? '').compareTo(right.etag ?? '');
+    final etagComparison = (left.etag ?? '').compareTo(right.etag ?? '');
+    if (etagComparison != 0) {
+      return etagComparison;
+    }
+    final contentLengthComparison =
+        (left.contentLength ?? -1).compareTo(right.contentLength ?? -1);
+    if (contentLengthComparison != 0) {
+      return contentLengthComparison;
+    }
+    return (left.lastModifiedUtc?.toUtc() ??
+            DateTime.fromMillisecondsSinceEpoch(0, isUtc: true))
+        .compareTo(
+      right.lastModifiedUtc?.toUtc() ??
+          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    );
+  }
+
+  int _compareSnapshotRecordOrder(
+    WebDavSnapshotRecord left,
+    WebDavSnapshotRecord right,
+  ) {
+    final updatedComparison = right.updatedAtUtc.compareTo(left.updatedAtUtc);
+    if (updatedComparison != 0) {
+      return updatedComparison;
+    }
+    final pathComparison = left.path.compareTo(right.path);
+    if (pathComparison != 0) {
+      return pathComparison;
+    }
+    final etagComparison = (left.etag ?? '').compareTo(right.etag ?? '');
+    if (etagComparison != 0) {
+      return etagComparison;
+    }
+    final contentLengthComparison =
+        (left.contentLength ?? -1).compareTo(right.contentLength ?? -1);
+    if (contentLengthComparison != 0) {
+      return contentLengthComparison;
+    }
+    return (left.lastModifiedUtc?.toUtc() ??
+            DateTime.fromMillisecondsSinceEpoch(0, isUtc: true))
+        .compareTo(
+      right.lastModifiedUtc?.toUtc() ??
+          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    );
   }
 
   Future<List<WebDavOperationLogRecord>> listOperationLogs() async {
+    _validatePaths();
     try {
       final entries = await _client.list(_paths.operationCollectionPath);
       final logs = _deduplicateOperationLogRecords(
@@ -362,7 +431,7 @@ class WebDavStateSyncService {
       });
       return logs;
     } on WebDavException catch (error) {
-      if (error.statusCode == 404) {
+      if (_isMissingRemoteCollectionStatus(error.statusCode)) {
         return const [];
       }
       rethrow;
@@ -406,10 +475,25 @@ class WebDavStateSyncService {
     if (pathComparison != 0) {
       return pathComparison;
     }
-    return (left.etag ?? '').compareTo(right.etag ?? '');
+    final etagComparison = (left.etag ?? '').compareTo(right.etag ?? '');
+    if (etagComparison != 0) {
+      return etagComparison;
+    }
+    final contentLengthComparison =
+        (left.contentLength ?? -1).compareTo(right.contentLength ?? -1);
+    if (contentLengthComparison != 0) {
+      return contentLengthComparison;
+    }
+    return (left.lastModifiedUtc?.toUtc() ??
+            DateTime.fromMillisecondsSinceEpoch(0, isUtc: true))
+        .compareTo(
+      right.lastModifiedUtc?.toUtc() ??
+          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    );
   }
 
   Future<WebDavStateSyncResult> downloadSnapshot(String snapshotPath) async {
+    _validateRootPath();
     final normalizedPath = _normalizeSnapshotPath(snapshotPath);
     final bytes = await _client.getBytes(normalizedPath);
     return WebDavStateSyncResult(
@@ -428,6 +512,7 @@ class WebDavStateSyncService {
 
   Future<WebDavOperationLogDownloadResult> downloadOperationLogWithMetadata(
       String operationLogPath) async {
+    _validateRootPath();
     final normalizedPath = _normalizeOperationLogPath(operationLogPath);
     final identity = _operationLogIdentityFromPath(normalizedPath);
     if (identity == null) {
@@ -458,11 +543,26 @@ class WebDavStateSyncService {
     WebDavOperationLogRecord record, {
     WebDavOperationLogDownloadResult? downloadedResult,
   }) async {
+    _validateRootPath();
     final etag = _nonBlankRemoteValue(record.etag);
     if (etag == null) {
       return false;
     }
+    final ifMatch = _ifMatchHeaderValue(etag);
+    if (ifMatch == null) {
+      return false;
+    }
     final normalizedPath = _normalizeOperationLogPath(record.path);
+    final identity = _operationLogIdentityFromPath(normalizedPath);
+    final normalizedRecordDeviceId = normalizeSyncDeviceId(
+      record.deviceId,
+      fallback: '',
+    );
+    if (identity == null ||
+        normalizedRecordDeviceId != identity.deviceId ||
+        record.sequence != identity.sequence) {
+      return false;
+    }
     final result =
         downloadedResult ?? await downloadOperationLogWithMetadata(record.path);
     if (result.path != normalizedPath ||
@@ -480,7 +580,7 @@ class WebDavStateSyncService {
       await _client.putBytes(
         normalizedPath,
         encryptedBytes,
-        ifMatch: _ifMatchHeaderValue(etag),
+        ifMatch: ifMatch,
       );
       return true;
     } on WebDavException catch (error) {
@@ -495,6 +595,7 @@ class WebDavStateSyncService {
     Iterable<SyncOperation> operations, {
     Map<String, int>? previousDeviceSequences,
   }) async {
+    _validateRootPath();
     final deviceSequences =
         normalizeSyncDeviceSequences(previousDeviceSequences);
     final candidates = operations
@@ -538,11 +639,20 @@ class WebDavStateSyncService {
   }
 
   Future<_RemoteManifest?> _loadManifestWithMetadata() async {
+    _validatePaths();
     final metadata = await _client.metadata(_paths.manifestPath);
     if (metadata == null) {
       return null;
     }
-    final bytes = await _client.getBytes(_paths.manifestPath);
+    late final List<int> bytes;
+    try {
+      bytes = await _client.getBytes(_paths.manifestPath);
+    } on WebDavException catch (error) {
+      if (_isMissingRemoteCollectionStatus(error.statusCode)) {
+        return null;
+      }
+      rethrow;
+    }
     return _RemoteManifest(
       manifest: SyncManifest.fromJson(
         decodeJsonObject(_decodeManifestText(bytes)),
@@ -565,9 +675,13 @@ class WebDavStateSyncService {
     if (updatedAtUtc == null) {
       return null;
     }
+    final deviceId = _normalizeSnapshotRecordDeviceId(match.group(2)!);
+    if (deviceId.isEmpty) {
+      return null;
+    }
     return WebDavSnapshotRecord(
       path: path,
-      deviceId: match.group(2)!,
+      deviceId: deviceId,
       updatedAtUtc: updatedAtUtc,
       etag: entry.etag,
       contentLength: entry.contentLength,
@@ -595,7 +709,21 @@ class WebDavStateSyncService {
   }
 
   String _entryRemotePath(String href) {
-    var path = _decodeRemotePath(href).replaceAll('\\', '/');
+    final absolutePath = _absoluteHrefPath(href);
+    var path = absolutePath ?? href.trim();
+    if (!_hasUnambiguousEncodedPathSegments(path) ||
+        !_hasStableDecodedPathSegments(path)) {
+      throw const WebDavSyncConfigurationException(
+        'WebDAV entry href must stay on the configured endpoint origin and path.',
+      );
+    }
+    path = _decodeRemotePath(path).replaceAll('\\', '/');
+    final isServerAbsolutePath = absolutePath != null || path.startsWith('/');
+    if (absolutePath == null && _looksLikeAbsoluteHrefPath(path)) {
+      throw const WebDavSyncConfigurationException(
+        'WebDAV entry href must stay on the configured endpoint origin and path.',
+      );
+    }
     if (path.endsWith('/')) {
       path = path.substring(0, path.length - 1);
     }
@@ -603,7 +731,7 @@ class WebDavStateSyncService {
     if (root.isNotEmpty) {
       final marker = '/$root/';
       final markerIndex = path.lastIndexOf(marker);
-      if (markerIndex >= 0) {
+      if (isServerAbsolutePath && markerIndex >= 0) {
         return _normalizeDecodedRemotePath(path.substring(markerIndex + 1));
       }
       if (path == root || path.startsWith('$root/')) {
@@ -611,6 +739,49 @@ class WebDavStateSyncService {
       }
     }
     return _normalizeDecodedRemotePath(path);
+  }
+
+  String? _absoluteHrefPath(String href) {
+    final uri = Uri.tryParse(href.trim());
+    if (uri == null) {
+      return null;
+    }
+    if (!uri.hasScheme) {
+      if (uri.hasAuthority) {
+        throw const WebDavSyncConfigurationException(
+          'WebDAV entry href must stay on the configured endpoint origin and path.',
+        );
+      }
+      return null;
+    }
+    if (!_hasSameOrigin(uri, _client.baseUri) ||
+        !_hasUnambiguousEncodedPathSegments(uri.path) ||
+        !_absoluteHrefStaysBelowBasePath(uri) ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      throw const WebDavSyncConfigurationException(
+        'WebDAV entry href must stay on the configured endpoint origin and path.',
+      );
+    }
+    return uri.path;
+  }
+
+  bool _absoluteHrefStaysBelowBasePath(Uri uri) {
+    final baseSegments = _absolutePathSegments(_client.baseUri.path);
+    if (baseSegments.isEmpty) {
+      return true;
+    }
+    final entrySegments = _absolutePathSegments(uri.path);
+    if (entrySegments.length < baseSegments.length) {
+      return false;
+    }
+    for (var index = 0; index < baseSegments.length; index += 1) {
+      if (entrySegments[index] != baseSegments[index]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   String? _tryNormalizeEntryPath(
@@ -633,10 +804,39 @@ class WebDavStateSyncService {
         'Snapshot path must be inside $snapshotCollectionPath.',
       );
     }
-    final fileName = normalizedPath.split('/').last;
-    if (!_snapshotFileNamePattern.hasMatch(fileName)) {
+    final fileName = normalizedPath.substring(expectedPrefix.length);
+    if (fileName.contains('/')) {
+      throw const WebDavSyncConfigurationException(
+        'Snapshot path must reference a direct snapshot file.',
+      );
+    }
+    final match = _snapshotFileNamePattern.firstMatch(fileName);
+    if (match == null) {
       throw const WebDavSyncConfigurationException(
         'Snapshot path must reference a RePaperTodo snapshot file.',
+      );
+    }
+    if (match.group(3) == null &&
+        RegExp(r'-seq-\d+\.json$').hasMatch(fileName)) {
+      throw const WebDavSyncConfigurationException(
+        'Snapshot path sequence must be a positive integer within the supported range.',
+      );
+    }
+    if (_tryParseSnapshotStamp(match.group(1)!) == null) {
+      throw const WebDavSyncConfigurationException(
+        'Snapshot path must contain a valid timestamp.',
+      );
+    }
+    if (_normalizeSnapshotRecordDeviceId(match.group(2)!).isEmpty) {
+      throw const WebDavSyncConfigurationException(
+        'Snapshot path must contain a valid device id.',
+      );
+    }
+    final sequence = match.group(3);
+    final parsedSequence = sequence == null ? null : int.tryParse(sequence);
+    if (sequence != null && !_isRemoteSequenceInRange(parsedSequence ?? 0)) {
+      throw const WebDavSyncConfigurationException(
+        'Snapshot path sequence must be a positive integer within the supported range.',
       );
     }
     return normalizedPath;
@@ -651,8 +851,13 @@ class WebDavStateSyncService {
         'Operation log path must be inside $operationCollectionPath.',
       );
     }
-    final fileName = normalizedPath.split('/').last;
-    if (!RegExp(r'^.+-\d{12}\.jsonl$').hasMatch(fileName)) {
+    final fileName = normalizedPath.substring(expectedPrefix.length);
+    if (fileName.contains('/')) {
+      throw const WebDavSyncConfigurationException(
+        'Operation log path must reference a direct operation log file.',
+      );
+    }
+    if (!_operationLogFileNamePattern.hasMatch(fileName)) {
       throw const WebDavSyncConfigurationException(
         'Operation log path must reference a RePaperTodo operation log file.',
       );
@@ -724,13 +929,20 @@ class WebDavStateSyncService {
       );
       return true;
     } on WebDavException catch (error) {
-      if (error.statusCode != 412) {
+      if (!_isCreateOnlyConflictStatus(error.statusCode)) {
         rethrow;
       }
-      final existingBytes = await _client.getBytes(snapshotPath);
-      if (!const ListEquality<int>().equals(existingBytes, bytes) &&
-          !await _snapshotsMatch(existingBytes, state)) {
-        rethrow;
+      final existingBytes = await _getBytesOrRethrowOriginal(
+        snapshotPath,
+        originalError: error,
+      );
+      if (!await _snapshotBytesMatchOrRethrowOriginal(
+        existingBytes,
+        bytes,
+        state,
+        originalError: error,
+      )) {
+        _throwWebDavException(error);
       }
       return false;
     }
@@ -743,6 +955,24 @@ class WebDavStateSyncService {
     );
     return _canonicalRemoteSnapshot(existingState) ==
         _canonicalRemoteSnapshot(state);
+  }
+
+  Future<bool> _snapshotBytesMatchOrRethrowOriginal(
+    List<int> existingBytes,
+    List<int> uploadedBytes,
+    AppState state, {
+    required WebDavException originalError,
+  }) async {
+    if (const ListEquality<int>().equals(existingBytes, uploadedBytes)) {
+      return true;
+    }
+    try {
+      return await _snapshotsMatch(existingBytes, state);
+    } on FormatException {
+      _throwWebDavException(originalError);
+    } on WebDavPayloadDecryptionException {
+      _throwWebDavException(originalError);
+    }
   }
 
   String _canonicalRemoteSnapshot(AppState state) {
@@ -782,15 +1012,44 @@ class WebDavStateSyncService {
       );
       return true;
     } on WebDavException catch (error) {
-      if (error.statusCode != 412) {
+      if (!_isCreateOnlyConflictStatus(error.statusCode)) {
         rethrow;
       }
-      final existingOperations = await downloadOperationLog(operationLogPath);
+      final existingOperations = await _downloadOperationLogOrRethrowOriginal(
+        operationLogPath,
+        originalError: error,
+      );
       if (existingOperations.length != 1 ||
           !_operationsMatch(existingOperations.single, operation)) {
-        rethrow;
+        _throwWebDavException(error);
       }
       return false;
+    }
+  }
+
+  Future<List<int>> _getBytesOrRethrowOriginal(
+    String path, {
+    required WebDavException originalError,
+  }) async {
+    try {
+      return await _client.getBytes(path);
+    } on WebDavException {
+      throw originalError;
+    }
+  }
+
+  Future<List<SyncOperation>> _downloadOperationLogOrRethrowOriginal(
+    String path, {
+    required WebDavException originalError,
+  }) async {
+    try {
+      return await downloadOperationLog(path);
+    } on WebDavException {
+      _throwWebDavException(originalError);
+    } on FormatException {
+      _throwWebDavException(originalError);
+    } on WebDavPayloadDecryptionException {
+      _throwWebDavException(originalError);
     }
   }
 
@@ -803,7 +1062,7 @@ class WebDavStateSyncService {
   }
 
   SyncOperation? _normalizeOperationForUpload(SyncOperation operation) {
-    if (operation.sequence <= 0) {
+    if (!_isRemoteSequenceInRange(operation.sequence)) {
       return null;
     }
     final normalizedDeviceId = normalizeSyncDeviceId(
@@ -827,14 +1086,21 @@ class WebDavStateSyncService {
     SyncManifest manifest, {
     String? expectedManifestEtag,
     bool createOnly = false,
+    bool requireCondition = false,
   }) async {
+    final ifMatch = expectedManifestEtag == null
+        ? null
+        : _ifMatchHeaderValue(expectedManifestEtag);
+    if (!createOnly &&
+        (ifMatch == null &&
+            (requireCondition || expectedManifestEtag != null))) {
+      return false;
+    }
     try {
       await _client.putBytes(
         _paths.manifestPath,
         utf8.encode(jsonEncode(manifest.toJson())),
-        ifMatch: expectedManifestEtag == null
-            ? null
-            : _ifMatchHeaderValue(expectedManifestEtag),
+        ifMatch: ifMatch,
         createOnly: createOnly,
       );
       return true;
@@ -843,6 +1109,29 @@ class WebDavStateSyncService {
         return false;
       }
       rethrow;
+    }
+  }
+
+  void _validatePaths() {
+    _validateRootPath();
+    _paths.manifestPath;
+    _paths.snapshotCollectionPath;
+    _paths.operationCollectionPath;
+  }
+
+  void _validateLocalDeviceId() {
+    if (_deviceId.isEmpty) {
+      throw const WebDavSyncConfigurationException(
+        'Remote path device id must not be blank.',
+      );
+    }
+  }
+
+  void _validateRootPath() {
+    if (_paths.rootCollectionPath.isEmpty) {
+      throw const WebDavSyncConfigurationException(
+        'Remote root path must not be blank.',
+      );
     }
   }
 }
@@ -928,6 +1217,14 @@ int _operationLogMetadataScore(WebDavOperationLogRecord record) {
       (record.lastModifiedUtc == null ? 0 : 1);
 }
 
+bool _isCreateOnlyConflictStatus(int statusCode) {
+  return statusCode == 409 || statusCode == 412;
+}
+
+Never _throwWebDavException(WebDavException error) {
+  throw error;
+}
+
 String? _nonBlankRemoteValue(String? value) {
   final trimmed = value?.trim();
   if (trimmed == null || trimmed.isEmpty) {
@@ -936,11 +1233,12 @@ String? _nonBlankRemoteValue(String? value) {
   return trimmed;
 }
 
-String _ifMatchHeaderValue(String etag) {
+String? _ifMatchHeaderValue(String etag) {
   final trimmed = etag.trim();
-  if (trimmed.startsWith('"') ||
-      trimmed.startsWith('W/"') ||
-      trimmed.contains('"')) {
+  if (trimmed.isEmpty || trimmed.toLowerCase().startsWith('w/')) {
+    return null;
+  }
+  if (trimmed.startsWith('"') || trimmed.contains('"')) {
     return trimmed;
   }
   return '"$trimmed"';
@@ -973,12 +1271,12 @@ class _OperationLogIdentity {
 
 _OperationLogIdentity? _operationLogIdentityFromPath(String path) {
   final fileName = path.split('/').last;
-  final match = RegExp(r'^(.+)-(\d{12})\.jsonl$').firstMatch(fileName);
+  final match = _operationLogIdentityPattern.firstMatch(fileName);
   if (match == null) {
     return null;
   }
   final sequence = int.tryParse(match.group(2)!);
-  if (sequence == null || sequence <= 0) {
+  if (sequence == null || !_isRemoteSequenceInRange(sequence)) {
     return null;
   }
   final deviceId = normalizeSyncDeviceId(match.group(1)!, fallback: '');
@@ -988,12 +1286,31 @@ _OperationLogIdentity? _operationLogIdentityFromPath(String path) {
   return _OperationLogIdentity(deviceId: deviceId, sequence: sequence);
 }
 
+final _operationLogFileNamePattern = RegExp(
+  '^.+-\\d{$syncDeviceSequenceWireWidth}\\.jsonl\$',
+);
+
+final _operationLogIdentityPattern = RegExp(
+  '^(.+)-(\\d{$syncDeviceSequenceWireWidth})\\.jsonl\$',
+);
+
 final _snapshotFileNamePattern = RegExp(
-  r'^snapshot-(\d{8}T\d{9}Z)-(.+?)(?:-seq-\d{12})?\.json$',
+  '^snapshot-(\\d{8}T\\d{9}Z)-(.+?)(?:-seq-'
+  '(\\d{$syncDeviceSequenceWireWidth}))?\\.json\$',
 );
 
 String _joinRemotePath(String base, String child) {
   final normalizedChild = _normalizeRemotePath(child);
+  if (normalizedChild.isEmpty) {
+    throw const WebDavSyncConfigurationException(
+      'Remote path component must not be blank.',
+    );
+  }
+  if (normalizedChild.contains('/')) {
+    throw const WebDavSyncConfigurationException(
+      'Remote path component must not contain path separators.',
+    );
+  }
   if (base.isEmpty) {
     return normalizedChild;
   }
@@ -1001,7 +1318,61 @@ String _joinRemotePath(String base, String child) {
 }
 
 String _normalizeRemotePath(String path) {
+  if (!_hasUnambiguousEncodedPathSegments(path)) {
+    throw const WebDavSyncConfigurationException(
+      'Remote path segments must not decode to path separators.',
+    );
+  }
   return _normalizeDecodedRemotePath(_decodeRemotePath(path));
+}
+
+bool _looksLikeAbsoluteHrefPath(String path) {
+  return path.startsWith('//') || (Uri.tryParse(path)?.hasScheme ?? false);
+}
+
+bool _hasUnambiguousEncodedPathSegments(String path) {
+  final segments = path.split('/');
+  for (var index = 0; index < segments.length; index += 1) {
+    final segment = segments[index];
+    if (segment.isEmpty && index > 0 && index < segments.length - 1) {
+      return false;
+    }
+    final decoded = _decodeRemotePath(segment);
+    if (decoded.contains('/') || decoded.contains('\\')) {
+      return false;
+    }
+    final trimmed = decoded.trim();
+    if (segment.isNotEmpty && trimmed.isEmpty) {
+      return false;
+    }
+    if (segment.isNotEmpty && trimmed != decoded) {
+      return false;
+    }
+    if (trimmed == '.' || trimmed == '..') {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _hasStableDecodedPathSegments(String path) {
+  for (final segment in path.split('/')) {
+    if (segment.isEmpty) {
+      continue;
+    }
+    late final String decoded;
+    try {
+      decoded = Uri.decodeComponent(segment);
+    } on ArgumentError {
+      return false;
+    } on FormatException {
+      return false;
+    }
+    if (decoded.trim() != decoded) {
+      return false;
+    }
+  }
+  return true;
 }
 
 String _decodeRemotePath(String path) {
@@ -1020,13 +1391,25 @@ String _decodeRemotePath(String path) {
 
 String _normalizeDecodedRemotePath(String path) {
   final segments = <String>[];
-  for (final segment in path.trim().replaceAll('\\', '/').split('/')) {
+  final rawSegments = path.trim().replaceAll('\\', '/').split('/');
+  for (var index = 0; index < rawSegments.length; index += 1) {
+    final segment = rawSegments[index];
+    if (segment.isEmpty && index > 0 && index < rawSegments.length - 1) {
+      throw const WebDavSyncConfigurationException(
+        'Remote path must not contain blank path segments.',
+      );
+    }
     if (_hasControlCharacter(segment)) {
       throw const WebDavSyncConfigurationException(
         'Remote path must not contain control characters.',
       );
     }
     final trimmed = segment.trim();
+    if (segment.isNotEmpty && trimmed.isEmpty) {
+      throw const WebDavSyncConfigurationException(
+        'Remote path segments must not collapse to blank.',
+      );
+    }
     if (trimmed.isEmpty || trimmed == '.') {
       continue;
     }
@@ -1044,13 +1427,51 @@ bool _hasControlCharacter(String value) {
   return value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
 }
 
+bool _isMissingRemoteCollectionStatus(int statusCode) {
+  return statusCode == 404 || statusCode == 410;
+}
+
+List<String> _absolutePathSegments(String path) {
+  return _decodeRemotePath(path)
+      .replaceAll('\\', '/')
+      .split('/')
+      .where((segment) => segment.isNotEmpty)
+      .toList(growable: false);
+}
+
+bool _hasSameOrigin(Uri left, Uri right) {
+  return left.scheme.toLowerCase() == right.scheme.toLowerCase() &&
+      left.host.toLowerCase() == right.host.toLowerCase() &&
+      _effectivePort(left) == _effectivePort(right);
+}
+
+int _effectivePort(Uri uri) {
+  if (uri.hasPort) {
+    return uri.port;
+  }
+  return switch (uri.scheme.toLowerCase()) {
+    'http' => 80,
+    'https' => 443,
+    _ => 0,
+  };
+}
+
 String _normalizeRemotePathSegment(String value) {
   final normalized = normalizeSyncDeviceId(value, fallback: '');
-  return normalized.isEmpty ? 'local-device' : normalized;
+  if (normalized.isEmpty) {
+    throw const WebDavSyncConfigurationException(
+      'Remote path device id must not be blank.',
+    );
+  }
+  return normalized;
+}
+
+String _normalizeSnapshotRecordDeviceId(String value) {
+  return normalizeSyncDeviceIdForDisplay(value);
 }
 
 String _normalizeDeviceId(String value) {
-  return normalizeSyncDeviceId(value);
+  return normalizeSyncDeviceId(value, fallback: '');
 }
 
 String _formatSnapshotStamp(DateTime value) {

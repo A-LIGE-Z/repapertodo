@@ -47,7 +47,32 @@ class AndroidUriOpenHost implements UriOpenHost {
 
   @override
   Future<void> openUri(String uri) async {
-    await _channel.invokeMethod<void>('openUri', uri);
+    final trimmedUri = uri.trim();
+    if (trimmedUri.isEmpty) {
+      throw ArgumentError.value(uri, 'uri', 'Android URI must not be blank.');
+    }
+    if (_hasUnsafeExternalUriCharacter(trimmedUri)) {
+      throw ArgumentError.value(
+        uri,
+        'uri',
+        'Android URI must not contain control characters.',
+      );
+    }
+    if (_hasEncodedUnsafeExternalUriCharacter(trimmedUri)) {
+      throw ArgumentError.value(
+        uri,
+        'uri',
+        'Android URI must not contain encoded control characters.',
+      );
+    }
+    if (_hasEncodedExternalUriAuthoritySeparator(trimmedUri)) {
+      throw ArgumentError.value(
+        uri,
+        'uri',
+        'Android URI must not contain encoded authority separators.',
+      );
+    }
+    await _channel.invokeMethod<void>('openUri', trimmedUri);
   }
 }
 
@@ -58,7 +83,22 @@ class AndroidExternalFileHost implements ExternalFileHost {
 
   @override
   Future<void> openFile(String path) async {
-    await _channel.invokeMethod<void>('openExternalFile', path);
+    final trimmedPath = path.trim();
+    if (trimmedPath.isEmpty) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'Android external file path must not be blank.',
+      );
+    }
+    if (_hasUnsafeExternalFilePathCharacter(path)) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'Android external file path must not contain control characters.',
+      );
+    }
+    await _channel.invokeMethod<void>('openExternalFile', trimmedPath);
   }
 }
 
@@ -76,4 +116,46 @@ class AndroidAppStorageHost implements AppStorageHost {
     }
     return trimmedPath;
   }
+}
+
+bool _hasEncodedUnsafeExternalUriCharacter(String value) {
+  for (final match in RegExp(r'%([0-9a-fA-F]{2})').allMatches(value)) {
+    final unit = int.parse(match.group(1)!, radix: 16);
+    if (unit < 0x20 || unit == 0x7F) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _hasEncodedExternalUriAuthoritySeparator(String value) {
+  final uri = Uri.tryParse(value);
+  final scheme = uri?.scheme.toLowerCase();
+  if (uri == null || (scheme != 'http' && scheme != 'https')) {
+    return false;
+  }
+  final authority = uri.authority.toLowerCase();
+  for (final encodedSeparator in const [
+    '%23',
+    '%2f',
+    '%3a',
+    '%3f',
+    '%40',
+    '%5b',
+    '%5c',
+    '%5d',
+  ]) {
+    if (authority.contains(encodedSeparator)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _hasUnsafeExternalUriCharacter(String value) {
+  return value.codeUnits.any((unit) => unit <= 0x20 || unit == 0x7F);
+}
+
+bool _hasUnsafeExternalFilePathCharacter(String value) {
+  return value.codeUnits.any((unit) => unit < 0x20 || unit == 0x7F);
 }

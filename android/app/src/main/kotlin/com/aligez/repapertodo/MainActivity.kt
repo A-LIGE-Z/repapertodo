@@ -28,13 +28,22 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
                     val trimmedUri = uri.trim()
-                    val parsedUri = Uri.parse(trimmedUri)
+                    val parsedUri = try {
+                        Uri.parse(trimmedUri)
+                    } catch (error: IllegalArgumentException) {
+                        result.error("invalid_uri", "The URI is not valid.", null)
+                        return@setMethodCallHandler
+                    }
                     if (parsedUri.scheme.isNullOrBlank()) {
                         result.error("invalid_uri", "The URI must include a scheme.", null)
                         return@setMethodCallHandler
                     }
                     if (hasUnsafeExternalUriCharacter(trimmedUri)) {
                         result.error("invalid_uri", "The URI contains unsupported characters.", null)
+                        return@setMethodCallHandler
+                    }
+                    if (hasEncodedUnsafeExternalUriCharacter(trimmedUri)) {
+                        result.error("invalid_uri", "The URI contains encoded unsupported characters.", null)
                         return@setMethodCallHandler
                     }
                     if (!isAllowedExternalUri(parsedUri)) {
@@ -61,6 +70,14 @@ class MainActivity : FlutterActivity() {
                     }
 
                     val trimmedPath = path.trim()
+                    if (hasUnsafeExternalFilePathCharacter(path)) {
+                        result.error(
+                            "invalid_path",
+                            "The file path contains unsupported characters.",
+                            null
+                        )
+                        return@setMethodCallHandler
+                    }
                     val file = File(trimmedPath)
                     if (!file.isFile) {
                         result.error("file_not_found", "The file does not exist.", null)
@@ -124,15 +141,47 @@ class MainActivity : FlutterActivity() {
 
     private fun isAllowedExternalUri(uri: Uri): Boolean {
         return when (uri.scheme?.lowercase()) {
-            "http", "https" -> !uri.host.isNullOrBlank()
+            "http", "https" -> !uri.host.isNullOrBlank() &&
+                uri.userInfo.isNullOrBlank() &&
+                !hasEncodedExternalUriAuthoritySeparator(uri.encodedAuthority)
             "mailto" -> !uri.schemeSpecificPart.isNullOrBlank()
             else -> false
         }
+    }
+
+    private fun hasEncodedExternalUriAuthoritySeparator(authority: String?): Boolean {
+        val normalized = authority?.lowercase() ?: return false
+        return listOf("%23", "%2f", "%3a", "%3f", "%40", "%5b", "%5c", "%5d")
+            .any { separator -> normalized.contains(separator) }
     }
 
     private fun hasUnsafeExternalUriCharacter(uri: String): Boolean {
         return uri.any { character ->
             character.code <= 0x20 || character.code == 0x7F
         }
+    }
+
+    private fun hasUnsafeExternalFilePathCharacter(path: String): Boolean {
+        return path.any { character ->
+            character.code < 0x20 || character.code == 0x7F
+        }
+    }
+
+    private fun hasEncodedUnsafeExternalUriCharacter(uri: String): Boolean {
+        var index = 0
+        while (index + 2 < uri.length) {
+            if (uri[index] == '%') {
+                val high = Character.digit(uri[index + 1], 16)
+                val low = Character.digit(uri[index + 2], 16)
+                if (high >= 0 && low >= 0) {
+                    val code = (high shl 4) + low
+                    if (code < 0x20 || code == 0x7F) {
+                        return true
+                    }
+                }
+            }
+            index += 1
+        }
+        return false
     }
 }

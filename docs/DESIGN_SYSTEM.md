@@ -76,6 +76,8 @@ Global hotkey settings are entered as text for now, so the Windows runner
 should accept forgiving key aliases: spaced names such as `Page Up`, arrow-key
 names, lock keys, number-pad names, and common punctuation names such as
 `Plus`, `Minus`, and `Slash`.
+Hotkey settings should strip control characters before saving or platform
+registration while preserving ordinary spaces used by aliases.
 
 ## Android Priority
 
@@ -87,8 +89,22 @@ implementation.
 External Markdown exports should be written under the platform documents area
 so Windows keeps portable files near the executable and Android FileProvider can
 grant temporary read access to other apps.
+Generated external Markdown export filenames must replace platform-reserved
+characters and raw control characters, including DEL, before file creation.
+External Markdown extension settings must reject platform-reserved characters
+and raw control characters, including DEL, before saving.
 External launches, Markdown links, and script capsules should report platform
 failures in the app instead of failing silently.
+Script capsule hosts must reject blank scripts and unsupported execution
+engines before invoking native launch paths.
+Platform URI and external-file hosts must trim and reject blank launch
+arguments before invoking native method channels. Platform URI hosts must also
+reject raw or percent-encoded control characters.
+Platform external-file paths must reject raw control characters while preserving
+ordinary spaces in local filenames.
+Markdown links must reject raw or percent-encoded control characters and
+encoded authority separators before native URI launch while preserving ordinary
+encoded path characters.
 Settings saves should keep ordinary app preferences while surfacing native
 integration failures such as hotkey, startup, or script-process errors.
 On narrow screens, keep one primary sync action directly reachable and move

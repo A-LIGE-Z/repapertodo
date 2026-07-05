@@ -1,5 +1,6 @@
 import 'json_helpers.dart';
 import 'sync_device_id.dart';
+import 'sync_wire_datetime.dart';
 import 'webdav_presets.dart';
 
 abstract final class SyncProviderIds {
@@ -53,7 +54,8 @@ class SyncSettings {
       webDav: webDavJson is Map
           ? WebDavSyncSettings.fromJson(Map<String, Object?>.from(webDavJson))
           : null,
-      operationDeviceSequences: intMap(json['operationDeviceSequences']),
+      operationDeviceSequences:
+          _syncDeviceSequencesFromWire(json['operationDeviceSequences']),
       deletedPaperTombstones:
           _normalizeTombstoneMap(json['deletedPaperTombstones']),
       deletedTodoItemTombstones:
@@ -82,8 +84,9 @@ class SyncSettings {
   }
 
   DateTime? paperDeletedAtUtc(String paperId) {
-    return DateTime.tryParse(deletedPaperTombstones[paperId.trim()] ?? '')
-        ?.toUtc();
+    return tryParseStrictSyncWireDateTimeUtc(
+      deletedPaperTombstones[paperId.trim()] ?? '',
+    );
   }
 
   bool markPaperDeleted(String paperId, DateTime deletedAtUtc) {
@@ -113,7 +116,7 @@ class SyncSettings {
     final beforeCount = itemTombstones.length;
     final paperDeletedAt = paperDeletedAtUtc.toUtc();
     itemTombstones.removeWhere((_, timestamp) {
-      final itemDeletedAt = DateTime.tryParse(timestamp)?.toUtc();
+      final itemDeletedAt = tryParseStrictSyncWireDateTimeUtc(timestamp);
       return itemDeletedAt == null || !itemDeletedAt.isAfter(paperDeletedAt);
     });
     if (itemTombstones.isEmpty) {
@@ -125,7 +128,7 @@ class SyncSettings {
   bool _removeTodoItemTombstonesCoveredByPaperTombstones() {
     var changed = false;
     for (final entry in deletedPaperTombstones.entries) {
-      final deletedAtUtc = DateTime.tryParse(entry.value)?.toUtc();
+      final deletedAtUtc = tryParseStrictSyncWireDateTimeUtc(entry.value);
       if (deletedAtUtc == null) {
         continue;
       }
@@ -151,9 +154,9 @@ class SyncSettings {
   }
 
   DateTime? todoItemDeletedAtUtc(String paperId, String itemId) {
-    return DateTime.tryParse(
+    return tryParseStrictSyncWireDateTimeUtc(
       deletedTodoItemTombstones[paperId.trim()]?[itemId.trim()] ?? '',
-    )?.toUtc();
+    );
   }
 
   bool markTodoItemDeleted(
@@ -313,7 +316,7 @@ class WebDavSyncSettings {
   Set<WebDavSyncConfigurationIssue> get secureConfigurationIssues {
     return {
       ...configurationIssues,
-      if (!usesEncryptedPayloads)
+      if (!_isValidEncryptionPassphrase(encryptionPassphrase))
         WebDavSyncConfigurationIssue.encryptionPassphrase,
     };
   }
@@ -329,6 +332,7 @@ class WebDavSyncSettings {
         (scheme != 'http' && scheme != 'https') ||
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty ||
+        _hasUnsafeEndpointAuthority(uri) ||
         uri.hasQuery ||
         uri.hasFragment) {
       return null;
@@ -337,7 +341,7 @@ class WebDavSyncSettings {
   }
 
   bool get usesEncryptedPayloads {
-    return encryptionPassphrase.trim().isNotEmpty;
+    return _isValidEncryptionPassphrase(encryptionPassphrase);
   }
 
   void normalize() {
@@ -404,6 +408,7 @@ String _normalizeEndpoint(String value) {
       (scheme != 'http' && scheme != 'https') ||
       uri.host.isEmpty ||
       uri.userInfo.isNotEmpty ||
+      _hasUnsafeEndpointAuthority(uri) ||
       uri.hasQuery ||
       uri.hasFragment) {
     return trimmed;
@@ -422,6 +427,25 @@ String _normalizeEndpoint(String value) {
   return normalized.endsWith('/') ? normalized : '$normalized/';
 }
 
+bool _hasUnsafeEndpointAuthority(Uri uri) {
+  final authority = uri.authority.toLowerCase();
+  for (final encodedSeparator in const [
+    '%23',
+    '%2f',
+    '%3a',
+    '%3f',
+    '%40',
+    '%5b',
+    '%5c',
+    '%5d',
+  ]) {
+    if (authority.contains(encodedSeparator)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 String _normalizeRootPath(String value) {
   final trimmed = value.trim();
   if (trimmed.isEmpty) {
@@ -436,11 +460,21 @@ String _normalizeRootPath(String value) {
     return '';
   }
   final segments = <String>[];
-  for (final segment in decoded.replaceAll('\\', '/').split('/')) {
+  final rawSegments = decoded.replaceAll('\\', '/').split('/');
+  for (var index = 0; index < rawSegments.length; index += 1) {
+    final segment = rawSegments[index];
+    if (segment.isEmpty &&
+        _hasNonEmptyPathSegmentBefore(rawSegments, index) &&
+        _hasNonEmptyPathSegmentAfter(rawSegments, index)) {
+      return '';
+    }
     if (_hasControlCharacter(segment)) {
       return '';
     }
     final trimmedSegment = segment.trim();
+    if (segment.isNotEmpty && trimmedSegment.isEmpty) {
+      return '';
+    }
     if (trimmedSegment.isEmpty || trimmedSegment == '.') {
       continue;
     }
@@ -451,6 +485,14 @@ String _normalizeRootPath(String value) {
   }
   final normalized = segments.join('/');
   return normalized.isEmpty ? 'repapertodo' : normalized;
+}
+
+bool _hasNonEmptyPathSegmentBefore(List<String> segments, int index) {
+  return segments.take(index).any((segment) => segment.isNotEmpty);
+}
+
+bool _hasNonEmptyPathSegmentAfter(List<String> segments, int index) {
+  return segments.skip(index + 1).any((segment) => segment.isNotEmpty);
 }
 
 bool _hasUnsafeEndpointPath(String endpoint) {
@@ -472,30 +514,52 @@ bool _hasUnsafeEndpointPath(String endpoint) {
       pathEnd = index;
     }
   }
-  late final String decodedPath;
-  try {
-    decodedPath = Uri.decodeComponent(endpoint.substring(pathStart, pathEnd));
-  } on ArgumentError {
-    return true;
-  } on FormatException {
-    return true;
-  }
-  return decodedPath.replaceAll('\\', '/').split('/').any((segment) {
+  final path = endpoint.substring(pathStart, pathEnd);
+  final rawSegments = path.split('/');
+  for (var index = 0; index < rawSegments.length; index += 1) {
+    final rawSegment = rawSegments[index];
+    if (rawSegment.isEmpty && index > 0 && index < rawSegments.length - 1) {
+      return true;
+    }
+    late final String segment;
+    try {
+      segment = Uri.decodeComponent(rawSegment);
+    } on ArgumentError {
+      return true;
+    } on FormatException {
+      return true;
+    }
     if (_hasControlCharacter(segment)) {
       return true;
     }
+    if (segment.contains('/') || segment.contains('\\')) {
+      return true;
+    }
     final trimmed = segment.trim();
-    return trimmed == '.' || trimmed == '..';
-  });
+    if (segment != trimmed) {
+      return true;
+    }
+    if (rawSegment.isNotEmpty && trimmed.isEmpty) {
+      return true;
+    }
+    if (trimmed == '.' || trimmed == '..') {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool _isValidBasicAuthUsername(String value) {
-  return value.isNotEmpty &&
+  return value.trim().isNotEmpty &&
       !value.contains(':') &&
       !_hasControlCharacter(value);
 }
 
 bool _isValidBasicAuthPassword(String value) {
+  return value.trim().isNotEmpty && !_hasControlCharacter(value);
+}
+
+bool _isValidEncryptionPassphrase(String value) {
   return value.trim().isNotEmpty && !_hasControlCharacter(value);
 }
 
@@ -544,16 +608,64 @@ Map<String, Map<String, String>> _normalizeNestedTombstoneMap(Object? value) {
   return normalized;
 }
 
+Map<String, int> _syncDeviceSequencesFromWire(Object? value) {
+  if (value is! Map) {
+    return const <String, int>{};
+  }
+  final normalized = <String, int>{};
+  for (final entry in value.entries) {
+    final key = entry.key;
+    if (key is! String) {
+      continue;
+    }
+    final sequence = _syncDeviceSequenceFromWire(entry.value);
+    if (sequence == null) {
+      continue;
+    }
+    final deviceId = normalizeSyncDeviceId(key, fallback: '');
+    if (deviceId.isEmpty) {
+      continue;
+    }
+    final previous = normalized[deviceId] ?? 0;
+    if (sequence > previous) {
+      normalized[deviceId] = sequence;
+    }
+  }
+  return normalized;
+}
+
+int? _syncDeviceSequenceFromWire(Object? value) {
+  if (value is int) {
+    return isSyncDeviceSequenceInRange(value) ? value : null;
+  }
+  if (value is num && value.isFinite && value % 1 == 0) {
+    final sequence = value.toInt();
+    return isSyncDeviceSequenceInRange(sequence) ? sequence : null;
+  }
+  if (value is String && value.trim() == value) {
+    final sequence = int.tryParse(value);
+    if (sequence != null && isSyncDeviceSequenceInRange(sequence)) {
+      return sequence;
+    }
+  }
+  return null;
+}
+
 bool _putLatestTombstone(
   Map<String, String> target,
   String id,
   String timestamp,
 ) {
   final previous = target[id];
-  final previousTime = previous == null ? null : DateTime.tryParse(previous);
+  final previousTime =
+      previous == null ? null : tryParseStrictSyncWireDateTimeUtc(previous);
+  final timestampTime = tryParseStrictSyncWireDateTimeUtc(timestamp);
+  if (timestampTime == null) {
+    return false;
+  }
   if (previous == null ||
       previousTime == null ||
-      DateTime.parse(timestamp).isAfter(previousTime)) {
+      timestampTime.isAfter(previousTime)) {
     target[id] = timestamp;
     return true;
   }
@@ -565,7 +677,7 @@ String _tombstoneTimestamp(DateTime value) {
 }
 
 String _normalizeTombstoneTimestamp(String value) {
-  final parsed = DateTime.tryParse(value.trim());
+  final parsed = tryParseStrictSyncWireDateTimeUtc(value);
   if (parsed == null) {
     return '';
   }

@@ -109,6 +109,58 @@ bool StartsWith(const std::string& value, const std::string& prefix) {
          value.compare(0, prefix.size(), prefix) == 0;
 }
 
+int HexDigitValue(char character) {
+  if (character >= '0' && character <= '9') {
+    return character - '0';
+  }
+  if (character >= 'a' && character <= 'f') {
+    return character - 'a' + 10;
+  }
+  if (character >= 'A' && character <= 'F') {
+    return character - 'A' + 10;
+  }
+  return -1;
+}
+
+bool HasEncodedUnsafeExternalUriCharacter(const std::string& uri) {
+  for (size_t index = 0; index + 2 < uri.size(); ++index) {
+    if (uri[index] != '%') {
+      continue;
+    }
+    const int high = HexDigitValue(uri[index + 1]);
+    const int low = HexDigitValue(uri[index + 2]);
+    if (high < 0 || low < 0) {
+      continue;
+    }
+    const int code = (high << 4) + low;
+    if (code < 0x20 || code == 0x7F) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool HasEncodedExternalUriAuthoritySeparator(const std::string& authority) {
+  const std::string normalized_authority = LowerAscii(authority);
+  for (const std::string& separator :
+       {"%23", "%2f", "%3a", "%3f", "%40", "%5b", "%5c", "%5d"}) {
+    if (normalized_authority.find(separator) != std::string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool HasUnsafeExternalFilePathCharacter(const std::string& path) {
+  for (const char character : path) {
+    const unsigned char ascii = static_cast<unsigned char>(character);
+    if (ascii < 0x20 || ascii == 0x7F) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool IsAllowedExternalUri(const std::string& value) {
   const std::string uri = TrimAscii(value);
   if (uri.empty()) {
@@ -119,6 +171,9 @@ bool IsAllowedExternalUri(const std::string& value) {
     if (ascii <= 0x20 || ascii == 0x7F) {
       return false;
     }
+  }
+  if (HasEncodedUnsafeExternalUriCharacter(uri)) {
+    return false;
   }
   const size_t scheme_separator = uri.find(':');
   if (scheme_separator == std::string::npos || scheme_separator == 0) {
@@ -142,7 +197,24 @@ bool IsAllowedExternalUri(const std::string& value) {
       authority_start,
       authority_end == std::string::npos ? std::string::npos
                                          : authority_end - authority_start);
-  return !TrimAscii(authority).empty();
+  const std::string normalized_authority = LowerAscii(authority);
+  if (TrimAscii(authority).empty() ||
+      authority.find('@') != std::string::npos ||
+      HasEncodedExternalUriAuthoritySeparator(authority)) {
+    return false;
+  }
+  std::string authority_host;
+  if (!authority.empty() && authority.front() == '[') {
+    const size_t host_end = authority.find(']');
+    if (host_end == std::string::npos || host_end <= 1) {
+      return false;
+    }
+    authority_host = authority.substr(1, host_end - 1);
+  } else {
+    const size_t host_end = authority.find(':');
+    authority_host = authority.substr(0, host_end);
+  }
+  return !TrimAscii(authority_host).empty();
 }
 
 std::string CompactHotkeyToken(const std::string& value) {
@@ -367,6 +439,10 @@ std::wstring ResolvePowerShellExecutable(const std::string& engine,
     }
   }
   return L"powershell.exe";
+}
+
+bool IsAllowedScriptCapsuleEngine(const std::string& engine) {
+  return engine == "auto" || engine == "pwsh" || engine == "powershell";
 }
 
 std::wstring ScriptCapsuleTempDirectory() {
@@ -1255,6 +1331,11 @@ bool FlutterWindow::OnCreate() {
               path = *value;
             }
           }
+          if (HasUnsafeExternalFilePathCharacter(path)) {
+            result->Error("invalid_path",
+                          "The external file path contains unsupported characters.");
+            return;
+          }
           path = TrimAscii(path);
           if (path.empty()) {
             result->Error("invalid_path", "The external file path is empty.");
@@ -1323,6 +1404,12 @@ bool FlutterWindow::OnCreate() {
               hide_script_run_window =
                   GetBoolArgument(*request, "hideScriptRunWindow", true);
             }
+          }
+          engine = LowerAscii(TrimAscii(engine));
+          if (!IsAllowedScriptCapsuleEngine(engine)) {
+            result->Error("invalid_script_capsule_engine",
+                          "The script capsule engine is not supported.");
+            return;
           }
           if (TrimAscii(script).empty()) {
             result->Error("script_capsule_empty",
@@ -1607,6 +1694,8 @@ void FlutterWindow::ShowTrayMenu() {
       break;
     case kTraySettingsCommand:
       SendStartupCommandRequested("settings");
+      ShowWindow(window, SW_SHOWNORMAL);
+      SetForegroundWindow(window);
       break;
     case kTrayShowCommand:
       SendStartupCommandRequested("show");
