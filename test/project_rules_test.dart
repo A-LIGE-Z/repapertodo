@@ -539,10 +539,13 @@ void main() {
     expect(design, contains('00-23 hour'));
     expect(design, contains('00-59 minute'));
     expect(design, contains('yyyy-MM-ddTHH:mm:ss'));
+    expect(design, contains('today is `HH:mm`'));
+    expect(design, contains('Tomorrow HH:mm'));
     expect(app, contains('_TodoDueSelectionDialog'));
     expect(app, contains("ValueKey('todo-due-hour')"));
     expect(app, contains("ValueKey('todo-due-minute')"));
     expect(app, contains('_formatDueAtLocalValue'));
+    expect(app, contains("return 'Tomorrow \$time'"));
     expect(app, contains('now.add(const Duration(hours: 1))'));
   });
 

@@ -5799,6 +5799,80 @@ void main() {
     expect(find.text('Due 06-30 10:30'), findsOneWidget);
   });
 
+  testWidgets('formats absolute todo due times like PaperTodo', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final later = today.add(const Duration(days: 2));
+    final laterMonth = later.month.toString().padLeft(2, '0');
+    final laterDay = later.day.toString().padLeft(2, '0');
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'due-format-paper',
+            type: PaperTypes.todo,
+            title: 'Due format paper',
+            items: [
+              PaperItem(
+                id: 'due-today',
+                text: 'Due today',
+                dueAtLocal: DateTime(
+                  today.year,
+                  today.month,
+                  today.day,
+                  10,
+                  5,
+                ).toIso8601String(),
+              ),
+              PaperItem(
+                id: 'due-tomorrow',
+                text: 'Due tomorrow',
+                order: 1,
+                dueAtLocal: DateTime(
+                  tomorrow.year,
+                  tomorrow.month,
+                  tomorrow.day,
+                  11,
+                  10,
+                ).toIso8601String(),
+              ),
+              PaperItem(
+                id: 'due-later',
+                text: 'Due later',
+                order: 2,
+                dueAtLocal: DateTime(
+                  later.year,
+                  later.month,
+                  later.day,
+                  12,
+                  15,
+                ).toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-due-format-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Due 10:05'), findsOneWidget);
+    expect(find.text('Due Tomorrow 11:10'), findsOneWidget);
+    expect(find.text('Due $laterMonth-$laterDay 12:15'), findsOneWidget);
+  });
+
   testWidgets('applies extra large todo visual size', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

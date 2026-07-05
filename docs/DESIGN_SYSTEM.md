@@ -155,6 +155,9 @@ Todo due editing should preserve PaperTodo date-and-time precision: the picker
 must expose a calendar date plus 00-23 hour and 00-59 minute choices, default a
 new due time to roughly one hour from now, and save local values as
 `yyyy-MM-ddTHH:mm:ss` without milliseconds.
+Absolute due labels without an explicit year should follow PaperTodo's compact
+time-aware display: today is `HH:mm`, tomorrow is `Tomorrow HH:mm`, and other
+dates keep month-day plus `HH:mm`.
 Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,

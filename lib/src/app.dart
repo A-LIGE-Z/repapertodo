@@ -5326,14 +5326,33 @@ class _TodoEditorState extends State<_TodoEditor> {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
     final time = _formatDueTime(date);
-    return switch (TodoDueYearDisplayModes.normalize(
+    final yearDisplayMode = TodoDueYearDisplayModes.normalize(
       widget.dueYearDisplayMode,
-    )) {
+    );
+    return switch (yearDisplayMode) {
       TodoDueYearDisplayModes.short =>
         '${(date.year % 100).toString().padLeft(2, '0')}-$month-$day $time',
       TodoDueYearDisplayModes.full => '${date.year}-$month-$day $time',
-      _ => '$month-$day $time',
+      _ => _formatCompactAbsoluteDueDate(date, time, month, day),
     };
+  }
+
+  String _formatCompactAbsoluteDueDate(
+    DateTime date,
+    String time,
+    String month,
+    String day,
+  ) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dueDay = DateTime(date.year, date.month, date.day);
+    if (dueDay == today) {
+      return time;
+    }
+    if (dueDay == today.add(const Duration(days: 1))) {
+      return 'Tomorrow $time';
+    }
+    return '$month-$day $time';
   }
 
   String _formatDueTime(DateTime date) {
