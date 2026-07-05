@@ -5702,7 +5702,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final today = DateTime.now();
+    final now = DateTime.now();
     final controller = RePaperTodoController(
       initialState: AppState(
         showTodoDueRelativeTime: true,
@@ -5714,9 +5714,9 @@ void main() {
             items: [
               PaperItem(
                 id: 'relative-item',
-                text: 'Due today',
-                dueAtLocal: DateTime(today.year, today.month, today.day)
-                    .toIso8601String(),
+                text: 'Due soon',
+                dueAtLocal:
+                    now.add(const Duration(minutes: 5)).toIso8601String(),
               ),
             ],
           ),
@@ -5734,7 +5734,67 @@ void main() {
       ),
     );
 
-    expect(find.text('Due Today'), findsOneWidget);
+    expect(find.text('Due in 5m'), findsOneWidget);
+  });
+
+  testWidgets('formats relative todo due durations like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final now = DateTime.now();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        showTodoDueRelativeTime: true,
+        papers: [
+          PaperData(
+            id: 'relative-duration-paper',
+            type: PaperTypes.todo,
+            title: 'Relative duration paper',
+            items: [
+              PaperItem(
+                id: 'relative-future',
+                text: 'Future',
+                dueAtLocal: now
+                    .add(const Duration(hours: 2, minutes: 5))
+                    .toIso8601String(),
+              ),
+              PaperItem(
+                id: 'relative-past',
+                text: 'Past',
+                order: 1,
+                dueAtLocal: now
+                    .subtract(
+                      const Duration(hours: 1, minutes: 2, seconds: 1),
+                    )
+                    .toIso8601String(),
+              ),
+              PaperItem(
+                id: 'relative-soon',
+                text: 'Soon',
+                order: 2,
+                dueAtLocal:
+                    now.add(const Duration(seconds: 10)).toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store =
+        StateStore(filePath: 'build/test-widget-relative-duration-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Due in 2h5m'), findsOneWidget);
+    expect(find.text('Due 1h3m overdue'), findsOneWidget);
+    expect(find.text('Due in 1m'), findsOneWidget);
   });
 
   testWidgets('sets todo due date with hour and minute like PaperTodo',

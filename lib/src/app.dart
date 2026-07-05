@@ -5383,16 +5383,28 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   String _relativeDueDate(DateTime date) {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final dueDay = DateTime(date.year, date.month, date.day);
-    final days = dueDay.difference(today).inDays;
-    return switch (days) {
-      0 => 'Today',
-      1 => 'Tomorrow',
-      -1 => 'Yesterday',
-      > 1 => 'In $days days',
-      _ => '${-days} days overdue',
-    };
+    final difference = date.difference(now);
+    final isPast = difference.isNegative;
+    final absoluteMicroseconds =
+        isPast ? -difference.inMicroseconds : difference.inMicroseconds;
+    final totalMinutes = (absoluteMicroseconds / Duration.microsecondsPerMinute)
+        .ceil()
+        .clamp(1, 1 << 31)
+        .toInt();
+    final days = totalMinutes ~/ (24 * 60);
+    final hours = (totalMinutes % (24 * 60)) ~/ 60;
+    final minutes = totalMinutes % 60;
+    final parts = <String>[
+      if (days > 0) '${days}d',
+      if (hours > 0) '${hours}h',
+      if (minutes > 0 || (days == 0 && hours == 0))
+        '${minutes <= 0 ? 1 : minutes}m',
+    ];
+    final text = parts.join();
+    if (isPast) {
+      return '$text overdue';
+    }
+    return 'in $text';
   }
 }
 

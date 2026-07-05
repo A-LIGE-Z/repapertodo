@@ -541,11 +541,17 @@ void main() {
     expect(design, contains('yyyy-MM-ddTHH:mm:ss'));
     expect(design, contains('today is `HH:mm`'));
     expect(design, contains('Tomorrow HH:mm'));
+    expect(design, contains('round the absolute distance up'));
+    expect(design, contains('`2h5m`'));
+    expect(design, contains('{duration} overdue'));
     expect(app, contains('_TodoDueSelectionDialog'));
     expect(app, contains("ValueKey('todo-due-hour')"));
     expect(app, contains("ValueKey('todo-due-minute')"));
     expect(app, contains('_formatDueAtLocalValue'));
     expect(app, contains("return 'Tomorrow \$time'"));
+    expect(app, contains('Duration.microsecondsPerMinute'));
+    expect(app, contains("return '\$text overdue'"));
+    expect(app, contains("return 'in \$text'"));
     expect(app, contains('now.add(const Duration(hours: 1))'));
   });
 
