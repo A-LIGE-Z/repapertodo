@@ -4187,81 +4187,24 @@ class _TodoEditorState extends State<_TodoEditor> {
         );
     final editor = Column(
       children: [
-        for (final item in widget.paper.items)
-          Padding(
-            padding: EdgeInsets.only(bottom: visualSpec.itemGap),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox.square(
-                  dimension: visualSpec.controlExtent,
-                  child: Transform.scale(
-                    scale: visualSpec.checkboxScale,
-                    child: Checkbox(
-                      value: item.done,
-                      onChanged: (value) {
-                        _pushTodoUndoSnapshot();
-                        setState(() => item.done = value ?? false);
-                        unawaited(widget.onChanged());
-                      },
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _todoColumnFields(context, item, itemTextStyle),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          if (_formatDueDate(item.dueAtLocal)
-                              case final dueDate?)
-                            InputChip(
-                              avatar: Icon(Icons.event_outlined,
-                                  size: visualSpec.chipIconSize),
-                              label: Text('Due $dueDate'),
-                              onDeleted: () => _clearDueDate(item),
-                              deleteIcon: Icon(Icons.close_outlined,
-                                  size: visualSpec.chipIconSize),
-                              deleteButtonTooltipMessage: _tooltipLabel(
-                                  widget.enableToolTips, 'Clear due date'),
-                            ),
-                          if (_formatReminderInterval(item)
-                              case final reminderInterval?)
-                            InputChip(
-                              avatar: Icon(Icons.notifications_active_outlined,
-                                  size: visualSpec.chipIconSize),
-                              label: Text(reminderInterval),
-                              onDeleted: () => _clearReminderInterval(item),
-                              deleteIcon: Icon(Icons.close_outlined,
-                                  size: visualSpec.chipIconSize),
-                              deleteButtonTooltipMessage: _tooltipLabel(
-                                  widget.enableToolTips,
-                                  'Clear reminder interval'),
-                            ),
-                          if (widget.enableTodoNoteLinks)
-                            if (_linkedNoteFor(item) case final linkedNote?)
-                              _linkedNoteChip(
-                                linkedNote,
-                                item,
-                                visualSpec,
-                              ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                ..._todoItemActions(
-                  context: context,
-                  item: item,
-                  visualSpec: visualSpec,
-                  compact: useCompactItemActions,
-                ),
-              ],
-            ),
-          ),
+        ReorderableListView.builder(
+          buildDefaultDragHandles: false,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: widget.paper.items.length,
+          onReorderItem: _reorderTodoItem,
+          itemBuilder: (context, index) {
+            final item = widget.paper.items[index];
+            return _todoRow(
+              context: context,
+              item: item,
+              itemIndex: index,
+              itemTextStyle: itemTextStyle,
+              visualSpec: visualSpec,
+              compactActions: useCompactItemActions,
+            );
+          },
+        ),
         Align(
           alignment: Alignment.centerLeft,
           child: Row(
@@ -4297,6 +4240,102 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
   }
 
+  Widget _todoRow({
+    required BuildContext context,
+    required PaperItem item,
+    required int itemIndex,
+    required TextStyle? itemTextStyle,
+    required _TodoVisualSpec visualSpec,
+    required bool compactActions,
+  }) {
+    return Padding(
+      key: ValueKey('${widget.paper.id}-${item.id}-row'),
+      padding: EdgeInsets.only(bottom: visualSpec.itemGap),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox.square(
+            dimension: visualSpec.controlExtent,
+            child: Transform.scale(
+              scale: visualSpec.checkboxScale,
+              child: Checkbox(
+                value: item.done,
+                onChanged: (value) {
+                  _pushTodoUndoSnapshot();
+                  setState(() => item.done = value ?? false);
+                  unawaited(widget.onChanged());
+                },
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _todoColumnFields(context, item, itemTextStyle),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    if (_formatDueDate(item.dueAtLocal) case final dueDate?)
+                      InputChip(
+                        avatar: Icon(
+                          Icons.event_outlined,
+                          size: visualSpec.chipIconSize,
+                        ),
+                        label: Text('Due $dueDate'),
+                        onDeleted: () => _clearDueDate(item),
+                        deleteIcon: Icon(
+                          Icons.close_outlined,
+                          size: visualSpec.chipIconSize,
+                        ),
+                        deleteButtonTooltipMessage: _tooltipLabel(
+                          widget.enableToolTips,
+                          'Clear due date',
+                        ),
+                      ),
+                    if (_formatReminderInterval(item)
+                        case final reminderInterval?)
+                      InputChip(
+                        avatar: Icon(
+                          Icons.notifications_active_outlined,
+                          size: visualSpec.chipIconSize,
+                        ),
+                        label: Text(reminderInterval),
+                        onDeleted: () => _clearReminderInterval(item),
+                        deleteIcon: Icon(
+                          Icons.close_outlined,
+                          size: visualSpec.chipIconSize,
+                        ),
+                        deleteButtonTooltipMessage: _tooltipLabel(
+                          widget.enableToolTips,
+                          'Clear reminder interval',
+                        ),
+                      ),
+                    if (widget.enableTodoNoteLinks)
+                      if (_linkedNoteFor(item) case final linkedNote?)
+                        _linkedNoteChip(
+                          linkedNote,
+                          item,
+                          visualSpec,
+                        ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          ..._todoItemActions(
+            context: context,
+            item: item,
+            itemIndex: itemIndex,
+            visualSpec: visualSpec,
+            compact: compactActions,
+          ),
+        ],
+      ),
+    );
+  }
+
   static const _columnActionAdd = 'add';
   static const _columnActionRemove = 'remove';
   static const _columnActionEqualWidths = 'equal-widths';
@@ -4314,6 +4353,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   List<Widget> _todoItemActions({
     required BuildContext context,
     required PaperItem item,
+    required int itemIndex,
     required _TodoVisualSpec visualSpec,
     required bool compact,
   }) {
@@ -4421,6 +4461,18 @@ class _TodoEditorState extends State<_TodoEditor> {
       ];
     }
     return [
+      ReorderableDragStartListener(
+        key: ValueKey('${widget.paper.id}-${item.id}-drag-handle'),
+        index: itemIndex,
+        child: Tooltip(
+          message: _tooltipLabel(widget.enableToolTips, 'Drag to reorder'),
+          child: SizedBox(
+            width: visualSpec.controlExtent,
+            height: visualSpec.controlExtent,
+            child: Icon(Icons.drag_handle, size: visualSpec.iconSize),
+          ),
+        ),
+      ),
       IconButton(
         tooltip: _tooltipLabel(widget.enableToolTips, 'Set due date'),
         onPressed: () => unawaited(_pickDueDate(context, item)),
@@ -5047,6 +5099,27 @@ class _TodoEditorState extends State<_TodoEditor> {
       widget.paper.normalize();
     });
     _requestTodoItemFocus(item.id);
+    unawaited(widget.onChanged());
+  }
+
+  void _reorderTodoItem(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= widget.paper.items.length) {
+      return;
+    }
+    final insertIndex =
+        newIndex.clamp(0, widget.paper.items.length - 1).toInt();
+    if (insertIndex == oldIndex) {
+      return;
+    }
+
+    _pushTodoUndoSnapshot();
+    late final PaperItem movedItem;
+    setState(() {
+      movedItem = widget.paper.items.removeAt(oldIndex);
+      widget.paper.items.insert(insertIndex, movedItem);
+      widget.paper.normalize();
+    });
+    _requestTodoItemFocus(movedItem.id);
     unawaited(widget.onChanged());
   }
 

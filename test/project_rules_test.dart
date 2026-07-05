@@ -562,11 +562,18 @@ void main() {
     expect(design, contains('Todo ordering should preserve PaperTodo'));
     expect(design, contains('push a todo undo snapshot'));
     expect(design, contains('orders after every move'));
+    expect(design, contains('visible drag handle'));
     expect(app, contains('_moveTodoItem'));
+    expect(app, contains('_reorderTodoItem'));
+    expect(app, contains('ReorderableListView.builder'));
+    expect(app, contains('ReorderableDragStartListener'));
+    expect(app, contains('onReorderItem: _reorderTodoItem'));
+    expect(app, isNot(contains('onReorder: _reorderTodoItem')));
     expect(app, contains('_compactTodoActionMoveUp'));
     expect(app, contains('_compactTodoActionMoveDown'));
     expect(app, contains('Move item up'));
     expect(app, contains('Move item down'));
+    expect(app, contains('Drag to reorder'));
     expect(app, contains('_requestTodoItemFocus(item.id)'));
   });
 

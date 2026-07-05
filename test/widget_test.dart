@@ -6476,6 +6476,63 @@ void main() {
     ]);
   });
 
+  testWidgets('drags todo items to reorder like PaperTodo', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'drag-paper',
+            type: PaperTypes.todo,
+            title: 'Drag paper',
+            items: [
+              PaperItem(id: 'first-item', text: 'First'),
+              PaperItem(id: 'second-item', text: 'Second', order: 1),
+              PaperItem(id: 'third-item', text: 'Third', order: 2),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-todo-drag.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    final dragHandle =
+        find.byKey(const ValueKey('drag-paper-first-item-drag-handle'));
+    expect(dragHandle, findsOneWidget);
+    await tester.drag(dragHandle, const Offset(0, 170));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.map((item) => item.id), [
+      'second-item',
+      'third-item',
+      'first-item',
+    ]);
+    expect(controller.state.papers.single.items.map((item) => item.order), [
+      0,
+      1,
+      2,
+    ]);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.map((item) => item.id), [
+      'first-item',
+      'second-item',
+      'third-item',
+    ]);
+  });
+
   testWidgets('toggles desktop pin and always-on-top as exclusive modes',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
