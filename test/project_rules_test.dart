@@ -941,8 +941,12 @@ void main() {
     expect(design, contains('dragging the element header moves the block'));
     expect(design, contains('bottom-right grip'));
     expect(design, contains('72x48'));
+    expect(design, contains('Pinned'));
+    expect(design, contains('ignore canvas move and resize gestures'));
     expect(app, contains('note-canvas-drag-handle-'));
     expect(app, contains('note-canvas-resize-handle-'));
+    expect(app, contains('geometryGesturesEnabled'));
+    expect(app, contains('!widget.paper.isPinnedToDesktop'));
     expect(app, contains('_moveElement'));
     expect(app, contains('_resizeElement'));
     expect(app, contains('clamp(72, maxWidth)'));

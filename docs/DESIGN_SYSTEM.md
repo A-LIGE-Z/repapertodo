@@ -320,7 +320,9 @@ and strikethrough belong in a compact overflow menu.
 Note canvas element geometry should preserve PaperTodo pointer semantics:
 dragging the element header moves the block, dragging the bottom-right grip
 resizes it, movement is clamped to the visible canvas, resize keeps the minimum
-72x48 size, and geometry changes are saved when the gesture finishes.
+72x48 size, and geometry changes are saved when the gesture finishes. Pinned
+desktop note papers should ignore canvas move and resize gestures so desktop
+surface mode cannot accidentally rearrange note blocks.
 New note canvas blocks should follow PaperTodo placement and layer rules:
 code blocks default to 230x116 with `Console.WriteLine("PaperTodo");`, new
 blocks use the 28px origin plus a capped 12px cascade clamped to the canvas with

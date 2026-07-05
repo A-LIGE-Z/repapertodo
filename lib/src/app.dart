@@ -3873,6 +3873,7 @@ class _NoteEditorState extends State<_NoteEditor> {
     return _NoteCanvasPreview(
       elements: widget.paper.noteCanvasElements,
       selectedElementId: _selectedCanvasElementId,
+      geometryGesturesEnabled: !widget.paper.isPinnedToDesktop,
       textZoom: widget.textZoom,
       onChanged: widget.onChanged,
       onGeometryChanging: _refreshCanvasGeometry,
@@ -4124,6 +4125,7 @@ class _NoteCanvasPreview extends StatelessWidget {
   const _NoteCanvasPreview({
     required this.elements,
     required this.selectedElementId,
+    required this.geometryGesturesEnabled,
     required this.textZoom,
     required this.onChanged,
     required this.onGeometryChanging,
@@ -4136,6 +4138,7 @@ class _NoteCanvasPreview extends StatelessWidget {
 
   final List<NoteCanvasElement> elements;
   final String? selectedElementId;
+  final bool geometryGesturesEnabled;
   final double textZoom;
   final Future<void> Function() onChanged;
   final VoidCallback onGeometryChanging;
@@ -4195,6 +4198,7 @@ class _NoteCanvasPreview extends StatelessWidget {
                       layerRank: index + 1,
                       layerCount: sortedElements.length,
                       isSelected: sortedElements[index].id == selectedElementId,
+                      geometryGesturesEnabled: geometryGesturesEnabled,
                       scale: scale,
                       canvasWidth: canvasWidth,
                       canvasHeight: canvasHeight,
@@ -4235,6 +4239,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
     required this.layerRank,
     required this.layerCount,
     required this.isSelected,
+    required this.geometryGesturesEnabled,
     required this.scale,
     required this.canvasWidth,
     required this.canvasHeight,
@@ -4253,6 +4258,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
   final int layerRank;
   final int layerCount;
   final bool isSelected;
+  final bool geometryGesturesEnabled;
   final double scale;
   final double canvasWidth;
   final double canvasHeight;
@@ -4337,7 +4343,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                       child: Tooltip(
                         message: 'Drag canvas block',
                         child: MouseRegion(
-                          cursor: SystemMouseCursors.move,
+                          cursor: widget.geometryGesturesEnabled
+                              ? SystemMouseCursors.move
+                              : SystemMouseCursors.basic,
                           child: Listener(
                             key: ValueKey(
                               'note-canvas-drag-handle-${element.id}',
@@ -4587,7 +4595,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
             child: Tooltip(
               message: 'Resize canvas block',
               child: MouseRegion(
-                cursor: SystemMouseCursors.resizeDownRight,
+                cursor: widget.geometryGesturesEnabled
+                    ? SystemMouseCursors.resizeDownRight
+                    : SystemMouseCursors.basic,
                 child: Listener(
                   key: ValueKey('note-canvas-resize-handle-${element.id}'),
                   behavior: HitTestBehavior.opaque,
@@ -4625,6 +4635,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
     PointerDownEvent event,
     _CanvasGeometryDragMode mode,
   ) {
+    if (!widget.geometryGesturesEnabled) {
+      return;
+    }
     if (_geometryPointer != null) {
       return;
     }
@@ -4656,6 +4669,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   }
 
   void _updateGeometryGesture(PointerMoveEvent event) {
+    if (!widget.geometryGesturesEnabled) {
+      return;
+    }
     if (event.pointer != _geometryPointer) {
       return;
     }

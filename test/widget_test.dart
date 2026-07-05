@@ -1318,6 +1318,66 @@ void main() {
     expect(element.height, 48);
   });
 
+  testWidgets('pinned note canvas ignores geometry drags like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'pinned-canvas-note',
+            type: PaperTypes.note,
+            title: 'Pinned canvas note',
+            content: 'Pinned note body',
+            isPinnedToDesktop: true,
+            noteCanvasElements: [
+              NoteCanvasElement(
+                id: 'pinned-canvas-element',
+                text: 'Stay put',
+                x: 16,
+                y: 24,
+                width: 130,
+                height: 90,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final element = controller.state.papers.single.noteCanvasElements.single;
+    await tester.drag(
+      find.byKey(
+        const ValueKey('note-canvas-drag-handle-pinned-canvas-element'),
+      ),
+      const Offset(40, 30),
+    );
+    await tester.pump();
+
+    await tester.drag(
+      find.byKey(
+        const ValueKey('note-canvas-resize-handle-pinned-canvas-element'),
+      ),
+      const Offset(50, 25),
+    );
+    await tester.pump();
+
+    expect(element.x, 16);
+    expect(element.y, 24);
+    expect(element.width, 130);
+    expect(element.height, 90);
+  });
+
   testWidgets('clips oversized markdown note input', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
