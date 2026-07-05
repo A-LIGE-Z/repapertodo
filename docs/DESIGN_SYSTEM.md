@@ -91,6 +91,9 @@ whether all papers should be shown or hidden from current visibility state.
 Pinning a paper to the desktop should follow PaperTodo's surface-mode rules:
 the paper becomes visible and expanded, always-on-top is cleared, capsule and
 deep-capsule mode are enabled, and missing capsule queue fields are initialized.
+Surface mode controls such as desktop pinning and always-on-top should update
+the native paper surface, persist local state, and rebuild the tray menu
+immediately after the user toggles them.
 Hiding a paper should follow PaperTodo's single-paper rules: clear desktop
 pinning, mark the paper hidden, and expand it before persisting or refreshing
 platform surfaces. Deleting the last remaining paper should immediately create

@@ -1016,12 +1016,16 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     controller.state.sync.clearTodoItemDeleted(paper.id, item.id);
   }
 
-  void _setPaperAlwaysOnTop(PaperData paper, bool enabled) {
+  Future<void> _setPaperAlwaysOnTop(PaperData paper, bool enabled) async {
     setState(() => controller.setPaperAlwaysOnTop(paper, enabled));
+    await controller.updatePaperSurface(paper);
+    await _saveState();
   }
 
-  void _setPaperPinnedToDesktop(PaperData paper, bool pinned) {
+  Future<void> _setPaperPinnedToDesktop(PaperData paper, bool pinned) async {
     setState(() => controller.setPaperPinnedToDesktop(paper, pinned));
+    await controller.updatePaperSurface(paper);
+    await _saveState();
   }
 
   Future<void> _hidePaper(PaperData paper) async {
@@ -2666,8 +2670,9 @@ class PaperPreview extends StatelessWidget {
   final void Function(PaperData paper, PaperItem item) onTodoItemDeleted;
   final void Function(PaperData paper, PaperItem item) onTodoItemRestored;
   final void Function(PaperItem item) onTodoReminderReset;
-  final void Function(PaperData paper, bool enabled) onSetAlwaysOnTop;
-  final void Function(PaperData paper, bool pinned) onSetPinnedToDesktop;
+  final Future<void> Function(PaperData paper, bool enabled) onSetAlwaysOnTop;
+  final Future<void> Function(PaperData paper, bool pinned)
+      onSetPinnedToDesktop;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
   final Future<void> Function(PaperData paper) onCaptureBounds;
 
@@ -3169,15 +3174,11 @@ class PaperPreview extends StatelessWidget {
   }
 
   void _toggleAlwaysOnTop() {
-    onSetAlwaysOnTop(paper, !paper.alwaysOnTop);
-    unawaited(onSurfaceChanged(paper));
-    unawaited(onChanged());
+    unawaited(onSetAlwaysOnTop(paper, !paper.alwaysOnTop));
   }
 
   void _togglePinnedToDesktop() {
-    onSetPinnedToDesktop(paper, !paper.isPinnedToDesktop);
-    unawaited(onSurfaceChanged(paper));
-    unawaited(onChanged());
+    unawaited(onSetPinnedToDesktop(paper, !paper.isPinnedToDesktop));
   }
 
   void _setTextZoom(double value) {

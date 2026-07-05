@@ -7495,7 +7495,7 @@ void main() {
       ),
       platform: platform,
     );
-    final store = StateStore(filePath: 'build/test-widget-pin-mode.json');
+    final store = _MemoryStateStore();
 
     await tester.pumpWidget(
       RePaperTodoApp(
@@ -7504,8 +7504,27 @@ void main() {
       ),
     );
 
+    Future<void> waitForSurfaceMode({
+      required bool pinned,
+      required bool topmost,
+    }) async {
+      await tester.runAsync(() async {
+        for (var attempt = 0; attempt < 20; attempt++) {
+          final latest = platform.tray.rebuildSurfaceModeSnapshots.isEmpty
+              ? null
+              : platform.tray.rebuildSurfaceModeSnapshots.last['pin-paper'];
+          if (latest?['pinned'] == pinned && latest?['topmost'] == topmost) {
+            return;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+      });
+      await tester.pump();
+    }
+
     await tester.tap(find.byTooltip('Pin to desktop'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await waitForSurfaceMode(pinned: true, topmost: false);
 
     final paper = controller.state.papers.single;
     expect(paper.isPinnedToDesktop, true);
@@ -7516,14 +7535,24 @@ void main() {
     expect(controller.state.showDeepCapsuleWhileExpanded, true);
     expect(find.byTooltip('Unpin from desktop'), findsOneWidget);
     expect(platform.paperWindows.updatedTitles, contains('Pin paper'));
+    expect(store.savedState.papers.single.isPinnedToDesktop, true);
+    expect(platform.tray.rebuildSurfaceModeSnapshots.last, {
+      'pin-paper': {'pinned': true, 'topmost': false},
+    });
 
     await tester.tap(find.byTooltip('Keep on top'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await waitForSurfaceMode(pinned: false, topmost: true);
 
     expect(paper.alwaysOnTop, true);
     expect(paper.isPinnedToDesktop, false);
     expect(find.byTooltip('Disable always on top'), findsOneWidget);
     expect(find.byTooltip('Pin to desktop'), findsOneWidget);
+    expect(store.savedState.papers.single.alwaysOnTop, true);
+    expect(store.savedState.papers.single.isPinnedToDesktop, false);
+    expect(platform.tray.rebuildSurfaceModeSnapshots.last, {
+      'pin-paper': {'pinned': false, 'topmost': true},
+    });
   });
 
   testWidgets('hiding a pinned collapsed paper restores PaperTodo state',
@@ -10008,6 +10037,7 @@ class _RecordingTrayHost extends NoopTrayHost {
   var disposeCount = 0;
   final rebuildTitleSnapshots = <List<String>>[];
   final rebuildVisibilitySnapshots = <Map<String, bool>>[];
+  final rebuildSurfaceModeSnapshots = <Map<String, Map<String, bool>>>[];
 
   @override
   Future<void> dispose() async {
@@ -10021,6 +10051,13 @@ class _RecordingTrayHost extends NoopTrayHost {
     );
     rebuildVisibilitySnapshots.add({
       for (final paper in state.papers) paper.id: paper.isVisible,
+    });
+    rebuildSurfaceModeSnapshots.add({
+      for (final paper in state.papers)
+        paper.id: {
+          'pinned': paper.isPinnedToDesktop,
+          'topmost': paper.alwaysOnTop,
+        },
     });
   }
 }

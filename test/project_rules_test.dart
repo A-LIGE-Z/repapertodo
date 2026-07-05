@@ -556,12 +556,17 @@ void main() {
     expect(design,
         contains("Hiding a paper should follow PaperTodo's single-paper"));
     expect(design, contains('Deleting the last remaining paper'));
+    expect(design, contains('Surface mode controls'));
+    expect(design, contains('rebuild the tray menu'));
     expect(controller, contains('..isPinnedToDesktop = false'));
     expect(controller, contains('..isVisible = false'));
     expect(controller, contains('..isCollapsed = false'));
+    expect(app, contains('Future<void> _setPaperAlwaysOnTop'));
+    expect(app, contains('Future<void> _setPaperPinnedToDesktop'));
     expect(app,
         contains('defaultPaper = controller.tryCreatePaper(PaperTypes.todo)'));
     expect(app, contains('await controller.showPaper(createdDefaultPaper)'));
+    expect(app, contains('await controller.updatePaperSurface(paper)'));
     expect(app, contains('_undoDeletePaper'));
   });
 
