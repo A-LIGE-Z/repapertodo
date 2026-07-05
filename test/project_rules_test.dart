@@ -405,6 +405,30 @@ void main() {
     expect(dartParser, contains('_createdPaperKind'));
   });
 
+  test('Windows runner forwards secondary instance startup commands', () {
+    final entrypoint = File('windows/runner/main.cpp').readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+
+    expect(entrypoint, contains('kSingleInstanceMutexName'));
+    expect(entrypoint, contains('kSingleInstancePipeName'));
+    expect(entrypoint, contains('CreateMutexW'));
+    expect(entrypoint, contains('ERROR_ALREADY_EXISTS'));
+    expect(entrypoint, contains('StartupCommandFromArgs'));
+    expect(
+        entrypoint, contains('SignalPrimaryInstance(command_line_arguments)'));
+    expect(entrypoint, contains('CreateFileW(kSingleInstancePipeName'));
+    expect(entrypoint, contains('WriteFile(pipe, command.data()'));
+    expect(entrypoint, contains('WaitNamedPipeW(kSingleInstancePipeName'));
+    expect(runner, contains('StartSingleInstanceListener();'));
+    expect(runner, contains('CreateNamedPipeW'));
+    expect(
+        runner, contains('PostMessageW(window, kSingleInstanceCommandMessage'));
+    expect(runner, contains('case kSingleInstanceCommandMessage'));
+    expect(runner, contains('SendStartupCommandRequested(*command)'));
+    expect(runner, contains('StopSingleInstanceListener();'));
+    expect(runner, contains('single_instance_listener_thread_.join()'));
+  });
+
   test('hotkey settings keep forgiving aliases without control characters', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final appState =
