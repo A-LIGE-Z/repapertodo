@@ -1321,6 +1321,21 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         controller.state.todoReminderIntervalValue;
     final previousTodoReminderIntervalUnit =
         controller.state.todoReminderIntervalUnit;
+    final previousCapsuleSettings = (
+      useCapsuleMode: controller.state.useCapsuleMode,
+      useDeepCapsuleMode: controller.state.useDeepCapsuleMode,
+      useCapsuleCollapseAll: controller.state.useCapsuleCollapseAll,
+      capsuleCollapseAllActive: controller.state.capsuleCollapseAllActive,
+      deepCapsuleSide: controller.state.deepCapsuleSide,
+      deepCapsuleStartTopMargin: controller.state.deepCapsuleStartTopMargin,
+      deepCapsuleMonitorDeviceName:
+          controller.state.deepCapsuleMonitorDeviceName,
+      showDeepCapsuleWhileExpanded:
+          controller.state.showDeepCapsuleWhileExpanded,
+      collapseExpandedDeepCapsuleOnClick:
+          controller.state.collapseExpandedDeepCapsuleOnClick,
+      hideDeepCapsulesWhenCovered: controller.state.hideDeepCapsulesWhenCovered,
+    );
     final result = await showSyncSettingsDialog(
       context: context,
       initialSettings: controller.state.sync,
@@ -1411,6 +1426,20 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             previousUseTodoReminderInterval ||
         result.todoReminderIntervalValue != previousTodoReminderIntervalValue ||
         result.todoReminderIntervalUnit != previousTodoReminderIntervalUnit;
+    final capsuleSettingsChanged = previousCapsuleSettings !=
+        (
+          useCapsuleMode: result.useCapsuleMode,
+          useDeepCapsuleMode: result.useDeepCapsuleMode,
+          useCapsuleCollapseAll: result.useCapsuleCollapseAll,
+          capsuleCollapseAllActive: result.capsuleCollapseAllActive,
+          deepCapsuleSide: result.deepCapsuleSide,
+          deepCapsuleStartTopMargin: result.deepCapsuleStartTopMargin,
+          deepCapsuleMonitorDeviceName: result.deepCapsuleMonitorDeviceName,
+          showDeepCapsuleWhileExpanded: result.showDeepCapsuleWhileExpanded,
+          collapseExpandedDeepCapsuleOnClick:
+              result.collapseExpandedDeepCapsuleOnClick,
+          hideDeepCapsulesWhenCovered: result.hideDeepCapsulesWhenCovered,
+        );
     if (reminderCadenceChanged) {
       _lastTodoReminderAt.clear();
     }
@@ -1445,22 +1474,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       controller.state.showTopBarNewNoteButton = result.showTopBarNewNoteButton;
       controller.state.showTopBarExternalOpenButton =
           result.showTopBarExternalOpenButton;
-      controller.state.useCapsuleMode = result.useCapsuleMode;
-      controller.state.useDeepCapsuleMode = result.useDeepCapsuleMode;
-      controller.state.useCapsuleCollapseAll = result.useCapsuleCollapseAll;
-      controller.state.capsuleCollapseAllActive =
-          result.capsuleCollapseAllActive;
-      controller.state.deepCapsuleSide = result.deepCapsuleSide;
-      controller.state.deepCapsuleStartTopMargin =
-          result.deepCapsuleStartTopMargin;
-      controller.state.deepCapsuleMonitorDeviceName =
-          result.deepCapsuleMonitorDeviceName;
-      controller.state.showDeepCapsuleWhileExpanded =
-          result.showDeepCapsuleWhileExpanded;
-      controller.state.collapseExpandedDeepCapsuleOnClick =
-          result.collapseExpandedDeepCapsuleOnClick;
-      controller.state.hideDeepCapsulesWhenCovered =
-          result.hideDeepCapsulesWhenCovered;
+      controller.applyCapsuleSettings(
+        useCapsuleMode: result.useCapsuleMode,
+        useDeepCapsuleMode: result.useDeepCapsuleMode,
+        useCapsuleCollapseAll: result.useCapsuleCollapseAll,
+        capsuleCollapseAllActive: result.capsuleCollapseAllActive,
+        deepCapsuleSide: result.deepCapsuleSide,
+        deepCapsuleStartTopMargin: result.deepCapsuleStartTopMargin,
+        deepCapsuleMonitorDeviceName: result.deepCapsuleMonitorDeviceName,
+        showDeepCapsuleWhileExpanded: result.showDeepCapsuleWhileExpanded,
+        collapseExpandedDeepCapsuleOnClick:
+            result.collapseExpandedDeepCapsuleOnClick,
+        hideDeepCapsulesWhenCovered: result.hideDeepCapsulesWhenCovered,
+      );
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
           result.hideFromWindowSwitcher;
@@ -1530,6 +1556,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       await applyPlatformSetting(
         'Script capsule process',
         controller.preparePersistentScriptCapsules,
+      );
+    }
+    if (capsuleSettingsChanged) {
+      await applyPlatformSetting(
+        'Paper surfaces',
+        controller.applyCurrentStateToPlatform,
       );
     }
     if (platformSettingErrors.isNotEmpty && mounted) {

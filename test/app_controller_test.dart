@@ -165,6 +165,98 @@ void main() {
     expect(controller.state.papers, hasLength(PaperLimits.maxPapers));
   });
 
+  test('disabling capsule mode restores collapsed papers like PaperTodo', () {
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: true,
+        useDeepCapsuleMode: true,
+        useCapsuleCollapseAll: true,
+        capsuleCollapseAllActive: true,
+        capsuleCollapseAllActiveQueues: {'Primary|left': true},
+        deepCapsuleSide: DeepCapsuleSides.left,
+        deepCapsuleStartTopMargin: 160,
+        deepCapsuleQueueStartTopMargins: {'Primary|left': 160},
+        papers: [
+          PaperData(
+            id: 'collapsed-paper',
+            type: PaperTypes.todo,
+            title: 'Collapsed',
+            isCollapsed: true,
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    controller.applyCapsuleSettings(
+      useCapsuleMode: false,
+      useDeepCapsuleMode: true,
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      deepCapsuleSide: DeepCapsuleSides.left,
+      deepCapsuleStartTopMargin: 160,
+      deepCapsuleMonitorDeviceName: 'Primary',
+      showDeepCapsuleWhileExpanded: true,
+      collapseExpandedDeepCapsuleOnClick: true,
+      hideDeepCapsulesWhenCovered: true,
+    );
+
+    expect(controller.state.useCapsuleMode, false);
+    expect(controller.state.useDeepCapsuleMode, false);
+    expect(controller.state.useCapsuleCollapseAll, false);
+    expect(controller.state.capsuleCollapseAllActive, false);
+    expect(controller.state.capsuleCollapseAllActiveQueues, isEmpty);
+    expect(controller.state.deepCapsuleStartTopMargin,
+        PaperLayoutDefaults.deepCapsuleStartTopMargin);
+    expect(controller.state.deepCapsuleQueueStartTopMargins, isEmpty);
+    expect(controller.state.papers.single.isCollapsed, false);
+  });
+
+  test('disabling deep capsule mode keeps ordinary capsules collapsed', () {
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: true,
+        useDeepCapsuleMode: true,
+        useCapsuleCollapseAll: true,
+        capsuleCollapseAllActive: true,
+        capsuleCollapseAllActiveQueues: {'Primary|left': true},
+        deepCapsuleStartTopMargin: 160,
+        deepCapsuleQueueStartTopMargins: {'Primary|left': 160},
+        papers: [
+          PaperData(
+            id: 'ordinary-capsule-paper',
+            type: PaperTypes.note,
+            title: 'Ordinary capsule',
+            isCollapsed: true,
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    controller.applyCapsuleSettings(
+      useCapsuleMode: true,
+      useDeepCapsuleMode: false,
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      deepCapsuleSide: DeepCapsuleSides.right,
+      deepCapsuleStartTopMargin: 160,
+      deepCapsuleMonitorDeviceName: 'Primary',
+      showDeepCapsuleWhileExpanded: true,
+      collapseExpandedDeepCapsuleOnClick: true,
+      hideDeepCapsulesWhenCovered: true,
+    );
+
+    expect(controller.state.useCapsuleMode, true);
+    expect(controller.state.useDeepCapsuleMode, false);
+    expect(controller.state.useCapsuleCollapseAll, false);
+    expect(controller.state.capsuleCollapseAllActive, false);
+    expect(controller.state.capsuleCollapseAllActiveQueues, isEmpty);
+    expect(controller.state.deepCapsuleStartTopMargin,
+        PaperLayoutDefaults.deepCapsuleStartTopMargin);
+    expect(controller.state.papers.single.isCollapsed, true);
+  });
+
   test('new papers are rescued into the Windows work area before showing',
       () async {
     final platform = _RecordingPlatformServices();

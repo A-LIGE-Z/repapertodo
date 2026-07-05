@@ -52,6 +52,9 @@ plain move/resize bounds updates should not trigger extra tray rebuilds.
 Deep-capsule collapse-all follows PaperTodo's queue model: the master capsule
 acts on one `(monitor, side)` queue, while the board-level fallback may still
 toggle all papers for compatibility with the current Flutter surface.
+Disabling capsule mode should immediately restore all collapsed papers, clear
+deep-capsule collapse-all state, reset deep-capsule start margins, and refresh
+the platform paper surfaces just as PaperTodo updates live paper windows.
 New visible papers created in deep capsule mode should resolve the target
 Windows work area and open away from the deep capsule edge strip when expanded
 capsules remain visible, using PaperTodo's capsule width, gap, and expanded

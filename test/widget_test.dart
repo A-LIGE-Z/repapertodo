@@ -7429,6 +7429,68 @@ void main() {
     expect(find.text('Still expanded'), findsOneWidget);
   });
 
+  testWidgets('settings disable capsule mode restores collapsed papers',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: true,
+        useDeepCapsuleMode: true,
+        useCapsuleCollapseAll: true,
+        capsuleCollapseAllActive: true,
+        deepCapsuleStartTopMargin: 144,
+        papers: [
+          PaperData(
+            id: 'settings-capsule-paper',
+            type: PaperTypes.todo,
+            title: 'Settings capsule',
+            isCollapsed: true,
+            items: [
+              PaperItem(
+                id: 'settings-capsule-item',
+                text: 'Restored from settings',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    expect(find.text('Restored from settings'), findsNothing);
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Capsule mode'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Capsule mode'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.useCapsuleMode, false);
+    expect(controller.state.useDeepCapsuleMode, false);
+    expect(controller.state.useCapsuleCollapseAll, false);
+    expect(controller.state.capsuleCollapseAllActive, false);
+    expect(controller.state.deepCapsuleStartTopMargin,
+        PaperLayoutDefaults.deepCapsuleStartTopMargin);
+    expect(controller.state.papers.single.isCollapsed, false);
+    expect(platform.paperWindows.restoredTitleSnapshots, isNotEmpty);
+    expect(find.text('Restored from settings'), findsOneWidget);
+  });
+
   testWidgets('saves deep capsule visibility settings', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -138,6 +138,61 @@ class RePaperTodoController {
     await _platform.tray.rebuildMenu(state);
   }
 
+  void applyCapsuleSettings({
+    required bool useCapsuleMode,
+    required bool useDeepCapsuleMode,
+    required bool useCapsuleCollapseAll,
+    required bool capsuleCollapseAllActive,
+    required String deepCapsuleSide,
+    required double deepCapsuleStartTopMargin,
+    required String deepCapsuleMonitorDeviceName,
+    required bool showDeepCapsuleWhileExpanded,
+    required bool collapseExpandedDeepCapsuleOnClick,
+    required bool hideDeepCapsulesWhenCovered,
+  }) {
+    state
+      ..useCapsuleMode = useCapsuleMode
+      ..useDeepCapsuleMode = useDeepCapsuleMode
+      ..useCapsuleCollapseAll = useCapsuleCollapseAll
+      ..capsuleCollapseAllActive = capsuleCollapseAllActive
+      ..deepCapsuleSide = deepCapsuleSide
+      ..deepCapsuleStartTopMargin = deepCapsuleStartTopMargin
+      ..deepCapsuleMonitorDeviceName = deepCapsuleMonitorDeviceName
+      ..showDeepCapsuleWhileExpanded = showDeepCapsuleWhileExpanded
+      ..collapseExpandedDeepCapsuleOnClick = collapseExpandedDeepCapsuleOnClick
+      ..hideDeepCapsulesWhenCovered = hideDeepCapsulesWhenCovered;
+
+    if (!state.useCapsuleMode) {
+      state
+        ..useDeepCapsuleMode = false
+        ..showDeepCapsuleWhileExpanded = false
+        ..collapseExpandedDeepCapsuleOnClick = false
+        ..hideDeepCapsulesWhenCovered = false;
+      for (final paper in state.papers) {
+        paper.isCollapsed = false;
+      }
+      _clearDeepCapsuleCollapseAllState();
+    } else if (!state.useDeepCapsuleMode) {
+      state
+        ..showDeepCapsuleWhileExpanded = false
+        ..collapseExpandedDeepCapsuleOnClick = false
+        ..hideDeepCapsulesWhenCovered = false;
+      _clearDeepCapsuleCollapseAllState();
+    }
+
+    state.normalize();
+  }
+
+  void _clearDeepCapsuleCollapseAllState() {
+    state
+      ..useCapsuleCollapseAll = false
+      ..capsuleCollapseAllActive = false
+      ..capsuleCollapseAllActiveQueues = <String, bool>{}
+      ..deepCapsuleStartTopMargin =
+          PaperLayoutDefaults.deepCapsuleStartTopMargin
+      ..deepCapsuleQueueStartTopMargins = <String, double>{};
+  }
+
   Future<void> updatePaperSurface(PaperData paper) async {
     await _platform.paperWindows.updatePaperSurface(paper);
   }
