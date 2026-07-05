@@ -7040,6 +7040,7 @@ void main() {
         store: store,
       ),
     );
+    platform.tray.rebuildVisibilitySnapshots.clear();
 
     startup.addCommand(const StartupCommand(StartupCommandKind.hide));
     await tester.pumpAndSettle();
@@ -7048,6 +7049,10 @@ void main() {
     expect(store.savedState.papers.every((paper) => !paper.isVisible), true);
     expect(platform.paperWindows.hiddenTitles,
         containsAll(['Visible A', 'Visible B']));
+    expect(platform.tray.rebuildVisibilitySnapshots.last, {
+      'runtime-visible-a': false,
+      'runtime-visible-b': false,
+    });
 
     startup.addCommand(const StartupCommand(StartupCommandKind.toggle));
     await tester.pumpAndSettle();
@@ -7056,6 +7061,10 @@ void main() {
     expect(store.savedState.papers.every((paper) => paper.isVisible), true);
     expect(platform.paperWindows.shownTitles,
         containsAll(['Visible A', 'Visible B']));
+    expect(platform.tray.rebuildVisibilitySnapshots.last, {
+      'runtime-visible-a': true,
+      'runtime-visible-b': true,
+    });
   });
 
   testWidgets('refreshes tray immediately for platform visibility updates',

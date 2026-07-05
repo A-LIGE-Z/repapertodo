@@ -960,8 +960,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     }
     await controller.executeStartupCommand(command);
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _refreshSurfaceVisibilitySnapshot();
+      });
     }
+    await controller.rebuildTrayMenu();
     await _saveState();
   }
 
