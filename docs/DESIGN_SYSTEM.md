@@ -95,6 +95,9 @@ Expanded desktop-pinned paper surfaces should be interaction-locked like
 PaperTodo: the title and paper body ignore editing, chrome actions such as
 hide/delete/collapse/zoom/always-on-top are unavailable, and the desktop unpin
 control remains reachable.
+Activating a collapsed desktop-pinned paper should follow PaperTodo's capsule
+path by clearing desktop pinning and restoring the paper expanded instead of
+leaving a pinned expanded surface behind.
 Surface mode controls such as desktop pinning and always-on-top should update
 the native paper surface, persist local state, and rebuild the tray menu
 immediately after the user toggles them.

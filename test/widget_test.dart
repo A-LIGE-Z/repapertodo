@@ -7699,6 +7699,52 @@ void main() {
     expect(find.byTooltip('Hide paper'), findsOneWidget);
   });
 
+  testWidgets('expanding a pinned collapsed paper unpins like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'collapsed-pinned-paper',
+            type: PaperTypes.todo,
+            title: 'Collapsed pinned paper',
+            isPinnedToDesktop: true,
+            items: [
+              PaperItem(id: 'collapsed-pinned-item', text: 'Restore me'),
+            ],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final paper = controller.state.papers.single;
+    paper.isCollapsed = true;
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Expand paper'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(paper.isPinnedToDesktop, false);
+    expect(paper.isCollapsed, false);
+    expect(store.savedState.papers.single.isPinnedToDesktop, false);
+    expect(store.savedState.papers.single.isCollapsed, false);
+    expect(platform.paperWindows.updatedTitles,
+        contains('Collapsed pinned paper'));
+    expect(find.byTooltip('Pin to desktop'), findsOneWidget);
+  });
+
   testWidgets('hiding a pinned collapsed paper restores PaperTodo state',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

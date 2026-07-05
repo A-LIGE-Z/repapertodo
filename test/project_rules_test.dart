@@ -561,6 +561,8 @@ void main() {
     expect(design, contains('interaction-locked like'));
     expect(design, contains('desktop unpin'));
     expect(design, contains('control remains reachable'));
+    expect(design, contains('collapsed desktop-pinned paper'));
+    expect(design, contains('clearing desktop pinning'));
     expect(controller, contains('..isPinnedToDesktop = false'));
     expect(controller, contains('..isVisible = false'));
     expect(controller, contains('..isCollapsed = false'));
@@ -569,6 +571,7 @@ void main() {
     expect(app, contains('desktopInteractionLocked'));
     expect(app, contains('AbsorbPointer'));
     expect(app, contains('_pinnedDesktopUnlockButton'));
+    expect(app, contains('paper.isPinnedToDesktop && paper.isCollapsed'));
     expect(app,
         contains('defaultPaper = controller.tryCreatePaper(PaperTypes.todo)'));
     expect(app, contains('await controller.showPaper(createdDefaultPaper)'));

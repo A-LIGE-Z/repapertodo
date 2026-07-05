@@ -3180,6 +3180,10 @@ class PaperPreview extends StatelessWidget {
   }
 
   void _toggleCollapsed() {
+    if (paper.isPinnedToDesktop && paper.isCollapsed) {
+      unawaited(onSetPinnedToDesktop(paper, false));
+      return;
+    }
     paper.isCollapsed = !paper.isCollapsed;
     unawaited(onChanged());
   }
