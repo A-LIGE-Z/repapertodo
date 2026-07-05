@@ -631,6 +631,34 @@ Plain item
     expect(result.text, 'start[Link](https://)');
   });
 
+  test('handles markdown tab indentation like PaperTodo', () {
+    var result = MarkdownFormatting.handleTab(
+      const TextEditingValue(
+        text: 'alpha',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    expect(result.text, 'al\tpha');
+    expect(result.selection.baseOffset, 3);
+
+    result = MarkdownFormatting.handleTab(
+      const TextEditingValue(
+        text: 'one\ntwo',
+        selection: TextSelection(baseOffset: 0, extentOffset: 7),
+      ),
+    );
+    expect(result.text, '\tone\n\ttwo');
+
+    result = MarkdownFormatting.handleTab(
+      const TextEditingValue(
+        text: '\tone\n    two\n  three',
+        selection: TextSelection(baseOffset: 0, extentOffset: 20),
+      ),
+      outdent: true,
+    );
+    expect(result.text, 'one\ntwo\nthree');
+  });
+
   test('normalizes pinned hotkeys like PaperTodo', () {
     final longHotKey = 'Ctrl+Alt+${List.filled(80, 'A').join()}';
     final state = AppState.fromJson({

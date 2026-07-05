@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 
 abstract final class MarkdownFormatting {
   static const defaultLinkLabel = 'Link';
+  static const tabIndent = '\t';
 
   static TextEditingValue wrapSelection(
     TextEditingValue value,
@@ -82,6 +83,26 @@ abstract final class MarkdownFormatting {
     );
   }
 
+  static TextEditingValue handleTab(
+    TextEditingValue value, {
+    bool outdent = false,
+  }) {
+    final selection = _normalizedSelection(value);
+    if (selection.isCollapsed && !outdent) {
+      final offset = selection.start;
+      final text = value.text.replaceRange(offset, offset, tabIndent);
+      return TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: offset + tabIndent.length),
+      );
+    }
+
+    final lineRange = _selectedLineRange(value.text, selection);
+    return outdent
+        ? _outdentLines(value, selection, lineRange)
+        : _indentLines(value, selection, lineRange);
+  }
+
   static TextSelection _normalizedSelection(TextEditingValue value) {
     final length = value.text.length;
     final selection = value.selection;
@@ -98,6 +119,118 @@ abstract final class MarkdownFormatting {
 
   static bool _hasLineBreak(String text) =>
       text.contains('\n') || text.contains('\r');
+
+  static _LineRange _selectedLineRange(String text, TextSelection selection) {
+    final start = selection.start.clamp(0, text.length).toInt();
+    var end = selection.end.clamp(0, text.length).toInt();
+    if (!selection.isCollapsed && end > start && text[end - 1] == '\n') {
+      end--;
+    }
+    final lineStart = text.lastIndexOf('\n', start == 0 ? 0 : start - 1);
+    final rangeStart = lineStart < 0 ? 0 : lineStart + 1;
+    final lineEnd = text.indexOf('\n', end);
+    final rangeEnd = lineEnd < 0 ? text.length : lineEnd;
+    return _LineRange(rangeStart, rangeEnd);
+  }
+
+  static TextEditingValue _indentLines(
+    TextEditingValue value,
+    TextSelection selection,
+    _LineRange lineRange,
+  ) {
+    final buffer = StringBuffer();
+    var index = lineRange.start;
+    var inserted = 0;
+    var firstLine = true;
+    while (index <= lineRange.end) {
+      if (!firstLine) {
+        buffer.write('\n');
+      }
+      firstLine = false;
+      buffer.write(tabIndent);
+      inserted += tabIndent.length;
+      final nextBreak = value.text.indexOf('\n', index);
+      final lineEnd = nextBreak < 0 || nextBreak > lineRange.end
+          ? lineRange.end
+          : nextBreak;
+      buffer.write(value.text.substring(index, lineEnd));
+      if (nextBreak < 0 || nextBreak >= lineRange.end) {
+        break;
+      }
+      index = nextBreak + 1;
+    }
+
+    final replacement = buffer.toString();
+    final text =
+        value.text.replaceRange(lineRange.start, lineRange.end, replacement);
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection(
+        baseOffset: selection.start + tabIndent.length,
+        extentOffset: selection.end + inserted,
+      ),
+    );
+  }
+
+  static TextEditingValue _outdentLines(
+    TextEditingValue value,
+    TextSelection selection,
+    _LineRange lineRange,
+  ) {
+    final buffer = StringBuffer();
+    var index = lineRange.start;
+    var removedBeforeStart = 0;
+    var removedBeforeEnd = 0;
+    var firstLine = true;
+    while (index <= lineRange.end) {
+      if (!firstLine) {
+        buffer.write('\n');
+      }
+      firstLine = false;
+      final nextBreak = value.text.indexOf('\n', index);
+      final lineEnd = nextBreak < 0 || nextBreak > lineRange.end
+          ? lineRange.end
+          : nextBreak;
+      final line = value.text.substring(index, lineEnd);
+      final removeCount = _leadingIndentToRemove(line);
+      if (index < selection.start) {
+        removedBeforeStart += removeCount;
+      }
+      if (index < selection.end) {
+        removedBeforeEnd += removeCount;
+      }
+      buffer.write(line.substring(removeCount));
+      if (nextBreak < 0 || nextBreak >= lineRange.end) {
+        break;
+      }
+      index = nextBreak + 1;
+    }
+
+    final replacement = buffer.toString();
+    final text =
+        value.text.replaceRange(lineRange.start, lineRange.end, replacement);
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection(
+        baseOffset: (selection.start - removedBeforeStart)
+            .clamp(0, text.length)
+            .toInt(),
+        extentOffset:
+            (selection.end - removedBeforeEnd).clamp(0, text.length).toInt(),
+      ),
+    );
+  }
+
+  static int _leadingIndentToRemove(String line) {
+    if (line.startsWith(tabIndent)) {
+      return tabIndent.length;
+    }
+    var spaces = 0;
+    while (spaces < line.length && spaces < 4 && line[spaces] == ' ') {
+      spaces++;
+    }
+    return spaces;
+  }
 
   static String _wrapEachSelectedLine(
     String selected,
@@ -135,4 +268,11 @@ abstract final class MarkdownFormatting {
 
     return buffer.toString();
   }
+}
+
+class _LineRange {
+  const _LineRange(this.start, this.end);
+
+  final int start;
+  final int end;
 }

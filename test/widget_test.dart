@@ -1607,6 +1607,20 @@ void main() {
     await tester.pump();
 
     expect(controller.state.papers.single.content, 'Body[Link](https://)');
+
+    await tester.enterText(field, 'Body');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(controller.state.papers.single.content, 'Body\t');
+
+    await tester.enterText(field, '\tBody');
+    await tester.pump();
+    await _pressShiftShortcut(tester, LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(controller.state.papers.single.content, 'Body');
   });
 
   testWidgets('saves custom theme color', (tester) async {
@@ -9996,6 +10010,16 @@ Future<void> _pressControlShortcut(
   await tester.sendKeyDownEvent(key);
   await tester.sendKeyUpEvent(key);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+}
+
+Future<void> _pressShiftShortcut(
+  WidgetTester tester,
+  LogicalKeyboardKey key,
+) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+  await tester.sendKeyDownEvent(key);
+  await tester.sendKeyUpEvent(key);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
 }
 
 Future<void> _enterNoteEditor(WidgetTester tester, String paperId) async {

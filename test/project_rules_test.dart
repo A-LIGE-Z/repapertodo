@@ -875,10 +875,14 @@ void main() {
     expect(design, contains('open in preview mode by default'));
     expect(design, contains('clicking the preview body enters'));
     expect(design, contains('losing editor focus returns'));
+    expect(design, contains('Markdown editors should accept Tab'));
+    expect(design, contains('Shift+Tab outdents'));
     expect(app, contains('_handleEditorTap'));
     expect(app, contains('_enterEditorFromPreview'));
     expect(app, contains('_handleEditorFocusChange'));
     expect(app, contains('HardwareKeyboard.instance.isControlPressed'));
+    expect(app, contains('LogicalKeyboardKey.tab'));
+    expect(app, contains('MarkdownFormatting.handleTab'));
     expect(app, contains("startsWith('www.')"));
     expect(app, contains('_normalizeMarkdownLocalPath'));
     expect(app, contains('controller.openExternalFile(localPath)'));
@@ -904,6 +908,10 @@ void main() {
     expect(
       File('lib/src/core/model/markdown_formatting.dart').readAsStringSync(),
       contains("defaultLinkLabel = 'Link'"),
+    );
+    expect(
+      File('lib/src/core/model/markdown_formatting.dart').readAsStringSync(),
+      contains("tabIndent = '\\t'"),
     );
   });
 

@@ -3631,7 +3631,19 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   KeyEventResult _handleMarkdownKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      _applyMarkdownFormat(
+        (value) => MarkdownFormatting.handleTab(
+          value,
+          outdent: HardwareKeyboard.instance.isShiftPressed,
+        ),
+      );
+      return KeyEventResult.handled;
+    }
+    if (!HardwareKeyboard.instance.isControlPressed) {
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.keyB) {

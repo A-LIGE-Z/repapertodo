@@ -221,6 +221,10 @@ Markdown list continuation should preserve PaperTodo's ordered marker parsing:
 leading zero markers continue from their numeric value, `long.MaxValue - 1`
 may continue to `long.MaxValue`, and `long.MaxValue` or larger markers fall
 back to ordinary Enter behavior instead of continuing or removing empty markers.
+Markdown editors should accept Tab as content like PaperTodo's AvalonEdit
+notes: Tab inserts or indents with literal tab characters, Shift+Tab outdents
+one leading tab or up to four leading spaces, and focus should not leave the
+note editor because of these keys.
 Settings saves should keep ordinary app preferences while surfacing native
 integration failures such as hotkey, startup, or script-process errors.
 On narrow screens, keep one primary sync action directly reachable and move
