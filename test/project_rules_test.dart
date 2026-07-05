@@ -643,6 +643,26 @@ void main() {
     expect(app, contains('_suppressTodoBackspaceUntilKeyUp'));
   });
 
+  test('PaperTodo todo text undo snapshot timing is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains("Todo text editing should follow PaperTodo's"));
+    expect(design, contains('focusing a'));
+    expect(design, contains('main todo text field records'));
+    expect(design, contains('losing focus after a change'));
+    expect(design, contains('structural edits first commit'));
+    expect(design, contains('left to the text editor'));
+    expect(app, contains('_activeOriginalTodoItemId'));
+    expect(app, contains('_activeOriginalTodoText'));
+    expect(app, contains('_handleMainTodoFieldFocusChange'));
+    expect(app, contains('_commitFocusedTodoTextIfNeeded'));
+    expect(app, contains('_markTodoTextEditCommitted'));
+    expect(app, contains('_shouldDeferToTodoTextUndo'));
+    expect(app, contains('_focusedTodoTextHasUncommittedEdit'));
+    expect(app, contains('_commitFocusedTodoTextIfNeeded();'));
+  });
+
   test('PaperTodo per-column todo editing is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

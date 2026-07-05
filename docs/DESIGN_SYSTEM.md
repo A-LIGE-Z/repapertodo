@@ -204,6 +204,11 @@ on an item whose main and extra text columns are blank deletes that item when
 more than one item exists, preserves at least one row, and suppresses repeated
 blank-row deletion until key up. These structural edits must use todo undo
 snapshots and deleted-item tombstones.
+Todo text editing should follow PaperTodo's undo snapshot timing: focusing a
+main todo text field records its original text, losing focus after a change
+pushes that pre-edit item snapshot, and structural edits first commit any
+focused text edit before pushing their own undo snapshot. Ctrl+Z/Y inside a
+text field with uncommitted edits should be left to the text editor.
 Todo column editing should preserve PaperTodo per-column semantics: inserting
 before column 1 moves the current main text into the first extra column and
 creates a blank main column, while deleting column 1 promotes the next column

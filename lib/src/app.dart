@@ -4853,6 +4853,8 @@ class _TodoEditorState extends State<_TodoEditor> {
   final _redoStack = <List<Map<String, Object?>>>[];
   var _textFieldRevision = 0;
   var _suppressTodoBackspaceUntilKeyUp = false;
+  String? _activeOriginalTodoItemId;
+  String? _activeOriginalTodoText;
 
   @override
   void dispose() {
@@ -5380,11 +5382,57 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _pushTodoUndoSnapshot() {
+    _commitFocusedTodoTextIfNeeded();
     _undoStack.add(_snapshotTodoItems());
     if (_undoStack.length > _maxTodoUndoDepth) {
       _undoStack.removeAt(0);
     }
     _redoStack.clear();
+  }
+
+  bool _commitFocusedTodoTextIfNeeded({bool clearRedo = false}) {
+    final itemId = _activeOriginalTodoItemId;
+    final originalText = _activeOriginalTodoText;
+    if (itemId == null || originalText == null) {
+      return false;
+    }
+    final item = _todoItemById(itemId);
+    if (item == null) {
+      _activeOriginalTodoItemId = null;
+      _activeOriginalTodoText = null;
+      return false;
+    }
+    if (item.text == originalText) {
+      return false;
+    }
+
+    final currentText = item.text;
+    item.text = originalText;
+    _undoStack.add(_snapshotTodoItems());
+    if (_undoStack.length > _maxTodoUndoDepth) {
+      _undoStack.removeAt(0);
+    }
+    item.text = currentText;
+    _activeOriginalTodoText = currentText;
+    if (clearRedo) {
+      _redoStack.clear();
+    }
+    return true;
+  }
+
+  PaperItem? _todoItemById(String itemId) {
+    for (final item in widget.paper.items) {
+      if (item.id == itemId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  void _markTodoTextEditCommitted(PaperItem item) {
+    if (_activeOriginalTodoItemId == item.id) {
+      _activeOriginalTodoText = item.text;
+    }
   }
 
   void _restoreTodoSnapshot(List<Map<String, Object?>> snapshot) {
@@ -5439,11 +5487,31 @@ class _TodoEditorState extends State<_TodoEditor> {
   FocusNode _mainTodoFieldFocusNode(PaperItem item) {
     final focusNode = _todoMainFieldFocusNodes.putIfAbsent(
       item.id,
-      () => FocusNode(debugLabel: 'todo-main-${item.id}'),
+      () {
+        final node = FocusNode(debugLabel: 'todo-main-${item.id}');
+        node.addListener(
+          () => _handleMainTodoFieldFocusChange(item.id, node),
+        );
+        return node;
+      },
     );
     focusNode.onKeyEvent =
         (node, event) => _handleTodoItemKeyEvent(node, item, event);
     return focusNode;
+  }
+
+  void _handleMainTodoFieldFocusChange(String itemId, FocusNode focusNode) {
+    if (focusNode.hasFocus) {
+      _activeOriginalTodoItemId = itemId;
+      _activeOriginalTodoText = _todoItemById(itemId)?.text ?? '';
+      return;
+    }
+    if (_activeOriginalTodoItemId != itemId) {
+      return;
+    }
+    if (_commitFocusedTodoTextIfNeeded(clearRedo: true) && mounted) {
+      setState(() {});
+    }
   }
 
   FocusNode _extraTodoFieldFocusNode(PaperItem item, int index) {
@@ -5495,6 +5563,9 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
       return KeyEventResult.ignored;
     }
+    if (_shouldDeferToTodoTextUndo(event)) {
+      return KeyEventResult.ignored;
+    }
     if (event.logicalKey == LogicalKeyboardKey.keyZ) {
       _undoTodoChange();
       return KeyEventResult.handled;
@@ -5511,6 +5582,9 @@ class _TodoEditorState extends State<_TodoEditor> {
     PaperItem item,
     KeyEvent event,
   ) {
+    if (_shouldDeferToTodoTextUndo(event)) {
+      return KeyEventResult.ignored;
+    }
     final editorShortcutResult = _handleTodoKeyEvent(node, event);
     if (editorShortcutResult == KeyEventResult.handled) {
       return editorShortcutResult;
@@ -5543,6 +5617,30 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
 
     return KeyEventResult.ignored;
+  }
+
+  bool _shouldDeferToTodoTextUndo(KeyEvent event) {
+    if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
+      return false;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.keyZ &&
+        event.logicalKey != LogicalKeyboardKey.keyY) {
+      return false;
+    }
+    return _focusedTodoTextHasUncommittedEdit;
+  }
+
+  bool get _focusedTodoTextHasUncommittedEdit {
+    final itemId = _activeOriginalTodoItemId;
+    final originalText = _activeOriginalTodoText;
+    if (itemId == null || originalText == null) {
+      return false;
+    }
+    if (_todoMainFieldFocusNodes[itemId]?.hasFocus != true) {
+      return false;
+    }
+    final item = _todoItemById(itemId);
+    return item != null && item.text != originalText;
   }
 
   bool get _noKeyboardModifiersPressed {
@@ -5674,6 +5772,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       widget.paper.normalize();
       _textFieldRevision++;
     });
+    _markTodoTextEditCommitted(item);
     _requestTodoFocus();
     unawaited(widget.onChanged());
     return true;
@@ -5767,6 +5866,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       }
       item.normalize();
     });
+    _markTodoTextEditCommitted(item);
     unawaited(widget.onChanged());
   }
 

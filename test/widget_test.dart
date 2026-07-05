@@ -6706,6 +6706,124 @@ void main() {
     expect(items.map((item) => item.order), [0, 1, 2]);
   });
 
+  testWidgets('commits todo text edits to undo on focus loss like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'text-undo-paper',
+            type: PaperTypes.todo,
+            title: 'Text undo paper',
+            items: [
+              PaperItem(id: 'first-item', text: 'First item'),
+              PaperItem(id: 'second-item', text: 'Second item', order: 1),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final firstField = find.descendant(
+      of: find.byKey(const ValueKey('text-undo-paper-first-item-text')),
+      matching: find.byType(EditableText),
+    );
+    final secondField = find.descendant(
+      of: find.byKey(const ValueKey('text-undo-paper-second-item-text')),
+      matching: find.byType(EditableText),
+    );
+
+    await tester.tap(firstField);
+    await tester.enterText(firstField, 'Edited first item');
+    await tester.pump();
+
+    expect(controller.state.papers.single.items.first.text, 'Edited first item');
+
+    await tester.tap(secondField);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.first.text, 'First item');
+
+    await tester.tap(find.byTooltip('Redo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.first.text, 'Edited first item');
+  });
+
+  testWidgets('commits focused todo text before structural undo snapshots',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'text-before-insert-paper',
+            type: PaperTypes.todo,
+            title: 'Text before insert',
+            items: [
+              PaperItem(id: 'first-item', text: 'First item'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final firstField = find.descendant(
+      of: find.byKey(
+        const ValueKey('text-before-insert-paper-first-item-text'),
+      ),
+      matching: find.byType(EditableText),
+    );
+
+    await tester.tap(firstField);
+    await tester.enterText(firstField, 'Edited first item');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.map((item) => item.text), [
+      'Edited first item',
+      '',
+    ]);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.map((item) => item.text), [
+      'Edited first item',
+    ]);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.map((item) => item.text), [
+      'First item',
+    ]);
+  });
+
   testWidgets('deletes blank todo items with backspace from keyboard',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
