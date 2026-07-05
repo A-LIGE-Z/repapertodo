@@ -1039,16 +1039,21 @@ bool TryParseVirtualKey(const std::string& token, UINT* key) {
 bool TryParseHotkey(const std::string& hotkey, UINT* modifiers, UINT* key) {
   *modifiers = MOD_NOREPEAT;
   *key = 0;
+  bool has_modifier = false;
   for (const std::string& raw_part : SplitHotkey(hotkey)) {
     const std::string part = UpperAscii(raw_part);
     if (part == "CTRL" || part == "CONTROL") {
       *modifiers |= MOD_CONTROL;
+      has_modifier = true;
     } else if (part == "ALT") {
       *modifiers |= MOD_ALT;
+      has_modifier = true;
     } else if (part == "SHIFT") {
       *modifiers |= MOD_SHIFT;
+      has_modifier = true;
     } else if (part == "WIN" || part == "WINDOWS" || part == "META") {
       *modifiers |= MOD_WIN;
+      has_modifier = true;
     } else if (*key == 0) {
       if (!TryParseVirtualKey(part, key)) {
         return false;
@@ -1057,7 +1062,7 @@ bool TryParseHotkey(const std::string& hotkey, UINT* modifiers, UINT* key) {
       return false;
     }
   }
-  return *key != 0;
+  return has_modifier && *key != 0;
 }
 
 bool RegisterConfiguredHotkey(HWND window, int id, const std::string& hotkey) {

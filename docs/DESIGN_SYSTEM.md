@@ -76,6 +76,10 @@ Global hotkey settings are entered as text for now, so the Windows runner
 should accept forgiving key aliases: spaced names such as `Page Up`, arrow-key
 names, lock keys, number-pad names, and common punctuation names such as
 `Plus`, `Minus`, and `Slash`.
+Global hotkey registration should follow PaperTodo's safety model: a valid
+hotkey must include at least one real modifier (`Ctrl`, `Alt`, `Shift`, or
+`Win`) plus one non-modifier key, so single-key global shortcuts are ignored
+instead of stealing normal typing.
 Hotkey settings should strip control characters before saving or platform
 registration while preserving ordinary spaces used by aliases.
 For PaperTodo font parity, when no explicit system font family is configured,

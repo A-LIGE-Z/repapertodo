@@ -446,11 +446,17 @@ void main() {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final appState =
         File('lib/src/core/model/app_state.dart').readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
 
     expect(design, contains('Hotkey settings should strip control characters'));
     expect(design, contains('preserving ordinary spaces used by aliases'));
+    expect(design, contains('must include at least one real modifier'));
+    expect(design, contains('single-key global shortcuts are ignored'));
     expect(appState, contains('_normalizeHotKeyForSettings'));
     expect(appState, contains('unit <= 0x1F || unit == 0x7F'));
+    expect(runner, contains('bool has_modifier = false'));
+    expect(runner, contains('has_modifier = true'));
+    expect(runner, contains('return has_modifier && *key != 0'));
   });
 
   test('PaperTodo runtime custom font convention is preserved', () {
