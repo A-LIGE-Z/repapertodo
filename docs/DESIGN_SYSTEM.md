@@ -91,6 +91,10 @@ whether all papers should be shown or hidden from current visibility state.
 Pinning a paper to the desktop should follow PaperTodo's surface-mode rules:
 the paper becomes visible and expanded, always-on-top is cleared, capsule and
 deep-capsule mode are enabled, and missing capsule queue fields are initialized.
+Expanded desktop-pinned paper surfaces should be interaction-locked like
+PaperTodo: the title and paper body ignore editing, chrome actions such as
+hide/delete/collapse/zoom/always-on-top are unavailable, and the desktop unpin
+control remains reachable.
 Surface mode controls such as desktop pinning and always-on-top should update
 the native paper surface, persist local state, and rebuild the tray menu
 immediately after the user toggles them.
@@ -322,7 +326,8 @@ dragging the element header moves the block, dragging the bottom-right grip
 resizes it, movement is clamped to the visible canvas, resize keeps the minimum
 72x48 size, and geometry changes are saved when the gesture finishes. Pinned
 desktop note papers should ignore canvas move, resize, and add-block gestures
-so desktop surface mode cannot accidentally rearrange note blocks.
+plus edit, duplicate, layer, delete, and text-edit actions so desktop surface
+mode cannot accidentally rearrange note blocks.
 New note canvas blocks should follow PaperTodo placement and layer rules:
 code blocks default to 230x116 with `Console.WriteLine("PaperTodo");`, new
 blocks use the 28px origin plus a capped 12px cascade clamped to the canvas with

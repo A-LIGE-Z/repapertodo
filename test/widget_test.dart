@@ -1361,6 +1361,7 @@ void main() {
         const ValueKey('note-canvas-drag-handle-pinned-canvas-element'),
       ),
       const Offset(40, 30),
+      warnIfMissed: false,
     );
     await tester.pump();
 
@@ -1369,6 +1370,7 @@ void main() {
         const ValueKey('note-canvas-resize-handle-pinned-canvas-element'),
       ),
       const Offset(50, 25),
+      warnIfMissed: false,
     );
     await tester.pump();
 
@@ -1377,9 +1379,11 @@ void main() {
     expect(element.width, 130);
     expect(element.height, 90);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Add canvas block'));
-    await tester.pump();
+    final addBlockButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Add canvas block'),
+    );
 
+    expect(addBlockButton.onPressed, isNull);
     expect(controller.state.papers.single.noteCanvasElements, hasLength(1));
   });
 
@@ -7604,6 +7608,21 @@ void main() {
     expect(platform.tray.rebuildSurfaceModeSnapshots.last, {
       'pin-paper': {'pinned': true, 'topmost': false},
     });
+    expect(find.byTooltip('Keep on top'), findsNothing);
+    expect(find.byTooltip('Hide paper'), findsNothing);
+
+    await tester.tap(find.byTooltip('Unpin from desktop'));
+    await tester.pump();
+    await waitForSurfaceMode(pinned: false, topmost: false);
+
+    expect(paper.alwaysOnTop, false);
+    expect(paper.isPinnedToDesktop, false);
+    expect(find.byTooltip('Keep on top'), findsOneWidget);
+    expect(find.byTooltip('Pin to desktop'), findsOneWidget);
+    expect(store.savedState.papers.single.isPinnedToDesktop, false);
+    expect(platform.tray.rebuildSurfaceModeSnapshots.last, {
+      'pin-paper': {'pinned': false, 'topmost': false},
+    });
 
     await tester.tap(find.byTooltip('Keep on top'));
     await tester.pump();
@@ -7618,6 +7637,66 @@ void main() {
     expect(platform.tray.rebuildSurfaceModeSnapshots.last, {
       'pin-paper': {'pinned': false, 'topmost': true},
     });
+  });
+
+  testWidgets('pinned desktop papers lock title body and chrome actions',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'locked-pinned-paper',
+            type: PaperTypes.todo,
+            title: 'Locked pinned paper',
+            isPinnedToDesktop: true,
+            items: [
+              PaperItem(id: 'locked-item', text: 'Do not change'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    final paper = controller.state.papers.single;
+    final titleField = tester.widget<TextFormField>(
+      find.byKey(const ValueKey('locked-pinned-paper-title')),
+    );
+    expect(titleField.enabled, false);
+    expect(find.byTooltip('Unpin from desktop'), findsOneWidget);
+    expect(find.byTooltip('Keep on top'), findsNothing);
+    expect(find.byTooltip('Hide paper'), findsNothing);
+    expect(find.byTooltip('Delete paper'), findsNothing);
+
+    await tester.tap(find.byType(Checkbox).first, warnIfMissed: false);
+    await tester.tap(
+      find.widgetWithText(TextButton, 'Add item'),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+
+    expect(paper.items.single.done, false);
+    expect(paper.items, hasLength(1));
+
+    await tester.tap(find.byTooltip('Unpin from desktop'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(paper.isPinnedToDesktop, false);
+    expect(store.savedState.papers.single.isPinnedToDesktop, false);
+    expect(find.byTooltip('Keep on top'), findsOneWidget);
+    expect(find.byTooltip('Hide paper'), findsOneWidget);
   });
 
   testWidgets('hiding a pinned collapsed paper restores PaperTodo state',

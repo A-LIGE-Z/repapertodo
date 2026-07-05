@@ -2684,6 +2684,8 @@ class PaperPreview extends StatelessWidget {
     final scriptCapsuleSpec =
         paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
     final textZoom = paper.textZoom.clamp(0.5, 1.5).toDouble();
+    final desktopInteractionLocked =
+        paper.isPinnedToDesktop && !paper.isCollapsed;
     return Semantics(
       label: '$titleText ${paper.type} paper',
       child: DecoratedBox(
@@ -2737,6 +2739,7 @@ class PaperPreview extends StatelessWidget {
                         hintText: 'Untitled',
                         isDense: true,
                       ),
+                      enabled: !desktopInteractionLocked,
                       style: theme.textTheme.titleMedium?.apply(
                         fontSizeFactor: textZoom,
                       ),
@@ -2757,11 +2760,15 @@ class PaperPreview extends StatelessWidget {
                   children: _paperHeaderActions(
                     context: context,
                     isCollapsed: isCollapsed,
+                    desktopInteractionLocked: desktopInteractionLocked,
                     textZoom: textZoom,
                   ),
                 ),
               ),
-              _animatedPaperBody(isCollapsed, scriptCapsuleSpec),
+              AbsorbPointer(
+                absorbing: desktopInteractionLocked,
+                child: _animatedPaperBody(isCollapsed, scriptCapsuleSpec),
+              ),
             ],
           ),
         ),
@@ -2967,8 +2974,12 @@ class PaperPreview extends StatelessWidget {
   List<Widget> _paperHeaderActions({
     required BuildContext context,
     required bool isCollapsed,
+    required bool desktopInteractionLocked,
     required double textZoom,
   }) {
+    if (desktopInteractionLocked) {
+      return [_pinnedDesktopUnlockButton()];
+    }
     final compact = MediaQuery.sizeOf(context).width < 600;
     if (compact) {
       return [
@@ -3101,6 +3112,14 @@ class PaperPreview extends StatelessWidget {
         icon: const Icon(Icons.delete_outline),
       ),
     ];
+  }
+
+  IconButton _pinnedDesktopUnlockButton() {
+    return IconButton(
+      tooltip: _tooltipLabel(enableToolTips, 'Unpin from desktop'),
+      onPressed: _togglePinnedToDesktop,
+      icon: const Icon(Icons.desktop_windows),
+    );
   }
 
   IconButton _collapseButton(bool isCollapsed) {
@@ -3898,12 +3917,16 @@ class _NoteEditorState extends State<_NoteEditor> {
       runSpacing: 4,
       children: [
         TextButton.icon(
-          onPressed: () => _addCanvasElement(NoteCanvasElementTypes.code),
+          onPressed: widget.paper.isPinnedToDesktop
+              ? null
+              : () => _addCanvasElement(NoteCanvasElementTypes.code),
           icon: const Icon(Icons.add_box_outlined),
           label: const Text('Add canvas block'),
         ),
         TextButton.icon(
-          onPressed: () => _addCanvasElement(NoteCanvasElementTypes.text),
+          onPressed: widget.paper.isPinnedToDesktop
+              ? null
+              : () => _addCanvasElement(NoteCanvasElementTypes.text),
           icon: const Icon(Icons.note_add_outlined),
           label: const Text('Add text block'),
         ),
@@ -3942,6 +3965,9 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   void _selectCanvasElement(NoteCanvasElement element) {
+    if (widget.paper.isPinnedToDesktop) {
+      return;
+    }
     if (_selectedCanvasElementId == element.id) {
       return;
     }
@@ -3949,6 +3975,9 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   void _duplicateCanvasElement(NoteCanvasElement element) {
+    if (widget.paper.isPinnedToDesktop) {
+      return;
+    }
     final elements = widget.paper.noteCanvasElements;
     final maxLayer = _maxCanvasElementLayer(elements);
     final duplicate = element.copyWith(
@@ -3968,6 +3997,9 @@ class _NoteEditorState extends State<_NoteEditor> {
     NoteCanvasElement element,
     _CanvasLayerAction action,
   ) {
+    if (widget.paper.isPinnedToDesktop) {
+      return;
+    }
     final elements = widget.paper.noteCanvasElements;
     final orderedElements = [...elements]..sort((a, b) {
         final byLayer = a.zIndex.compareTo(b.zIndex);
@@ -4021,6 +4053,9 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   void _deleteCanvasElement(NoteCanvasElement element) {
+    if (widget.paper.isPinnedToDesktop) {
+      return;
+    }
     setState(() {
       widget.paper.noteCanvasElements.removeWhere(
         (candidate) => candidate.id == element.id,
@@ -4033,6 +4068,9 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   Future<void> _editCanvasElement(NoteCanvasElement element) async {
+    if (widget.paper.isPinnedToDesktop) {
+      return;
+    }
     final result = await showDialog<_CanvasGeometry>(
       context: context,
       builder: (context) => _CanvasGeometryDialog(element: element),

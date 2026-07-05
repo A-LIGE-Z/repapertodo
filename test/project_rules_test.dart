@@ -558,11 +558,17 @@ void main() {
     expect(design, contains('Deleting the last remaining paper'));
     expect(design, contains('Surface mode controls'));
     expect(design, contains('rebuild the tray menu'));
+    expect(design, contains('interaction-locked like'));
+    expect(design, contains('desktop unpin'));
+    expect(design, contains('control remains reachable'));
     expect(controller, contains('..isPinnedToDesktop = false'));
     expect(controller, contains('..isVisible = false'));
     expect(controller, contains('..isCollapsed = false'));
     expect(app, contains('Future<void> _setPaperAlwaysOnTop'));
     expect(app, contains('Future<void> _setPaperPinnedToDesktop'));
+    expect(app, contains('desktopInteractionLocked'));
+    expect(app, contains('AbsorbPointer'));
+    expect(app, contains('_pinnedDesktopUnlockButton'));
     expect(app,
         contains('defaultPaper = controller.tryCreatePaper(PaperTypes.todo)'));
     expect(app, contains('await controller.showPaper(createdDefaultPaper)'));
@@ -943,6 +949,7 @@ void main() {
     expect(design, contains('72x48'));
     expect(design, contains('Pinned'));
     expect(design, contains('ignore canvas move, resize, and add-block'));
+    expect(design, contains('edit, duplicate, layer, delete, and text-edit'));
     expect(app, contains('note-canvas-drag-handle-'));
     expect(app, contains('note-canvas-resize-handle-'));
     expect(app, contains('geometryGesturesEnabled'));
