@@ -973,8 +973,9 @@ void main() {
     expect(design, contains('control characters are removed'));
     expect(app, contains('_PaperTitleTextInputFormatter'));
     expect(app, contains('PaperTitles.cleanCustomTitle(value)'));
+    expect(app, contains('controller.paperTitleText(paper)'));
     expect(paperData, contains('PaperTitles.maxTitleLength'));
-    expect(windows, contains('PaperTitles.cleanCustomTitle(paper.title)'));
+    expect(windows, contains('PaperTitles.effectiveTitle'));
   });
 
   test('release script packages Windows and Android artifacts', () {

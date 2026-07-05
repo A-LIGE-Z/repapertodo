@@ -702,6 +702,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return PaperPreview(
       paper: paper,
       notePapers: notePapers,
+      titleText: controller.paperTitleText(paper),
       enableTodoNoteLinks: controller.state.enableTodoNoteLinks,
       showLinkedNoteName: controller.state.showLinkedNoteName,
       allowLongLinkedNoteTitles: controller.state.allowLongLinkedNoteTitles,
@@ -1948,9 +1949,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   String _displayTitle(PaperData paper) {
-    final title = paper.title.trim();
+    final title = controller.paperTitleText(paper);
     return _shortenTitle(
-      title.isEmpty ? 'Untitled' : title,
+      title,
       controller.state.maxTitleLength,
     );
   }
@@ -2503,6 +2504,7 @@ class PaperPreview extends StatelessWidget {
   const PaperPreview({
     required this.paper,
     required this.notePapers,
+    required this.titleText,
     required this.enableTodoNoteLinks,
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
@@ -2546,6 +2548,7 @@ class PaperPreview extends StatelessWidget {
 
   final PaperData paper;
   final List<PaperData> notePapers;
+  final String titleText;
   final bool enableTodoNoteLinks;
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
@@ -2585,7 +2588,7 @@ class PaperPreview extends StatelessWidget {
         paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
     final textZoom = paper.textZoom.clamp(0.5, 1.5).toDouble();
     return Semantics(
-      label: '${paper.title} ${paper.type} paper',
+      label: '$titleText ${paper.type} paper',
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerLowest,
@@ -2623,7 +2626,10 @@ class PaperPreview extends StatelessWidget {
                   Expanded(
                     child: TextFormField(
                       key: ValueKey('${paper.id}-title'),
-                      initialValue: paper.title,
+                      initialValue:
+                          PaperTitles.cleanCustomTitle(paper.title).isEmpty
+                              ? titleText
+                              : paper.title,
                       inputFormatters: const [
                         _PaperTitleTextInputFormatter(
                           maxLength: PaperTitles.maxTitleLength,
@@ -2712,7 +2718,7 @@ class PaperPreview extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Link ${_displayPaperTitle(paper)}',
+                  'Link ${_displayPaperTitle()}',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         color: colorScheme.onPrimaryContainer,
                         fontWeight: FontWeight.w600,
@@ -2838,7 +2844,7 @@ class PaperPreview extends StatelessWidget {
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          'Run ${_displayPaperTitle(paper)}',
+                          'Run ${_displayPaperTitle()}',
                           overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -3085,9 +3091,8 @@ class PaperPreview extends StatelessWidget {
     unawaited(onChanged());
   }
 
-  String _displayPaperTitle(PaperData paper) {
-    final title = paper.title.trim();
-    return title.isEmpty ? 'Untitled' : title;
+  String _displayPaperTitle() {
+    return titleText;
   }
 }
 
@@ -6714,8 +6719,26 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   String _displayPaperTitle(PaperData paper) {
-    final title = paper.title.trim();
-    return title.isEmpty ? 'Untitled' : title;
+    final title = PaperTitles.cleanCustomTitle(paper.title);
+    if (title.isNotEmpty) {
+      return title;
+    }
+    return PaperTitles.defaultTitle(paper.type, _titleNumberForPaper(paper));
+  }
+
+  int _titleNumberForPaper(PaperData paper) {
+    final normalizedType = PaperTypes.normalize(paper.type);
+    var number = 1;
+    for (final existing in widget.notePapers) {
+      if (PaperTypes.normalize(existing.type) != normalizedType) {
+        continue;
+      }
+      if (existing.id == paper.id) {
+        return number;
+      }
+      number++;
+    }
+    return math.max(1, number);
   }
 
   String _displayItemText(PaperItem item) {

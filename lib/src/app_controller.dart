@@ -382,6 +382,29 @@ class RePaperTodoController {
     return PaperTitles.defaultTitle(type, sameTypeCount);
   }
 
+  int titleNumberFor(PaperData paper) {
+    final normalizedType = PaperTypes.normalize(paper.type);
+    var number = 1;
+    for (final existing in state.papers) {
+      if (PaperTypes.normalize(existing.type) != normalizedType) {
+        continue;
+      }
+      if (existing.id == paper.id) {
+        return number;
+      }
+      number++;
+    }
+    return math.max(1, number);
+  }
+
+  String paperTitleText(PaperData paper) {
+    return PaperTitles.effectiveTitle(
+      paperType: paper.type,
+      title: paper.title,
+      fallbackNumber: titleNumberFor(paper),
+    );
+  }
+
   ({double x, double y}) _newPaperInitialPosition(PaperData? sourcePaper) {
     final offset = sourcePaper == null
         ? state.papers.length * PaperLayoutDefaults.newPaperCascadeOffset

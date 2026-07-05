@@ -588,6 +588,39 @@ void main() {
     ]);
   });
 
+  test('tray menu uses PaperTodo default titles for blank paper titles',
+      () async {
+    const channel = MethodChannel('repapertodo/window_blank_title_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final services = WindowsPlatformServices(channel: channel);
+    await services.tray.rebuildMenu(
+      AppState(
+        papers: [
+          PaperData(id: 'blank-todo', type: PaperTypes.todo, title: '   '),
+          PaperData(id: 'blank-note-1', type: PaperTypes.note),
+          PaperData(id: 'blank-note-2', type: PaperTypes.note, title: '\u0000'),
+        ],
+      ),
+    );
+
+    final trayMenuCall =
+        calls.lastWhere((call) => call.method == 'setTrayMenu');
+    final papers = trayMenuCall.arguments as List<Object?>;
+    expect((papers[0] as Map<Object?, Object?>)['title'], 'Todo1');
+    expect((papers[1] as Map<Object?, Object?>)['title'], 'Note1');
+    expect((papers[2] as Map<Object?, Object?>)['title'], 'Note2');
+  });
+
   test('startup command events accept string, list, and map arguments',
       () async {
     const channel = MethodChannel('repapertodo/window_startup_event_test');

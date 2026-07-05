@@ -309,6 +309,58 @@ void main() {
     expect(platform.paperWindows.updatedTitles, contains(expected));
   });
 
+  testWidgets('blank paper titles fall back to PaperTodo default titles',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        enableTodoNoteLinks: true,
+        showLinkedNoteName: true,
+        papers: [
+          PaperData(
+            id: 'blank-title-todo',
+            type: PaperTypes.todo,
+            title: '   ',
+            items: [
+              PaperItem(
+                id: 'blank-title-item',
+                text: 'Use fallback note title',
+                linkedNoteId: 'blank-title-note-2',
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'blank-title-note-1',
+            type: PaperTypes.note,
+            title: '',
+            content: 'First blank note',
+          ),
+          PaperData(
+            id: 'blank-title-note-2',
+            type: PaperTypes.note,
+            title: '\u0000',
+            content: 'Second blank note',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    expect(find.text('Todo1'), findsOneWidget);
+    expect(find.text('Note1'), findsOneWidget);
+    expect(find.text('Note2'), findsOneWidget);
+    expect(find.text('Note Note2'), findsOneWidget);
+  });
+
   testWidgets('renders markdown note preview controls', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

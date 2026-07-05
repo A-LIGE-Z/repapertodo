@@ -277,7 +277,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   Future<void> _syncPaperSurfaceRegistry(AppState state) async {
     await _channel.invokeMethod<void>(
       'setTrayMenu',
-      state.papers.map(_paperSurfaceRegistryEntry).toList(),
+      _paperSurfaceRegistryEntries(state),
     );
   }
 
@@ -366,8 +366,12 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   }
 
   String _windowTitle(PaperData paper) {
-    final title = PaperTitles.cleanCustomTitle(paper.title);
-    return title.isEmpty ? 'RePaperTodo' : 'RePaperTodo - $title';
+    final title = PaperTitles.effectiveTitle(
+      paperType: paper.type,
+      title: paper.title,
+      fallbackNumber: 1,
+    );
+    return 'RePaperTodo - $title';
   }
 
   double _doubleValue(Object? value, double fallback) {
@@ -414,16 +418,38 @@ class WindowsTrayHost implements TrayHost {
   Future<void> rebuildMenu(AppState state) async {
     await _channel.invokeMethod<void>(
       'setTrayMenu',
-      state.papers.map(_paperSurfaceRegistryEntry).toList(),
+      _paperSurfaceRegistryEntries(state),
     );
   }
 }
 
-Map<String, Object?> _paperSurfaceRegistryEntry(PaperData paper) {
-  final title = PaperTitles.cleanCustomTitle(paper.title);
+List<Map<String, Object?>> _paperSurfaceRegistryEntries(AppState state) {
+  final typeCounts = <String, int>{};
+  return [
+    for (final paper in state.papers)
+      _paperSurfaceRegistryEntry(
+        paper,
+        fallbackNumber: typeCounts.update(
+          PaperTypes.normalize(paper.type),
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        ),
+      ),
+  ];
+}
+
+Map<String, Object?> _paperSurfaceRegistryEntry(
+  PaperData paper, {
+  required int fallbackNumber,
+}) {
+  final title = PaperTitles.effectiveTitle(
+    paperType: paper.type,
+    title: paper.title,
+    fallbackNumber: fallbackNumber,
+  );
   return <String, Object?>{
     'id': paper.id,
-    'title': title.isEmpty ? 'Untitled' : title,
+    'title': title,
     'type': paper.type,
     'x': paper.x,
     'y': paper.y,
