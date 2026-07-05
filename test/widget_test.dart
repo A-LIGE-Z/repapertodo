@@ -63,13 +63,13 @@ void main() {
     expect(find.text('RePaperTodo'), findsWidgets);
     expect(find.text('Windows parity'), findsOneWidget);
     expect(find.text('Build compatible data core'), findsOneWidget);
-    expect(find.text('Due 06-30'), findsOneWidget);
+    expect(find.text('Due 06-30 00:00'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.close_outlined));
     await tester.pump();
 
     expect(controller.state.papers.single.items[1].dueAtLocal, isNull);
-    expect(find.text('Due 06-30'), findsNothing);
+    expect(find.text('Due 06-30 00:00'), findsNothing);
 
     await tester.enterText(
         find.byKey(const ValueKey('welcome-todo-title')), 'Edited title');
@@ -5735,6 +5735,68 @@ void main() {
     );
 
     expect(find.text('Due Today'), findsOneWidget);
+  });
+
+  testWidgets('sets todo due date with hour and minute like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'due-time-paper',
+            type: PaperTypes.todo,
+            title: 'Due time paper',
+            items: [
+              PaperItem(
+                id: 'due-time-item',
+                text: 'Timed task',
+                dueAtLocal: '2026-06-30T09:15:00',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(filePath: 'build/test-widget-due-time-data.json');
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    expect(find.text('Due 06-30 09:15'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Set due date'));
+    await tester.pumpAndSettle();
+
+    tester
+        .widget<DropdownButtonFormField<int>>(
+          find.byKey(const ValueKey('todo-due-hour')),
+        )
+        .onChanged
+        ?.call(10);
+    await tester.pump();
+
+    tester
+        .widget<DropdownButtonFormField<int>>(
+          find.byKey(const ValueKey('todo-due-minute')),
+        )
+        .onChanged
+        ?.call(30);
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final item = controller.state.papers.single.items.single;
+    expect(item.dueAtLocal, '2026-06-30T10:30:00');
+    expect(find.text('Due 06-30 10:30'), findsOneWidget);
   });
 
   testWidgets('applies extra large todo visual size', (tester) async {

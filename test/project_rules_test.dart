@@ -531,6 +531,21 @@ void main() {
     expect(app, contains('item.text = item.todoExtraColumns.first'));
   });
 
+  test('PaperTodo todo due date time precision is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('Todo due editing should preserve PaperTodo'));
+    expect(design, contains('00-23 hour'));
+    expect(design, contains('00-59 minute'));
+    expect(design, contains('yyyy-MM-ddTHH:mm:ss'));
+    expect(app, contains('_TodoDueSelectionDialog'));
+    expect(app, contains("ValueKey('todo-due-hour')"));
+    expect(app, contains("ValueKey('todo-due-minute')"));
+    expect(app, contains('_formatDueAtLocalValue'));
+    expect(app, contains('now.add(const Duration(hours: 1))'));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

@@ -151,6 +151,10 @@ before column 1 moves the current main text into the first extra column and
 creates a blank main column, while deleting column 1 promotes the next column
 into the main text. Inserting or deleting later columns should keep the other
 columns in order and preserve normalized per-column widths.
+Todo due editing should preserve PaperTodo date-and-time precision: the picker
+must expose a calendar date plus 00-23 hour and 00-59 minute choices, default a
+new due time to roughly one hour from now, and save local values as
+`yyyy-MM-ddTHH:mm:ss` without milliseconds.
 Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,

@@ -5162,22 +5162,21 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   Future<void> _pickDueDate(BuildContext context, PaperItem item) async {
-    final initialDate =
-        DateTime.tryParse(item.dueAtLocal ?? '')?.toLocal() ?? DateTime.now();
-    final pickedDate = await showDatePicker(
+    final now = DateTime.now();
+    final initialDate = DateTime.tryParse(item.dueAtLocal ?? '')?.toLocal() ??
+        now.add(const Duration(hours: 1));
+    final result = await showDialog<_TodoDueSelection>(
       context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      builder: (context) => _TodoDueSelectionDialog(initialDate: initialDate),
     );
-    if (pickedDate == null) {
+    if (result == null) {
       return;
     }
     _pushTodoUndoSnapshot();
     setState(() {
-      item.dueAtLocal =
-          DateTime(pickedDate.year, pickedDate.month, pickedDate.day)
-              .toIso8601String();
+      item.dueAtLocal = result.clear
+          ? null
+          : _formatDueAtLocalValue(result.dueAt ?? initialDate);
     });
     unawaited(widget.onChanged());
   }
@@ -5326,14 +5325,31 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
+    final time = _formatDueTime(date);
     return switch (TodoDueYearDisplayModes.normalize(
       widget.dueYearDisplayMode,
     )) {
       TodoDueYearDisplayModes.short =>
-        '${(date.year % 100).toString().padLeft(2, '0')}-$month-$day',
-      TodoDueYearDisplayModes.full => '${date.year}-$month-$day',
-      _ => '$month-$day',
+        '${(date.year % 100).toString().padLeft(2, '0')}-$month-$day $time',
+      TodoDueYearDisplayModes.full => '${date.year}-$month-$day $time',
+      _ => '$month-$day $time',
     };
+  }
+
+  String _formatDueTime(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _formatDueAtLocalValue(DateTime date) {
+    final year = date.year.toString().padLeft(4, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    final second = date.second.toString().padLeft(2, '0');
+    return '$year-$month-${day}T$hour:$minute:$second';
   }
 
   String? _formatReminderInterval(PaperItem item) {
@@ -5358,6 +5374,158 @@ class _TodoEditorState extends State<_TodoEditor> {
       > 1 => 'In $days days',
       _ => '${-days} days overdue',
     };
+  }
+}
+
+class _TodoDueSelection {
+  const _TodoDueSelection.set(this.dueAt) : clear = false;
+
+  const _TodoDueSelection.clear()
+      : dueAt = null,
+        clear = true;
+
+  final DateTime? dueAt;
+  final bool clear;
+}
+
+class _TodoDueSelectionDialog extends StatefulWidget {
+  const _TodoDueSelectionDialog({required this.initialDate});
+
+  final DateTime initialDate;
+
+  @override
+  State<_TodoDueSelectionDialog> createState() =>
+      _TodoDueSelectionDialogState();
+}
+
+class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
+  late DateTime _selectedDate;
+  late int _hour;
+  late int _minute;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime(
+      widget.initialDate.year,
+      widget.initialDate.month,
+      widget.initialDate.day,
+    );
+    _hour = widget.initialDate.hour;
+    _minute = widget.initialDate.minute;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Due date'),
+      content: SizedBox(
+        width: 360,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 330,
+                child: CalendarDatePicker(
+                  initialDate: _selectedDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100),
+                  onDateChanged: (value) {
+                    setState(() {
+                      _selectedDate = DateTime(
+                        value.year,
+                        value.month,
+                        value.day,
+                      );
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      key: const ValueKey('todo-due-hour'),
+                      initialValue: _hour,
+                      decoration: const InputDecoration(
+                        labelText: 'Hour',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: [
+                        for (var value = 0; value < 24; value++)
+                          DropdownMenuItem(
+                            value: value,
+                            child: Text(value.toString().padLeft(2, '0')),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _hour = value);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      key: const ValueKey('todo-due-minute'),
+                      initialValue: _minute,
+                      decoration: const InputDecoration(
+                        labelText: 'Minute',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: [
+                        for (var value = 0; value < 60; value++)
+                          DropdownMenuItem(
+                            value: value,
+                            child: Text(value.toString().padLeft(2, '0')),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _minute = value);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () =>
+              Navigator.of(context).pop(const _TodoDueSelection.clear()),
+          child: const Text('Clear'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.of(context).pop(
+              _TodoDueSelection.set(
+                DateTime(
+                  _selectedDate.year,
+                  _selectedDate.month,
+                  _selectedDate.day,
+                  _hour,
+                  _minute,
+                ),
+              ),
+            );
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
 
