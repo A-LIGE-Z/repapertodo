@@ -153,9 +153,12 @@ abstract final class MarkdownLinks {
   }
 
   static String? _normalizeHref(String? rawHref) {
-    final href = rawHref?.trim();
+    var href = rawHref?.trim();
     if (href == null || href.isEmpty) {
       return null;
+    }
+    if (href.toLowerCase().startsWith('www.')) {
+      href = 'https://$href';
     }
     return href.replaceAll(' ', '%20');
   }

@@ -834,6 +834,8 @@ void main() {
     expect(design, contains('edit-mode source links open'));
     expect(design, contains('Ctrl+click'));
     expect(design, contains('single-line inline HTML `a href` links'));
+    expect(design, contains("bare-host convenience"));
+    expect(design, contains('links beginning with `www.`'));
     expect(design, contains('focus-driven reading flow'));
     expect(design, contains('open in preview mode by default'));
     expect(design, contains('clicking the preview body enters'));
@@ -842,9 +844,11 @@ void main() {
     expect(app, contains('_enterEditorFromPreview'));
     expect(app, contains('_handleEditorFocusChange'));
     expect(app, contains('HardwareKeyboard.instance.isControlPressed'));
+    expect(app, contains("startsWith('www.')"));
     expect(app, contains('MarkdownLinks.hrefAt'));
     expect(markdownLinks, contains('class MarkdownLinkSpan'));
     expect(markdownLinks, contains('_htmlAnchorLinks'));
+    expect(markdownLinks, contains("startsWith('www.')"));
   });
 
   test('PaperTodo markdown note paste safety is preserved', () {

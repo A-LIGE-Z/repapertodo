@@ -600,6 +600,40 @@ void main() {
     expect(platform.uriOpener.openedUris, ['mailto:paper@example.com']);
   });
 
+  testWidgets('normalizes bare www markdown preview links like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'bare-www-note',
+            type: PaperTypes.note,
+            title: 'Bare www note',
+            content: '[Open site](www.example.com/paper)',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Open site'));
+    await tester.pump();
+
+    expect(platform.uriOpener.openedUris, ['https://www.example.com/paper']);
+  });
+
   testWidgets('blocks unsafe markdown preview links before platform open',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

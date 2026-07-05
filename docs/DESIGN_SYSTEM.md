@@ -173,6 +173,9 @@ Markdown note link interaction should preserve PaperTodo edit/preview
 semantics: preview-mode links open directly, while edit-mode source links open
 only on Ctrl+click and otherwise keep normal text editing behavior. This applies
 to Markdown links and the supported single-line inline HTML `a href` links.
+Markdown URL normalization should preserve PaperTodo's bare-host convenience:
+links beginning with `www.` open as `https://www...` in both preview mode and
+edit-mode source link handling before platform URI validation runs.
 Markdown notes should preserve PaperTodo's focus-driven reading flow: Markdown
 enabled notes open in preview mode by default, clicking the preview body enters
 the source editor, and losing editor focus returns the note to preview mode.

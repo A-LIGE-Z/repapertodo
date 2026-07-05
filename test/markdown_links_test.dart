@@ -41,4 +41,14 @@ void main() {
     expect(MarkdownLinks.hrefAt(text, text.indexOf('Spaced')),
         'https://example.com/a%20b');
   });
+
+  test('normalizes bare www links like PaperTodo', () {
+    const markdown = '[Site](www.example.com/paper)';
+    const html = '<a href="www.example.com/html">HTML</a>';
+
+    expect(MarkdownLinks.hrefAt(markdown, markdown.indexOf('Site')),
+        'https://www.example.com/paper');
+    expect(MarkdownLinks.hrefAt(html, html.indexOf('HTML')),
+        'https://www.example.com/html');
+  });
 }

@@ -277,9 +277,12 @@ String _platformFailureMessage({
 }
 
 String? _normalizeExternalUri(String value) {
-  final trimmed = value.trim();
+  var trimmed = value.trim();
   if (trimmed.isEmpty) {
     return null;
+  }
+  if (trimmed.toLowerCase().startsWith('www.')) {
+    trimmed = 'https://$trimmed';
   }
   if (_hasUnsafeExternalUriCharacter(trimmed)) {
     return null;
