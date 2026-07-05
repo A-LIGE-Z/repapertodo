@@ -728,6 +728,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       onDelete: _deletePaper,
       onTodoItemDeleted: _markTodoItemDeleted,
       onTodoItemRestored: _clearTodoItemDeleted,
+      onTodoReminderReset: _resetTodoReminder,
       onSetAlwaysOnTop: _setPaperAlwaysOnTop,
       onSetPinnedToDesktop: _setPaperPinnedToDesktop,
       onSurfaceChanged: _updatePaperSurface,
@@ -925,11 +926,16 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   void _markTodoItemDeleted(PaperData paper, PaperItem item) {
+    _resetTodoReminder(item);
     controller.state.sync.markTodoItemDeleted(
       paper.id,
       item.id,
       DateTime.now().toUtc(),
     );
+  }
+
+  void _resetTodoReminder(PaperItem item) {
+    _clearTodoReminderStateForItems([item], hideActiveSnackBar: true);
   }
 
   void _clearTodoItemDeleted(PaperData paper, PaperItem item) {
@@ -2515,6 +2521,7 @@ class PaperPreview extends StatelessWidget {
     required this.onDelete,
     required this.onTodoItemDeleted,
     required this.onTodoItemRestored,
+    required this.onTodoReminderReset,
     required this.onSetAlwaysOnTop,
     required this.onSetPinnedToDesktop,
     required this.onSurfaceChanged,
@@ -2557,6 +2564,7 @@ class PaperPreview extends StatelessWidget {
   final Future<void> Function(PaperData paper) onDelete;
   final void Function(PaperData paper, PaperItem item) onTodoItemDeleted;
   final void Function(PaperData paper, PaperItem item) onTodoItemRestored;
+  final void Function(PaperItem item) onTodoReminderReset;
   final void Function(PaperData paper, bool enabled) onSetAlwaysOnTop;
   final void Function(PaperData paper, bool pinned) onSetPinnedToDesktop;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
@@ -2677,6 +2685,7 @@ class PaperPreview extends StatelessWidget {
                   onChanged: onChanged,
                   onItemDeleted: onTodoItemDeleted,
                   onItemRestored: onTodoItemRestored,
+                  onReminderReset: onTodoReminderReset,
                 )
               else
                 _NoteEditor(
@@ -4742,6 +4751,7 @@ class _TodoEditor extends StatefulWidget {
     required this.onChanged,
     required this.onItemDeleted,
     required this.onItemRestored,
+    required this.onReminderReset,
   });
 
   final PaperData paper;
@@ -4762,6 +4772,7 @@ class _TodoEditor extends StatefulWidget {
   final Future<void> Function() onChanged;
   final void Function(PaperData paper, PaperItem item) onItemDeleted;
   final void Function(PaperData paper, PaperItem item) onItemRestored;
+  final void Function(PaperItem item) onReminderReset;
 
   @override
   State<_TodoEditor> createState() => _TodoEditorState();
@@ -5954,12 +5965,14 @@ class _TodoEditorState extends State<_TodoEditor> {
           ? null
           : _formatDueAtLocalValue(result.dueAt ?? initialDate);
     });
+    widget.onReminderReset(item);
     unawaited(widget.onChanged());
   }
 
   void _clearDueDate(PaperItem item) {
     _pushTodoUndoSnapshot();
     setState(() => item.dueAtLocal = null);
+    widget.onReminderReset(item);
     unawaited(widget.onChanged());
   }
 
@@ -5987,6 +6000,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         item.reminderIntervalUnit = result.unit;
       }
     });
+    widget.onReminderReset(item);
     unawaited(widget.onChanged());
   }
 
@@ -5996,6 +6010,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       item.reminderIntervalValue = null;
       item.reminderIntervalUnit = null;
     });
+    widget.onReminderReset(item);
     unawaited(widget.onChanged());
   }
 

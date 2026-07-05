@@ -196,7 +196,8 @@ scope chooses the candidate closest to the current time, not merely the oldest
 overdue item.
 Deleting a Todo paper should clear active reminder state for that paper's items
 and close any currently displayed reminder for those items, matching
-PaperTodo's reminder bubble cleanup.
+PaperTodo's reminder bubble cleanup. Changing or clearing a todo due date or
+per-item reminder interval should also reset that item's reminder state.
 Todo keyboard editing should follow PaperTodo: Enter with no modifiers inserts
 an empty item directly after the focused item and moves focus there. Backspace
 on an item whose main and extra text columns are blank deletes that item when

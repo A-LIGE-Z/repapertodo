@@ -5818,6 +5818,53 @@ void main() {
     expect(controller.state.papers.single.type, PaperTypes.todo);
   });
 
+  testWidgets('clearing a due date closes that item reminder', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final item = PaperItem(
+      id: 'clear-due-reminder-item',
+      text: 'Clear due reminder',
+      dueAtLocal:
+          DateTime.now().subtract(const Duration(minutes: 1)).toIso8601String(),
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        todoReminderIntervalValue: 10,
+        todoReminderBubbleDurationSeconds: 30,
+        papers: [
+          PaperData(
+            id: 'clear-due-reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Reminder paper',
+            items: [item],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.text('Reminder: Remind - Clear due reminder'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byTooltip('Clear due date'));
+    await tester.pumpAndSettle();
+
+    expect(item.dueAtLocal, isNull);
+    expect(find.text('Reminder: Remind - Clear due reminder'), findsNothing);
+  });
+
   testWidgets('shows one-shot reminders before todo due time', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
