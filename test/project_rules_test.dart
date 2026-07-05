@@ -508,6 +508,7 @@ void main() {
 
     expect(design, contains('open away from the deep capsule edge strip'));
     expect(design, contains('created from an existing paper'));
+    expect(design, contains("100-paper limit"));
     expect(constants, contains('capsuleWidth = 92.0'));
     expect(constants, contains('deepCapsuleExpandedEdgeInset = 36.0'));
     expect(constants, contains('deepCapsuleGap = 4.0'));
@@ -516,7 +517,10 @@ void main() {
     expect(constants, contains('newPaperSourceOffset = 30.0'));
     expect(constants, contains('newPaperCollisionNudge = 30.0'));
     expect(constants, contains('newPaperWorkAreaResizeInset = 80.0'));
+    expect(constants, contains('maxPapers = 100'));
     expect(platform, contains('workAreaForPaper'));
+    expect(controller, contains('canCreatePaper'));
+    expect(controller, contains('tryCreatePaper'));
     expect(controller, contains('sourcePaper'));
     expect(controller, contains('_initializeNewPaperCapsuleQueue'));
     expect(controller, contains('_rescuePapersIntoWorkAreas'));

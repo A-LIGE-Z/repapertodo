@@ -168,3 +168,7 @@ abstract final class PaperLayoutDefaults {
   static const noteDefaultWidth = 320.0;
   static const noteDefaultHeight = 360.0;
 }
+
+abstract final class PaperLimits {
+  static const maxPapers = 100;
+}

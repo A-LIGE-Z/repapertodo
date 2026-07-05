@@ -144,6 +144,27 @@ void main() {
     expect(paper.y, 240);
   });
 
+  test('paper creation stops at PaperTodo paper limit', () {
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: List.generate(
+          PaperLimits.maxPapers,
+          (index) => PaperData(
+            id: 'paper-$index',
+            type: PaperTypes.todo,
+            title: 'Paper $index',
+          ),
+        ),
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    expect(controller.canCreatePaper, false);
+    expect(controller.tryCreatePaper(PaperTypes.note), isNull);
+    expect(() => controller.createPaper(PaperTypes.note), throwsStateError);
+    expect(controller.state.papers, hasLength(PaperLimits.maxPapers));
+  });
+
   test('new papers are rescued into the Windows work area before showing',
       () async {
     final platform = _RecordingPlatformServices();
@@ -269,6 +290,31 @@ void main() {
     expect(platform.paperWindows.workAreaRequestIds, [paper.id]);
     expect(platform.paperWindows.shownIds, [paper.id]);
     expect(paper.x, 104);
+  });
+
+  test('startup new-paper commands no-op at the PaperTodo paper limit',
+      () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: List.generate(
+          PaperLimits.maxPapers,
+          (index) => PaperData(
+            id: 'paper-$index',
+            type: PaperTypes.todo,
+            title: 'Paper $index',
+          ),
+        ),
+      ),
+      platform: platform,
+    );
+
+    await controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.newNote),
+    );
+
+    expect(controller.state.papers, hasLength(PaperLimits.maxPapers));
+    expect(platform.paperWindows.shownIds, isEmpty);
   });
 
   test('startup show and hide commands apply every paper', () async {

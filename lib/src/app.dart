@@ -729,12 +729,27 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _createPaper(String type, {PaperData? sourcePaper}) async {
-    late final PaperData paper;
+    PaperData? paper;
     setState(() {
-      paper = controller.createPaper(type, sourcePaper: sourcePaper);
+      paper = controller.tryCreatePaper(type, sourcePaper: sourcePaper);
     });
-    await controller.showPaper(paper);
+    final createdPaper = paper;
+    if (createdPaper == null) {
+      _showPaperLimitSnackBar();
+      return;
+    }
+    await controller.showPaper(createdPaper);
     await _saveState();
+  }
+
+  void _showPaperLimitSnackBar() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Paper limit reached. Delete papers you no longer need before creating more.',
+        ),
+      ),
+    );
   }
 
   bool _collapseAllActiveFor(PaperData? surfacePaper) {

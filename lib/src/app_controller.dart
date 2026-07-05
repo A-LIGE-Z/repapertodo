@@ -48,6 +48,8 @@ class RePaperTodoController {
   bool get supportsScriptCapsules =>
       _platform.scriptCapsules.supportsScriptCapsules;
 
+  bool get canCreatePaper => state.papers.length < PaperLimits.maxPapers;
+
   Future<void> start(
       {StartupCommand startupCommand =
           const StartupCommand(StartupCommandKind.none)}) async {
@@ -71,6 +73,17 @@ class RePaperTodoController {
   }
 
   PaperData createPaper(String type, {PaperData? sourcePaper}) {
+    final paper = tryCreatePaper(type, sourcePaper: sourcePaper);
+    if (paper == null) {
+      throw StateError('Paper limit reached.');
+    }
+    return paper;
+  }
+
+  PaperData? tryCreatePaper(String type, {PaperData? sourcePaper}) {
+    if (!canCreatePaper) {
+      return null;
+    }
     final normalizedType = PaperTypes.normalize(type);
     final initialPosition = _newPaperInitialPosition(sourcePaper);
     final paper = PaperData(
@@ -251,9 +264,15 @@ class RePaperTodoController {
               shouldHide ? StartupCommandKind.hide : StartupCommandKind.show),
         );
       case StartupCommandKind.newTodo:
-        await showPaper(createPaper(PaperTypes.todo));
+        final paper = tryCreatePaper(PaperTypes.todo);
+        if (paper != null) {
+          await showPaper(paper);
+        }
       case StartupCommandKind.newNote:
-        await showPaper(createPaper(PaperTypes.note));
+        final paper = tryCreatePaper(PaperTypes.note);
+        if (paper != null) {
+          await showPaper(paper);
+        }
       case StartupCommandKind.settings:
         _pendingUiStartupCommand = command;
         return;

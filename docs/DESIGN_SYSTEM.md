@@ -62,6 +62,9 @@ state, and keep the source capsule queue when one is set.
 New desktop papers should follow PaperTodo's cascade placement: start near
 `140,140`, offset each new paper by the existing paper count, and nudge again
 when the target position is already occupied.
+Paper creation must stop at PaperTodo's 100-paper limit. User-triggered
+creation should show an in-app cleanup prompt instead of adding a 101st paper,
+and background startup commands should quietly no-op at the limit.
 Before a new desktop paper is first shown, clamp its dimensions and position to
 the resolved Windows work area so large cascades or small screens do not create
 lost off-screen papers.

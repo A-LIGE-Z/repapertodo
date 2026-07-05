@@ -6873,6 +6873,48 @@ void main() {
     expect(platform.paperWindows.shownTitles.last, createdPaper.title);
   });
 
+  testWidgets('top bar creation shows cleanup prompt at paper limit',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        papers: List.generate(
+          PaperLimits.maxPapers,
+          (index) => PaperData(
+            id: 'limited-paper-$index',
+            type: PaperTypes.todo,
+            title: 'Limited paper $index',
+            isVisible: index == 0,
+            items: [
+              PaperItem(id: 'limited-item-$index', text: 'Paper $index'),
+            ],
+          ),
+        ),
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('New todo paper'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers, hasLength(PaperLimits.maxPapers));
+    expect(platform.paperWindows.shownTitles, isEmpty);
+    expect(find.textContaining('Paper limit reached'), findsOneWidget);
+    expect(find.textContaining('Delete papers you no longer need'),
+        findsOneWidget);
+  });
+
   testWidgets('uses compact app bar overflow actions on narrow screens',
       (tester) async {
     tester.view
