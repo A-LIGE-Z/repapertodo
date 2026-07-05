@@ -1987,26 +1987,31 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       return;
     }
     final now = DateTime.now();
-    final readyCandidates = _reminderCandidates(now)
+    final candidates = _reminderCandidates(now);
+    final shouldRefreshRelativeDueLabels =
+        controller.state.showTodoDueRelativeTime && candidates.isNotEmpty;
+    final readyCandidates = candidates
         .where((candidate) => _shouldShowReminder(candidate, now))
         .toList();
-    if (readyCandidates.isEmpty) {
-      return;
+    if (readyCandidates.isNotEmpty) {
+      if (controller.state.todoReminderScope == TodoReminderScopes.nearest &&
+          readyCandidates.length > 1) {
+        readyCandidates.sort((a, b) {
+          final distance = _distanceFromNow(a, now).compareTo(
+            _distanceFromNow(b, now),
+          );
+          return distance == 0 ? a.dueAt.compareTo(b.dueAt) : distance;
+        });
+        readyCandidates.removeRange(1, readyCandidates.length);
+      }
+      for (final candidate in readyCandidates) {
+        _lastTodoReminderAt[candidate.key] = now;
+      }
+      _showTodoReminder(readyCandidates);
     }
-    if (controller.state.todoReminderScope == TodoReminderScopes.nearest &&
-        readyCandidates.length > 1) {
-      readyCandidates.sort((a, b) {
-        final distance = _distanceFromNow(a, now).compareTo(
-          _distanceFromNow(b, now),
-        );
-        return distance == 0 ? a.dueAt.compareTo(b.dueAt) : distance;
-      });
-      readyCandidates.removeRange(1, readyCandidates.length);
+    if (shouldRefreshRelativeDueLabels) {
+      setState(() {});
     }
-    for (final candidate in readyCandidates) {
-      _lastTodoReminderAt[candidate.key] = now;
-    }
-    _showTodoReminder(readyCandidates);
   }
 
   List<_TodoReminderCandidate> _reminderCandidates(DateTime now) {

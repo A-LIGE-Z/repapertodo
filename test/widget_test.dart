@@ -6050,6 +6050,56 @@ void main() {
     expect(find.text('Due in 5m'), findsOneWidget);
   });
 
+  testWidgets('refreshes relative due labels on the reminder timer',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final dueAt = DateTime.now().add(
+      const Duration(minutes: 20, seconds: 5),
+    );
+    final item = PaperItem(
+      id: 'relative-refresh-item',
+      text: 'Watch relative time',
+      dueAtLocal: dueAt.toIso8601String(),
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        showTodoDueRelativeTime: true,
+        useTodoReminderInterval: false,
+        papers: [
+          PaperData(
+            id: 'relative-refresh-paper',
+            type: PaperTypes.todo,
+            title: 'Relative refresh',
+            items: [
+              item,
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Due in 21m'), findsOneWidget);
+
+    item.dueAtLocal = DateTime.now()
+        .add(const Duration(minutes: 19, seconds: 5))
+        .toIso8601String();
+    await tester.pump(const Duration(seconds: 31));
+
+    expect(find.text('Due in 21m'), findsNothing);
+    expect(find.text('Due in 20m'), findsOneWidget);
+  });
+
   testWidgets('formats relative todo due durations like PaperTodo',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

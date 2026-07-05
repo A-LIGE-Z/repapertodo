@@ -219,7 +219,9 @@ dates keep month-day plus `HH:mm`.
 Relative due labels should use PaperTodo's duration model rather than coarse
 day names: round the absolute distance up to at least one minute, combine day,
 hour, and minute units such as `2h5m`, then show `in {duration}` for future
-items and `{duration} overdue` for past items.
+items and `{duration} overdue` for past items. When relative due labels are
+enabled, the reminder timer should also refresh due rows even when no reminder
+bubble is shown, so visible countdown text does not go stale.
 Todo ordering should preserve PaperTodo's reorder data semantics: item moves
 must push a todo undo snapshot, keep the moved item focused, normalize item
 orders after every move, and expose a visible drag handle for pointer reordering

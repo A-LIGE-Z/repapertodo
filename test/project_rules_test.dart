@@ -671,6 +671,7 @@ void main() {
     expect(design, contains('round the absolute distance up'));
     expect(design, contains('`2h5m`'));
     expect(design, contains('{duration} overdue'));
+    expect(design, contains('visible countdown text does not go stale'));
     expect(app, contains('_TodoDueSelectionDialog'));
     expect(app, contains("ValueKey('todo-due-hour')"));
     expect(app, contains("ValueKey('todo-due-minute')"));
@@ -680,6 +681,7 @@ void main() {
     expect(app, contains("return '\$text overdue'"));
     expect(app, contains("return 'in \$text'"));
     expect(app, contains('now.add(const Duration(hours: 1))'));
+    expect(app, contains('shouldRefreshRelativeDueLabels'));
   });
 
   test('PaperTodo todo reorder data semantics are preserved', () {
