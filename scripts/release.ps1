@@ -87,6 +87,7 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
 $windowsZip = Join-Path $dist "repapertodo-windows-x64-$artifactVersion.zip"
 $androidApk = Join-Path $dist "repapertodo-android-$artifactVersion.apk"
+$checksumsFile = Join-Path $dist "repapertodo-$artifactVersion-sha256.txt"
 
 Invoke-Step "Package release artifacts" {
   if (Test-Path -LiteralPath $windowsZip) {
@@ -95,6 +96,9 @@ Invoke-Step "Package release artifacts" {
   if (Test-Path -LiteralPath $androidApk) {
     Remove-Item -LiteralPath $androidApk -Force
   }
+  if (Test-Path -LiteralPath $checksumsFile) {
+    Remove-Item -LiteralPath $checksumsFile -Force
+  }
   Compress-Archive `
     -Path "build\windows\x64\runner\Release\*" `
     -DestinationPath $windowsZip `
@@ -102,9 +106,16 @@ Invoke-Step "Package release artifacts" {
   Copy-Item `
     -LiteralPath "build\app\outputs\flutter-apk\app-release.apk" `
     -Destination $androidApk
+
+  @($windowsZip, $androidApk) |
+    ForEach-Object {
+      $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_
+      "$($hash.Hash.ToLowerInvariant())  $(Split-Path -Leaf $_)"
+    } |
+    Set-Content -LiteralPath $checksumsFile -Encoding ascii
 }
 
-Get-Item -LiteralPath $windowsZip, $androidApk |
+Get-Item -LiteralPath $windowsZip, $androidApk, $checksumsFile |
   Select-Object FullName, Length, LastWriteTime |
   Format-Table -AutoSize
 
@@ -112,12 +123,12 @@ if ($PublishGitHubRelease) {
   Invoke-Step "Publish GitHub release $TagName" {
     $existingRelease = & gh release view $TagName --json tagName 2>$null
     if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($existingRelease)) {
-      & gh release upload $TagName $windowsZip $androidApk --clobber
+      & gh release upload $TagName $windowsZip $androidApk $checksumsFile --clobber
     } else {
-      & gh release create $TagName $windowsZip $androidApk `
+      & gh release create $TagName $windowsZip $androidApk $checksumsFile `
         --target main `
         --title $ReleaseTitle `
-        --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n`nValidation:`n- flutter test`n- flutter analyze`n- flutter build windows --release`n- flutter build apk --release"
+        --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n`nValidation:`n- flutter test`n- flutter analyze`n- flutter build windows --release`n- flutter build apk --release"
     }
   }
 }

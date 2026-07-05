@@ -26,7 +26,8 @@ See [AGENTS.md](AGENTS.md) for project rules and [docs/ROADMAP.md](docs/ROADMAP.
 ## Release Build
 
 Use the local release script to verify, build, and package the Windows and
-Android artifacts:
+Android artifacts. The script also writes a SHA-256 checksum file beside the
+artifacts in `dist/`.
 
 ```powershell
 .\scripts\release.ps1

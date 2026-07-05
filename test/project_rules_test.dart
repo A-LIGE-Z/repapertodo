@@ -660,12 +660,18 @@ void main() {
     expect(script, contains(r'& $flutter build windows --release'));
     expect(script, contains(r'& $flutter build apk --release'));
     expect(script, contains('Compress-Archive'));
+    expect(script, contains('Get-FileHash -Algorithm SHA256'));
+    expect(script, contains(r'Set-Content -LiteralPath $checksumsFile'));
     expect(script, contains(r'repapertodo-windows-x64-$artifactVersion.zip'));
     expect(script, contains(r'repapertodo-android-$artifactVersion.apk'));
+    expect(script, contains(r'repapertodo-$artifactVersion-sha256.txt'));
     expect(script, contains('gh release create'));
     expect(script, contains('gh release upload'));
+    expect(script, contains(r'$checksumsFile --clobber'));
+    expect(script, contains('SHA-256 checksums for release artifacts.'));
     expect(script, contains('Android release APK for Android 14+'));
     expect(readme, contains(r'.\scripts\release.ps1'));
     expect(readme, contains('-PublishGitHubRelease'));
+    expect(readme, contains('SHA-256 checksum file'));
   });
 }
