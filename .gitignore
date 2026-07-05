@@ -19,3 +19,8 @@ Thumbs.db
 data.json
 data.backup*.json
 *.papertodo-sync
+
+# Android signing secrets
+android/key.properties
+*.jks
+*.keystore

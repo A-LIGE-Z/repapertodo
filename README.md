@@ -45,3 +45,25 @@ use offline package resolution:
 ```powershell
 .\scripts\release.ps1 -OfflinePubGet
 ```
+
+### Android release signing
+
+Android APK builds keep working without secrets by falling back to the debug
+signing config. For a store-ready APK, create `android/key.properties` locally
+and keep the keystore out of git:
+
+```properties
+storeFile=repapertodo-release.jks
+storePassword=your-store-password
+keyAlias=repapertodo
+keyPassword=your-key-password
+```
+
+Generate a local keystore when needed:
+
+```powershell
+keytool -genkeypair -v -keystore android\repapertodo-release.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias repapertodo
+```
+
+The release script prints whether the APK used `android/key.properties` or the
+debug fallback and records that mode in GitHub Release notes.

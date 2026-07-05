@@ -49,6 +49,26 @@ function Get-FlutterVersion {
   return ($versionLine -replace "^version:\s*", "").Trim()
 }
 
+function Get-AndroidSigningMode {
+  param([string]$RepoRoot)
+
+  $keyProperties = Join-Path $RepoRoot "android\key.properties"
+  if (-not (Test-Path -LiteralPath $keyProperties)) {
+    return "debug fallback (android/key.properties not found)"
+  }
+
+  $requiredKeys = @("storeFile", "storePassword", "keyAlias", "keyPassword")
+  $content = Get-Content -LiteralPath $keyProperties
+  foreach ($key in $requiredKeys) {
+    $match = $content | Where-Object { $_ -match "^\s*$([regex]::Escape($key))\s*=\s*\S+" } | Select-Object -First 1
+    if (-not $match) {
+      return "debug fallback (android/key.properties is incomplete)"
+    }
+  }
+
+  return "release keystore from android/key.properties"
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
 
@@ -76,6 +96,8 @@ if ([string]::IsNullOrWhiteSpace($TagName)) {
 if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) {
   $ReleaseTitle = "RePaperTodo $version"
 }
+$androidSigningMode = Get-AndroidSigningMode -RepoRoot $repoRoot
+Write-Host "Android signing mode: $androidSigningMode"
 
 if (-not $SkipTests -or -not $SkipBuild) {
   Invoke-Step "Resolve Flutter packages" {
@@ -170,7 +192,7 @@ if ($PublishGitHubRelease) {
         & gh release create $TagName $windowsZip $androidApk $checksumsFile `
           --target main `
           --title $ReleaseTitle `
-          --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n`nValidation:`n- flutter test --no-pub`n- flutter analyze --no-pub`n- flutter build windows --release --no-pub`n- flutter build apk --release --no-pub"
+          --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n`nAndroid signing: $androidSigningMode.`n`nValidation:`n- flutter test --no-pub`n- flutter analyze --no-pub`n- flutter build windows --release --no-pub`n- flutter build apk --release --no-pub"
       }
     }
   }

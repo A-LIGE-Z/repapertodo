@@ -18,6 +18,8 @@ void main() {
         File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
     final filePaths =
         File('android/app/src/main/res/xml/file_paths.xml').readAsStringSync();
+    final gitignore = File('.gitignore').readAsStringSync();
+    final readme = File('README.md').readAsStringSync();
     final mainActivity = File(
             'android/app/src/main/kotlin/com/aligez/repapertodo/MainActivity.kt')
         .readAsStringSync();
@@ -25,6 +27,17 @@ void main() {
     expect(gradle, contains('compileSdk = 37'));
     expect(gradle, contains('minSdk = 34'));
     expect(gradle, contains('targetSdk = 37'));
+    expect(gradle, contains('rootProject.file("key.properties")'));
+    expect(gradle, contains('hasReleaseSigningConfig'));
+    expect(gradle, contains('signingConfigs.getByName("release")'));
+    expect(gradle, contains('signingConfigs.getByName("debug")'));
+    expect(gradle, contains('enableV2Signing = true'));
+    expect(gradle, contains('enableV3Signing = true'));
+    expect(gitignore, contains('android/key.properties'));
+    expect(gitignore, contains('*.jks'));
+    expect(readme, contains('Android release signing'));
+    expect(readme, contains('debug fallback'));
+    expect(readme, contains('android/key.properties'));
     expect(manifest, contains('android.permission.INTERNET'));
     expect(manifest, contains('android:usesCleartextTraffic="true"'));
     expect(manifest, contains('androidx.core.content.FileProvider'));
@@ -697,6 +710,9 @@ void main() {
     expect(script, contains(r'& $flutter analyze --no-pub'));
     expect(script, contains(r'& $flutter build windows --release --no-pub'));
     expect(script, contains(r'& $flutter build apk --release --no-pub'));
+    expect(script, contains('Get-AndroidSigningMode'));
+    expect(script, contains(r'Android signing mode: $androidSigningMode'));
+    expect(script, contains(r'Android signing: $androidSigningMode.'));
     expect(script, contains('Compress-Archive'));
     expect(script, contains('Get-FileHash -Algorithm SHA256'));
     expect(script, contains(r'Set-Content -LiteralPath $checksumsFile'));
