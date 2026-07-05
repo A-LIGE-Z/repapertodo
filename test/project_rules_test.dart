@@ -744,6 +744,26 @@ void main() {
     expect(app, contains('_requestTodoItemFocus(item.id)'));
   });
 
+  test('PaperTodo clear completed todo items is preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('Clearing completed Todo items should preserve'));
+    expect(design, contains('push one todo undo snapshot'));
+    expect(design, contains('create a blank fallback row'));
+    expect(design, contains('deleted-item tombstones'));
+    expect(design, contains('first'));
+    expect(design, contains('nonblank remaining row'));
+    expect(app, contains('_compactTodoActionClearDone'));
+    expect(app, contains('Clear completed'));
+    expect(app, contains('Clear completed items'));
+    expect(app, contains('_clearDoneItems'));
+    expect(app, contains('completedItems.isEmpty'));
+    expect(app, contains('remainingItems.add(_newTodoItem())'));
+    expect(app, contains('widget.onItemDeleted(widget.paper, item)'));
+    expect(app, contains('_requestTodoItemFocus(focusTargetId)'));
+  });
+
   test('PaperTodo markdown note link interaction is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

@@ -5042,6 +5042,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   static const _compactTodoActionMoveUp = 'move-up';
   static const _compactTodoActionMoveDown = 'move-down';
   static const _compactTodoActionDelete = 'delete';
+  static const _compactTodoActionClearDone = 'clear-done';
   static const _compactTodoColumnActionPrefix = 'column:';
   static const _compactTodoLinkActionPrefix = 'link:';
 
@@ -5150,6 +5151,12 @@ class _TodoEditorState extends State<_TodoEditor> {
               icon: Icons.delete_outline,
               label: 'Delete item',
               enabled: widget.paper.items.length > 1,
+            ),
+            _todoActionMenuItem(
+              value: _compactTodoActionClearDone,
+              icon: Icons.delete_sweep_outlined,
+              label: 'Clear completed',
+              enabled: _hasDoneTodoItems,
             ),
           ],
         ),
@@ -5313,6 +5320,16 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
         icon: const Icon(Icons.delete_outline),
       ),
+      IconButton(
+        tooltip: _tooltipLabel(widget.enableToolTips, 'Clear completed items'),
+        onPressed: _hasDoneTodoItems ? _clearDoneItems : null,
+        iconSize: visualSpec.iconSize,
+        constraints: BoxConstraints.tightFor(
+          width: visualSpec.controlExtent,
+          height: visualSpec.controlExtent,
+        ),
+        icon: const Icon(Icons.delete_sweep_outlined),
+      ),
     ];
   }
 
@@ -5373,6 +5390,8 @@ class _TodoEditorState extends State<_TodoEditor> {
         _moveTodoItem(item, 1);
       case _compactTodoActionDelete:
         _deleteItem(context, item);
+      case _compactTodoActionClearDone:
+        _clearDoneItems();
     }
   }
 
@@ -5543,6 +5562,20 @@ class _TodoEditorState extends State<_TodoEditor> {
       }
       focusNode.requestFocus();
     });
+  }
+
+  String? _currentFocusedTodoItemId() {
+    for (final entry in _todoMainFieldFocusNodes.entries) {
+      if (entry.value.hasFocus) {
+        return entry.key;
+      }
+    }
+    for (final entry in _todoExtraFieldFocusNodes.entries) {
+      if (entry.value.hasFocus) {
+        return entry.key.split(':').first;
+      }
+    }
+    return null;
   }
 
   void _undoTodoChange() {
@@ -6180,6 +6213,57 @@ class _TodoEditorState extends State<_TodoEditor> {
   bool _allTodoTextColumnsBlank(PaperItem item) {
     return item.text.trim().isEmpty &&
         item.todoExtraColumns.every((column) => column.trim().isEmpty);
+  }
+
+  bool _isBlankTodoItem(PaperItem item) {
+    return _allTodoTextColumnsBlank(item) &&
+        (item.dueAtLocal?.trim().isEmpty ?? true) &&
+        item.reminderIntervalValue == null &&
+        (item.linkedNoteId?.trim().isEmpty ?? true);
+  }
+
+  bool get _hasDoneTodoItems {
+    return widget.paper.items.any((item) => item.done);
+  }
+
+  void _clearDoneItems() {
+    final completedItems =
+        widget.paper.items.where((item) => item.done).toList();
+    if (completedItems.isEmpty) {
+      return;
+    }
+    final focusedId = _currentFocusedTodoItemId();
+    final completedIds = completedItems.map((item) => item.id).toSet();
+
+    _pushTodoUndoSnapshot();
+    String? focusTargetId;
+    setState(() {
+      final remainingItems = widget.paper.items
+          .where((item) => !completedIds.contains(item.id))
+          .toList();
+      if (remainingItems.isEmpty) {
+        remainingItems.add(_newTodoItem());
+      }
+      widget.paper.items = remainingItems;
+      widget.paper.normalize();
+      if (widget.paper.items.any((item) => item.id == focusedId)) {
+        focusTargetId = focusedId;
+      } else {
+        for (final item in widget.paper.items) {
+          if (!_isBlankTodoItem(item)) {
+            focusTargetId = item.id;
+            break;
+          }
+        }
+        focusTargetId ??=
+            widget.paper.items.isEmpty ? null : widget.paper.items.first.id;
+      }
+    });
+    for (final item in completedItems) {
+      widget.onItemDeleted(widget.paper, item);
+    }
+    _requestTodoItemFocus(focusTargetId);
+    unawaited(widget.onChanged());
   }
 
   void _deleteItem(BuildContext context, PaperItem item) {

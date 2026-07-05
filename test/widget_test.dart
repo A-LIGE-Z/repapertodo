@@ -6949,6 +6949,121 @@ void main() {
     );
   });
 
+  testWidgets('clears completed todo items like PaperTodo', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'clear-done-paper',
+            type: PaperTypes.todo,
+            title: 'Clear done paper',
+            items: [
+              PaperItem(id: 'done-one', text: 'Done one', done: true),
+              PaperItem(id: 'keep-one', text: 'Keep one', order: 1),
+              PaperItem(id: 'done-two', text: 'Done two', done: true, order: 2),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Clear completed items').first);
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.single.items.map((item) => item.id),
+      ['keep-one'],
+    );
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['clear-done-paper']
+          ?.containsKey('done-one'),
+      true,
+    );
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['clear-done-paper']
+          ?.containsKey('done-two'),
+      true,
+    );
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.single.items.map((item) => item.id),
+      ['done-one', 'keep-one', 'done-two'],
+    );
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['clear-done-paper']
+          ?.containsKey('done-one'),
+      isNot(true),
+    );
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['clear-done-paper']
+          ?.containsKey('done-two'),
+      isNot(true),
+    );
+  });
+
+  testWidgets('clearing all completed todo items leaves a fallback row',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'clear-all-done-paper',
+            type: PaperTypes.todo,
+            title: 'Clear all done paper',
+            items: [
+              PaperItem(id: 'done-one', text: 'Done one', done: true),
+              PaperItem(id: 'done-two', text: 'Done two', done: true, order: 1),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Clear completed items').first);
+    await tester.pumpAndSettle();
+
+    final fallback = controller.state.papers.single.items.single;
+    expect(fallback.id, isNot(anyOf('done-one', 'done-two')));
+    expect(fallback.text, '');
+    expect(fallback.done, false);
+    expect(fallback.order, 0);
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['clear-all-done-paper']
+          ?.containsKey('done-one'),
+      true,
+    );
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['clear-all-done-paper']
+          ?.containsKey('done-two'),
+      true,
+    );
+  });
+
   testWidgets('moves todo items up and down with undoable ordering',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
