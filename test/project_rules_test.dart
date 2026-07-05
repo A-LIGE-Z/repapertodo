@@ -443,6 +443,8 @@ void main() {
   test('PaperTodo runtime custom font convention is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
+    final settingsDialog =
+        File('lib/src/ui/sync_settings_dialog.dart').readAsStringSync();
     final runtimeFont =
         File('lib/src/ui/runtime_custom_font.dart').readAsStringSync();
 
@@ -450,8 +452,15 @@ void main() {
     expect(design, contains('papertodo.otf'));
     expect(design, contains('Windows executable directory'));
     expect(design, contains('must not block startup'));
+    expect(design, contains('yahei'));
+    expect(design, contains('dengxian'));
     expect(app, contains('PaperTodoRuntimeCustomFontLoader'));
     expect(app, contains('resolveAppFontFamily'));
+    expect(app, contains('resolveAppFontFamilyFallback'));
+    expect(app, contains('Microsoft YaHei UI'));
+    expect(app, contains('DengXian'));
+    expect(settingsDialog, contains('value: UiFontPresets.yaHei'));
+    expect(settingsDialog, contains('value: UiFontPresets.dengXian'));
     expect(runtimeFont, contains('paperTodoRuntimeCustomFontCandidates'));
     expect(runtimeFont, contains("'papertodo.ttf'"));
     expect(runtimeFont, contains("'papertodo.otf'"));

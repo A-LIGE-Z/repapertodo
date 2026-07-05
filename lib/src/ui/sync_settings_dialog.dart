@@ -683,6 +683,14 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     child: Text('Default'),
                   ),
                   DropdownMenuItem(
+                    value: UiFontPresets.yaHei,
+                    child: Text('YaHei'),
+                  ),
+                  DropdownMenuItem(
+                    value: UiFontPresets.dengXian,
+                    child: Text('DengXian'),
+                  ),
+                  DropdownMenuItem(
                     value: UiFontPresets.serif,
                     child: Text('Serif'),
                   ),

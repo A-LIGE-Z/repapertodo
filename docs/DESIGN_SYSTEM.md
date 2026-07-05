@@ -82,6 +82,8 @@ For PaperTodo font parity, when no explicit system font family is configured,
 the app should try to load `papertodo.ttf` and then `papertodo.otf` from the
 Windows executable directory before falling back to built-in font presets.
 Missing, invalid, or unsupported runtime font files must not block startup.
+Original PaperTodo font preset migration must preserve `yahei` and `dengxian`
+instead of silently normalizing them to the default preset.
 
 ## Android Priority
 

@@ -40,12 +40,16 @@ abstract final class TodoVisualSizes {
 
 abstract final class UiFontPresets {
   static const defaultPreset = 'default';
+  static const yaHei = 'yahei';
+  static const dengXian = 'dengxian';
   static const serif = 'serif';
   static const mono = 'mono';
   static const custom = 'custom';
 
   static String normalize(String? value) {
     return switch (_normalizedValue(value)) {
+      yaHei => yaHei,
+      dengXian => dengXian,
       serif => serif,
       mono => mono,
       custom => custom,

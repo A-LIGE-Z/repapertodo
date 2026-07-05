@@ -111,4 +111,20 @@ void main() {
       'monospace',
     );
   });
+
+  test('app font family preserves PaperTodo YaHei and DengXian presets', () {
+    final yaHeiState = AppState(uiFontPreset: UiFontPresets.yaHei);
+    final dengXianState = AppState(uiFontPreset: UiFontPresets.dengXian);
+
+    expect(resolveAppFontFamily(yaHeiState), 'Microsoft YaHei UI');
+    expect(
+      resolveAppFontFamilyFallback(yaHeiState),
+      containsAll(['Microsoft YaHei', 'Segoe UI', 'Segoe UI Emoji']),
+    );
+    expect(resolveAppFontFamily(dengXianState), 'DengXian');
+    expect(
+      resolveAppFontFamilyFallback(dengXianState),
+      containsAll(['Microsoft YaHei UI', 'Segoe UI', 'Segoe UI Emoji']),
+    );
+  });
 }

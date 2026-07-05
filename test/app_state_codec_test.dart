@@ -314,6 +314,17 @@ void main() {
         TodoReminderIntervalUnits.hours);
   });
 
+  test('preserves original PaperTodo UI font presets', () {
+    expect(
+      AppState.fromJson({'uiFontPreset': 'YAHEI'}).uiFontPreset,
+      UiFontPresets.yaHei,
+    );
+    expect(
+      AppState.fromJson({'uiFontPreset': 'DENGXIAN'}).uiFontPreset,
+      UiFontPresets.dengXian,
+    );
+  });
+
   test('normalizes external markdown extensions like PaperTodo', () {
     expect(
       AppState.fromJson({'externalMarkdownExtension': '*.MD'})

@@ -31,6 +31,31 @@ import 'ui/sync_settings_dialog.dart';
 
 const _externalMarkdownExportRetention = Duration(days: 7);
 const _maxExternalMarkdownPaperIdFileNameLength = 96;
+const _yaHeiFontFamily = 'Microsoft YaHei UI';
+const _yaHeiFontFamilyFallback = [
+  'Microsoft YaHei',
+  'Segoe UI',
+  'Microsoft JhengHei UI',
+  'Microsoft JhengHei',
+  'Yu Gothic UI',
+  'Malgun Gothic',
+  'Meiryo',
+  'Segoe UI Symbol',
+  'Segoe UI Emoji',
+];
+const _dengXianFontFamily = 'DengXian';
+const _dengXianFontFamilyFallback = [
+  'Microsoft YaHei UI',
+  'Microsoft YaHei',
+  'Segoe UI',
+  'Microsoft JhengHei UI',
+  'Microsoft JhengHei',
+  'Yu Gothic UI',
+  'Malgun Gothic',
+  'Meiryo',
+  'Segoe UI Symbol',
+  'Segoe UI Emoji',
+];
 
 class RePaperTodoApp extends StatefulWidget {
   const RePaperTodoApp({
@@ -99,13 +124,16 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
       useMaterial3: true,
     );
     final fontFamily = _fontFamily(state);
+    final fontFamilyFallback = _fontFamilyFallback(state);
     return base.copyWith(
       textTheme: base.textTheme.apply(
         fontFamily: fontFamily,
+        fontFamilyFallback: fontFamilyFallback,
         fontSizeFactor: state.zoom,
       ),
       primaryTextTheme: base.primaryTextTheme.apply(
         fontFamily: fontFamily,
+        fontFamilyFallback: fontFamilyFallback,
         fontSizeFactor: state.zoom,
       ),
     );
@@ -146,6 +174,13 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
       runtimeCustomFontFamily: _runtimeCustomFontFamily,
     );
   }
+
+  List<String>? _fontFamilyFallback(AppState state) {
+    return resolveAppFontFamilyFallback(
+      state,
+      runtimeCustomFontFamily: _runtimeCustomFontFamily,
+    );
+  }
 }
 
 String? resolveAppFontFamily(
@@ -161,8 +196,28 @@ String? resolveAppFontFamily(
     return runtimeFamily;
   }
   return switch (UiFontPresets.normalize(state.uiFontPreset)) {
+    UiFontPresets.yaHei => _yaHeiFontFamily,
+    UiFontPresets.dengXian => _dengXianFontFamily,
     UiFontPresets.serif => 'serif',
     UiFontPresets.mono => 'monospace',
+    _ => null,
+  };
+}
+
+List<String>? resolveAppFontFamilyFallback(
+  AppState state, {
+  String? runtimeCustomFontFamily,
+}) {
+  if (state.systemFontFamilyName.trim().isNotEmpty) {
+    return null;
+  }
+  final runtimeFamily = runtimeCustomFontFamily?.trim();
+  if (runtimeFamily != null && runtimeFamily.isNotEmpty) {
+    return null;
+  }
+  return switch (UiFontPresets.normalize(state.uiFontPreset)) {
+    UiFontPresets.yaHei => _yaHeiFontFamilyFallback,
+    UiFontPresets.dengXian => _dengXianFontFamilyFallback,
     _ => null,
   };
 }
