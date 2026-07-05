@@ -555,6 +555,21 @@ void main() {
     expect(app, contains('now.add(const Duration(hours: 1))'));
   });
 
+  test('PaperTodo todo reorder data semantics are preserved', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(design, contains('Todo ordering should preserve PaperTodo'));
+    expect(design, contains('push a todo undo snapshot'));
+    expect(design, contains('orders after every move'));
+    expect(app, contains('_moveTodoItem'));
+    expect(app, contains('_compactTodoActionMoveUp'));
+    expect(app, contains('_compactTodoActionMoveDown'));
+    expect(app, contains('Move item up'));
+    expect(app, contains('Move item down'));
+    expect(app, contains('_requestTodoItemFocus(item.id)'));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();

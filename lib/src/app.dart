@@ -4305,6 +4305,8 @@ class _TodoEditorState extends State<_TodoEditor> {
   static const _columnActionDeletePrefix = 'delete:';
   static const _compactTodoActionDueDate = 'due-date';
   static const _compactTodoActionReminder = 'reminder';
+  static const _compactTodoActionMoveUp = 'move-up';
+  static const _compactTodoActionMoveDown = 'move-down';
   static const _compactTodoActionDelete = 'delete';
   static const _compactTodoColumnActionPrefix = 'column:';
   static const _compactTodoLinkActionPrefix = 'link:';
@@ -4337,6 +4339,19 @@ class _TodoEditorState extends State<_TodoEditor> {
               value: _compactTodoActionReminder,
               icon: Icons.notifications_none_outlined,
               label: 'Set reminder',
+            ),
+            const PopupMenuDivider(),
+            _todoActionMenuItem(
+              value: _compactTodoActionMoveUp,
+              icon: Icons.keyboard_arrow_up,
+              label: 'Move item up',
+              enabled: _canMoveTodoItem(item, -1),
+            ),
+            _todoActionMenuItem(
+              value: _compactTodoActionMoveDown,
+              icon: Icons.keyboard_arrow_down,
+              label: 'Move item down',
+              enabled: _canMoveTodoItem(item, 1),
             ),
             const PopupMenuDivider(),
             _todoActionMenuItem(
@@ -4517,6 +4532,28 @@ class _TodoEditorState extends State<_TodoEditor> {
         },
       ),
       IconButton(
+        tooltip: _tooltipLabel(widget.enableToolTips, 'Move item up'),
+        onPressed:
+            _canMoveTodoItem(item, -1) ? () => _moveTodoItem(item, -1) : null,
+        iconSize: visualSpec.iconSize,
+        constraints: BoxConstraints.tightFor(
+          width: visualSpec.controlExtent,
+          height: visualSpec.controlExtent,
+        ),
+        icon: const Icon(Icons.keyboard_arrow_up),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(widget.enableToolTips, 'Move item down'),
+        onPressed:
+            _canMoveTodoItem(item, 1) ? () => _moveTodoItem(item, 1) : null,
+        iconSize: visualSpec.iconSize,
+        constraints: BoxConstraints.tightFor(
+          width: visualSpec.controlExtent,
+          height: visualSpec.controlExtent,
+        ),
+        icon: const Icon(Icons.keyboard_arrow_down),
+      ),
+      IconButton(
         tooltip: _tooltipLabel(widget.enableToolTips, 'Delete item'),
         onPressed: widget.paper.items.length <= 1
             ? null
@@ -4571,6 +4608,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         unawaited(_pickDueDate(context, item));
       case _compactTodoActionReminder:
         unawaited(_pickReminderInterval(context, item));
+      case _compactTodoActionMoveUp:
+        _moveTodoItem(item, -1);
+      case _compactTodoActionMoveDown:
+        _moveTodoItem(item, 1);
       case _compactTodoActionDelete:
         _deleteItem(context, item);
     }
@@ -4971,6 +5012,41 @@ class _TodoEditorState extends State<_TodoEditor> {
       }
       item.normalize();
     });
+    unawaited(widget.onChanged());
+  }
+
+  bool _canMoveTodoItem(PaperItem item, int delta) {
+    final index = _todoItemIndex(item);
+    if (index < 0) {
+      return false;
+    }
+    final targetIndex = index + delta;
+    return targetIndex >= 0 && targetIndex < widget.paper.items.length;
+  }
+
+  int _todoItemIndex(PaperItem item) {
+    return widget.paper.items.indexWhere(
+      (candidate) => candidate.id == item.id,
+    );
+  }
+
+  void _moveTodoItem(PaperItem item, int delta) {
+    final index = _todoItemIndex(item);
+    final targetIndex = index + delta;
+    if (index < 0 ||
+        targetIndex < 0 ||
+        targetIndex >= widget.paper.items.length) {
+      return;
+    }
+
+    _pushTodoUndoSnapshot();
+    setState(() {
+      final targetItem = widget.paper.items[targetIndex];
+      widget.paper.items[targetIndex] = item;
+      widget.paper.items[index] = targetItem;
+      widget.paper.normalize();
+    });
+    _requestTodoItemFocus(item.id);
     unawaited(widget.onChanged());
   }
 

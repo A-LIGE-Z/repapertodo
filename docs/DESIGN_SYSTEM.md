@@ -162,6 +162,10 @@ Relative due labels should use PaperTodo's duration model rather than coarse
 day names: round the absolute distance up to at least one minute, combine day,
 hour, and minute units such as `2h5m`, then show `in {duration}` for future
 items and `{duration} overdue` for past items.
+Todo ordering should preserve PaperTodo's reorder data semantics: item moves
+must push a todo undo snapshot, keep the moved item focused, normalize item
+orders after every move, and expose move-up/move-down actions until the full
+drag handle interaction is rebuilt.
 Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,
