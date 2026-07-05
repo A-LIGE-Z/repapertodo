@@ -2180,7 +2180,6 @@ class _ReminderIntervalDialog extends StatefulWidget {
 class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
   late final TextEditingController _intervalController;
   late String _unit;
-  String? _errorText;
 
   @override
   void initState() {
@@ -2212,7 +2211,6 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
                 border: const OutlineInputBorder(),
                 labelText: 'Interval',
                 prefixIcon: const Icon(Icons.notifications_active_outlined),
-                errorText: _errorText,
               ),
               keyboardType: TextInputType.number,
             ),
@@ -2259,11 +2257,10 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
   }
 
   void _save() {
-    final value = int.tryParse(_intervalController.text.trim());
-    if (value == null || value < 1 || value > 240) {
-      setState(() => _errorText = 'Enter a number from 1 to 240.');
-      return;
-    }
+    final parsedValue = int.tryParse(_intervalController.text.trim());
+    final fallbackValue = (widget.initialValue ?? 10).clamp(1, 240).toInt();
+    final rawValue = parsedValue ?? fallbackValue;
+    final value = (rawValue <= 0 ? 1 : rawValue).clamp(1, 240).toInt();
     Navigator.of(context).pop(
       _ReminderIntervalSelection.set(value, _unit),
     );

@@ -6117,6 +6117,25 @@ void main() {
     expect(item.reminderIntervalValue, isNull);
     expect(item.reminderIntervalUnit, isNull);
     expect(find.text('Every 2 hr'), findsNothing);
+
+    await tester.tap(find.byTooltip('Set reminder interval'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Interval'), 'bad');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(item.reminderIntervalValue, 3);
+    expect(item.reminderIntervalUnit, TodoReminderIntervalUnits.hours);
+
+    await tester.tap(find.byTooltip('Set reminder interval'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Interval'), '999');
+    await tester.tap(find.text('Minutes'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(item.reminderIntervalValue, 240);
+    expect(item.reminderIntervalUnit, TodoReminderIntervalUnits.minutes);
   });
 
   testWidgets('renders relative todo due dates', (tester) async {

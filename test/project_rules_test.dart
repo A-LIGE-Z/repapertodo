@@ -711,6 +711,8 @@ void main() {
     expect(design, contains('Todo overflow actions should mirror PaperTodo'));
     expect(design, contains('change plus clear actions'));
     expect(design, contains('global reminder interval value and unit'));
+    expect(design, contains("PaperTodo's forgiving input"));
+    expect(design, contains('values above 240 are clamped to 240'));
     expect(design, contains('00-23 hour'));
     expect(design, contains('00-59 minute'));
     expect(design, contains('yyyy-MM-ddTHH:mm:ss'));
@@ -735,6 +737,8 @@ void main() {
     expect(app, contains('_hasReminderInterval'));
     expect(app, contains('defaultReminderIntervalValue'));
     expect(app, contains('defaultReminderIntervalUnit'));
+    expect(app, contains('fallbackValue'));
+    expect(app, contains('rawValue <= 0 ? 1 : rawValue'));
     expect(app, contains('shouldRefreshRelativeDueLabels'));
   });
 

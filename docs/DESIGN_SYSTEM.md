@@ -241,7 +241,9 @@ state: existing due dates show change plus clear actions, existing reminder
 intervals show change plus clear actions, and clear actions no-op when the
 field is already empty. Creating a per-item reminder interval should default
 to the global reminder interval value and unit when the item has no custom
-interval yet.
+interval yet. Saving that dialog should follow PaperTodo's forgiving input
+model: unparsable text falls back to the initial value, non-positive values
+become 1, and values above 240 are clamped to 240.
 Absolute due labels without an explicit year should follow PaperTodo's compact
 time-aware display: today is `HH:mm`, tomorrow is `Tomorrow HH:mm`, and other
 dates keep month-day plus `HH:mm`.
