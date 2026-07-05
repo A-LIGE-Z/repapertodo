@@ -449,6 +449,21 @@ void main() {
     expect(settingsCase, contains('SetForegroundWindow(window);'));
   });
 
+  test('Windows tray paper command shows the selected paper window', () {
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final paperCommandStart = runner.indexOf(
+      'command >= kTrayPaperCommandBase',
+    );
+    final paperCommandEnd = runner.indexOf('break;', paperCommandStart);
+
+    expect(paperCommandStart, isNonNegative);
+    expect(paperCommandEnd, greaterThan(paperCommandStart));
+    final paperCommand = runner.substring(paperCommandStart, paperCommandEnd);
+    expect(paperCommand, contains('SendPaperRequested('));
+    expect(paperCommand, contains('ShowWindow(window, SW_SHOWNORMAL);'));
+    expect(paperCommand, contains('SetForegroundWindow(window);'));
+  });
+
   test('Windows runner validates external files before opening them', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
 
