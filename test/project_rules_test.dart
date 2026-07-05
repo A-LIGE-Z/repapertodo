@@ -638,10 +638,13 @@ void main() {
 
     expect(design, contains('Todo keyboard editing should follow PaperTodo'));
     expect(design, contains('Enter with no modifiers inserts'));
+    expect(design, contains("PaperTodo's `AddItemAfter` semantics"));
+    expect(design, contains('default single-column'));
     expect(design, contains('Backspace'));
     expect(design, contains('suppresses repeated'));
     expect(app, contains('_handleTodoItemKeyEvent'));
     expect(app, contains('_insertItemAfter'));
+    expect(app, contains('PaperItem _newTodoItem({String text = \'\'}'));
     expect(app, contains('_deleteBlankTodoItemFromKeyboard'));
     expect(app, contains('_allTodoTextColumnsBlank'));
     expect(app, contains('_suppressTodoBackspaceUntilKeyUp'));

@@ -6552,9 +6552,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.items, hasLength(2));
-    expect(controller.state.papers.single.items.last.todoColumnCount, 2);
-    expect(controller.state.papers.single.items.last.todoExtraColumns, ['']);
-    expect(controller.state.papers.single.items.last.todoColumnWidths, [2, 1]);
+    expect(controller.state.papers.single.items.last.todoColumnCount, 1);
+    expect(controller.state.papers.single.items.last.todoExtraColumns, isEmpty);
+    expect(controller.state.papers.single.items.last.todoColumnWidths, [1]);
 
     await tester.tap(find.byTooltip('Todo columns').first);
     await tester.pumpAndSettle();
@@ -6772,11 +6772,11 @@ void main() {
       'Compare notes',
       'Ship build',
     ]);
-    expect(items.map((item) => item.todoColumnCount), [2, 2, 2]);
+    expect(items.map((item) => item.todoColumnCount), [2, 1, 1]);
     expect(items.map((item) => item.todoColumnWidths), [
       [2, 1],
-      [2, 1],
-      [2, 1],
+      [1],
+      [1],
     ]);
 
     await tester.tap(find.byTooltip('Undo todo change'));
@@ -6848,9 +6848,9 @@ void main() {
       '',
       'Second item',
     ]);
-    expect(items[1].todoColumnCount, 2);
-    expect(items[1].todoExtraColumns, ['']);
-    expect(items[1].todoColumnWidths, [2, 1]);
+    expect(items[1].todoColumnCount, 1);
+    expect(items[1].todoExtraColumns, isEmpty);
+    expect(items[1].todoColumnWidths, [1]);
     expect(items.map((item) => item.order), [0, 1, 2]);
   });
 

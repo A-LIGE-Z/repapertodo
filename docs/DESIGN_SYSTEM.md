@@ -214,6 +214,10 @@ on an item whose main and extra text columns are blank deletes that item when
 more than one item exists, preserves at least one row, and suppresses repeated
 blank-row deletion until key up. These structural edits must use todo undo
 snapshots and deleted-item tombstones.
+New Todo rows created by Enter, the append affordance, or multiline paste
+should follow PaperTodo's `AddItemAfter` semantics: the active row keeps its
+existing columns, while newly inserted rows start as default single-column
+items instead of inheriting the source row's column layout.
 Todo text editing should follow PaperTodo's undo snapshot timing: focusing a
 main todo text field records its original text, losing focus after a change
 pushes that pre-edit item snapshot, and structural edits first commit any

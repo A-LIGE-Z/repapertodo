@@ -6328,9 +6328,9 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _addItem() {
-    final inheritedItem =
+    final lastItem =
         widget.paper.items.isEmpty ? null : widget.paper.items.last;
-    _insertItemAfter(inheritedItem);
+    _insertItemAfter(lastItem);
   }
 
   void _insertItemAfter(PaperItem? item, {String text = ''}) {
@@ -6344,9 +6344,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     final normalizedInsertIndex = insertIndex <= 0
         ? widget.paper.items.length
         : insertIndex.clamp(0, widget.paper.items.length).toInt();
-    final inheritedItem =
-        item ?? (widget.paper.items.isEmpty ? null : widget.paper.items.last);
-    final newItem = _newTodoItem(inheritedItem: inheritedItem, text: text);
+    final newItem = _newTodoItem(text: text);
     setState(() {
       widget.paper.items.insert(normalizedInsertIndex, newItem);
       widget.paper.normalize();
@@ -6362,11 +6360,6 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (insertIndex < 0) {
       return;
     }
-    final inheritedColumnCount = item.todoColumnCount;
-    final inheritedColumnWidths =
-        item.todoColumnWidths.length == inheritedColumnCount
-            ? item.todoColumnWidths
-            : <double>[];
     final idSeed = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     var lineIndex = 0;
     final newItems = [
@@ -6374,26 +6367,15 @@ class _TodoEditorState extends State<_TodoEditor> {
         PaperItem(
           id: '$idSeed-${lineIndex++}',
           text: line,
-          todoColumnCount: inheritedColumnCount,
-          todoExtraColumns: List.filled(inheritedColumnCount - 1, ''),
-          todoColumnWidths: [...inheritedColumnWidths],
         ),
     ];
     widget.paper.items.insertAll(insertIndex + 1, newItems);
   }
 
-  PaperItem _newTodoItem({PaperItem? inheritedItem, String text = ''}) {
-    final inheritedColumnCount = inheritedItem?.todoColumnCount ?? 1;
-    final inheritedColumnWidths =
-        inheritedItem?.todoColumnWidths.length == inheritedColumnCount
-            ? inheritedItem!.todoColumnWidths
-            : <double>[];
+  PaperItem _newTodoItem({String text = ''}) {
     return PaperItem(
       id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
       text: text,
-      todoColumnCount: inheritedColumnCount,
-      todoExtraColumns: List.filled(inheritedColumnCount - 1, ''),
-      todoColumnWidths: [...inheritedColumnWidths],
     );
   }
 
