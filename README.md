@@ -22,3 +22,18 @@ platform-service boundaries, startup command handling, and WebDAV snapshot plus
 operation-log sync foundations.
 
 See [AGENTS.md](AGENTS.md) for project rules and [docs/ROADMAP.md](docs/ROADMAP.md) for the staged implementation plan.
+
+## Release Build
+
+Use the local release script to verify, build, and package the Windows and
+Android artifacts:
+
+```powershell
+.\scripts\release.ps1
+```
+
+To also create or update the GitHub Release for the version in `pubspec.yaml`:
+
+```powershell
+.\scripts\release.ps1 -PublishGitHubRelease
+```

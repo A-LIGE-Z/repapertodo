@@ -472,4 +472,24 @@ void main() {
     expect(runner, contains('IsAllowedScriptCapsuleEngine'));
     expect(runner, contains('invalid_script_capsule_engine'));
   });
+
+  test('release script packages Windows and Android artifacts', () {
+    final script = File('scripts/release.ps1').readAsStringSync();
+    final readme = File('README.md').readAsStringSync();
+
+    expect(script, contains(r'$env:HTTPS_PROXY = ""'));
+    expect(script, contains('flutter.bat'));
+    expect(script, contains(r'& $flutter test'));
+    expect(script, contains(r'& $flutter analyze'));
+    expect(script, contains(r'& $flutter build windows --release'));
+    expect(script, contains(r'& $flutter build apk --release'));
+    expect(script, contains('Compress-Archive'));
+    expect(script, contains(r'repapertodo-windows-x64-$artifactVersion.zip'));
+    expect(script, contains(r'repapertodo-android-$artifactVersion.apk'));
+    expect(script, contains('gh release create'));
+    expect(script, contains('gh release upload'));
+    expect(script, contains('Android release APK for Android 14+'));
+    expect(readme, contains(r'.\scripts\release.ps1'));
+    expect(readme, contains('-PublishGitHubRelease'));
+  });
 }
