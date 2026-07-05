@@ -4302,7 +4302,7 @@ class _TodoEditorState extends State<_TodoEditor> {
               value: '$_compactTodoColumnActionPrefix$_columnActionAdd',
               icon: Icons.add,
               label: 'Add column',
-              enabled: item.todoColumnCount < 8,
+              enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
             ),
             _todoActionMenuItem(
               value: '$_compactTodoColumnActionPrefix$_columnActionRemove',
@@ -4374,7 +4374,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           return [
             PopupMenuItem(
               value: _columnActionAdd,
-              enabled: item.todoColumnCount < 8,
+              enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
               child: const ListTile(
                 leading: Icon(Icons.add),
                 title: Text('Add column'),
@@ -4740,7 +4740,8 @@ class _TodoEditorState extends State<_TodoEditor> {
   void _updateColumns(PaperItem item, String action) {
     _pushTodoUndoSnapshot();
     setState(() {
-      if (action == _columnActionAdd && item.todoColumnCount < 8) {
+      if (action == _columnActionAdd &&
+          item.todoColumnCount < TodoColumnLimits.maxCount) {
         item.todoColumnCount += 1;
         if (item.todoColumnWidths.isNotEmpty) {
           item.todoColumnWidths = [

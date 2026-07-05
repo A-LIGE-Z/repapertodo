@@ -867,9 +867,9 @@ Plain item
           'items': [
             {
               'id': 'columns',
-              'todoColumnCount': 3,
+              'todoColumnCount': 9,
               'todoExtraColumns': ['A'],
-              'todoColumnWidths': [0.1, 1.23456, 99, 7],
+              'todoColumnWidths': [0.1, 1.23456, 99, 10001, 7],
               'dueAtLocal': ' 2026-06-30T09:08:07.999 ',
             },
             {
@@ -884,9 +884,12 @@ Plain item
     final itemsById = {
       for (final item in state.papers.single.items) item.id: item,
     };
-    expect(itemsById['columns']?.todoColumnCount, 3);
-    expect(itemsById['columns']?.todoExtraColumns, ['A', '']);
-    expect(itemsById['columns']?.todoColumnWidths, [0.2, 1.235, 8]);
+    expect(itemsById['columns']?.todoColumnCount, 4);
+    expect(itemsById['columns']?.todoExtraColumns, ['A', '', '']);
+    expect(
+      itemsById['columns']?.todoColumnWidths,
+      [0.2, 1.235, 99, 10000],
+    );
     expect(itemsById['columns']?.dueAtLocal, '2026-06-30T09:08:07');
     expect(itemsById['invalid-due']?.dueAtLocal, isNull);
   });

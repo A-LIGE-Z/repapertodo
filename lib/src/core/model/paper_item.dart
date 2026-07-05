@@ -76,7 +76,9 @@ class PaperItem {
     }
     todoExtraColumns = [...todoExtraColumns];
     todoColumnWidths = [...todoColumnWidths];
-    todoColumnCount = todoColumnCount.clamp(1, 8).toInt();
+    todoColumnCount = todoColumnCount
+        .clamp(TodoColumnLimits.minCount, TodoColumnLimits.maxCount)
+        .toInt();
     while (todoExtraColumns.length < todoColumnCount - 1) {
       todoExtraColumns.add('');
     }
@@ -128,7 +130,9 @@ double _normalizeColumnWidth(double value) {
     return 1;
   }
   final rounded = (value * 1000).roundToDouble() / 1000;
-  return rounded.clamp(0.2, 8).toDouble();
+  return rounded
+      .clamp(TodoColumnLimits.minWidth, TodoColumnLimits.maxWidth)
+      .toDouble();
 }
 
 String? _normalizeDueAtLocal(String? value) {

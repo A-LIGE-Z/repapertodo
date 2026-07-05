@@ -468,6 +468,21 @@ void main() {
     expect(runtimeFont, contains('Invalid or unsupported custom fonts'));
   });
 
+  test('PaperTodo todo column limits are preserved', () {
+    final model =
+        File('lib/src/core/model/paper_constants.dart').readAsStringSync();
+    final item = File('lib/src/core/model/paper_item.dart').readAsStringSync();
+    final app = File('lib/src/app.dart').readAsStringSync();
+
+    expect(model, contains('static const maxCount = 4'));
+    expect(model, contains('static const maxWidth = 10000.0'));
+    expect(item, contains('TodoColumnLimits.maxCount'));
+    expect(item, contains('TodoColumnLimits.maxWidth'));
+    expect(item, isNot(contains('clamp(1, 8)')));
+    expect(app, contains('TodoColumnLimits.maxCount'));
+    expect(app, isNot(contains('todoColumnCount < 8')));
+  });
+
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
