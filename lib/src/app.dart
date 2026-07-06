@@ -5611,6 +5611,8 @@ class _TodoEditor extends StatefulWidget {
   State<_TodoEditor> createState() => _TodoEditorState();
 }
 
+enum _TodoFocusPlacement { start, end }
+
 class _TodoEditorState extends State<_TodoEditor> {
   static const _maxTodoUndoDepth = 100;
   static const _todoColumnSplitterWidth = 8.0;
@@ -6566,7 +6568,10 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
   }
 
-  void _requestTodoItemFocus(String? itemId) {
+  void _requestTodoItemFocus(
+    String? itemId, {
+    _TodoFocusPlacement placement = _TodoFocusPlacement.end,
+  }) {
     if (itemId == null) {
       _requestTodoFocus();
       return;
@@ -6581,7 +6586,48 @@ class _TodoEditorState extends State<_TodoEditor> {
         return;
       }
       focusNode.requestFocus();
+      _placeTodoCaret(focusNode, placement);
     });
+  }
+
+  void _placeTodoCaret(FocusNode focusNode, _TodoFocusPlacement placement) {
+    final editable = _editableTextStateFor(focusNode.context);
+    if (editable == null) {
+      return;
+    }
+    final value = editable.textEditingValue;
+    final offset = switch (placement) {
+      _TodoFocusPlacement.start => 0,
+      _TodoFocusPlacement.end => value.text.length,
+    };
+    editable.userUpdateTextEditingValue(
+      value.copyWith(selection: TextSelection.collapsed(offset: offset)),
+      SelectionChangedCause.keyboard,
+    );
+  }
+
+  EditableTextState? _editableTextStateFor(BuildContext? context) {
+    if (context == null) {
+      return null;
+    }
+    final ancestor = context.findAncestorStateOfType<EditableTextState>();
+    if (ancestor != null) {
+      return ancestor;
+    }
+    EditableTextState? descendant;
+    void visit(Element element) {
+      if (descendant != null) {
+        return;
+      }
+      if (element is StatefulElement && element.state is EditableTextState) {
+        descendant = element.state as EditableTextState;
+        return;
+      }
+      element.visitChildElements(visit);
+    }
+
+    context.visitChildElements(visit);
+    return descendant;
   }
 
   void _unfocusTodoItem(PaperItem item) {
@@ -7336,7 +7382,12 @@ class _TodoEditorState extends State<_TodoEditor> {
       widget.paper.normalize();
     });
     widget.onItemDeleted(widget.paper, item);
-    _requestTodoItemFocus(focusTargetId ?? widget.paper.items.first.id);
+    _requestTodoItemFocus(
+      focusTargetId ?? widget.paper.items.first.id,
+      placement: previousItem == null
+          ? _TodoFocusPlacement.start
+          : _TodoFocusPlacement.end,
+    );
     unawaited(widget.onChanged());
     return true;
   }

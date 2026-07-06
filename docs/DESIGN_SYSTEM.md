@@ -311,7 +311,9 @@ Todo keyboard editing should follow PaperTodo: Enter with no modifiers inserts
 an empty item directly after the focused item and moves focus there. Backspace
 on an item whose main and extra text columns are blank deletes that item when
 more than one item exists, preserves at least one row, and suppresses repeated
-blank-row deletion until key up. These structural edits must use todo undo
+blank-row deletion until key up. After a blank-row Backspace delete, focus
+should move to the previous Todo item's text end when one exists, otherwise to
+the next Todo item's text start. These structural edits must use todo undo
 snapshots and deleted-item tombstones.
 New Todo rows created by Enter, the append affordance, or multiline paste
 should follow PaperTodo's `AddItemAfter` semantics: the active row keeps its

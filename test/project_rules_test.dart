@@ -787,6 +787,8 @@ void main() {
     expect(design, contains('first cleaned line replaces'));
     expect(design, contains('Backspace'));
     expect(design, contains('suppresses repeated'));
+    expect(design, contains("previous Todo item's text end"));
+    expect(design, contains("next Todo item's text start"));
     expect(app, contains('_handleTodoItemKeyEvent'));
     expect(app, contains('_insertItemAfter'));
     expect(app, contains('extraColumnIndex'));
@@ -795,6 +797,9 @@ void main() {
     expect(app, contains('_deleteBlankTodoItemFromKeyboard'));
     expect(app, contains('_allTodoTextColumnsBlank'));
     expect(app, contains('_suppressTodoBackspaceUntilKeyUp'));
+    expect(app, contains('enum _TodoFocusPlacement { start, end }'));
+    expect(app, contains('_placeTodoCaret'));
+    expect(app, contains('previousItem == null'));
   });
 
   test('PaperTodo todo text undo snapshot timing is preserved', () {

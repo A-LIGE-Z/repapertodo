@@ -8802,6 +8802,17 @@ void main() {
     final items = controller.state.papers.single.items;
     expect(items.map((item) => item.id), ['before-item', 'after-item']);
     expect(items.map((item) => item.order), [0, 1]);
+    final beforeField = tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(const ValueKey('backspace-paper-before-item-text')),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(beforeField.focusNode.hasFocus, true);
+    expect(
+      beforeField.controller.selection,
+      const TextSelection.collapsed(offset: 11),
+    );
     expect(
       controller.state.sync.deletedTodoItemTombstones['backspace-paper']
           ?.containsKey('blank-item'),
@@ -8819,6 +8830,64 @@ void main() {
       controller.state.sync.deletedTodoItemTombstones['backspace-paper']
           ?.containsKey('blank-item'),
       isNot(true),
+    );
+  });
+
+  testWidgets('focuses next todo start after deleting first blank row',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'backspace-first-paper',
+            type: PaperTypes.todo,
+            title: 'Backspace first paper',
+            items: [
+              PaperItem(id: 'blank-item', text: ' '),
+              PaperItem(id: 'after-item', text: 'After item', order: 1),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('backspace-first-paper-blank-item-text'),
+        ),
+        matching: find.byType(EditableText),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.map((item) => item.id), [
+      'after-item',
+    ]);
+    final afterField = tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('backspace-first-paper-after-item-text'),
+        ),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(afterField.focusNode.hasFocus, true);
+    expect(
+      afterField.controller.selection,
+      const TextSelection.collapsed(offset: 0),
     );
   });
 
