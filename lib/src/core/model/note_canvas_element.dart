@@ -74,7 +74,8 @@ class NoteCanvasElement {
   }
 
   void normalize() {
-    if (id.trim().isEmpty) {
+    id = id.trim();
+    if (id.isEmpty) {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
     type = NoteCanvasElementTypes.normalize(type);

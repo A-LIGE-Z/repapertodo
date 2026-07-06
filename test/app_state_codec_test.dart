@@ -818,12 +818,12 @@ Plain item
           id: 'todo-paper',
           type: PaperTypes.todo,
           items: [
-            PaperItem(id: 'item-valid', linkedNoteId: 'note-paper'),
+            PaperItem(id: ' item-valid ', linkedNoteId: ' note-paper '),
             PaperItem(id: 'item-missing', linkedNoteId: 'missing-note'),
           ],
         ),
         PaperData(
-          id: 'note-paper',
+          id: ' note-paper ',
           type: PaperTypes.note,
           title: 'Keep me',
         ),
@@ -835,6 +835,7 @@ Plain item
     };
     expect(itemsById['item-valid']?.linkedNoteId, 'note-paper');
     expect(itemsById['item-missing']?.linkedNoteId, isNull);
+    expect(state.papers.last.id, 'note-paper');
   });
 
   test('normalizes paper identity and surface fields like PaperTodo', () {
@@ -845,7 +846,7 @@ Plain item
       useCapsuleMode: false,
       papers: [
         PaperData(
-          id: 'duplicate-paper',
+          id: ' duplicate-paper ',
           type: PaperTypes.todo,
           title: '  Long\u0000Title  ',
           x: double.nan,
@@ -855,7 +856,7 @@ Plain item
           textZoom: 1.26,
           isCollapsed: true,
           items: [
-            PaperItem(id: 'duplicate-item', text: 'First'),
+            PaperItem(id: ' duplicate-item ', text: 'First'),
             PaperItem(id: 'duplicate-item', text: 'Second', order: -4),
           ],
         ),
@@ -864,7 +865,7 @@ Plain item
           type: PaperTypes.note,
           title: 'Note',
           noteCanvasElements: [
-            NoteCanvasElement(id: 'duplicate-element'),
+            NoteCanvasElement(id: ' duplicate-element '),
             NoteCanvasElement(id: 'duplicate-element'),
           ],
         ),
@@ -883,11 +884,13 @@ Plain item
     expect(todo.capsuleSide, DeepCapsuleSides.left);
     expect(todo.capsuleMonitorDeviceName, 'Primary monitor');
     expect(todo.items.map((item) => item.id).toSet(), hasLength(2));
+    expect(todo.items.first.id, 'duplicate-item');
     expect(todo.items.map((item) => item.order), [0, 1]);
     expect(
       state.papers.last.noteCanvasElements.map((element) => element.id).toSet(),
       hasLength(2),
     );
+    expect(state.papers.last.noteCanvasElements.first.id, 'duplicate-element');
     expect(state.papers.last.width, PaperLayoutDefaults.noteDefaultWidth);
     expect(state.papers.last.height, PaperLayoutDefaults.noteDefaultHeight);
   });

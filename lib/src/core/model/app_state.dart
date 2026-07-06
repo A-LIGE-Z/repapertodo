@@ -330,7 +330,8 @@ class AppState {
     sync.normalize();
     final usedPaperIds = <String>{};
     for (final paper in papers) {
-      if (paper.id.trim().isEmpty || !usedPaperIds.add(paper.id)) {
+      paper.id = paper.id.trim();
+      if (paper.id.isEmpty || !usedPaperIds.add(paper.id)) {
         paper.id = _newUniqueId(usedPaperIds);
       }
       if (paper.isPinnedToDesktop) {

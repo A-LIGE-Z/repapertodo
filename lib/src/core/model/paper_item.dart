@@ -72,7 +72,8 @@ class PaperItem {
   }
 
   void normalize() {
-    if (id.trim().isEmpty) {
+    id = id.trim();
+    if (id.isEmpty) {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
     todoExtraColumns = [...todoExtraColumns];
@@ -96,6 +97,11 @@ class PaperItem {
       for (final width in todoColumnWidths) _normalizeColumnWidth(width),
     ];
     dueAtLocal = _normalizeDueAtLocal(dueAtLocal);
+    final normalizedLinkedNoteId = linkedNoteId?.trim();
+    linkedNoteId =
+        normalizedLinkedNoteId == null || normalizedLinkedNoteId.isEmpty
+            ? null
+            : normalizedLinkedNoteId;
     if (reminderIntervalValue != null && reminderIntervalValue! <= 0) {
       reminderIntervalValue = null;
       reminderIntervalUnit = null;
