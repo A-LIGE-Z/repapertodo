@@ -1296,10 +1296,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _replaceStateAndApplyPlatform(AppState state) async {
+    final previousReminderCadence = _todoReminderCadence(controller.state);
     setState(() {
       controller.replaceState(state);
       _refreshSurfaceVisibilitySnapshot();
     });
+    if (previousReminderCadence != _todoReminderCadence(controller.state)) {
+      _lastTodoReminderAt.clear();
+    }
     _reconcileTodoReminderStateAfterReplacement();
     await controller.applyCurrentStateToPlatform();
   }
@@ -2225,17 +2229,28 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final lastReminderAt = _lastTodoReminderAt[candidate.key];
     if (controller.state.useTodoReminderInterval) {
       final interval = _reminderInterval(candidate.item);
-      if (candidate.dueAt.isAfter(now.add(interval))) {
+      if (!_isReminderInActiveWindow(candidate, now)) {
         return false;
       }
       return lastReminderAt == null ||
           now.difference(lastReminderAt) >= interval;
     }
-    if (now.isBefore(candidate.dueAt.subtract(_todoReminderLeadTime)) ||
-        now.isAfter(candidate.dueAt.add(_todoReminderGraceTime))) {
+    if (!_isReminderInActiveWindow(candidate, now)) {
       return false;
     }
     return lastReminderAt == null;
+  }
+
+  bool _isReminderInActiveWindow(
+    _TodoReminderCandidate candidate,
+    DateTime now,
+  ) {
+    if (controller.state.useTodoReminderInterval) {
+      return !candidate.dueAt
+          .isAfter(now.add(_reminderInterval(candidate.item)));
+    }
+    return !now.isBefore(candidate.dueAt.subtract(_todoReminderLeadTime)) &&
+        !now.isAfter(candidate.dueAt.add(_todoReminderGraceTime));
   }
 
   Duration _distanceFromNow(_TodoReminderCandidate candidate, DateTime now) {
@@ -2303,10 +2318,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   void _reconcileTodoReminderStateAfterReplacement() {
+    final now = DateTime.now();
     final candidateKeys = <String>{};
     final candidateItemIds = <String>{};
-    for (final candidate in _reminderCandidates(DateTime.now())) {
+    final activeWindowCandidateKeys = <String>{};
+    for (final candidate in _reminderCandidates(now)) {
       candidateKeys.add(candidate.key);
+      if (_isReminderInActiveWindow(candidate, now)) {
+        activeWindowCandidateKeys.add(candidate.key);
+      }
       final itemId = candidate.item.id.trim();
       if (itemId.isNotEmpty) {
         candidateItemIds.add(itemId);
@@ -2314,13 +2334,23 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     }
     _lastTodoReminderAt.removeWhere((key, _) => !candidateKeys.contains(key));
     final activeReminderStillExists =
-        _activeTodoReminderKeys.every(candidateKeys.contains) &&
+        _activeTodoReminderKeys.every(activeWindowCandidateKeys.contains) &&
             _activeTodoReminderItemIds.every(candidateItemIds.contains);
     if (_activeTodoReminderKeys.isNotEmpty && !activeReminderStillExists) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       _activeTodoReminderItemIds.clear();
       _activeTodoReminderKeys.clear();
     }
+  }
+
+  ({bool useInterval, int value, String unit}) _todoReminderCadence(
+    AppState state,
+  ) {
+    return (
+      useInterval: state.useTodoReminderInterval,
+      value: state.todoReminderIntervalValue,
+      unit: TodoReminderIntervalUnits.normalize(state.todoReminderIntervalUnit),
+    );
   }
 
   void _clearTodoReminderStateForItems(

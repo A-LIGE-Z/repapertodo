@@ -3229,6 +3229,105 @@ void main() {
     expect(find.text('Snapshot restored.'), findsOneWidget);
   });
 
+  testWidgets('recovery snapshot restore reapplies reminder cadence',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final dueAtLocal =
+        DateTime.now().subtract(const Duration(minutes: 11)).toIso8601String();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        todoReminderIntervalValue: 10,
+        todoReminderBubbleDurationSeconds: 30,
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'cadence-reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Cadence',
+            items: [
+              PaperItem(
+                id: 'cadence-reminder-item',
+                text: 'Apply restored cadence',
+                dueAtLocal: dueAtLocal,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      snapshots: [
+        WebDavSnapshotRecord(
+          path:
+              'repapertodo/snapshots/snapshot-20260701T103000000Z-laptop.json',
+          deviceId: 'laptop',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 10, 30),
+        ),
+      ],
+      restoredState: AppState(
+        useTodoReminderInterval: false,
+        todoReminderBubbleDurationSeconds: 30,
+        papers: [
+          PaperData(
+            id: 'cadence-reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Cadence',
+            items: [
+              PaperItem(
+                id: 'cadence-reminder-item',
+                text: 'Apply restored cadence',
+                dueAtLocal: dueAtLocal,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.text('Reminder: Cadenc - Apply restored cadence'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(
+        'restore-snapshot-repapertodo/snapshots/snapshot-20260701T103000000Z-laptop.json')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.useTodoReminderInterval, false);
+    expect(
+      find.text('Reminder: Cadenc - Apply restored cadence'),
+      findsNothing,
+    );
+    expect(find.text('Snapshot restored.'), findsOneWidget);
+  });
+
   testWidgets('recovery snapshot restore failure can retry from snackbar',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
