@@ -1049,6 +1049,13 @@ Plain item
               height: 4,
             ),
             NoteCanvasElement(
+              id: 'invalid',
+              x: double.nan,
+              y: double.infinity,
+              width: double.negativeInfinity,
+              height: double.nan,
+            ),
+            NoteCanvasElement(
               id: 'layered',
               zIndex: -3,
             ),
@@ -1058,13 +1065,18 @@ Plain item
     )..normalize();
 
     final wide = state.papers.single.noteCanvasElements.first;
+    final invalid = state.papers.single.noteCanvasElements[1];
     final layered = state.papers.single.noteCanvasElements.last;
     expect(wide.x, -2000);
     expect(wide.y, 8000);
     expect(wide.width, 1600);
     expect(wide.height, 110);
     expect(wide.zIndex, 10);
-    expect(layered.zIndex, 20);
+    expect(invalid.x, 32);
+    expect(invalid.y, 32);
+    expect(invalid.width, 220);
+    expect(invalid.height, 110);
+    expect(layered.zIndex, 30);
   });
 
   test('normalizes deep capsule top margins', () {

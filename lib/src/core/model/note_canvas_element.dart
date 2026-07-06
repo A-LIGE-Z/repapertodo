@@ -78,10 +78,10 @@ class NoteCanvasElement {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
     type = NoteCanvasElementTypes.normalize(type);
-    x = x.clamp(-2000, 8000).toDouble();
-    y = y.clamp(-2000, 8000).toDouble();
-    width = width < 72 ? 220 : width.clamp(72, 1600).toDouble();
-    height = height < 48 ? 110 : height.clamp(48, 1600).toDouble();
+    x = _normalizeCoordinate(x, 32).clamp(-2000, 8000).toDouble();
+    y = _normalizeCoordinate(y, 32).clamp(-2000, 8000).toDouble();
+    width = _normalizeDimension(width, 220, 72).clamp(72, 1600).toDouble();
+    height = _normalizeDimension(height, 110, 48).clamp(48, 1600).toDouble();
   }
 
   JsonMap toJson() {
@@ -97,4 +97,12 @@ class NoteCanvasElement {
       'zIndex': zIndex,
     };
   }
+}
+
+double _normalizeCoordinate(double value, double fallback) {
+  return value.isFinite ? value : fallback;
+}
+
+double _normalizeDimension(double value, double fallback, double min) {
+  return !value.isFinite || value < min ? fallback : value;
 }
