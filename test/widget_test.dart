@@ -1387,6 +1387,116 @@ void main() {
     expect(controller.state.papers.single.noteCanvasElements, hasLength(1));
   });
 
+  testWidgets('pinned note canvas ignores editing actions like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'pinned-canvas-actions-note',
+            type: PaperTypes.note,
+            title: 'Pinned canvas actions',
+            content: 'Pinned action body',
+            isPinnedToDesktop: true,
+            noteCanvasElements: [
+              NoteCanvasElement(
+                id: 'pinned-canvas-action-primary',
+                type: NoteCanvasElementTypes.text,
+                text: 'Locked text',
+                x: 16,
+                y: 24,
+                width: 220,
+                height: 120,
+                zIndex: 1,
+              ),
+              NoteCanvasElement(
+                id: 'pinned-canvas-action-secondary',
+                type: NoteCanvasElementTypes.text,
+                text: 'Upper text',
+                x: 300,
+                y: 24,
+                width: 220,
+                height: 120,
+                zIndex: 2,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final elements = controller.state.papers.single.noteCanvasElements;
+    final primary =
+        elements.firstWhere((element) => element.id.endsWith('primary'));
+    final field = find.byKey(
+      const ValueKey('note-canvas-element-text-pinned-canvas-action-primary'),
+    );
+
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .readOnly,
+      true,
+    );
+
+    await tester.enterText(field, 'Changed text');
+    await tester.pump();
+
+    expect(primary.text, 'Locked text');
+    expect(
+      tester
+          .widget<AbsorbPointer>(
+            find
+                .ancestor(of: field, matching: find.byType(AbsorbPointer))
+                .first,
+          )
+          .absorbing,
+      true,
+    );
+    expect(find.text('Canvas block geometry'), findsNothing);
+    expect(find.widgetWithIcon(IconButton, Icons.tune_outlined), findsWidgets);
+    expect(
+      find.widgetWithIcon(IconButton, Icons.content_copy_outlined),
+      findsWidgets,
+    );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'note-canvas-layer-actions-pinned-canvas-action-primary',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(find.widgetWithIcon(IconButton, Icons.close_outlined), findsWidgets);
+    expect(primary.x, 16);
+    expect(primary.width, 220);
+    expect(primary.zIndex, 1);
+    expect(elements.map((element) => element.id), [
+      'pinned-canvas-action-primary',
+      'pinned-canvas-action-secondary',
+    ]);
+
+    final addTextButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Add text block'),
+    );
+
+    expect(addTextButton.onPressed, isNull);
+    expect(elements, hasLength(2));
+  });
+
   testWidgets('note canvas text accepts tab indentation like PaperTodo',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

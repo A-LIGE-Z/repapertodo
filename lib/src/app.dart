@@ -4680,6 +4680,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                               'note-canvas-element-text-${element.id}',
                             ),
                             controller: _textController,
+                            readOnly: !widget.geometryGesturesEnabled,
+                            enableInteractiveSelection:
+                                widget.geometryGesturesEnabled,
                             expands: true,
                             maxLines: null,
                             minLines: null,
@@ -4793,6 +4796,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   }
 
   void _commitCanvasText(String value) {
+    if (!widget.geometryGesturesEnabled) {
+      return;
+    }
     if (widget.element.text == value) {
       return;
     }
