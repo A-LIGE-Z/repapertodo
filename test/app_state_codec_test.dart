@@ -895,6 +895,20 @@ Plain item
     expect(state.papers.last.height, PaperLayoutDefaults.noteDefaultHeight);
   });
 
+  test('keeps empty todo item lists compatible with PaperTodo storage', () {
+    final state = AppState.fromJson({
+      'papers': [
+        {
+          'id': 'empty-todo',
+          'type': PaperTypes.todo,
+          'items': <Object?>[],
+        },
+      ],
+    });
+
+    expect(state.papers.single.items, isEmpty);
+  });
+
   test('expands hidden linked note capsules like PaperTodo', () {
     final state = AppState(
       enableTodoNoteLinks: true,

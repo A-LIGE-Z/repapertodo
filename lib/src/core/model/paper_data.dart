@@ -149,9 +149,6 @@ class PaperData {
     for (var index = 0; index < items.length; index++) {
       items[index].order = index;
     }
-    if (isTodo && items.isEmpty) {
-      items.add(PaperItem(id: '${id}_item0'));
-    }
     final usedElementIds = <String>{};
     for (var index = 0; index < noteCanvasElements.length; index++) {
       final element = noteCanvasElements[index];
