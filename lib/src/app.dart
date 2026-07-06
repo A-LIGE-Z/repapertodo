@@ -422,10 +422,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
+      case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
         unawaited(_syncSilentlyIfConfigured());
-      case AppLifecycleState.hidden:
       case AppLifecycleState.inactive:
         break;
     }

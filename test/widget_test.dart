@@ -5164,27 +5164,31 @@ void main() {
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-    await tester.pump();
 
     expect(syncService.calls, 1);
 
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     await tester.pump();
 
     expect(syncService.calls, 2);
     expect(find.text('Remote data downloaded.'), findsNothing);
 
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
 
     expect(syncService.calls, 3);
     expect(find.text('Remote data downloaded.'), findsNothing);
 
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
     await tester.pump();
 
     expect(syncService.calls, 4);
+    expect(find.text('Remote data downloaded.'), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(syncService.calls, 5);
     expect(find.text('Remote data downloaded.'), findsNothing);
   });
 
