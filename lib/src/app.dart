@@ -1247,7 +1247,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       return;
     }
     final paper = controller.state.papers[paperIndex];
-    await _openPaper(paper);
+    if (paper.isVisible) {
+      await _hidePaper(paper);
+    } else {
+      await _openPaper(paper);
+    }
   }
 
   Future<void> _handlePaperDeleteRequest(String paperId) async {

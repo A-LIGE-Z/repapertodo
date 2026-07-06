@@ -2325,8 +2325,6 @@ void FlutterWindow::ShowTrayMenu() {
       if (command >= kTrayPaperCommandBase &&
           command < kTrayPaperCommandBase + tray_papers_.size()) {
         SendPaperRequested(tray_papers_[command - kTrayPaperCommandBase].id);
-        ShowWindow(window, SW_SHOWNORMAL);
-        SetForegroundWindow(window);
       } else if (command >= kTrayPaperDeleteCommandBase &&
                  command <
                      kTrayPaperDeleteCommandBase + tray_papers_.size()) {

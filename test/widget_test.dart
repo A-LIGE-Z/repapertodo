@@ -10814,7 +10814,7 @@ void main() {
     expect(platform.tray.rebuildVisibilitySnapshots, hasLength(1));
   });
 
-  testWidgets('paper open requests show hidden papers and save state',
+  testWidgets('paper open requests toggle paper visibility like PaperTodo',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -10854,6 +10854,14 @@ void main() {
     expect(store.savedState.papers.single.isVisible, true);
     expect(platform.paperWindows.shownTitles, contains('Tray hidden'));
     expect(find.text('Tray hidden'), findsOneWidget);
+
+    platform.paperWindows.emitPaperOpenRequest('tray-open-hidden-paper');
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.isVisible, false);
+    expect(store.savedState.papers.single.isVisible, false);
+    expect(platform.paperWindows.hiddenTitles, contains('Tray hidden'));
+    expect(find.text('Tray hidden'), findsNothing);
   });
 
   testWidgets('paper delete requests delete with PaperTodo tray semantics',

@@ -1270,8 +1270,9 @@ void main() {
     expect(settingsCase, contains('SetForegroundWindow(window);'));
   });
 
-  test('Windows tray paper command shows the selected paper window', () {
+  test('Windows tray paper command lets Dart toggle the selected paper', () {
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final app = _readProjectText('lib/src/app.dart');
     final paperCommandStart = runner.indexOf(
       'command >= kTrayPaperCommandBase',
     );
@@ -1281,8 +1282,11 @@ void main() {
     expect(paperCommandEnd, greaterThan(paperCommandStart));
     final paperCommand = runner.substring(paperCommandStart, paperCommandEnd);
     expect(paperCommand, contains('SendPaperRequested('));
-    expect(paperCommand, contains('ShowWindow(window, SW_SHOWNORMAL);'));
-    expect(paperCommand, contains('SetForegroundWindow(window);'));
+    expect(paperCommand, isNot(contains('ShowWindow(window, SW_SHOWNORMAL);')));
+    expect(paperCommand, isNot(contains('SetForegroundWindow(window);')));
+    expect(app, contains('Future<void> _handlePaperOpenRequest'));
+    expect(app, contains('await _hidePaper(paper);'));
+    expect(app, contains('await _openPaper(paper);'));
   });
 
   test('Windows tray paper delete command confirms in the menu', () {
