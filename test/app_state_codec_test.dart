@@ -917,6 +917,9 @@ Plain item
 
   test('normalizes todo reminder intervals like PaperTodo', () {
     final state = AppState.fromJson({
+      'todoReminderIntervalValue': 0,
+      'todoReminderIntervalUnit': 'days',
+      'todoReminderBubbleDurationSeconds': -3,
       'papers': [
         {
           'id': 'todo-paper',
@@ -936,6 +939,13 @@ Plain item
         },
       ],
     });
+
+    expect(state.todoReminderIntervalValue, 10);
+    expect(
+      state.todoReminderIntervalUnit,
+      TodoReminderIntervalUnits.minutes,
+    );
+    expect(state.todoReminderBubbleDurationSeconds, 5);
 
     final itemsById = {
       for (final item in state.papers.single.items) item.id: item,

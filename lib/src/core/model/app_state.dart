@@ -285,12 +285,13 @@ class AppState {
         TodoDueYearDisplayModes.normalize(todoDueYearDisplayMode);
     todoLineSpacing = _normalizeLineSpacing(todoLineSpacing);
     noteLineSpacing = _normalizeLineSpacing(noteLineSpacing);
-    todoReminderIntervalValue = todoReminderIntervalValue.clamp(1, 240).toInt();
+    todoReminderIntervalValue =
+        _normalizePositiveIntRange(todoReminderIntervalValue, 10, 1, 240);
     todoReminderIntervalUnit =
         TodoReminderIntervalUnits.normalize(todoReminderIntervalUnit);
     todoReminderScope = TodoReminderScopes.normalize(todoReminderScope);
-    todoReminderBubbleDurationSeconds =
-        todoReminderBubbleDurationSeconds.clamp(1, 600).toInt();
+    todoReminderBubbleDurationSeconds = _normalizePositiveIntRange(
+        todoReminderBubbleDurationSeconds, 5, 1, 600);
     maxTitleLength = PaperTitles.normalizeMaxTitleLength(maxTitleLength);
     pinnedTodoHotKey = _normalizeHotKeyForSettings(pinnedTodoHotKey);
     pinnedNoteHotKey = _normalizeHotKeyForSettings(pinnedNoteHotKey);
@@ -511,6 +512,16 @@ double _normalizeZoom(double value) {
     return 1;
   }
   return value.clamp(0.5, 1.5).toDouble();
+}
+
+int _normalizePositiveIntRange(
+  int value,
+  int fallback,
+  int min,
+  int max,
+) {
+  final normalized = value <= 0 ? fallback : value;
+  return normalized.clamp(min, max).toInt();
 }
 
 String _normalizeHotKeyForSettings(String value) {
