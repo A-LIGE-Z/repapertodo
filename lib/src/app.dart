@@ -2085,7 +2085,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _syncSilentlyIfConfigured() async {
-    if (_isSyncing || !_canRunAutoSync()) {
+    if (_isSyncing || _isSettingsOpen || !_canRunAutoSync()) {
       return;
     }
     await _syncNow(showMessage: false);

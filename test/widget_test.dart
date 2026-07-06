@@ -5603,6 +5603,93 @@ void main() {
     expect(find.text('Remote data downloaded.'), findsNothing);
   });
 
+  testWidgets('lifecycle sync waits while settings dialog is open',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: syncSettings.copy(),
+        papers: [
+          PaperData(
+            id: 'settings-lifecycle-note',
+            type: PaperTypes.note,
+            title: 'Local before settings',
+            content: 'Local body',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = StateStore(
+      filePath: 'build/test-widget-settings-lifecycle-sync.json',
+    );
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'settings-lifecycle-note',
+          type: PaperTypes.note,
+          title: 'Synced after settings closes',
+          content: 'Synced body',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 0);
+    expect(controller.state.papers.single.title, 'Local before settings');
+    expect(find.text('Remote data downloaded.'), findsNothing);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced after settings closes');
+    expect(find.text('Remote data downloaded.'), findsNothing);
+  });
+
   testWidgets('lifecycle sync flushes pending local edits before debounce',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
