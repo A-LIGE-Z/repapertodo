@@ -1204,9 +1204,12 @@ void main() {
     expect(script, contains('git rev-parse HEAD'));
     expect(script, contains('builtAtUtc'));
     expect(script, contains('targetSdk = 37'));
+    expect(script, contains('function New-ReleaseNotes'));
     expect(script, contains('gh release create'));
+    expect(script, contains('gh release edit'));
     expect(script, contains('gh release upload'));
     expect(script, contains(r'$releaseViewExitCode'));
+    expect(script, contains(r'--notes $releaseNotes'));
     expect(script, contains(r'$checksumsFile $metadataFile --clobber'));
     expect(script, contains('SHA-256 checksums for release artifacts.'));
     expect(script, contains('Release metadata JSON with version'));

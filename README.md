@@ -42,6 +42,10 @@ To also create or update the GitHub Release for the version in `pubspec.yaml`:
 .\scripts\release.ps1 -PublishGitHubRelease
 ```
 
+When the tag already has a GitHub Release, the script updates the release title
+and notes before clobbering the Windows, Android, checksum, and metadata
+artifacts.
+
 By default the release script refuses to package a dirty git working tree so
 the artifact metadata commit matches the files being shipped. For a local-only
 smoke package from uncommitted changes, pass `-AllowDirty`.

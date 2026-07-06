@@ -96,6 +96,33 @@ function Assert-GitDiffCheck {
   }
 }
 
+function New-ReleaseNotes {
+  param(
+    [string]$version,
+    [string]$androidSigningMode
+  )
+
+  return @"
+Release build for RePaperTodo $version.
+
+Artifacts:
+- Windows x64 release zip containing repapertodo.exe and runtime files.
+- Android release APK for Android 14+ target SDK 37.
+- SHA-256 checksums for release artifacts.
+- Release metadata JSON with version, commit, Android SDK/signing, validation, and artifact hashes.
+
+Android signing: $androidSigningMode.
+
+Validation:
+- git diff --check
+- git diff --cached --check
+- flutter test --no-pub
+- flutter analyze --no-pub
+- flutter build windows --release --no-pub
+- flutter build apk --release --no-pub
+"@
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
 
@@ -124,6 +151,7 @@ if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) {
   $ReleaseTitle = "RePaperTodo $version"
 }
 $androidSigningMode = Get-AndroidSigningMode -RepoRoot $repoRoot
+$releaseNotes = New-ReleaseNotes -Version $version -AndroidSigningMode $androidSigningMode
 Write-Host "Android signing mode: $androidSigningMode"
 
 $gitCommit = ""
@@ -253,6 +281,11 @@ if ($PublishGitHubRelease) {
     $releaseViewExitCode = $LASTEXITCODE
     $ErrorActionPreference = $previousErrorActionPreference
     if ($releaseViewExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($existingRelease)) {
+      Invoke-Native "gh release edit $TagName" {
+        & gh release edit $TagName `
+          --title $ReleaseTitle `
+          --notes $releaseNotes
+      }
       Invoke-Native "gh release upload $TagName" {
         & gh release upload $TagName $windowsZip $androidApk $checksumsFile $metadataFile --clobber
       }
@@ -261,7 +294,7 @@ if ($PublishGitHubRelease) {
         & gh release create $TagName $windowsZip $androidApk $checksumsFile $metadataFile `
           --target main `
           --title $ReleaseTitle `
-          --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n- Release metadata JSON with version, commit, Android SDK/signing, validation, and artifact hashes.`n`nAndroid signing: $androidSigningMode.`n`nValidation:`n- git diff --check`n- git diff --cached --check`n- flutter test --no-pub`n- flutter analyze --no-pub`n- flutter build windows --release --no-pub`n- flutter build apk --release --no-pub"
+          --notes $releaseNotes
       }
     }
   }
