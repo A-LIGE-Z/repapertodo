@@ -3,17 +3,19 @@ class WebDavPreset {
     required this.id,
     required this.name,
     required this.label,
-    required this.endpoint,
-    required this.defaultRemotePath,
+    this.endpoint,
+    this.defaultRemotePath = '',
   });
 
   final String id;
   final String name;
   final String label;
-  final Uri endpoint;
+  final Uri? endpoint;
   final String defaultRemotePath;
 
-  String get endpointText => endpoint.toString();
+  bool get isCustom => id == WebDavPresetIds.custom;
+
+  String get endpointText => endpoint?.toString() ?? '';
 
   String get defaultRootPath => _normalizePresetRootPath(defaultRemotePath);
 }
@@ -23,11 +25,17 @@ abstract final class WebDavPresetIds {
   static const jianguoyun = 'jianguoyun';
 
   static String normalize(String? value) {
-    return WebDavPresets.byId(value)?.id ?? custom;
+    return WebDavPresets.byId(value).id;
   }
 }
 
 abstract final class WebDavPresets {
+  static const custom = WebDavPreset(
+    id: WebDavPresetIds.custom,
+    name: 'Generic WebDAV',
+    label: 'Generic',
+  );
+
   static final jianguoyun = WebDavPreset(
     id: WebDavPresetIds.jianguoyun,
     name: 'Jianguoyun WebDAV',
@@ -42,21 +50,27 @@ abstract final class WebDavPresets {
 
   static final all = List<WebDavPreset>.unmodifiable([
     ...recommended,
+    custom,
   ]);
 
   static const customId = WebDavPresetIds.custom;
 
-  static WebDavPreset? byId(String? id) {
+  static WebDavPreset byId(String? id) {
     final normalizedId = _normalizePresetId(id);
     if (normalizedId == null || normalizedId.isEmpty) {
-      return null;
+      return custom;
     }
     for (final preset in all) {
       if (preset.id == normalizedId) {
         return preset;
       }
     }
-    return null;
+    return custom;
+  }
+
+  static WebDavPreset? configuredById(String? id) {
+    final preset = byId(id);
+    return preset.isCustom ? null : preset;
   }
 }
 
@@ -70,6 +84,11 @@ String? _normalizePresetId(String? id) {
     'nutstore' ||
     'nutstore-webdav' =>
       WebDavPresetIds.jianguoyun,
+    'custom' ||
+    'generic' ||
+    'custom-webdav' ||
+    'generic-webdav' =>
+      WebDavPresetIds.custom,
     _ => value,
   };
 }

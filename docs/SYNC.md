@@ -32,10 +32,11 @@ Initial recommended preset:
 - Suggested remote path: `/RePaperTodo/`
 
 Provider presets are maintained in a shared registry so UI labels, default
-endpoints, and model defaults stay aligned. The custom generic WebDAV option
-must remain available even when more provider presets are added. Preset IDs may
-accept common aliases for import compatibility, but unknown provider IDs must
-fall back to the generic WebDAV option.
+endpoints, and model defaults stay aligned. Generic WebDAV is an explicit
+registry entry without provider defaults, and it must remain available even
+when more provider presets are added. Preset IDs may accept common aliases for
+import compatibility, but unknown provider IDs must fall back to the generic
+WebDAV option.
 
 ## Current Remote Layout
 

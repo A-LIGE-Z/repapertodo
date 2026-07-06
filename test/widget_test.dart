@@ -2933,6 +2933,27 @@ void main() {
       find.widgetWithText(TextField, 'WebDAV URL'),
     );
     expect(urlField.controller?.text, 'https://dav.jianguoyun.com/dav/');
+
+    final rootField = tester.widget<TextField>(
+      find.widgetWithText(TextField, 'Remote folder'),
+    );
+    expect(rootField.controller?.text, 'RePaperTodo');
+
+    await tester.tap(
+      find.byKey(const ValueKey('compact-webdav-preset-selector')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Generic').last);
+    await tester.pumpAndSettle();
+
+    final genericUrlField = tester.widget<TextField>(
+      find.widgetWithText(TextField, 'WebDAV URL'),
+    );
+    final genericRootField = tester.widget<TextField>(
+      find.widgetWithText(TextField, 'Remote folder'),
+    );
+    expect(genericUrlField.controller?.text, 'https://dav.jianguoyun.com/dav/');
+    expect(genericRootField.controller?.text, 'RePaperTodo');
   });
 
   testWidgets('uses compact settings choice controls on narrow screens',

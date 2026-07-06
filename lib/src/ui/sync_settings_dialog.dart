@@ -1498,15 +1498,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   Widget _webDavPresetSelector(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 600;
     final presetItems = [
-      for (final preset in WebDavPresets.recommended)
+      for (final preset in WebDavPresets.all)
         DropdownMenuItem(
           value: preset.id,
-          child: Text(preset.label),
+          child: Text(_webDavPresetLabel(preset)),
         ),
-      DropdownMenuItem(
-        value: WebDavPresetIds.custom,
-        child: Text(strings.get(PaperTodoStringKeys.generic)),
-      ),
     ];
     if (compact) {
       return DropdownButtonFormField<String>(
@@ -1524,33 +1520,37 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     }
     return SegmentedButton<String>(
       segments: [
-        for (final preset in WebDavPresets.recommended)
+        for (final preset in WebDavPresets.all)
           ButtonSegment(
             value: preset.id,
-            icon: const Icon(Icons.cloud_queue_outlined),
-            label: Text(preset.label),
+            icon: Icon(
+              preset.isCustom ? Icons.dns_outlined : Icons.cloud_queue_outlined,
+            ),
+            label: Text(_webDavPresetLabel(preset)),
           ),
-        ButtonSegment(
-          value: WebDavPresetIds.custom,
-          icon: const Icon(Icons.dns_outlined),
-          label: Text(strings.get(PaperTodoStringKeys.generic)),
-        ),
       ],
       selected: {_presetId},
       onSelectionChanged: (selection) => _applyPreset(selection.single),
     );
   }
 
+  String _webDavPresetLabel(WebDavPreset preset) {
+    return preset.isCustom
+        ? strings.get(PaperTodoStringKeys.generic)
+        : preset.label;
+  }
+
   void _applyPreset(String presetId) {
     setState(() {
       final preset = WebDavPresets.byId(presetId);
-      _presetId = preset?.id ?? WebDavPresetIds.custom;
-      if (preset != null) {
-        _endpointController.text = preset.endpointText;
+      _presetId = preset.id;
+      final configuredPreset = WebDavPresets.configuredById(preset.id);
+      if (configuredPreset != null) {
+        _endpointController.text = configuredPreset.endpointText;
         _endpointErrorText = null;
         if (_rootPathController.text.trim().isEmpty ||
             _rootPathController.text.trim() == 'repapertodo') {
-          _rootPathController.text = preset.defaultRootPath;
+          _rootPathController.text = configuredPreset.defaultRootPath;
           _rootPathErrorText = null;
         }
       }

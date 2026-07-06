@@ -6,6 +6,7 @@ void main() {
     final preset = WebDavPresets.jianguoyun;
 
     expect(WebDavPresets.recommended, contains(preset));
+    expect(WebDavPresets.all, containsAll([preset, WebDavPresets.custom]));
     expect(WebDavPresets.byId(' jianguoyun '), same(preset));
     expect(WebDavPresets.byId('Jian-Guo-Yun'), same(preset));
     expect(WebDavPresets.byId('nutstore'), same(preset));
@@ -18,11 +19,26 @@ void main() {
     expect(preset.defaultRootPath, 'RePaperTodo');
   });
 
-  test('keeps custom WebDAV as the fallback preset id', () {
-    expect(WebDavPresets.byId(WebDavPresetIds.custom), isNull);
+  test('keeps generic WebDAV as an explicit fallback preset', () {
+    final preset = WebDavPresets.custom;
+
+    expect(WebDavPresets.recommended, isNot(contains(preset)));
+    expect(WebDavPresets.byId(WebDavPresetIds.custom), same(preset));
+    expect(WebDavPresets.byId(' generic '), same(preset));
+    expect(WebDavPresets.byId('generic-webdav'), same(preset));
+    expect(WebDavPresets.byId('custom-webdav'), same(preset));
+    expect(WebDavPresets.byId('future-provider'), same(preset));
+    expect(WebDavPresets.configuredById(WebDavPresetIds.custom), isNull);
+    expect(WebDavPresets.configuredById('future-provider'), isNull);
+    expect(WebDavPresetIds.normalize('GENERIC'), WebDavPresetIds.custom);
     expect(
         WebDavPresetIds.normalize('future-provider'), WebDavPresetIds.custom);
     expect(WebDavPresetIds.normalize(null), WebDavPresetIds.custom);
+    expect(preset.isCustom, true);
+    expect(preset.label, 'Generic');
+    expect(preset.name, 'Generic WebDAV');
+    expect(preset.endpointText, isEmpty);
+    expect(preset.defaultRootPath, isEmpty);
   });
 
   test('uses preset defaults for Jianguoyun sync settings', () {

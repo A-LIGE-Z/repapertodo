@@ -352,7 +352,7 @@ class WebDavSyncSettings {
     rootPath = _normalizeRootPath(rootPath);
     autoSyncIntervalMinutes = autoSyncIntervalMinutes.clamp(1, 1440).toInt();
     requestTimeoutSeconds = requestTimeoutSeconds.clamp(1, 300).toInt();
-    final preset = WebDavPresets.byId(presetId);
+    final preset = WebDavPresets.configuredById(presetId);
     if (preset != null && endpoint.isEmpty) {
       endpoint = preset.endpointText;
     }
