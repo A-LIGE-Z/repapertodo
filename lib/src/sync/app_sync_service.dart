@@ -736,8 +736,10 @@ Future<bool> _migrateLegacyPlainPayload({
   final uploadedManifest = uploadResult.manifest;
   if (uploadedManifest != null) {
     final migratedState = AppState.fromJson(state.toJson())
-      ..sync.operationDeviceSequences = normalizeSyncDeviceSequences(
+      ..sync.operationDeviceSequences = _mergeDeviceSequences(
+        state.sync.operationDeviceSequences,
         uploadedManifest.deviceSequences,
+        const <String, int>{},
       )
       ..normalize();
     try {

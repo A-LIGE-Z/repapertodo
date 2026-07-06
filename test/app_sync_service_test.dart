@@ -508,7 +508,6 @@ void main() {
               updatedAtUtc: updatedAtUtc ?? remoteUpdatedAtUtc,
               latestSnapshotPath: 'repapertodo/snapshots/encrypted.json',
               deviceSequences: {
-                'remote-device': 9,
                 deviceId ?? 'device-local': 1,
               },
             ),
@@ -521,7 +520,7 @@ void main() {
       localState: AppState(
         sync: _configuredSyncSettings(
           encryptionPassphrase: 'shared sync secret',
-        ),
+        )..operationDeviceSequences = {'local-known': 4},
       ),
       store: store,
       localUpdatedAtUtc: DateTime.utc(2026, 7, 2, 11),
@@ -539,6 +538,7 @@ void main() {
     final stored = await store.load();
     expect(stored.sync.operationDeviceSequences, {
       'remote-device': 9,
+      'local-known': 4,
       'device-local': 1,
     });
   });
