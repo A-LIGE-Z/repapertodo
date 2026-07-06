@@ -75,14 +75,23 @@ abstract final class WebDavPresets {
 }
 
 String? _normalizePresetId(String? id) {
-  final value = id?.trim().toLowerCase();
+  final value = id?.trim().toLowerCase().replaceAll(RegExp(r'[\s_]+'), '-');
   return switch (value) {
     null || '' => null,
+    '坚果云' ||
+    '坚果云-webdav' ||
     'jianguoyun' ||
+    'jianguo-yun' ||
+    'jian-guoyun' ||
     'jian-guo-yun' ||
     'jianguoyun-webdav' ||
+    'jianguo-yun-webdav' ||
+    'jian-guoyun-webdav' ||
+    'jian-guo-yun-webdav' ||
     'nutstore' ||
-    'nutstore-webdav' =>
+    'nut-store' ||
+    'nutstore-webdav' ||
+    'nut-store-webdav' =>
       WebDavPresetIds.jianguoyun,
     'custom' ||
     'generic' ||

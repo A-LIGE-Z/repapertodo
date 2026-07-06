@@ -8,10 +8,16 @@ void main() {
     expect(WebDavPresets.recommended, contains(preset));
     expect(WebDavPresets.all, containsAll([preset, WebDavPresets.custom]));
     expect(WebDavPresets.byId(' jianguoyun '), same(preset));
+    expect(WebDavPresets.byId('坚果云'), same(preset));
+    expect(WebDavPresets.byId('jian guo yun'), same(preset));
+    expect(WebDavPresets.byId('jian_guo_yun'), same(preset));
     expect(WebDavPresets.byId('Jian-Guo-Yun'), same(preset));
     expect(WebDavPresets.byId('nutstore'), same(preset));
+    expect(WebDavPresets.byId('nut-store'), same(preset));
     expect(WebDavPresets.byId('nutstore-webdav'), same(preset));
+    expect(WebDavPresets.byId('nut store webdav'), same(preset));
     expect(WebDavPresetIds.normalize('jianguoyun'), WebDavPresetIds.jianguoyun);
+    expect(WebDavPresetIds.normalize('坚果云 WebDAV'), WebDavPresetIds.jianguoyun);
     expect(WebDavPresetIds.normalize('NUTSTORE'), WebDavPresetIds.jianguoyun);
     expect(preset.label, 'Jianguoyun');
     expect(preset.name, 'Jianguoyun WebDAV');
