@@ -41,6 +41,19 @@ function Invoke-Native {
   }
 }
 
+function Invoke-NativeText {
+  param(
+    [string]$Name,
+    [scriptblock]$Action
+  )
+
+  $output = & $Action
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Name failed with exit code $LASTEXITCODE."
+  }
+  return (($output -join "`n").Trim())
+}
+
 function Get-FlutterVersion {
   $pubspec = Get-Content -LiteralPath "pubspec.yaml"
   $versionLine = $pubspec | Where-Object { $_ -match "^version:\s*(.+)$" } | Select-Object -First 1
@@ -191,6 +204,29 @@ function Assert-GitHubAuthentication {
   }
 }
 
+function Assert-GitHubReleaseGitState {
+  Invoke-Native "git fetch origin main" {
+    & git fetch origin main
+  }
+
+  $branch = Invoke-NativeText "git rev-parse --abbrev-ref HEAD" {
+    & git rev-parse --abbrev-ref HEAD
+  }
+  if ($branch -ne "main") {
+    throw "GitHub Release publishing must run from the main branch because the release tag targets main."
+  }
+
+  $headCommit = Invoke-NativeText "git rev-parse HEAD" {
+    & git rev-parse HEAD
+  }
+  $originMainCommit = Invoke-NativeText "git rev-parse --verify origin/main" {
+    & git rev-parse --verify origin/main
+  }
+  if ($headCommit -ne $originMainCommit) {
+    throw "GitHub Release publishing requires local HEAD to match origin/main. Push or pull main before publishing."
+  }
+}
+
 function New-ReleaseNotes {
   param(
     [string]$version,
@@ -264,6 +300,9 @@ Invoke-Native "git rev-parse HEAD" {
 }
 Assert-CleanGitTree
 Assert-GitDiffCheck
+if ($PublishGitHubRelease) {
+  Assert-GitHubReleaseGitState
+}
 
 $validationExecuted = @(
   "git diff --check",

@@ -47,6 +47,9 @@ To also create or update the GitHub Release for the version in `pubspec.yaml`:
 
 Publishing checks `gh auth status` before running the expensive Flutter
 validation and build steps, so missing GitHub credentials fail early.
+Publishing also fetches `origin/main` and requires the local `main` HEAD to
+match it before building, so release metadata, artifacts, and the GitHub tag
+all point at the same commit.
 
 When the tag already has a GitHub Release, the script updates the release title
 and notes before clobbering the Windows, Android, checksum, and metadata
