@@ -1264,8 +1264,12 @@ void main() {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final platform =
         _readProjectText('lib/src/platform/windows_platform_services.dart');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final lookupStart = platform.indexOf('PaperData? _paperFromEventArguments');
     final lookupEnd = platform.indexOf('String? _paperIdFromArguments');
+    final trayMenuStart = runner.indexOf('if (method == "setTrayMenu")');
+    final trayMenuEnd =
+        runner.indexOf('if (method == "acquireSingleInstance")');
 
     expect(design, contains('explicitly name an unknown `paperId`'));
     expect(design, contains('Registry refreshes from restore or tray rebuild'));
@@ -1279,6 +1283,12 @@ void main() {
     expect(lookupBlock, contains('return _activePaper;'));
     expect(lookupBlock, contains('return _knownPapers[paperId];'));
     expect(lookupBlock, isNot(contains('?? _activePaper')));
+    expect(trayMenuStart, isNonNegative);
+    expect(trayMenuEnd, greaterThan(trayMenuStart));
+    final trayMenuBlock = runner.substring(trayMenuStart, trayMenuEnd);
+    expect(trayMenuBlock, contains('current_paper_ids'));
+    expect(trayMenuBlock, contains('paper_surfaces_.erase(iterator)'));
+    expect(trayMenuBlock, contains('active_paper_id_.clear()'));
   });
 
   test('Windows runner hides only the active native paper surface', () {

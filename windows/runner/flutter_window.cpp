@@ -1632,6 +1632,7 @@ bool FlutterWindow::OnCreate() {
         }
         if (method == "setTrayMenu") {
           tray_papers_.clear();
+          std::vector<std::string> current_paper_ids;
           if (call.arguments()) {
             if (const auto* papers =
                     std::get_if<flutter::EncodableList>(call.arguments())) {
@@ -1641,6 +1642,7 @@ bool FlutterWindow::OnCreate() {
                   const std::string id =
                       GetStringArgument(*paper_map, "id", "");
                   if (!id.empty()) {
+                    current_paper_ids.push_back(id);
                     RememberPaperVisibility(
                         id, GetBoolArgument(*paper_map, "isVisible", false));
                     RememberPaperPinnedToDesktop(
@@ -1670,6 +1672,22 @@ bool FlutterWindow::OnCreate() {
                 }
               }
             }
+          }
+          for (auto iterator = paper_surfaces_.begin();
+               iterator != paper_surfaces_.end();) {
+            if (std::find(current_paper_ids.begin(), current_paper_ids.end(),
+                          iterator->first) == current_paper_ids.end()) {
+              iterator = paper_surfaces_.erase(iterator);
+            } else {
+              ++iterator;
+            }
+          }
+          if (!active_paper_id_.empty() &&
+              std::find(current_paper_ids.begin(), current_paper_ids.end(),
+                        active_paper_id_) == current_paper_ids.end()) {
+            active_paper_id_.clear();
+            pinned_to_desktop_ = false;
+            z_order_state_initialized_ = false;
           }
           result->Success();
           return;
