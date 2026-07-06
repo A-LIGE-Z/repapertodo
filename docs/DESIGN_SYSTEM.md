@@ -150,6 +150,9 @@ Global hotkey registration should follow PaperTodo's safety model: a valid
 hotkey must include at least one real modifier (`Ctrl`, `Alt`, `Shift`, or
 `Win`) plus one non-modifier key, so single-key global shortcuts are ignored
 instead of stealing normal typing.
+When a non-empty hotkey cannot be registered because it is invalid or already
+claimed by another app, the Windows runner should report a platform setting
+failure and undo any partial hotkey registration from the same request.
 Pinned paper hotkeys should follow PaperTodo's reveal model: the Todo and Note
 hotkeys reveal the first visible desktop-pinned paper of the matching type and
 do not create new papers when no matching pinned surface exists.

@@ -1702,16 +1702,33 @@ bool FlutterWindow::OnCreate() {
           UnregisterHotKey(window, kPinnedNoteHotkeyId);
           todo_hotkey_registered_ = false;
           note_hotkey_registered_ = false;
+          std::string todo_hotkey;
+          std::string note_hotkey;
           if (call.arguments()) {
             if (const auto* hotkeys =
                     std::get_if<flutter::EncodableMap>(call.arguments())) {
+              todo_hotkey = GetStringArgument(*hotkeys, "todo", "");
+              note_hotkey = GetStringArgument(*hotkeys, "note", "");
               todo_hotkey_registered_ = RegisterConfiguredHotkey(
-                  window, kPinnedTodoHotkeyId,
-                  GetStringArgument(*hotkeys, "todo", ""));
+                  window, kPinnedTodoHotkeyId, todo_hotkey);
               note_hotkey_registered_ = RegisterConfiguredHotkey(
-                  window, kPinnedNoteHotkeyId,
-                  GetStringArgument(*hotkeys, "note", ""));
+                  window, kPinnedNoteHotkeyId, note_hotkey);
             }
+          }
+          const bool todo_hotkey_requested = !TrimAscii(todo_hotkey).empty();
+          const bool note_hotkey_requested = !TrimAscii(note_hotkey).empty();
+          if ((todo_hotkey_requested && !todo_hotkey_registered_) ||
+              (note_hotkey_requested && !note_hotkey_registered_)) {
+            UnregisterHotKey(window, kPinnedTodoHotkeyId);
+            UnregisterHotKey(window, kPinnedNoteHotkeyId);
+            todo_hotkey_registered_ = false;
+            note_hotkey_registered_ = false;
+            result->Error(
+                "hotkey_registration_failed",
+                "Unable to register one or more global hotkeys. Use Ctrl, Alt, "
+                "Shift, or Win plus a key and make sure the shortcut is not "
+                "already used.");
+            return;
           }
           result->Success();
           return;
