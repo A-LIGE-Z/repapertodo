@@ -2584,18 +2584,17 @@ void main() {
 
     final snapshots = await service.listSnapshots();
 
-    expect(snapshots, hasLength(3));
+    expect(snapshots, hasLength(2));
     expect(snapshots.map((snapshot) => snapshot.deviceId), [
-      'laptop',
       'phone',
       'win-device',
     ]);
     expect(snapshots.first.path,
-        'repapertodo/snapshots/snapshot-20260702T080000000Z-laptop-seq-000000000006.json');
-    expect(snapshots.first.updatedAtUtc, DateTime.utc(2026, 7, 2, 8));
-    expect(snapshots.first.etag, 'laptop-v6');
-    expect(snapshots.first.contentLength, 3072);
-    expect(snapshots.first.lastModifiedUtc, DateTime.utc(2026, 7, 2, 8, 1));
+        'repapertodo/snapshots/snapshot-20260701T090000000Z-phone-seq-000000000004.json');
+    expect(snapshots.first.updatedAtUtc, DateTime.utc(2026, 7, 1, 9));
+    expect(snapshots.first.etag, 'phone-v1');
+    expect(snapshots.first.contentLength, 2048);
+    expect(snapshots.first.lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 1));
   });
 
   test('deduplicates snapshot records by stable metadata preference', () async {
@@ -3733,10 +3732,9 @@ void main() {
 
     final logs = await service.listOperationLogs();
 
-    expect(logs, hasLength(3));
+    expect(logs, hasLength(2));
     expect(logs.map((log) => '${log.deviceId}:${log.sequence}'), [
       'android-device:1',
-      'tablet-device:2',
       'win-device:3',
     ]);
     expect(
@@ -3744,10 +3742,10 @@ void main() {
     expect(logs.first.etag, 'android-op-v1');
     expect(logs.first.contentLength, 128);
     expect(logs.first.lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 1));
-    expect(logs[1].path, 'repapertodo/ops/tablet-device-000000000002.jsonl');
-    expect(logs[1].etag, 'tablet-op-v2');
-    expect(logs[1].contentLength, 192);
-    expect(logs[1].lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 2));
+    expect(logs[1].path, 'repapertodo/ops/win-device-000000000003.jsonl');
+    expect(logs[1].etag, 'win-op-v3');
+    expect(logs[1].contentLength, 256);
+    expect(logs[1].lastModifiedUtc, DateTime.utc(2026, 7, 1, 9, 3));
   });
 
   test('deduplicates operation log records by normalized device sequence',

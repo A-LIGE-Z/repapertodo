@@ -727,13 +727,11 @@ class WebDavStateSyncService {
     if (path.endsWith('/')) {
       path = path.substring(0, path.length - 1);
     }
+    if (isServerAbsolutePath) {
+      return _normalizeDecodedRemotePath(_serverAbsoluteRemotePath(path));
+    }
     final root = _paths.rootCollectionPath;
     if (root.isNotEmpty) {
-      final marker = '/$root/';
-      final markerIndex = path.lastIndexOf(marker);
-      if (isServerAbsolutePath && markerIndex >= 0) {
-        return _normalizeDecodedRemotePath(path.substring(markerIndex + 1));
-      }
       if (path == root || path.startsWith('$root/')) {
         return _normalizeDecodedRemotePath(path);
       }
@@ -765,6 +763,24 @@ class WebDavStateSyncService {
       );
     }
     return uri.path;
+  }
+
+  String _serverAbsoluteRemotePath(String path) {
+    final baseSegments = _absolutePathSegments(_client.baseUri.path);
+    final entrySegments = _absolutePathSegments(path);
+    if (entrySegments.length < baseSegments.length) {
+      throw const WebDavSyncConfigurationException(
+        'WebDAV entry href must stay on the configured endpoint origin and path.',
+      );
+    }
+    for (var index = 0; index < baseSegments.length; index += 1) {
+      if (entrySegments[index] != baseSegments[index]) {
+        throw const WebDavSyncConfigurationException(
+          'WebDAV entry href must stay on the configured endpoint origin and path.',
+        );
+      }
+    }
+    return entrySegments.skip(baseSegments.length).join('/');
   }
 
   bool _absoluteHrefStaysBelowBasePath(Uri uri) {

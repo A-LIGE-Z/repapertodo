@@ -188,8 +188,9 @@ Network-path `href` values with an authority but no scheme, such as
 `//host/path`, are treated as absolute references and ignored for the same
 reason. Relative-looking `href` values that decode into network-path or
 absolute URL references are ignored before root-folder matching. Plain relative
-`href` values must already start at the sync root; only server-absolute paths
-may be reduced to the last root marker in the provider path.
+`href` values must already start at the sync root; server-absolute `href`
+values must stay under the configured endpoint path before they can be reduced
+to endpoint-relative sync paths.
 The WebDAV client itself also refuses absolute or parent-traversing request
 paths, paths with control characters, unsafe base URI authorities with encoded
 separators, unsafe base URI paths including control characters, encoded path
