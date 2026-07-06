@@ -277,7 +277,8 @@ class SyncOperationApplier {
     }
     final migratedSettings = migrateLegacyPaperTodoJson(settings);
     final safeSettings = Map<String, Object?>.from(migratedSettings)
-      ..remove('sync');
+      ..remove('sync')
+      ..remove('startAtLogin');
     if (safeSettings.isEmpty) {
       return;
     }

@@ -151,7 +151,11 @@ class SyncOperationDiffBuilder {
   }
 
   JsonMap _settingsJson(AppState state) {
-    return _withoutKeys(state.toJson(), const {'papers', 'sync'});
+    return _withoutKeys(state.toJson(), const {
+      'papers',
+      'sync',
+      'startAtLogin',
+    });
   }
 
   Map<String, PaperData> _paperMap(List<PaperData> papers) {

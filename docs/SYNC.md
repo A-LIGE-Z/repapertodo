@@ -354,8 +354,8 @@ leading/trailing whitespace are discarded.
 
 Settings operations are intentionally limited to app preferences. They do not
 replace local sync settings, WebDAV credentials, operation device sequences, or
-delete tombstones. Sync progress comes from manifests, operation logs, and local
-upload results instead.
+delete tombstones, and they do not replace local startup-at-login state. Sync
+progress comes from manifests, operation logs, and local upload results instead.
 
 Local device sequence progress must never move backward. Operation upload
 progress comes from returned device sequence metadata and explicitly accepted
@@ -417,7 +417,8 @@ Snapshot and operation-log file contents are encrypted for user-facing sync;
 - Preserve conflicts as recoverable user content.
 - Surface conflict recovery from the sync result so preserved snapshots are easy to inspect.
 - Keep tombstones long enough to prevent deleted content from reappearing from stale devices.
-- Keep WebDAV settings, credentials, sequence progress, and tombstones out of remote settings operations.
+- Keep WebDAV settings, credentials, sequence progress, tombstones, and local
+  startup-at-login state out of remote settings operations.
 - Keep WebDAV settings and credentials out of uploaded remote snapshots.
 - Sync on startup, exit, foreground/background transitions, manual request, and debounced local edits.
 - Opening settings must pause pending debounced local-edit uploads; canceling settings or saving settings without changing sync configuration restores the pending upload, even when platform setting application reports errors, while saving sync setting changes clears stale pending uploads so edits are not sent under a new sync configuration. Settings save failures must surface as readable UI errors and must not leave later local edits blocked from debounced upload.

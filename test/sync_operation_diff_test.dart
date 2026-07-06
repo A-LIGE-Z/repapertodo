@@ -70,9 +70,10 @@ void main() {
     expect(result.state.papers.single.content, 'New body');
   });
 
-  test('excludes local sync settings from generated settings operations', () {
+  test('excludes local sync and startup settings from settings operations', () {
     final before = AppState(
       theme: 'light',
+      startAtLogin: false,
       sync: SyncSettings(
         enabled: true,
         provider: SyncProviderIds.webDav,
@@ -90,6 +91,7 @@ void main() {
     );
     final syncOnlyAfter = AppState(
       theme: 'light',
+      startAtLogin: true,
       sync: SyncSettings(
         enabled: true,
         provider: SyncProviderIds.webDav,

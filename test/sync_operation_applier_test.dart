@@ -528,11 +528,12 @@ void main() {
     expect(result.state.sync.webDav.encryptionPassphrase, 'local-secret');
   });
 
-  test('settings operations cannot replace local sync settings', () {
+  test('settings operations cannot replace local sync or startup settings', () {
     final deletedAtUtc = DateTime.utc(2026, 7, 1, 9);
     final result = applier.apply(
       AppState(
         theme: 'light',
+        startAtLogin: true,
         sync: SyncSettings(
           enabled: true,
           provider: SyncProviderIds.webDav,
@@ -558,6 +559,7 @@ void main() {
           payload: {
             'settings': {
               'theme': 'dark',
+              'startAtLogin': false,
               'sync': {
                 'enabled': false,
                 'provider': SyncProviderIds.none,
@@ -582,6 +584,7 @@ void main() {
     );
 
     expect(result.state.theme, 'dark');
+    expect(result.state.startAtLogin, true);
     expect(result.state.sync.enabled, true);
     expect(result.state.sync.provider, SyncProviderIds.webDav);
     expect(result.state.sync.webDav.endpoint, 'https://dav.example.test/');
