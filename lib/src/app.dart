@@ -5589,17 +5589,21 @@ class _TodoEditorState extends State<_TodoEditor> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _todoColumnFields(context, item, itemTextStyle),
+              _todoColumnFields(context, item, itemTextStyle, visualSpec),
               Wrap(
                 spacing: 6,
                 runSpacing: 4,
                 children: [
                   if (_formatDueDate(item.dueAtLocal) case final dueDate?)
                     InputChip(
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       avatar: Icon(
                         Icons.event_outlined,
                         size: visualSpec.chipIconSize,
                       ),
+                      labelStyle: _todoChipTextStyle(visualSpec),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
                       label: Text(
                         strings.format(PaperTodoStringKeys.dueLabel, [dueDate]),
                       ),
@@ -5617,10 +5621,14 @@ class _TodoEditorState extends State<_TodoEditor> {
                   if (_formatReminderInterval(item)
                       case final reminderInterval?)
                     InputChip(
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       avatar: Icon(
                         Icons.notifications_active_outlined,
                         size: visualSpec.chipIconSize,
                       ),
+                      labelStyle: _todoChipTextStyle(visualSpec),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
                       label: Text(reminderInterval),
                       onPressed: () =>
                           unawaited(_pickReminderInterval(context, item)),
@@ -5935,134 +5943,145 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
         icon: const Icon(Icons.notifications_none_outlined),
       ),
-      PopupMenuButton<String>(
-        tooltip: _tooltipLabel(
-          widget.enableToolTips,
-          strings.get(PaperTodoStringKeys.actionTodoColumns),
-        ),
-        iconSize: visualSpec.iconSize,
-        icon: const Icon(Icons.table_chart_outlined),
-        onSelected: (value) => _updateColumns(item, value),
-        itemBuilder: (context) {
-          return [
-            PopupMenuItem(
-              value: _columnActionAdd,
-              enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
-              child: ListTile(
-                leading: const Icon(Icons.add),
-                title: Text(strings.get(PaperTodoStringKeys.actionAddColumn)),
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-            PopupMenuItem(
-              value: _columnActionRemove,
-              enabled: item.todoColumnCount > 1,
-              child: ListTile(
-                leading: const Icon(Icons.remove),
-                title: Text(
-                  strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
-                ),
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-            const PopupMenuDivider(),
-            for (var columnIndex = 0;
-                columnIndex < item.todoColumnCount;
-                columnIndex++)
+      SizedBox(
+        width: visualSpec.controlExtent,
+        height: visualSpec.controlExtent,
+        child: PopupMenuButton<String>(
+          tooltip: _tooltipLabel(
+            widget.enableToolTips,
+            strings.get(PaperTodoStringKeys.actionTodoColumns),
+          ),
+          iconSize: visualSpec.iconSize,
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.table_chart_outlined),
+          onSelected: (value) => _updateColumns(item, value),
+          itemBuilder: (context) {
+            return [
               PopupMenuItem(
-                value: '$_columnActionInsertBeforePrefix$columnIndex',
+                value: _columnActionAdd,
                 enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
                 child: ListTile(
-                  leading: const Icon(Icons.add_box_outlined),
-                  title: Text(
-                    strings.format(
-                      PaperTodoStringKeys.actionInsertBeforeColumn,
-                      [columnIndex + 1],
-                    ),
-                  ),
+                  leading: const Icon(Icons.add),
+                  title: Text(strings.get(PaperTodoStringKeys.actionAddColumn)),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-            for (var columnIndex = 0;
-                columnIndex < item.todoColumnCount;
-                columnIndex++)
               PopupMenuItem(
-                value: '$_columnActionDeletePrefix$columnIndex',
+                value: _columnActionRemove,
                 enabled: item.todoColumnCount > 1,
                 child: ListTile(
-                  leading: const Icon(Icons.delete_sweep_outlined),
+                  leading: const Icon(Icons.remove),
                   title: Text(
-                    strings.format(
-                      PaperTodoStringKeys.actionDeleteColumn,
-                      [columnIndex + 1],
-                    ),
+                    strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
                   ),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-            const PopupMenuDivider(),
-            PopupMenuItem(
-              value: _columnActionEqualWidths,
-              enabled: item.todoColumnCount > 1,
-              child: ListTile(
-                leading: const Icon(Icons.view_column_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.actionEqualWidths)),
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-            PopupMenuItem(
-              value: _columnActionWideFirst,
-              enabled: item.todoColumnCount > 1,
-              child: ListTile(
-                leading: const Icon(Icons.view_week_outlined),
-                title: Text(
-                  strings.get(PaperTodoStringKeys.actionWideFirstColumn),
+              const PopupMenuDivider(),
+              for (var columnIndex = 0;
+                  columnIndex < item.todoColumnCount;
+                  columnIndex++)
+                PopupMenuItem(
+                  value: '$_columnActionInsertBeforePrefix$columnIndex',
+                  enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
+                  child: ListTile(
+                    leading: const Icon(Icons.add_box_outlined),
+                    title: Text(
+                      strings.format(
+                        PaperTodoStringKeys.actionInsertBeforeColumn,
+                        [columnIndex + 1],
+                      ),
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
-                contentPadding: EdgeInsets.zero,
+              for (var columnIndex = 0;
+                  columnIndex < item.todoColumnCount;
+                  columnIndex++)
+                PopupMenuItem(
+                  value: '$_columnActionDeletePrefix$columnIndex',
+                  enabled: item.todoColumnCount > 1,
+                  child: ListTile(
+                    leading: const Icon(Icons.delete_sweep_outlined),
+                    title: Text(
+                      strings.format(
+                        PaperTodoStringKeys.actionDeleteColumn,
+                        [columnIndex + 1],
+                      ),
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: _columnActionEqualWidths,
+                enabled: item.todoColumnCount > 1,
+                child: ListTile(
+                  leading: const Icon(Icons.view_column_outlined),
+                  title:
+                      Text(strings.get(PaperTodoStringKeys.actionEqualWidths)),
+                  contentPadding: EdgeInsets.zero,
+                ),
               ),
-            ),
-          ];
-        },
-      ),
-      PopupMenuButton<String>(
-        tooltip: _tooltipLabel(
-          widget.enableToolTips,
-          strings.get(PaperTodoStringKeys.actionLinkNote),
+              PopupMenuItem(
+                value: _columnActionWideFirst,
+                enabled: item.todoColumnCount > 1,
+                child: ListTile(
+                  leading: const Icon(Icons.view_week_outlined),
+                  title: Text(
+                    strings.get(PaperTodoStringKeys.actionWideFirstColumn),
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ];
+          },
         ),
-        enabled: widget.enableTodoNoteLinks &&
-            (widget.notePapers.isNotEmpty ||
-                (item.linkedNoteId?.trim().isNotEmpty ?? false)),
-        iconSize: visualSpec.iconSize,
-        icon: Icon(item.linkedNoteId == null
-            ? Icons.note_add_outlined
-            : Icons.link_outlined),
-        onSelected: (value) {
-          if (value == _todoLinkActionUnlink) {
-            _clearLinkedNote(item);
-            return;
-          }
-          _linkNote(item, value);
-        },
-        itemBuilder: (context) {
-          return [
-            if (item.linkedNoteId?.trim().isNotEmpty ?? false) ...[
-              _todoActionMenuItem(
-                value: _todoLinkActionUnlink,
-                icon: Icons.link_off_outlined,
-                label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
-              ),
-              if (widget.notePapers.isNotEmpty) const PopupMenuDivider(),
-            ],
-            for (final note in widget.notePapers)
-              _todoActionMenuItem(
-                value: note.id,
-                icon: item.linkedNoteId == note.id
-                    ? Icons.link_outlined
-                    : Icons.notes_outlined,
-                label: _displayPaperTitle(note),
-              ),
-          ];
-        },
+      ),
+      SizedBox(
+        width: visualSpec.controlExtent,
+        height: visualSpec.controlExtent,
+        child: PopupMenuButton<String>(
+          tooltip: _tooltipLabel(
+            widget.enableToolTips,
+            strings.get(PaperTodoStringKeys.actionLinkNote),
+          ),
+          enabled: widget.enableTodoNoteLinks &&
+              (widget.notePapers.isNotEmpty ||
+                  (item.linkedNoteId?.trim().isNotEmpty ?? false)),
+          iconSize: visualSpec.iconSize,
+          padding: EdgeInsets.zero,
+          icon: Icon(item.linkedNoteId == null
+              ? Icons.note_add_outlined
+              : Icons.link_outlined),
+          onSelected: (value) {
+            if (value == _todoLinkActionUnlink) {
+              _clearLinkedNote(item);
+              return;
+            }
+            _linkNote(item, value);
+          },
+          itemBuilder: (context) {
+            return [
+              if (item.linkedNoteId?.trim().isNotEmpty ?? false) ...[
+                _todoActionMenuItem(
+                  value: _todoLinkActionUnlink,
+                  icon: Icons.link_off_outlined,
+                  label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
+                ),
+                if (widget.notePapers.isNotEmpty) const PopupMenuDivider(),
+              ],
+              for (final note in widget.notePapers)
+                _todoActionMenuItem(
+                  value: note.id,
+                  icon: item.linkedNoteId == note.id
+                      ? Icons.link_outlined
+                      : Icons.notes_outlined,
+                  label: _displayPaperTitle(note),
+                ),
+            ];
+          },
+        ),
       ),
       IconButton(
         tooltip: _tooltipLabel(
@@ -6560,11 +6579,12 @@ class _TodoEditorState extends State<_TodoEditor> {
     BuildContext context,
     PaperItem item,
     TextStyle? itemTextStyle,
+    _TodoVisualSpec visualSpec,
   ) {
     final fields = [
-      _mainColumnField(context, item, itemTextStyle),
+      _mainColumnField(context, item, itemTextStyle, visualSpec),
       for (var index = 0; index < item.todoExtraColumns.length; index++)
-        _extraColumnField(context, item, index, itemTextStyle),
+        _extraColumnField(context, item, index, itemTextStyle, visualSpec),
     ];
     if (item.todoColumnCount <= 1) {
       return fields.first;
@@ -6712,53 +6732,58 @@ class _TodoEditorState extends State<_TodoEditor> {
     BuildContext context,
     PaperItem item,
     TextStyle? itemTextStyle,
+    _TodoVisualSpec visualSpec,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
     return KeyedSubtree(
       key: ValueKey('${widget.paper.id}-${item.id}-text'),
       child: _todoItemKeyboardScope(
         item,
-        TextFormField(
-          key: ValueKey(
-            '${widget.paper.id}-${item.id}-text-field-$_textFieldRevision',
-          ),
-          focusNode: _mainTodoFieldFocusNode(item),
-          initialValue: item.text,
-          keyboardType: TextInputType.multiline,
-          minLines: 1,
-          maxLines: null,
-          textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            border: item.todoColumnCount > 1
-                ? const OutlineInputBorder()
-                : InputBorder.none,
-            labelText: item.todoColumnCount > 1
-                ? strings.format(PaperTodoStringKeys.columnLabel, [1])
-                : null,
-            hintText: strings.get(PaperTodoStringKeys.todoNewItemHint),
-            isDense: true,
-          ),
-          style: itemTextStyle?.copyWith(
-            color: item.done ? colorScheme.outline : colorScheme.onSurface,
-            decoration: item.done ? TextDecoration.lineThrough : null,
-          ),
-          inputFormatters: [
-            _TodoPasteTextInputFormatter(
-              onPaste: (value, previousValue) => _handleMultiLinePaste(
-                item,
-                value,
-                previousColumnText: previousValue,
-              ),
+        ConstrainedBox(
+          constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
+          child: TextFormField(
+            key: ValueKey(
+              '${widget.paper.id}-${item.id}-text-field-$_textFieldRevision',
             ),
-          ],
-          onChanged: (value) {
-            if (_handleMultiLinePaste(item, value)) {
-              return;
-            }
-            item.text = value;
-            unawaited(widget.onChanged());
-          },
-          onFieldSubmitted: (_) => _insertItemAfter(item),
+            focusNode: _mainTodoFieldFocusNode(item),
+            initialValue: item.text,
+            keyboardType: TextInputType.multiline,
+            minLines: 1,
+            maxLines: null,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              border: item.todoColumnCount > 1
+                  ? const OutlineInputBorder()
+                  : InputBorder.none,
+              labelText: item.todoColumnCount > 1
+                  ? strings.format(PaperTodoStringKeys.columnLabel, [1])
+                  : null,
+              hintText: strings.get(PaperTodoStringKeys.todoNewItemHint),
+              isDense: true,
+              contentPadding: visualSpec.mainContentPadding,
+            ),
+            style: itemTextStyle?.copyWith(
+              color: item.done ? colorScheme.outline : colorScheme.onSurface,
+              decoration: item.done ? TextDecoration.lineThrough : null,
+            ),
+            inputFormatters: [
+              _TodoPasteTextInputFormatter(
+                onPaste: (value, previousValue) => _handleMultiLinePaste(
+                  item,
+                  value,
+                  previousColumnText: previousValue,
+                ),
+              ),
+            ],
+            onChanged: (value) {
+              if (_handleMultiLinePaste(item, value)) {
+                return;
+              }
+              item.text = value;
+              unawaited(widget.onChanged());
+            },
+            onFieldSubmitted: (_) => _insertItemAfter(item),
+          ),
         ),
       ),
     );
@@ -6840,50 +6865,55 @@ class _TodoEditorState extends State<_TodoEditor> {
     PaperItem item,
     int index,
     TextStyle? itemTextStyle,
+    _TodoVisualSpec visualSpec,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
     return _todoItemKeyboardScope(
       item,
-      TextFormField(
-        key: ValueKey(
-          '${widget.paper.id}-${item.id}-column-${index + 2}',
-        ),
-        focusNode: _extraTodoFieldFocusNode(item, index),
-        initialValue: item.todoExtraColumns[index],
-        keyboardType: TextInputType.multiline,
-        minLines: 1,
-        maxLines: null,
-        textInputAction: TextInputAction.next,
-        decoration: InputDecoration(
-          border: const OutlineInputBorder(),
-          labelText: strings.format(
-            PaperTodoStringKeys.columnLabel,
-            [index + 2],
+      ConstrainedBox(
+        constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
+        child: TextFormField(
+          key: ValueKey(
+            '${widget.paper.id}-${item.id}-column-${index + 2}',
           ),
-          isDense: true,
-        ),
-        style: itemTextStyle?.copyWith(
-          color: item.done ? colorScheme.outline : colorScheme.onSurface,
-          decoration: item.done ? TextDecoration.lineThrough : null,
-        ),
-        inputFormatters: [
-          _TodoPasteTextInputFormatter(
-            onPaste: (value, previousValue) => _handleMultiLinePaste(
-              item,
-              value,
-              extraColumnIndex: index,
-              previousColumnText: previousValue,
+          focusNode: _extraTodoFieldFocusNode(item, index),
+          initialValue: item.todoExtraColumns[index],
+          keyboardType: TextInputType.multiline,
+          minLines: 1,
+          maxLines: null,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            labelText: strings.format(
+              PaperTodoStringKeys.columnLabel,
+              [index + 2],
             ),
+            isDense: true,
+            contentPadding: visualSpec.extraContentPadding,
           ),
-        ],
-        onChanged: (value) {
-          if (_handleMultiLinePaste(item, value, extraColumnIndex: index)) {
-            return;
-          }
-          item.todoExtraColumns[index] = value;
-          unawaited(widget.onChanged());
-        },
-        onFieldSubmitted: (_) => _insertItemAfter(item),
+          style: itemTextStyle?.copyWith(
+            color: item.done ? colorScheme.outline : colorScheme.onSurface,
+            decoration: item.done ? TextDecoration.lineThrough : null,
+          ),
+          inputFormatters: [
+            _TodoPasteTextInputFormatter(
+              onPaste: (value, previousValue) => _handleMultiLinePaste(
+                item,
+                value,
+                extraColumnIndex: index,
+                previousColumnText: previousValue,
+              ),
+            ),
+          ],
+          onChanged: (value) {
+            if (_handleMultiLinePaste(item, value, extraColumnIndex: index)) {
+              return;
+            }
+            item.todoExtraColumns[index] = value;
+            unawaited(widget.onChanged());
+          },
+          onFieldSubmitted: (_) => _insertItemAfter(item),
+        ),
       ),
     );
   }
@@ -7402,10 +7432,14 @@ class _TodoEditorState extends State<_TodoEditor> {
         : null;
     final isScriptCapsule = scriptSpec != null;
     return InputChip(
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       avatar: Icon(
         isScriptCapsule ? Icons.bolt_outlined : Icons.notes_outlined,
         size: visualSpec.chipIconSize,
       ),
+      labelStyle: _todoChipTextStyle(visualSpec),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
       label: Text(
         isScriptCapsule
             ? _scriptChipLabel(linkedNote)
@@ -7431,6 +7465,13 @@ class _TodoEditorState extends State<_TodoEditor> {
         strings.get(PaperTodoStringKeys.actionUnlinkNote),
       ),
     );
+  }
+
+  TextStyle? _todoChipTextStyle(_TodoVisualSpec visualSpec) {
+    return Theme.of(context).textTheme.labelSmall?.copyWith(
+          fontSize: visualSpec.chipFontSize,
+          fontWeight: FontWeight.w600,
+        );
   }
 
   String _noteChipLabel(PaperData note) {
@@ -7922,50 +7963,74 @@ class _TodoVisualSpec {
     required this.checkboxScale,
     required this.iconSize,
     required this.chipIconSize,
+    required this.chipFontSize,
     required this.controlExtent,
     required this.itemGap,
+    required this.rowMinHeight,
+    required this.textVerticalPadding,
   });
 
   final double textScale;
   final double checkboxScale;
   final double iconSize;
   final double chipIconSize;
+  final double chipFontSize;
   final double controlExtent;
   final double itemGap;
+  final double rowMinHeight;
+  final double textVerticalPadding;
+
+  EdgeInsets get mainContentPadding =>
+      EdgeInsets.symmetric(horizontal: 2, vertical: textVerticalPadding);
+
+  EdgeInsets get extraContentPadding =>
+      EdgeInsets.fromLTRB(8, textVerticalPadding, 4, textVerticalPadding);
 
   static _TodoVisualSpec from(String value) {
     return switch (TodoVisualSizes.normalize(value)) {
       TodoVisualSizes.small => const _TodoVisualSpec(
-          textScale: 0.94,
-          checkboxScale: 0.9,
-          iconSize: 20,
-          chipIconSize: 16,
-          controlExtent: 44,
+          textScale: 12 / 14,
+          checkboxScale: 0.86,
+          iconSize: 21,
+          chipIconSize: 11.5,
+          chipFontSize: 9.5,
+          controlExtent: 28,
           itemGap: 4,
+          rowMinHeight: 23,
+          textVerticalPadding: 2.5,
         ),
       TodoVisualSizes.large => const _TodoVisualSpec(
-          textScale: 1.08,
-          checkboxScale: 1.08,
-          iconSize: 26,
-          chipIconSize: 20,
-          controlExtent: 48,
-          itemGap: 12,
-        ),
-      TodoVisualSizes.extraLarge => const _TodoVisualSpec(
-          textScale: 1.18,
-          checkboxScale: 1.18,
-          iconSize: 30,
-          chipIconSize: 22,
-          controlExtent: 52,
-          itemGap: 16,
-        ),
-      _ => const _TodoVisualSpec(
           textScale: 1,
           checkboxScale: 1,
           iconSize: 24,
-          chipIconSize: 18,
-          controlExtent: 44,
+          chipIconSize: 13.5,
+          chipFontSize: 11.5,
+          controlExtent: 32,
           itemGap: 8,
+          rowMinHeight: 26,
+          textVerticalPadding: 3.5,
+        ),
+      TodoVisualSizes.extraLarge => const _TodoVisualSpec(
+          textScale: 15.5 / 14,
+          checkboxScale: 1.08,
+          iconSize: 27,
+          chipIconSize: 15,
+          chipFontSize: 13,
+          controlExtent: 36,
+          itemGap: 10,
+          rowMinHeight: 30,
+          textVerticalPadding: 4.5,
+        ),
+      _ => const _TodoVisualSpec(
+          textScale: 13 / 14,
+          checkboxScale: 0.94,
+          iconSize: 22,
+          chipIconSize: 12.5,
+          chipFontSize: 10.5,
+          controlExtent: 30,
+          itemGap: 6,
+          rowMinHeight: 24,
+          textVerticalPadding: 3,
         ),
     };
   }

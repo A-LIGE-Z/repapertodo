@@ -7470,9 +7470,23 @@ void main() {
     final dueButton = tester.widget<IconButton>(
       find.widgetWithIcon(IconButton, Icons.event_outlined).first,
     );
-    expect(dueButton.iconSize, 30);
-    expect(dueButton.constraints?.minWidth, 52);
-    expect(dueButton.constraints?.minHeight, 52);
+    expect(dueButton.iconSize, 27);
+    expect(dueButton.constraints?.minWidth, 36);
+    expect(dueButton.constraints?.minHeight, 36);
+
+    final itemFinder = find.byKey(const ValueKey('large-todo-large-item-text'));
+    final todoText = tester.widget<EditableText>(
+      find.descendant(of: itemFinder, matching: find.byType(EditableText)),
+    );
+    expect(todoText.style.fontSize, closeTo(15.5, 0.001));
+
+    final textField = tester.widget<TextField>(
+      find.descendant(of: itemFinder, matching: find.byType(TextField)),
+    );
+    expect(
+      textField.decoration?.contentPadding,
+      const EdgeInsets.symmetric(horizontal: 2, vertical: 4.5),
+    );
   });
 
   testWidgets('adjusts per-paper text zoom', (tester) async {
