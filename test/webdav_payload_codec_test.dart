@@ -72,6 +72,18 @@ void main() {
     }
   });
 
+  test('encrypted payload codec rejects unsafe KDF iteration counts', () {
+    for (final kdfIterations in const [99999, 1000001]) {
+      expect(
+        () => EncryptedWebDavPayloadCodec(
+          passphrase: 'shared sync secret',
+          kdfIterations: kdfIterations,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    }
+  });
+
   test('encrypted payload codec trims passphrases before encryption', () async {
     final encoder = EncryptedWebDavPayloadCodec(
       passphrase: ' shared sync secret ',
@@ -298,6 +310,47 @@ void main() {
 
     expect(
       codec.decodeSnapshot(unsupportedEnvelope, const AppStateCodec()),
+      throwsA(
+        isA<WebDavPayloadDecryptionException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('unsupported or corrupted'),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              isNot(contains('passphrase')),
+            ),
+      ),
+    );
+  });
+
+  test(
+      'encrypted payload codec rejects excessive remote KDF iterations quickly',
+      () async {
+    final codec = EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(11),
+    );
+    final malformedEnvelope = utf8.encode(
+      'RePaperTodo-Encrypted-Payload-v1\n'
+      '${jsonEncode({
+            'version': 1,
+            'algorithm': 'aes-gcm-256',
+            'kdf': 'pbkdf2-hmac-sha256',
+            'kdfIterations': 1000001,
+            'salt': base64Url.encode(List.filled(16, 1)).replaceAll('=', ''),
+            'nonce': base64Url.encode(List.filled(12, 2)).replaceAll('=', ''),
+            'cipherText':
+                base64Url.encode(List.filled(8, 3)).replaceAll('=', ''),
+            'mac': base64Url.encode(List.filled(16, 4)).replaceAll('=', ''),
+          })}\n',
+    );
+
+    expect(
+      codec.decodeSnapshot(malformedEnvelope, const AppStateCodec()),
       throwsA(
         isA<WebDavPayloadDecryptionException>()
             .having(

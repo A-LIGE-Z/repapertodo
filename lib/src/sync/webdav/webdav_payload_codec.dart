@@ -112,6 +112,13 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
         'WebDAV encryption KDF iterations are too low.',
       );
     }
+    if (kdfIterations > _maximumKdfIterations) {
+      throw ArgumentError.value(
+        kdfIterations,
+        'kdfIterations',
+        'WebDAV encryption KDF iterations are too high.',
+      );
+    }
   }
 
   static const _magic = 'RePaperTodo-Encrypted-Payload-v1\n';
@@ -119,6 +126,7 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
   static const _kdfName = 'pbkdf2-hmac-sha256';
   static const _defaultKdfIterations = 210000;
   static const _minimumKdfIterations = 100000;
+  static const _maximumKdfIterations = 1000000;
   static const _saltLength = 16;
   static const _nonceLength = 12;
   static const _macLength = 16;
@@ -226,7 +234,9 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
     if (version != 1 || algorithm != _algorithmName || kdf != _kdfName) {
       throw const FormatException('Unsupported encrypted WebDAV payload.');
     }
-    if (iterations is! int || iterations < _minimumKdfIterations) {
+    if (iterations is! int ||
+        iterations < _minimumKdfIterations ||
+        iterations > _maximumKdfIterations) {
       throw const FormatException(
         'Encrypted WebDAV payload has invalid KDF settings.',
       );

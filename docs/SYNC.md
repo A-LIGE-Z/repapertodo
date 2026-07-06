@@ -54,6 +54,9 @@ AES-GCM-256 encrypted payloads with a PBKDF2-HMAC-SHA256 derived key while
 preserving WebDAV path, ETag, retry, and merge behavior. The lower-level codec
 can still read legacy plain JSON payloads during normal pull, operation-log
 merge, and recovery restore so existing remote data can be migrated gradually.
+Encrypted payload KDF iteration counts are bounded during both encoding and
+decoding so malformed remote envelopes cannot force unbounded key derivation
+work before surfacing as corrupted sync data.
 Configuration validation should preserve field-level issue details for the UI:
 endpoint, username, password, remote folder, and encryption passphrase errors
 must be recoverable without making users infer which setting blocked sync.
