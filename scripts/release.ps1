@@ -29,6 +29,19 @@ function Assert-Command {
   }
 }
 
+function Clear-ProxyEnvironment {
+  foreach ($name in @(
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy"
+  )) {
+    Remove-Item -LiteralPath "Env:\$name" -ErrorAction SilentlyContinue
+  }
+}
+
 function Invoke-Native {
   param(
     [string]$Name,
@@ -304,10 +317,9 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
 
 # Some local shells may carry malformed proxy values. Release commands should
-# prefer direct network access unless the caller deliberately sets a proxy here.
-$env:HTTP_PROXY = ""
-$env:HTTPS_PROXY = ""
-$env:ALL_PROXY = ""
+# prefer direct network access. Remove the variables entirely because Java and
+# Android SDK tools parse empty proxy variables as malformed URLs.
+Clear-ProxyEnvironment
 
 $flutter = "C:\Users\28415\.puro\envs\stable\flutter\bin\flutter.bat"
 if (-not (Test-Path -LiteralPath $flutter)) {

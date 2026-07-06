@@ -1378,7 +1378,13 @@ void main() {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
     final readme = File('README.md').readAsStringSync();
 
-    expect(script, contains(r'$env:HTTPS_PROXY = ""'));
+    expect(script, contains('function Clear-ProxyEnvironment'));
+    expect(script, contains(r'Remove-Item -LiteralPath "Env:\$name"'));
+    expect(script, contains('Android SDK tools parse empty proxy variables'));
+    expect(script, contains('Clear-ProxyEnvironment'));
+    expect(script, isNot(contains(r'$env:HTTPS_PROXY = ""')));
+    expect(script, isNot(contains(r'$env:HTTP_PROXY = ""')));
+    expect(script, isNot(contains(r'$env:ALL_PROXY = ""')));
     expect(script, contains('flutter.bat'));
     expect(script, contains(r'[switch]$OfflinePubGet'));
     expect(script, contains(r'[switch]$AllowDirty'));
@@ -1483,6 +1489,10 @@ void main() {
     expect(workflow, contains('channel: stable'));
     expect(workflow, contains('platforms;android-37'));
     expect(workflow, contains('build-tools;37.0.0'));
+    expect(workflow, contains(r'Remove-Item -LiteralPath "Env:\$name"'));
+    expect(workflow, isNot(contains('HTTP_PROXY: ""')));
+    expect(workflow, isNot(contains('HTTPS_PROXY: ""')));
+    expect(workflow, isNot(contains('ALL_PROXY: ""')));
     expect(workflow, contains(r'.\scripts\release.ps1 @releaseArgs'));
     expect(workflow, contains('-PublishGitHubRelease'));
     expect(workflow, contains('actions/upload-artifact@v4'));
