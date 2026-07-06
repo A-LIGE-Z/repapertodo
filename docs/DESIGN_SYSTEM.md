@@ -207,6 +207,10 @@ to Markdown links and the supported single-line inline HTML `a href` links.
 Inline HTML anchor parsing should follow PaperTodo's small parser: attributes
 must be well-formed `name=value` pairs, quoted values must close, unquoted href
 values are allowed, and empty anchor bodies are not link hit targets.
+Inline HTML preview rendering should preserve PaperTodo's small single-line
+subset only: `b`, `strong`, `i`, `em`, `s`, `del`, `u`, `code`, and `a href`.
+It should not enable block HTML, HTML images, HTML tables, embedded content,
+or arbitrary tags.
 Markdown URL normalization should preserve PaperTodo's bare-host convenience:
 links beginning with `www.` open as `https://www...` in both preview mode and
 edit-mode source link handling before platform URI validation runs.

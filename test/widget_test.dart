@@ -485,6 +485,97 @@ void main() {
     expect(platform.uriOpener.openedUris, ['https://example.com/paper']);
   });
 
+  testWidgets('renders PaperTodo inline HTML markdown preview tags',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'html-tags-note',
+            type: PaperTypes.note,
+            title: 'HTML tags note',
+            content: '<b>Bold</b> <strong>Strong</strong> '
+                '<i>Italic</i> <em>Em</em> '
+                '<s>Strike</s> <del>Del</del> '
+                '<u>Under</u> <code>Code</code>\n\n'
+                '<mark>Raw</mark>',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final bold = _markdownTextSpan(tester, 'Bold');
+    final strong = _markdownTextSpan(tester, 'Strong');
+    final italic = _markdownTextSpan(tester, 'Italic');
+    final em = _markdownTextSpan(tester, 'Em');
+    final strike = _markdownTextSpan(tester, 'Strike');
+    final del = _markdownTextSpan(tester, 'Del');
+    final under = _markdownTextSpan(tester, 'Under');
+    final code = _markdownTextSpan(tester, 'Code');
+    expect(find.text('<mark>Raw</mark>'), findsOneWidget);
+
+    expect(bold.style?.fontWeight, FontWeight.bold);
+    expect(strong.style?.fontWeight, FontWeight.bold);
+    expect(italic.style?.fontStyle, FontStyle.italic);
+    expect(em.style?.fontStyle, FontStyle.italic);
+    expect(strike.style?.decoration, TextDecoration.lineThrough);
+    expect(del.style?.decoration, TextDecoration.lineThrough);
+    expect(under.style?.decoration, TextDecoration.underline);
+    expect(code.style?.fontFamily, 'monospace');
+  });
+
+  testWidgets('opens PaperTodo inline HTML markdown preview links',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'html-link-note',
+            type: PaperTypes.note,
+            title: 'HTML link note',
+            content: '<a href="https://example.com/html">HTML link</a>\n\n'
+                '<a href=www.example.com/bare>Bare HTML link</a>',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('HTML link'));
+    await tester.pump();
+    await tester.tap(find.text('Bare HTML link'));
+    await tester.pump();
+
+    expect(platform.uriOpener.openedUris, [
+      'https://example.com/html',
+      'https://www.example.com/bare',
+    ]);
+  });
+
   testWidgets('opens editor markdown links only on control click',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -756,6 +847,42 @@ void main() {
       find.textContaining('unsupported link target'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('blocks unsafe inline HTML markdown preview links',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'unsafe-html-link-note',
+            type: PaperTypes.note,
+            title: 'Unsafe HTML link note',
+            content: '<a href="javascript:alert(1)">Run script</a>',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.text('Run script'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(platform.uriOpener.openedUris, isEmpty);
+    expect(find.textContaining('unsupported link target'), findsOneWidget);
   });
 
   testWidgets('blocks credentialed markdown preview links before platform open',
@@ -10659,6 +10786,38 @@ Future<void> _enterNoteEditor(WidgetTester tester, String paperId) async {
   await tester.pump();
   await tester.pump();
   expect(find.byKey(ValueKey('$paperId-content')), findsOneWidget);
+}
+
+TextSpan _markdownTextSpan(WidgetTester tester, String text) {
+  for (final selectable
+      in tester.widgetList<SelectableText>(find.byType(SelectableText))) {
+    final textSpan = selectable.textSpan;
+    if (textSpan == null) {
+      continue;
+    }
+    final match = _findTextSpan(textSpan, text);
+    if (match != null) {
+      return match;
+    }
+  }
+  throw TestFailure('Could not find markdown text span "$text".');
+}
+
+TextSpan? _findTextSpan(InlineSpan span, String text) {
+  if (span is! TextSpan) {
+    return null;
+  }
+  final spanText = span.text;
+  if (spanText == text || (spanText?.contains(text) ?? false)) {
+    return span;
+  }
+  for (final child in span.children ?? const <InlineSpan>[]) {
+    final match = _findTextSpan(child, text);
+    if (match != null) {
+      return match;
+    }
+  }
+  return null;
 }
 
 class _RecoverySnapshotSyncService extends AppSyncService {

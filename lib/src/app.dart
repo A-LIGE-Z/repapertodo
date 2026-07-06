@@ -7,11 +7,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:path/path.dart' as p;
 
 import 'app_controller.dart';
 import 'core/model/app_state.dart';
 import 'core/model/markdown_formatting.dart';
+import 'core/model/markdown_inline_html.dart';
 import 'core/model/markdown_links.dart';
 import 'core/model/markdown_list_continuation.dart';
 import 'core/model/markdown_paste.dart';
@@ -61,6 +63,29 @@ const _dengXianFontFamilyFallback = [
   'Segoe UI Symbol',
   'Segoe UI Emoji',
 ];
+final _paperTodoMarkdownBuilders = <String, MarkdownElementBuilder>{
+  'u': _UnderlineMarkdownElementBuilder(),
+};
+
+class _UnderlineMarkdownElementBuilder extends MarkdownElementBuilder {
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    final baseStyle = parentStyle ?? DefaultTextStyle.of(context).style;
+    return SelectableText.rich(
+      TextSpan(
+        text: element.textContent,
+        style: baseStyle.merge(preferredStyle).merge(
+              const TextStyle(decoration: TextDecoration.underline),
+            ),
+      ),
+    );
+  }
+}
 
 class RePaperTodoApp extends StatefulWidget {
   const RePaperTodoApp({
@@ -3874,24 +3899,29 @@ class _NoteEditorState extends State<_NoteEditor> {
               data: widget.paper.content.trim().isEmpty
                   ? '_No note content._'
                   : widget.paper.content,
+              inlineSyntaxes: paperTodoMarkdownInlineHtmlSyntaxes(),
+              builders: _paperTodoMarkdownBuilders,
               onTapLink: (text, href, title) =>
                   _openMarkdownLink(context, href),
-              styleSheet:
-                  MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                p: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.apply(
-                      fontSizeFactor: widget.textZoom,
-                    )
-                    .copyWith(height: widget.lineSpacing),
-              ),
+              styleSheet: _previewMarkdownStyleSheet(context),
               selectable: true,
             ),
           ),
         ),
       ),
     );
+  }
+
+  MarkdownStyleSheet _previewMarkdownStyleSheet(BuildContext context) {
+    final theme = Theme.of(context);
+    final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
+      p: theme.textTheme.bodyMedium
+          ?.apply(
+            fontSizeFactor: widget.textZoom,
+          )
+          .copyWith(height: widget.lineSpacing),
+    );
+    return styleSheet;
   }
 
   void _enterEditorFromPreview() {

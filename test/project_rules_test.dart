@@ -892,6 +892,8 @@ void main() {
   test('PaperTodo markdown note link interaction is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
+    final inlineHtml =
+        File('lib/src/core/model/markdown_inline_html.dart').readAsStringSync();
     final markdownLinks =
         File('lib/src/core/model/markdown_links.dart').readAsStringSync();
 
@@ -903,6 +905,9 @@ void main() {
     expect(design, contains('Inline HTML anchor parsing should follow'));
     expect(design, contains('well-formed `name=value` pairs'));
     expect(design, contains('empty anchor bodies'));
+    expect(design, contains('Inline HTML preview rendering should preserve'));
+    expect(design, contains('`b`, `strong`, `i`, `em`, `s`, `del`, `u`'));
+    expect(design, contains('arbitrary tags'));
     expect(design, contains("bare-host convenience"));
     expect(design, contains('links beginning with `www.`'));
     expect(design, contains('Markdown local path links should preserve'));
@@ -940,6 +945,10 @@ void main() {
     expect(app, contains('PointerScrollEvent'));
     expect(app, contains('pointerSignalResolver'));
     expect(app, contains('_textZoomAfterWheel'));
+    expect(app, contains('paperTodoMarkdownInlineHtmlSyntaxes'));
+    expect(app, contains('_paperTodoMarkdownBuilders'));
+    expect(app, contains('class _UnderlineMarkdownElementBuilder'));
+    expect(app, contains("_previewMarkdownStyleSheet"));
     expect(app, contains("startsWith('www.')"));
     expect(app, contains('_normalizeMarkdownLocalPath'));
     expect(app, contains('controller.openExternalFile(localPath)'));
@@ -953,6 +962,16 @@ void main() {
     expect(markdownLinks, contains('_closedInlineCodeSpans'));
     expect(markdownLinks, contains("indexOf(']('"));
     expect(markdownLinks, contains("_normalizeLocalMarkdownPath"));
+    expect(inlineHtml, contains('class PaperTodoMarkdownInlineHtmlSyntax'));
+    expect(inlineHtml, contains("'b' || 'strong'"));
+    expect(inlineHtml, contains("'i' || 'em'"));
+    expect(inlineHtml, contains("'s' || 'del'"));
+    expect(inlineHtml, contains("'u' => md.Element.text('u'"));
+    expect(inlineHtml, contains("'strong',"));
+    expect(inlineHtml, contains("'em',"));
+    expect(inlineHtml, contains("'del',"));
+    expect(inlineHtml, contains("md.Element.text('code'"));
+    expect(inlineHtml, contains("md.Element('a'"));
     expect(
       File('lib/src/core/model/markdown_line_analysis.dart').readAsStringSync(),
       contains('enum MarkdownLineKind'),
