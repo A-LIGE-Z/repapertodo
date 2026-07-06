@@ -7,6 +7,24 @@ String _readProjectText(String path) => File(path)
     .replaceAll('\r\n', '\n')
     .replaceAll('\r', '\n');
 
+String? _findPowerShellExecutable() {
+  final candidates = Platform.isWindows
+      ? const ['pwsh.exe', 'powershell.exe']
+      : const ['pwsh'];
+  final lookupCommand = Platform.isWindows ? 'where' : 'which';
+  for (final candidate in candidates) {
+    final result = Process.runSync(
+      lookupCommand,
+      [candidate],
+      runInShell: true,
+    );
+    if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 void main() {
   test('project rules preserve the requested direction', () {
     final rules = _readProjectText('AGENTS.md');
@@ -1525,5 +1543,35 @@ void main() {
     expect(readme, contains('Android 14-17/API 34-37 compatibility'));
     expect(readme, contains('reads the Android Gradle SDK settings'));
     expect(readme, contains('stops if they drift'));
+  });
+
+  test('release script parses before packaging starts', () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for release script parsing.');
+      return;
+    }
+
+    final result = await Process.run(
+      powerShell,
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        r"$ErrorActionPreference = 'Stop'; [scriptblock]::Create((Get-Content -Raw -LiteralPath 'scripts/release.ps1')) | Out-Null",
+      ],
+    );
+
+    expect(
+      result.exitCode,
+      0,
+      reason: [
+        'scripts/release.ps1 must remain parseable before release packaging.',
+        if (result.stdout.toString().trim().isNotEmpty)
+          'stdout: ${result.stdout}',
+        if (result.stderr.toString().trim().isNotEmpty)
+          'stderr: ${result.stderr}',
+      ].join('\n'),
+    );
   });
 }
