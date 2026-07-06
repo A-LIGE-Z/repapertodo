@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../core/model/paper_constants.dart';
 import '../core/model/sync_settings.dart';
 import '../core/model/webdav_presets.dart';
+import 'papertodo_strings.dart';
 
 class SyncSettingsDialogResult {
   const SyncSettingsDialogResult({
@@ -415,6 +416,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   String? _passwordErrorText;
   String? _encryptionPassphraseErrorText;
 
+  PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
+
   bool get _hasDesktopIntegrationSettings =>
       widget.supportsStartAtLogin ||
       widget.supportsHideFromWindowSwitcher ||
@@ -551,13 +554,13 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     final colorScheme = Theme.of(context).colorScheme;
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.sync_outlined),
-          SizedBox(width: 12),
+          const Icon(Icons.sync_outlined),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Sync settings',
+              strings.get(PaperTodoStringKeys.dialogSyncSettings),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -572,23 +575,23 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
             children: [
               _adaptiveChoiceSelector(
                 key: const ValueKey('settings-theme-selector'),
-                labelText: 'Theme',
+                labelText: strings.get(PaperTodoStringKeys.theme),
                 compactIcon: Icons.brightness_auto_outlined,
                 selectedValue: _theme,
-                choices: const [
+                choices: [
                   _SettingsChoice(
                     value: 'system',
-                    label: 'System',
+                    label: strings.get(PaperTodoStringKeys.themeSystem),
                     icon: Icons.brightness_auto_outlined,
                   ),
                   _SettingsChoice(
                     value: 'light',
-                    label: 'Light',
+                    label: strings.get(PaperTodoStringKeys.themeLight),
                     icon: Icons.light_mode_outlined,
                   ),
                   _SettingsChoice(
                     value: 'dark',
-                    label: 'Dark',
+                    label: strings.get(PaperTodoStringKeys.themeDark),
                     icon: Icons.dark_mode_outlined,
                   ),
                 ],
@@ -597,51 +600,63 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const SizedBox(height: 12),
               _adaptiveChoiceSelector(
                 key: const ValueKey('settings-color-scheme-selector'),
-                labelText: 'Color scheme',
+                labelText: strings.get(PaperTodoStringKeys.colorScheme),
                 compactIcon: Icons.palette_outlined,
                 selectedValue: _colorScheme,
-                choices: const [
-                  _SettingsChoice(value: ColorSchemes.warm, label: 'Warm'),
-                  _SettingsChoice(value: ColorSchemes.ink, label: 'Ink'),
-                  _SettingsChoice(value: ColorSchemes.forest, label: 'Forest'),
-                  _SettingsChoice(value: ColorSchemes.rose, label: 'Rose'),
+                choices: [
+                  _SettingsChoice(
+                    value: ColorSchemes.warm,
+                    label: strings.get(PaperTodoStringKeys.colorWarm),
+                  ),
+                  _SettingsChoice(
+                    value: ColorSchemes.ink,
+                    label: strings.get(PaperTodoStringKeys.colorInk),
+                  ),
+                  _SettingsChoice(
+                    value: ColorSchemes.forest,
+                    label: strings.get(PaperTodoStringKeys.colorForest),
+                  ),
+                  _SettingsChoice(
+                    value: ColorSchemes.rose,
+                    label: strings.get(PaperTodoStringKeys.colorRose),
+                  ),
                 ],
                 onChanged: (value) => setState(() => _colorScheme = value),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _customThemeColorController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Custom theme color',
-                  prefixIcon: Icon(Icons.palette_outlined),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: strings.get(PaperTodoStringKeys.customThemeColor),
+                  prefixIcon: const Icon(Icons.palette_outlined),
                 ),
               ),
               const SizedBox(height: 16),
               Text(
-                'Appearance',
+                strings.get(PaperTodoStringKeys.appearance),
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
               _adaptiveChoiceSelector(
                 key: const ValueKey('settings-markdown-mode-selector'),
-                labelText: 'Markdown mode',
+                labelText: strings.get(PaperTodoStringKeys.markdownMode),
                 compactIcon: Icons.article_outlined,
                 selectedValue: _markdownRenderMode,
-                choices: const [
+                choices: [
                   _SettingsChoice(
                     value: MarkdownRenderModes.off,
-                    label: 'Markdown off',
+                    label: strings.get(PaperTodoStringKeys.markdownOff),
                     icon: Icons.edit_outlined,
                   ),
                   _SettingsChoice(
                     value: MarkdownRenderModes.basic,
-                    label: 'Basic',
+                    label: strings.get(PaperTodoStringKeys.basic),
                     icon: Icons.article_outlined,
                   ),
                   _SettingsChoice(
                     value: MarkdownRenderModes.enhanced,
-                    label: 'Enhanced',
+                    label: strings.get(PaperTodoStringKeys.enhanced),
                     icon: Icons.vertical_split_outlined,
                   ),
                 ],
@@ -651,19 +666,25 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const SizedBox(height: 12),
               _adaptiveChoiceSelector(
                 key: const ValueKey('settings-todo-visual-size-selector'),
-                labelText: 'Todo visual size',
+                labelText: strings.get(PaperTodoStringKeys.todoVisualSize),
                 compactIcon: Icons.format_size_outlined,
                 selectedValue: _todoVisualSize,
-                choices: const [
-                  _SettingsChoice(value: TodoVisualSizes.small, label: 'Small'),
+                choices: [
+                  _SettingsChoice(
+                    value: TodoVisualSizes.small,
+                    label: strings.get(PaperTodoStringKeys.small),
+                  ),
                   _SettingsChoice(
                     value: TodoVisualSizes.medium,
-                    label: 'Medium',
+                    label: strings.get(PaperTodoStringKeys.medium),
                   ),
-                  _SettingsChoice(value: TodoVisualSizes.large, label: 'Large'),
+                  _SettingsChoice(
+                    value: TodoVisualSizes.large,
+                    label: strings.get(PaperTodoStringKeys.large),
+                  ),
                   _SettingsChoice(
                     value: TodoVisualSizes.extraLarge,
-                    label: 'XL',
+                    label: strings.get(PaperTodoStringKeys.xl),
                   ),
                 ],
                 onChanged: (value) => setState(() => _todoVisualSize = value),
@@ -671,36 +692,36 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _uiFontPreset,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Font preset',
-                  prefixIcon: Icon(Icons.font_download_outlined),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: strings.get(PaperTodoStringKeys.fontPreset),
+                  prefixIcon: const Icon(Icons.font_download_outlined),
                 ),
                 isExpanded: true,
-                items: const [
+                items: [
                   DropdownMenuItem(
                     value: UiFontPresets.defaultPreset,
-                    child: Text('Default'),
+                    child: Text(strings.get(PaperTodoStringKeys.defaultFont)),
                   ),
                   DropdownMenuItem(
                     value: UiFontPresets.yaHei,
-                    child: Text('YaHei'),
+                    child: Text(strings.get(PaperTodoStringKeys.yaHei)),
                   ),
                   DropdownMenuItem(
                     value: UiFontPresets.dengXian,
-                    child: Text('DengXian'),
+                    child: Text(strings.get(PaperTodoStringKeys.dengXian)),
                   ),
                   DropdownMenuItem(
                     value: UiFontPresets.serif,
-                    child: Text('Serif'),
+                    child: Text(strings.get(PaperTodoStringKeys.serif)),
                   ),
                   DropdownMenuItem(
                     value: UiFontPresets.mono,
-                    child: Text('Mono'),
+                    child: Text(strings.get(PaperTodoStringKeys.mono)),
                   ),
                   DropdownMenuItem(
                     value: UiFontPresets.custom,
-                    child: Text('Custom'),
+                    child: Text(strings.get(PaperTodoStringKeys.custom)),
                   ),
                 ],
                 onChanged: (value) => setState(
@@ -712,25 +733,27 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               TextField(
                 controller: _fontFamilyController,
                 enabled: _uiFontPreset == UiFontPresets.custom,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Custom font family',
-                  prefixIcon: Icon(Icons.title_outlined),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: strings.get(PaperTodoStringKeys.customFontFamily),
+                  prefixIcon: const Icon(Icons.title_outlined),
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _externalMarkdownExtensionController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'External markdown extension',
-                  prefixIcon: Icon(Icons.file_open_outlined),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: strings.get(
+                    PaperTodoStringKeys.externalMarkdownExtension,
+                  ),
+                  prefixIcon: const Icon(Icons.file_open_outlined),
                 ),
               ),
               const SizedBox(height: 12),
               _SettingsSlider(
                 icon: Icons.zoom_in_outlined,
-                label: 'Zoom',
+                label: strings.get(PaperTodoStringKeys.zoom),
                 valueLabel: '${(_zoom * 100).round()}%',
                 value: _zoom,
                 min: 0.5,
@@ -740,7 +763,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               ),
               _SettingsSlider(
                 icon: Icons.short_text_outlined,
-                label: 'Max title length',
+                label: strings.get(PaperTodoStringKeys.maxTitleLength),
                 valueLabel: '${_maxTitleLength.round()} chars',
                 value: _maxTitleLength,
                 min: 2,
@@ -751,20 +774,20 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.info_outline),
-                title: const Text('Tooltips'),
+                title: Text(strings.get(PaperTodoStringKeys.tooltips)),
                 value: _enableToolTips,
                 onChanged: (value) => setState(() => _enableToolTips = value),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.animation_outlined),
-                title: const Text('Animations'),
+                title: Text(strings.get(PaperTodoStringKeys.animations)),
                 value: _enableAnimations,
                 onChanged: (value) => setState(() => _enableAnimations = value),
               ),
               _SettingsSlider(
                 icon: Icons.checklist_outlined,
-                label: 'Todo spacing',
+                label: strings.get(PaperTodoStringKeys.todoSpacing),
                 valueLabel: _todoLineSpacing.toStringAsFixed(1),
                 value: _todoLineSpacing,
                 min: 0.8,
@@ -774,7 +797,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               ),
               _SettingsSlider(
                 icon: Icons.notes_outlined,
-                label: 'Note spacing',
+                label: strings.get(PaperTodoStringKeys.noteSpacing),
                 valueLabel: _noteLineSpacing.toStringAsFixed(1),
                 value: _noteLineSpacing,
                 min: 0.8,
@@ -785,7 +808,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.event_repeat_outlined),
-                title: const Text('Relative due dates'),
+                title: Text(strings.get(PaperTodoStringKeys.relativeDueDates)),
                 value: _showTodoDueRelativeTime,
                 onChanged: (value) =>
                     setState(() => _showTodoDueRelativeTime = value),
@@ -793,21 +816,21 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const SizedBox(height: 8),
               _adaptiveChoiceSelector(
                 key: const ValueKey('settings-due-year-selector'),
-                labelText: 'Due year display',
+                labelText: strings.get(PaperTodoStringKeys.dueYearDisplay),
                 compactIcon: Icons.event_outlined,
                 selectedValue: _todoDueYearDisplayMode,
-                choices: const [
+                choices: [
                   _SettingsChoice(
                     value: TodoDueYearDisplayModes.none,
-                    label: 'No year',
+                    label: strings.get(PaperTodoStringKeys.noYear),
                   ),
                   _SettingsChoice(
                     value: TodoDueYearDisplayModes.short,
-                    label: 'YY',
+                    label: strings.get(PaperTodoStringKeys.yy),
                   ),
                   _SettingsChoice(
                     value: TodoDueYearDisplayModes.full,
-                    label: 'YYYY',
+                    label: strings.get(PaperTodoStringKeys.yyyy),
                   ),
                 ],
                 onChanged: _showTodoDueRelativeTime
@@ -819,7 +842,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.add_task_outlined),
-                title: const Text('Top bar new todo'),
+                title: Text(strings.get(PaperTodoStringKeys.topBarNewTodo)),
                 value: _showTopBarNewTodoButton,
                 onChanged: (value) =>
                     setState(() => _showTopBarNewTodoButton = value),
@@ -827,7 +850,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.note_add_outlined),
-                title: const Text('Top bar new note'),
+                title: Text(strings.get(PaperTodoStringKeys.topBarNewNote)),
                 value: _showTopBarNewNoteButton,
                 onChanged: (value) =>
                     setState(() => _showTopBarNewNoteButton = value),
@@ -835,7 +858,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.open_in_new_outlined),
-                title: const Text('Top bar open surface'),
+                title: Text(strings.get(PaperTodoStringKeys.topBarOpenSurface)),
                 value: _showTopBarExternalOpenButton,
                 onChanged: (value) =>
                     setState(() => _showTopBarExternalOpenButton = value),
@@ -843,7 +866,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.view_agenda_outlined),
-                title: const Text('Capsule mode'),
+                title: Text(strings.get(PaperTodoStringKeys.capsuleMode)),
                 value: _useCapsuleMode,
                 onChanged: (value) => setState(() {
                   _useCapsuleMode = value;
@@ -860,7 +883,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.stacked_line_chart_outlined),
-                title: const Text('Deep capsule mode'),
+                title: Text(strings.get(PaperTodoStringKeys.deepCapsuleMode)),
                 value: _useDeepCapsuleMode,
                 onChanged: _useCapsuleMode
                     ? (value) => setState(() {
@@ -876,7 +899,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.unfold_less_outlined),
-                title: const Text('Collapse all control'),
+                title:
+                    Text(strings.get(PaperTodoStringKeys.collapseAllControl)),
                 value: _useCapsuleCollapseAll,
                 onChanged: _useCapsuleMode
                     ? (value) => setState(() {
@@ -890,7 +914,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.vertical_align_center_outlined),
-                title: const Text('Collapse all active'),
+                title: Text(strings.get(PaperTodoStringKeys.collapseAllActive)),
                 value: _capsuleCollapseAllActive,
                 onChanged: _useCapsuleMode && _useCapsuleCollapseAll
                     ? (value) =>
@@ -900,18 +924,18 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const SizedBox(height: 8),
               _adaptiveChoiceSelector(
                 key: const ValueKey('settings-deep-capsule-side-selector'),
-                labelText: 'Deep capsule side',
+                labelText: strings.get(PaperTodoStringKeys.deepCapsuleSide),
                 compactIcon: Icons.vertical_align_center_outlined,
                 selectedValue: _deepCapsuleSide,
-                choices: const [
+                choices: [
                   _SettingsChoice(
                     value: DeepCapsuleSides.left,
-                    label: 'Left',
+                    label: strings.get(PaperTodoStringKeys.left),
                     icon: Icons.keyboard_double_arrow_left_outlined,
                   ),
                   _SettingsChoice(
                     value: DeepCapsuleSides.right,
-                    label: 'Right',
+                    label: strings.get(PaperTodoStringKeys.right),
                     icon: Icons.keyboard_double_arrow_right_outlined,
                   ),
                 ],
@@ -923,10 +947,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               TextField(
                 controller: _deepCapsuleTopMarginController,
                 enabled: _useCapsuleMode && _useDeepCapsuleMode,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Deep capsule top margin',
-                  prefixIcon: Icon(Icons.vertical_align_top_outlined),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: strings.get(
+                    PaperTodoStringKeys.deepCapsuleTopMargin,
+                  ),
+                  prefixIcon: const Icon(Icons.vertical_align_top_outlined),
                 ),
                 keyboardType: TextInputType.number,
               ),
@@ -934,16 +960,19 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               TextField(
                 controller: _deepCapsuleMonitorController,
                 enabled: _useCapsuleMode && _useDeepCapsuleMode,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Deep capsule monitor',
-                  prefixIcon: Icon(Icons.monitor_outlined),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText:
+                      strings.get(PaperTodoStringKeys.deepCapsuleMonitor),
+                  prefixIcon: const Icon(Icons.monitor_outlined),
                 ),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.open_in_full_outlined),
-                title: const Text('Show deep capsule while expanded'),
+                title: Text(
+                  strings.get(PaperTodoStringKeys.showDeepCapsuleWhileExpanded),
+                ),
                 value: _showDeepCapsuleWhileExpanded,
                 onChanged: _useCapsuleMode && _useDeepCapsuleMode
                     ? (value) =>
@@ -953,7 +982,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.ads_click_outlined),
-                title: const Text('Collapse expanded deep capsule on click'),
+                title: Text(
+                  strings.get(
+                    PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick,
+                  ),
+                ),
                 value: _collapseExpandedDeepCapsuleOnClick,
                 onChanged: _useCapsuleMode && _useDeepCapsuleMode
                     ? (value) => setState(
@@ -964,7 +997,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.layers_clear_outlined),
-                title: const Text('Hide covered deep capsules'),
+                title: Text(
+                  strings.get(PaperTodoStringKeys.hideCoveredDeepCapsules),
+                ),
                 value: _hideDeepCapsulesWhenCovered,
                 onChanged: _useCapsuleMode && _useDeepCapsuleMode
                     ? (value) =>
@@ -976,7 +1011,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.login_outlined),
-                  title: const Text('Start at login'),
+                  title: Text(strings.get(PaperTodoStringKeys.startAtLogin)),
                   value: _startAtLogin,
                   onChanged: (value) => setState(() => _startAtLogin = value),
                 ),
@@ -984,7 +1019,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.visibility_off_outlined),
-                  title: const Text('Hide from task switcher'),
+                  title: Text(
+                    strings.get(PaperTodoStringKeys.hideFromTaskSwitcher),
+                  ),
                   value: _hideFromWindowSwitcher,
                   onChanged: (value) =>
                       setState(() => _hideFromWindowSwitcher = value),
@@ -993,18 +1030,19 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 const SizedBox(height: 8),
                 _adaptiveChoiceSelector(
                   key: const ValueKey('settings-fullscreen-topmost-selector'),
-                  labelText: 'Fullscreen behavior',
+                  labelText:
+                      strings.get(PaperTodoStringKeys.fullscreenTopmostMode),
                   compactIcon: Icons.fullscreen_exit_outlined,
                   selectedValue: _fullscreenTopmostMode,
-                  choices: const [
+                  choices: [
                     _SettingsChoice(
                       value: FullscreenTopmostModes.avoid,
-                      label: 'Avoid fullscreen',
+                      label: strings.get(PaperTodoStringKeys.avoidFullscreen),
                       icon: Icons.fullscreen_exit_outlined,
                     ),
                     _SettingsChoice(
                       value: FullscreenTopmostModes.stayOnTop,
-                      label: 'Stay on top',
+                      label: strings.get(PaperTodoStringKeys.stayOnTop),
                       icon: Icons.push_pin_outlined,
                     ),
                   ],
@@ -1017,18 +1055,21 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 _adaptiveFieldPair(
                   first: TextField(
                     controller: _pinnedTodoHotKeyController,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Pinned todo hotkey',
-                      prefixIcon: Icon(Icons.keyboard_outlined),
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText:
+                          strings.get(PaperTodoStringKeys.pinnedTodoHotkey),
+                      prefixIcon: const Icon(Icons.keyboard_outlined),
                     ),
                   ),
                   second: TextField(
                     controller: _pinnedNoteHotKeyController,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Pinned note hotkey',
-                      prefixIcon: Icon(Icons.keyboard_command_key_outlined),
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText:
+                          strings.get(PaperTodoStringKeys.pinnedNoteHotkey),
+                      prefixIcon:
+                          const Icon(Icons.keyboard_command_key_outlined),
                     ),
                   ),
                 ),
@@ -1038,7 +1079,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.terminal_outlined),
-                  title: const Text('Run linked script capsules on click'),
+                  title: Text(
+                    strings.get(
+                      PaperTodoStringKeys.runLinkedScriptCapsulesOnClick,
+                    ),
+                  ),
                   value: _runLinkedScriptCapsulesOnClick,
                   onChanged: (value) =>
                       setState(() => _runLinkedScriptCapsulesOnClick = value),
@@ -1046,7 +1091,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.memory_outlined),
-                  title: const Text('Persistent PowerShell process'),
+                  title: Text(
+                    strings.get(
+                      PaperTodoStringKeys.persistentPowerShellProcess,
+                    ),
+                  ),
                   value: _usePersistentPowerShellProcess,
                   onChanged: _runLinkedScriptCapsulesOnClick
                       ? (value) => setState(
@@ -1057,7 +1106,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.bolt_outlined),
-                  title: const Text('Prefer PowerShell 7'),
+                  title:
+                      Text(strings.get(PaperTodoStringKeys.preferPowerShell7)),
                   value: _preferPowerShell7,
                   onChanged: _runLinkedScriptCapsulesOnClick
                       ? (value) => setState(() => _preferPowerShell7 = value)
@@ -1066,7 +1116,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.visibility_off_outlined),
-                  title: const Text('Hide script run window'),
+                  title: Text(
+                      strings.get(PaperTodoStringKeys.hideScriptRunWindow)),
                   value: _hideScriptRunWindow,
                   onChanged: _runLinkedScriptCapsulesOnClick
                       ? (value) => setState(() => _hideScriptRunWindow = value)
@@ -1077,7 +1128,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.notifications_active_outlined),
-                title: const Text('Todo reminders'),
+                title: Text(strings.get(PaperTodoStringKeys.todoReminders)),
                 value: _useTodoReminderInterval,
                 onChanged: (value) =>
                     setState(() => _useTodoReminderInterval = value),
@@ -1087,26 +1138,27 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 first: TextField(
                   controller: _reminderIntervalController,
                   enabled: _useTodoReminderInterval,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Reminder interval',
-                    prefixIcon: Icon(Icons.timer_outlined),
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText:
+                        strings.get(PaperTodoStringKeys.reminderInterval),
+                    prefixIcon: const Icon(Icons.timer_outlined),
                   ),
                   keyboardType: TextInputType.number,
                 ),
                 second: _adaptiveChoiceSelector(
                   key: const ValueKey('settings-reminder-unit-selector'),
-                  labelText: 'Reminder unit',
+                  labelText: strings.get(PaperTodoStringKeys.reminderUnit),
                   compactIcon: Icons.schedule_outlined,
                   selectedValue: _todoReminderIntervalUnit,
-                  choices: const [
+                  choices: [
                     _SettingsChoice(
                       value: TodoReminderIntervalUnits.minutes,
-                      label: 'Minutes',
+                      label: strings.get(PaperTodoStringKeys.minutes),
                     ),
                     _SettingsChoice(
                       value: TodoReminderIntervalUnits.hours,
-                      label: 'Hours',
+                      label: strings.get(PaperTodoStringKeys.hours),
                     ),
                   ],
                   onChanged: _useTodoReminderInterval
@@ -1118,18 +1170,18 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const SizedBox(height: 12),
               _adaptiveChoiceSelector(
                 key: const ValueKey('settings-reminder-scope-selector'),
-                labelText: 'Reminder scope',
+                labelText: strings.get(PaperTodoStringKeys.reminderScope),
                 compactIcon: Icons.notifications_active_outlined,
                 selectedValue: _todoReminderScope,
-                choices: const [
+                choices: [
                   _SettingsChoice(
                     value: TodoReminderScopes.all,
-                    label: 'All due',
+                    label: strings.get(PaperTodoStringKeys.allDue),
                     icon: Icons.format_list_bulleted_outlined,
                   ),
                   _SettingsChoice(
                     value: TodoReminderScopes.nearest,
-                    label: 'Nearest',
+                    label: strings.get(PaperTodoStringKeys.nearest),
                     icon: Icons.near_me_outlined,
                   ),
                 ],
@@ -1141,10 +1193,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               TextField(
                 controller: _reminderDurationController,
                 enabled: _useTodoReminderInterval,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Reminder display seconds',
-                  prefixIcon: Icon(Icons.hourglass_bottom_outlined),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText:
+                      strings.get(PaperTodoStringKeys.reminderDisplaySeconds),
+                  prefixIcon: const Icon(Icons.hourglass_bottom_outlined),
                 ),
                 keyboardType: TextInputType.number,
               ),
@@ -1152,7 +1205,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.account_tree_outlined),
-                title: const Text('Todo-note links'),
+                title: Text(strings.get(PaperTodoStringKeys.todoNoteLinks)),
                 value: _enableTodoNoteLinks,
                 onChanged: (value) => setState(() {
                   _enableTodoNoteLinks = value;
@@ -1164,7 +1217,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.notes_outlined),
-                title: const Text('Show linked note name'),
+                title:
+                    Text(strings.get(PaperTodoStringKeys.showLinkedNoteName)),
                 value: _showLinkedNoteName,
                 onChanged: _enableTodoNoteLinks
                     ? (value) => setState(() => _showLinkedNoteName = value)
@@ -1173,7 +1227,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.subject_outlined),
-                title: const Text('Allow long linked note titles'),
+                title: Text(
+                  strings.get(PaperTodoStringKeys.allowLongLinkedNoteTitles),
+                ),
                 value: _allowLongLinkedNoteTitles,
                 onChanged: _enableTodoNoteLinks && _showLinkedNoteName
                     ? (value) =>
@@ -1183,7 +1239,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.layers_clear_outlined),
-                title: const Text('Hide linked note capsules'),
+                title: Text(
+                    strings.get(PaperTodoStringKeys.hideLinkedNoteCapsules)),
                 value: _hideLinkedNotesFromCapsules,
                 onChanged: _enableTodoNoteLinks
                     ? (value) =>
@@ -1194,7 +1251,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.sync_outlined),
-                title: const Text('WebDAV sync'),
+                title: Text(strings.get(PaperTodoStringKeys.webDavSync)),
                 value: _enabled,
                 onChanged: (value) => setState(() => _enabled = value),
               ),
@@ -1210,7 +1267,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 ),
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
-                  labelText: 'WebDAV URL',
+                  labelText: strings.get(PaperTodoStringKeys.webDavUrl),
                   errorText: _endpointErrorText,
                   prefixIcon: const Icon(Icons.link_outlined),
                 ),
@@ -1226,7 +1283,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 ),
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
-                  labelText: 'Remote folder',
+                  labelText: strings.get(PaperTodoStringKeys.remoteFolder),
                   errorText: _rootPathErrorText,
                   prefixIcon: const Icon(Icons.folder_outlined),
                 ),
@@ -1241,7 +1298,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 ),
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
-                  labelText: 'Username',
+                  labelText: strings.get(PaperTodoStringKeys.username),
                   errorText: _usernameErrorText,
                   prefixIcon: const Icon(Icons.person_outline),
                 ),
@@ -1258,14 +1315,14 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 ),
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
-                  labelText: 'Password',
+                  labelText: strings.get(PaperTodoStringKeys.password),
                   errorText: _passwordErrorText,
                   prefixIcon: const Icon(Icons.key_outlined),
                   suffixIcon: IconButton(
                     tooltip: _enableToolTips
                         ? _obscurePassword
-                            ? 'Show password'
-                            : 'Hide password'
+                            ? strings.get(PaperTodoStringKeys.showPassword)
+                            : strings.get(PaperTodoStringKeys.hidePassword)
                         : null,
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
@@ -1286,16 +1343,16 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 ),
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
-                  labelText: 'Sync encryption passphrase',
-                  helperText:
-                      'Required for encrypted Windows and Android sync.',
+                  labelText:
+                      strings.get(PaperTodoStringKeys.syncEncryptionPassphrase),
+                  helperText: strings.get(PaperTodoStringKeys.passphraseHelper),
                   errorText: _encryptionPassphraseErrorText,
                   prefixIcon: const Icon(Icons.enhanced_encryption_outlined),
                   suffixIcon: IconButton(
                     tooltip: _enableToolTips
                         ? _obscureEncryptionPassphrase
-                            ? 'Show passphrase'
-                            : 'Hide passphrase'
+                            ? strings.get(PaperTodoStringKeys.showPassphrase)
+                            : strings.get(PaperTodoStringKeys.hidePassphrase)
                         : null,
                     onPressed: () => setState(() =>
                         _obscureEncryptionPassphrase =
@@ -1311,10 +1368,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 first: TextField(
                   controller: _intervalController,
                   enabled: _enabled,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Interval minutes',
-                    prefixIcon: Icon(Icons.schedule_outlined),
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: strings.get(PaperTodoStringKeys.intervalMinutes),
+                    prefixIcon: const Icon(Icons.schedule_outlined),
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1322,10 +1379,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 second: TextField(
                   controller: _requestTimeoutController,
                   enabled: _enabled,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Request timeout seconds',
-                    prefixIcon: Icon(Icons.timer_outlined),
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText:
+                        strings.get(PaperTodoStringKeys.requestTimeoutSeconds),
+                    prefixIcon: const Icon(Icons.timer_outlined),
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1334,7 +1392,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const SizedBox(height: 4),
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Sync on start'),
+                title: Text(strings.get(PaperTodoStringKeys.syncOnStart)),
                 value: _autoSyncOnStart,
                 onChanged: _enabled
                     ? (value) =>
@@ -1355,12 +1413,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
         ),
         FilledButton.icon(
           onPressed: _save,
           icon: const Icon(Icons.check),
-          label: const Text('Save'),
+          label: Text(strings.get(PaperTodoStringKeys.actionSave)),
         ),
       ],
     );
@@ -1445,19 +1503,19 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
           value: preset.id,
           child: Text(preset.label),
         ),
-      const DropdownMenuItem(
+      DropdownMenuItem(
         value: WebDavPresetIds.custom,
-        child: Text('Generic'),
+        child: Text(strings.get(PaperTodoStringKeys.generic)),
       ),
     ];
     if (compact) {
       return DropdownButtonFormField<String>(
         key: const ValueKey('compact-webdav-preset-selector'),
         initialValue: _presetId,
-        decoration: const InputDecoration(
-          border: OutlineInputBorder(),
-          labelText: 'WebDAV provider',
-          prefixIcon: Icon(Icons.cloud_queue_outlined),
+        decoration: InputDecoration(
+          border: const OutlineInputBorder(),
+          labelText: strings.get(PaperTodoStringKeys.webDavProvider),
+          prefixIcon: const Icon(Icons.cloud_queue_outlined),
         ),
         isExpanded: true,
         items: presetItems,
@@ -1472,10 +1530,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
             icon: const Icon(Icons.cloud_queue_outlined),
             label: Text(preset.label),
           ),
-        const ButtonSegment(
+        ButtonSegment(
           value: WebDavPresetIds.custom,
-          icon: Icon(Icons.dns_outlined),
-          label: Text('Generic'),
+          icon: const Icon(Icons.dns_outlined),
+          label: Text(strings.get(PaperTodoStringKeys.generic)),
         ),
       ],
       selected: {_presetId},
@@ -1547,18 +1605,18 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   ) {
     return switch (issue) {
       WebDavSyncConfigurationIssue.endpoint => settings.endpoint.trim().isEmpty
-          ? 'Enter a WebDAV URL.'
-          : 'Use a full http:// or https:// WebDAV URL without user info, query, fragment, backslashes, control characters, encoded authority or path separators, blank path segments, or path segment edge spaces.',
+          ? strings.get(PaperTodoStringKeys.webDavIssueEndpointRequired)
+          : strings.get(PaperTodoStringKeys.webDavIssueEndpointInvalid),
       WebDavSyncConfigurationIssue.username => settings.username.isEmpty
-          ? 'Enter a WebDAV username.'
-          : 'Username cannot contain colons or control characters.',
+          ? strings.get(PaperTodoStringKeys.webDavIssueUsernameRequired)
+          : strings.get(PaperTodoStringKeys.webDavIssueUsernameInvalid),
       WebDavSyncConfigurationIssue.password => settings.password.trim().isEmpty
-          ? 'Enter a WebDAV password or app password.'
-          : 'Password cannot contain control characters.',
+          ? strings.get(PaperTodoStringKeys.webDavIssuePasswordRequired)
+          : strings.get(PaperTodoStringKeys.webDavIssuePasswordInvalid),
       WebDavSyncConfigurationIssue.rootPath =>
-        'Use a remote folder without parent-directory segments, invalid percent escapes, control characters, or blank path segments.',
+        strings.get(PaperTodoStringKeys.webDavIssueRootPathInvalid),
       WebDavSyncConfigurationIssue.encryptionPassphrase =>
-        'Enter a sync encryption passphrase.',
+        strings.get(PaperTodoStringKeys.webDavIssuePassphraseRequired),
     };
   }
 
@@ -1651,8 +1709,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     settings.webDav,
                   )
                 : null;
-        _errorText =
-            'Complete the WebDAV URL, username, password, remote folder, and sync encryption passphrase.';
+        _errorText = strings.get(PaperTodoStringKeys.webDavIssueSummary);
       });
       _focusFirstWebDavIssue(issues);
       return;

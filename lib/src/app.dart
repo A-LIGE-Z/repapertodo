@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:path/path.dart' as p;
@@ -34,6 +35,7 @@ import 'sync/app_sync_service.dart';
 import 'sync/webdav/webdav_client.dart';
 import 'sync/webdav/webdav_payload_codec.dart';
 import 'sync/webdav/webdav_state_sync_service.dart';
+import 'ui/papertodo_strings.dart';
 import 'ui/runtime_custom_font.dart';
 import 'ui/sync_settings_dialog.dart';
 
@@ -129,10 +131,31 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
     final state = widget.controller.state;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'RePaperTodo',
+      title: PaperTodoStrings.resolve(
+        PaperTodoStrings.resolveLocale(
+          WidgetsBinding.instance.platformDispatcher.locale,
+          PaperTodoStrings.supportedLocales,
+        ),
+      ).get(PaperTodoStringKeys.appTitle),
+      supportedLocales: PaperTodoStrings.supportedLocales,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      localeResolutionCallback: (locale, supportedLocales) {
+        return PaperTodoStrings.resolveLocale(locale, supportedLocales);
+      },
       theme: _appTheme(Brightness.light, state),
       darkTheme: _appTheme(Brightness.dark, state),
       themeMode: _themeMode(state.theme),
+      builder: (context, child) {
+        final locale = Localizations.maybeLocaleOf(context) ??
+            PaperTodoStrings.resolveLocale(
+              WidgetsBinding.instance.platformDispatcher.locale,
+              PaperTodoStrings.supportedLocales,
+            );
+        return PaperTodoStringsScope(
+          strings: PaperTodoStrings.resolve(locale),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: PaperBoardScreen(
         controller: widget.controller,
         store: widget.store,
@@ -374,6 +397,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   final Set<String> _activeTodoReminderItemIds = <String>{};
 
   RePaperTodoController get controller => widget.controller;
+  PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
 
   @override
   void initState() {
@@ -456,12 +480,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         leading: surfacePaper == null
             ? null
             : IconButton(
-                tooltip: _tooltipLabel(enableToolTips, 'Back to board'),
+                tooltip: _tooltipLabel(
+                  enableToolTips,
+                  strings.get(PaperTodoStringKeys.actionBackToBoard),
+                ),
                 onPressed: () => setState(() => _surfacePaperId = null),
                 icon: const Icon(Icons.arrow_back),
               ),
         title: Text(
-          surfacePaper == null ? 'RePaperTodo' : _displayTitle(surfacePaper),
+          surfacePaper == null
+              ? strings.get(PaperTodoStringKeys.appTitle)
+              : _displayTitle(surfacePaper),
         ),
         actions: _appBarActions(
           surfacePaper: surfacePaper,
@@ -500,7 +529,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }) {
     final collapseAllActive = _collapseAllActiveFor(surfacePaper);
     final syncButton = IconButton(
-      tooltip: _tooltipLabel(enableToolTips, 'Sync now'),
+      tooltip: _tooltipLabel(
+        enableToolTips,
+        strings.get(PaperTodoStringKeys.actionSyncNow),
+      ),
       onPressed: _isSyncing ? null : () => _syncNow(),
       icon: _isSyncing
           ? const SizedBox.square(
@@ -514,7 +546,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         syncButton,
         PopupMenuButton<String>(
           key: const ValueKey('compact-app-bar-actions'),
-          tooltip: _tooltipLabel(enableToolTips, 'More actions'),
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            strings.get(PaperTodoStringKeys.actionMore),
+          ),
           icon: const Icon(Icons.more_vert),
           onSelected: (value) =>
               _handleCompactAppBarAction(value, surfacePaper),
@@ -524,43 +559,45 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
               _compactMenuItem(
                 value: _CompactAppBarActions.openSurface,
                 icon: Icons.open_in_new,
-                label: 'Open surface',
+                label: strings.get(PaperTodoStringKeys.actionOpenSurface),
               ),
             if (controller.state.showTopBarNewTodoButton)
               _compactMenuItem(
                 value: _CompactAppBarActions.newTodo,
                 icon: Icons.add_task,
-                label: 'New todo',
+                label: strings.get(PaperTodoStringKeys.actionNewTodo),
               ),
             if (controller.state.showTopBarNewNoteButton)
               _compactMenuItem(
                 value: _CompactAppBarActions.newNote,
                 icon: Icons.note_add_outlined,
-                label: 'New note',
+                label: strings.get(PaperTodoStringKeys.actionNewNote),
               ),
             if (controller.state.useCapsuleMode &&
                 controller.state.useCapsuleCollapseAll)
               _compactMenuItem(
                 value: _CompactAppBarActions.toggleCollapseAll,
                 icon: collapseAllActive ? Icons.unfold_more : Icons.unfold_less,
-                label: collapseAllActive ? 'Expand all' : 'Collapse all',
+                label: collapseAllActive
+                    ? strings.get(PaperTodoStringKeys.actionExpandAll)
+                    : strings.get(PaperTodoStringKeys.actionCollapseAll),
               ),
             _compactMenuItem(
               value: _CompactAppBarActions.recoverySnapshots,
               icon: Icons.restore_outlined,
-              label: 'Recovery snapshots',
+              label: strings.get(PaperTodoStringKeys.actionRecoverySnapshots),
               enabled: !_isSyncing,
             ),
             _compactMenuItem(
               value: _CompactAppBarActions.showHidden,
               icon: Icons.visibility_outlined,
-              label: 'Show hidden',
+              label: strings.get(PaperTodoStringKeys.actionShowHidden),
               enabled: hiddenPapers.isNotEmpty,
             ),
             _compactMenuItem(
               value: _CompactAppBarActions.settings,
               icon: Icons.settings_outlined,
-              label: 'Settings',
+              label: strings.get(PaperTodoStringKeys.actionSettings),
             ),
           ],
         ),
@@ -569,20 +606,29 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return [
       if (surfacePaper != null && controller.state.showTopBarExternalOpenButton)
         IconButton(
-          tooltip: _tooltipLabel(enableToolTips, 'Open current paper surface'),
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            strings.get(PaperTodoStringKeys.actionOpenCurrentPaperSurface),
+          ),
           onPressed: () => _openPaper(surfacePaper),
           icon: const Icon(Icons.open_in_new),
         ),
       if (controller.state.showTopBarNewTodoButton)
         IconButton(
-          tooltip: _tooltipLabel(enableToolTips, 'New todo paper'),
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            strings.get(PaperTodoStringKeys.actionNewTodoPaper),
+          ),
           onPressed: () =>
               _createPaper(PaperTypes.todo, sourcePaper: surfacePaper),
           icon: const Icon(Icons.add_task),
         ),
       if (controller.state.showTopBarNewNoteButton)
         IconButton(
-          tooltip: _tooltipLabel(enableToolTips, 'New note paper'),
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            strings.get(PaperTodoStringKeys.actionNewNotePaper),
+          ),
           onPressed: () =>
               _createPaper(PaperTypes.note, sourcePaper: surfacePaper),
           icon: const Icon(Icons.note_add_outlined),
@@ -592,24 +638,35 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         IconButton(
           tooltip: _tooltipLabel(
             enableToolTips,
-            collapseAllActive ? 'Expand all papers' : 'Collapse all papers',
+            collapseAllActive
+                ? strings.get(PaperTodoStringKeys.actionExpandAllPapers)
+                : strings.get(PaperTodoStringKeys.actionCollapseAllPapers),
           ),
           onPressed: () => _toggleCollapseAll(surfacePaper),
           icon: Icon(collapseAllActive ? Icons.unfold_more : Icons.unfold_less),
         ),
       syncButton,
       IconButton(
-        tooltip: _tooltipLabel(enableToolTips, 'Recovery snapshots'),
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          strings.get(PaperTodoStringKeys.actionRecoverySnapshots),
+        ),
         onPressed: _isSyncing ? null : _openRecoverySnapshots,
         icon: const Icon(Icons.restore_outlined),
       ),
       IconButton(
-        tooltip: _tooltipLabel(enableToolTips, 'Show hidden papers'),
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          strings.get(PaperTodoStringKeys.actionShowHiddenPapers),
+        ),
         onPressed: hiddenPapers.isEmpty ? null : _showHiddenPapers,
         icon: const Icon(Icons.visibility_outlined),
       ),
       IconButton(
-        tooltip: _tooltipLabel(enableToolTips, 'Settings'),
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          strings.get(PaperTodoStringKeys.actionSettings),
+        ),
         onPressed: _openSettings,
         icon: const Icon(Icons.settings_outlined),
       ),
@@ -1687,7 +1744,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       AppSyncStatus.configurationMissing ||
       AppSyncStatus.payloadUnreadable =>
         SnackBarAction(
-          label: 'Settings',
+          label: strings.get(PaperTodoStringKeys.actionSettings),
           onPressed: () {
             if (mounted) {
               unawaited(_openSettings());
@@ -1695,7 +1752,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           },
         ),
       AppSyncStatus.conflict => SnackBarAction(
-          label: 'Recovery',
+          label: strings.get(PaperTodoStringKeys.actionRecovery),
           onPressed: () {
             if (mounted) {
               unawaited(_openRecoverySnapshots());
@@ -1715,9 +1772,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   void _showSyncFailureSnackBar(Object error) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Sync failed: ${_readableFailureMessage(error)}'),
+        content: Text(
+          strings.format(
+            PaperTodoStringKeys.syncFailed,
+            [_readableFailureMessage(error)],
+          ),
+        ),
         action: SnackBarAction(
-          label: 'Retry',
+          label: strings.get(PaperTodoStringKeys.actionRetry),
           onPressed: () {
             if (mounted) {
               unawaited(_syncNow());
@@ -1736,7 +1798,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       SnackBar(
         content: Text('Restore failed: ${_readableFailureMessage(error)}'),
         action: SnackBarAction(
-          label: 'Retry',
+          label: strings.get(PaperTodoStringKeys.actionRetry),
           onPressed: () {
             if (mounted) {
               unawaited(_restoreRecoverySnapshot(snapshot));
@@ -1780,15 +1842,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       return result.message;
     }
     return switch (result.status) {
-      AppSyncStatus.disabled => 'Sync is disabled.',
+      AppSyncStatus.disabled => strings.get(PaperTodoStringKeys.syncDisabled),
       AppSyncStatus.configurationMissing =>
-        'Complete WebDAV sync settings and encryption passphrase first.',
-      AppSyncStatus.uploaded => 'Local data uploaded.',
-      AppSyncStatus.downloaded => 'Remote data downloaded.',
-      AppSyncStatus.conflict =>
-        'Remote data changed during sync. Pull again before upload.',
+        strings.get(PaperTodoStringKeys.syncCompleteConfiguration),
+      AppSyncStatus.uploaded => strings.get(PaperTodoStringKeys.syncUploaded),
+      AppSyncStatus.downloaded =>
+        strings.get(PaperTodoStringKeys.syncDownloaded),
+      AppSyncStatus.conflict => strings.get(PaperTodoStringKeys.syncConflict),
       AppSyncStatus.payloadUnreadable =>
-        'Unable to decrypt remote sync data. Check the sync encryption passphrase.',
+        strings.get(PaperTodoStringKeys.syncPayloadUnreadable),
     };
   }
 
@@ -1798,7 +1860,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final parts = <String>[baseMessage];
     if (appliedCount > 0) {
       final changeLabel = appliedCount == 1 ? 'change' : 'changes';
-      parts.add('Merged $appliedCount remote $changeLabel.');
+      parts.add(
+        strings.format(
+          PaperTodoStringKeys.syncMergedRemoteChanges,
+          [appliedCount, changeLabel],
+        ),
+      );
     }
     final mergeResult = result.operationMergeResult;
     if (mergeResult != null && mergeResult.legacyPlainOperationLogCount > 0) {

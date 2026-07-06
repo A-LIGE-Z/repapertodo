@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   characters: ^1.4.0
   collection: ^1.18.0
   crypto: ^3.0.3
