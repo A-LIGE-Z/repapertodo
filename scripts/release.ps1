@@ -124,6 +124,12 @@ function Assert-PublishableReleaseOptions {
   }
 }
 
+function Assert-GitHubAuthentication {
+  Invoke-Native "gh auth status" {
+    & gh auth status
+  }
+}
+
 function New-ReleaseNotes {
   param(
     [string]$version,
@@ -173,6 +179,7 @@ Assert-PublishableReleaseOptions `
   -AllowDirty $AllowDirty
 if ($PublishGitHubRelease) {
   Assert-Command "gh"
+  Assert-GitHubAuthentication
 }
 
 $version = Get-FlutterVersion

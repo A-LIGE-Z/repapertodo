@@ -43,6 +43,9 @@ To also create or update the GitHub Release for the version in `pubspec.yaml`:
 .\scripts\release.ps1 -PublishGitHubRelease
 ```
 
+Publishing checks `gh auth status` before running the expensive Flutter
+validation and build steps, so missing GitHub credentials fail early.
+
 When the tag already has a GitHub Release, the script updates the release title
 and notes before clobbering the Windows, Android, checksum, and metadata
 artifacts.

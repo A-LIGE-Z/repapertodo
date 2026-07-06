@@ -1332,6 +1332,7 @@ void main() {
     expect(script, contains('function Assert-CleanGitTree'));
     expect(script, contains('function Assert-GitDiffCheck'));
     expect(script, contains('function Assert-PublishableReleaseOptions'));
+    expect(script, contains('function Assert-GitHubAuthentication'));
     expect(script, contains('git status --porcelain'));
     expect(script, contains('git diff --check'));
     expect(script, contains('git diff --cached --check'));
@@ -1366,6 +1367,7 @@ void main() {
     expect(script, contains('gh release create'));
     expect(script, contains('gh release edit'));
     expect(script, contains('gh release upload'));
+    expect(script, contains('gh auth status'));
     expect(script, contains(r'$releaseViewExitCode'));
     expect(script, contains(r'--notes $releaseNotes'));
     expect(script, contains(r'$checksumsFile $metadataFile --clobber'));
@@ -1377,6 +1379,7 @@ void main() {
     );
     expect(readme, contains(r'.\scripts\release.ps1'));
     expect(readme, contains('-PublishGitHubRelease'));
+    expect(readme, contains('Publishing checks `gh auth status`'));
     expect(readme, contains('-AllowDirty'));
     expect(readme, contains('dirty git working tree'));
     expect(readme, contains('GitHub Release publishing always requires'));
