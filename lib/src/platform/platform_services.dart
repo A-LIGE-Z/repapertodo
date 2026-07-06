@@ -73,6 +73,9 @@ class TrayMenuLabels {
     required this.deletePaper,
     required this.deleteConfirmTitle,
     required this.deleteConfirmMessage,
+    required this.inlineConfirmDelete,
+    required this.inlineConfirmAction,
+    required this.cancel,
     required this.exit,
     required this.todoPaper,
     required this.notePaper,
@@ -93,6 +96,9 @@ class TrayMenuLabels {
   final String deletePaper;
   final String deleteConfirmTitle;
   final String deleteConfirmMessage;
+  final String inlineConfirmDelete;
+  final String inlineConfirmAction;
+  final String cancel;
   final String exit;
   final String todoPaper;
   final String notePaper;
@@ -114,6 +120,9 @@ class TrayMenuLabels {
       'deletePaper': deletePaper,
       'deleteConfirmTitle': deleteConfirmTitle,
       'deleteConfirmMessage': deleteConfirmMessage,
+      'inlineConfirmDelete': inlineConfirmDelete,
+      'inlineConfirmAction': inlineConfirmAction,
+      'cancel': cancel,
       'exit': exit,
       'todoPaper': todoPaper,
       'notePaper': notePaper,

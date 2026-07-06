@@ -1231,12 +1231,15 @@ void main() {
     expect(runner, contains('tray_labels_.show_all.c_str()'));
     expect(runner, contains('tray_labels_.hide_all.c_str()'));
     expect(runner, contains('tray_labels_.toggle_all.c_str()'));
-    expect(runner, contains('tray_labels_.delete_confirm_message'));
-    expect(runner, contains('FormatWideMessage'));
+    expect(runner, contains('tray_labels_.inline_confirm_delete'));
+    expect(runner, contains('tray_labels_.inline_confirm_action.c_str()'));
+    expect(runner, contains('tray_labels_.cancel.c_str()'));
     expect(platform, contains("'labels': labels.toJson()"));
     expect(platform,
         contains("'trayLabel': _trayPaperLabel(paper, title, labels)"));
     expect(app, contains('PaperTodoStringKeys.trayNewTodo'));
+    expect(app, contains('PaperTodoStringKeys.trayInlineConfirmDelete'));
+    expect(app, contains('PaperTodoStringKeys.trayInlineConfirmAction'));
     expect(app, contains('_trayMenuLabelsFor'));
     expect(runner, contains('SendStartupCommandRequested("new-todo");'));
     expect(runner, contains('SendStartupCommandRequested("new-note");'));
@@ -1273,15 +1276,17 @@ void main() {
     expect(paperCommand, contains('SetForegroundWindow(window);'));
   });
 
-  test('Windows tray paper delete command confirms before Dart deletion', () {
+  test('Windows tray paper delete command confirms in the menu', () {
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final platform =
         _readProjectText('lib/src/platform/windows_platform_services.dart');
 
     expect(runner, contains('kTrayPaperDeleteCommandBase'));
     expect(runner, contains('tray_labels_.delete_paper.c_str()'));
-    expect(runner, contains('tray_labels_.delete_confirm_title.c_str()'));
-    expect(runner, contains('MessageBoxW'));
+    expect(runner, contains('HMENU confirm_menu = CreatePopupMenu();'));
+    expect(runner, contains('tray_labels_.inline_confirm_action.c_str()'));
+    expect(runner, contains('tray_labels_.cancel.c_str()'));
+    expect(runner, isNot(contains('MessageBoxW')));
     expect(runner, contains('SendPaperDeleteRequested'));
     expect(runner, contains('"paperDeleteRequested"'));
     expect(platform, contains('_paperDeleteRequests'));

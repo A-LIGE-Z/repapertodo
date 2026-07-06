@@ -236,6 +236,8 @@ abstract final class PaperTodoStringKeys {
   static const trayDeleteConfirmMessage = 'trayDeleteConfirmMessage';
   static const trayDeleteConfirmTitle = 'trayDeleteConfirmTitle';
   static const trayDeletePaper = 'trayDeletePaper';
+  static const trayInlineConfirmDelete = 'trayInlineConfirmDelete';
+  static const trayInlineConfirmAction = 'trayInlineConfirmAction';
   static const trayDesktop = 'trayDesktop';
   static const trayExit = 'trayExit';
   static const trayHidden = 'trayHidden';
@@ -652,6 +654,8 @@ const _enStrings = {
   PaperTodoStringKeys.trayDeleteConfirmMessage: 'Delete "{0}"?',
   PaperTodoStringKeys.trayDeleteConfirmTitle: 'Delete paper?',
   PaperTodoStringKeys.trayDeletePaper: 'Delete paper...',
+  PaperTodoStringKeys.trayInlineConfirmDelete: '⚠ Delete',
+  PaperTodoStringKeys.trayInlineConfirmAction: 'Confirm',
   PaperTodoStringKeys.trayDesktop: 'desktop',
   PaperTodoStringKeys.trayExit: 'Exit',
   PaperTodoStringKeys.trayHidden: 'hidden',
@@ -975,6 +979,8 @@ const _zhStrings = {
   PaperTodoStringKeys.trayDeleteConfirmMessage: '删除“{0}”？',
   PaperTodoStringKeys.trayDeleteConfirmTitle: '删除纸片？',
   PaperTodoStringKeys.trayDeletePaper: '删除纸片...',
+  PaperTodoStringKeys.trayInlineConfirmDelete: '⚠ 删除',
+  PaperTodoStringKeys.trayInlineConfirmAction: '确认',
   PaperTodoStringKeys.trayDesktop: '桌面',
   PaperTodoStringKeys.trayExit: '退出',
   PaperTodoStringKeys.trayHidden: '已隐藏',
@@ -1292,6 +1298,8 @@ const _jaStrings = {
   PaperTodoStringKeys.trayDeleteConfirmMessage: '「{0}」を削除しますか？',
   PaperTodoStringKeys.trayDeleteConfirmTitle: '紙片を削除しますか？',
   PaperTodoStringKeys.trayDeletePaper: '紙片を削除...',
+  PaperTodoStringKeys.trayInlineConfirmDelete: '⚠ 削除',
+  PaperTodoStringKeys.trayInlineConfirmAction: '確認',
   PaperTodoStringKeys.trayDesktop: 'デスクトップ',
   PaperTodoStringKeys.trayExit: '終了',
   PaperTodoStringKeys.trayHidden: '非表示',
@@ -1613,6 +1621,8 @@ const _koStrings = {
   PaperTodoStringKeys.trayDeleteConfirmMessage: '"{0}" 삭제할까요?',
   PaperTodoStringKeys.trayDeleteConfirmTitle: '종이를 삭제할까요?',
   PaperTodoStringKeys.trayDeletePaper: '종이 삭제...',
+  PaperTodoStringKeys.trayInlineConfirmDelete: '⚠ 삭제',
+  PaperTodoStringKeys.trayInlineConfirmAction: '확인',
   PaperTodoStringKeys.trayDesktop: '데스크톱',
   PaperTodoStringKeys.trayExit: '종료',
   PaperTodoStringKeys.trayHidden: '숨김',

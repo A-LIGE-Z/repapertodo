@@ -1346,6 +1346,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           strings.get(PaperTodoStringKeys.trayDeleteConfirmTitle),
       deleteConfirmMessage:
           strings.get(PaperTodoStringKeys.trayDeleteConfirmMessage),
+      inlineConfirmDelete:
+          strings.get(PaperTodoStringKeys.trayInlineConfirmDelete),
+      inlineConfirmAction:
+          strings.get(PaperTodoStringKeys.trayInlineConfirmAction),
+      cancel: strings.get(PaperTodoStringKeys.actionCancel),
       exit: strings.get(PaperTodoStringKeys.trayExit),
       todoPaper: strings.get(PaperTodoStringKeys.trayTodoPaper),
       notePaper: strings.get(PaperTodoStringKeys.trayNotePaper),

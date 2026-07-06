@@ -28,6 +28,9 @@ struct TrayMenuLabels {
   std::wstring delete_paper = L"Delete paper...";
   std::wstring delete_confirm_title = L"Delete paper?";
   std::wstring delete_confirm_message = L"Delete \"{0}\"?";
+  std::wstring inline_confirm_delete = L"Delete";
+  std::wstring inline_confirm_action = L"Confirm";
+  std::wstring cancel = L"Cancel";
   std::wstring exit = L"Exit";
   std::wstring todo_paper = L"Todo";
   std::wstring note_paper = L"Note";

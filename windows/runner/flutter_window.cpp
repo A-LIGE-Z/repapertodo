@@ -394,21 +394,6 @@ std::wstring GetWideStringArgument(const flutter::EncodableMap& map,
   return Utf8ToWide(value);
 }
 
-std::wstring FormatWideMessage(std::wstring template_text,
-                               const std::wstring& value) {
-  const std::wstring placeholder = L"{0}";
-  const size_t index = template_text.find(placeholder);
-  if (index == std::wstring::npos) {
-    if (!template_text.empty() && template_text.back() != L' ') {
-      template_text += L" ";
-    }
-    template_text += value;
-    return template_text;
-  }
-  template_text.replace(index, placeholder.size(), value);
-  return template_text;
-}
-
 TrayMenuLabels TrayMenuLabelsFromMap(const flutter::EncodableMap& map,
                                      const TrayMenuLabels& fallback) {
   TrayMenuLabels labels = fallback;
@@ -426,6 +411,11 @@ TrayMenuLabels TrayMenuLabelsFromMap(const flutter::EncodableMap& map,
       map, "deleteConfirmTitle", labels.delete_confirm_title);
   labels.delete_confirm_message = GetWideStringArgument(
       map, "deleteConfirmMessage", labels.delete_confirm_message);
+  labels.inline_confirm_delete = GetWideStringArgument(
+      map, "inlineConfirmDelete", labels.inline_confirm_delete);
+  labels.inline_confirm_action = GetWideStringArgument(
+      map, "inlineConfirmAction", labels.inline_confirm_action);
+  labels.cancel = GetWideStringArgument(map, "cancel", labels.cancel);
   labels.exit = GetWideStringArgument(map, "exit", labels.exit);
   labels.todo_paper =
       GetWideStringArgument(map, "todoPaper", labels.todo_paper);
@@ -2269,9 +2259,22 @@ void FlutterWindow::ShowTrayMenu() {
     HMENU delete_menu = CreatePopupMenu();
     if (delete_menu) {
       for (size_t index = 0; index < tray_papers_.size(); index++) {
-        AppendMenu(delete_menu, MF_STRING,
+        HMENU confirm_menu = CreatePopupMenu();
+        if (!confirm_menu) {
+          continue;
+        }
+        const std::wstring confirm_title =
+            tray_labels_.inline_confirm_delete.empty()
+                ? tray_papers_[index].label
+                : tray_labels_.inline_confirm_delete + L" - " +
+                      tray_papers_[index].label;
+        AppendMenu(confirm_menu, MF_STRING,
                    kTrayPaperDeleteCommandBase + static_cast<UINT>(index),
-                   tray_papers_[index].label.c_str());
+                   tray_labels_.inline_confirm_action.c_str());
+        AppendMenu(confirm_menu, MF_STRING, 0, tray_labels_.cancel.c_str());
+        AppendMenu(delete_menu, MF_POPUP,
+                   reinterpret_cast<UINT_PTR>(confirm_menu),
+                   confirm_title.c_str());
       }
       AppendMenu(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(delete_menu),
                  tray_labels_.delete_paper.c_str());
@@ -2325,16 +2328,7 @@ void FlutterWindow::ShowTrayMenu() {
                      kTrayPaperDeleteCommandBase + tray_papers_.size()) {
         const auto& paper =
             tray_papers_[command - kTrayPaperDeleteCommandBase];
-        const std::wstring message =
-            FormatWideMessage(tray_labels_.delete_confirm_message,
-                              paper.label);
-        const int response =
-            MessageBoxW(window, message.c_str(),
-                        tray_labels_.delete_confirm_title.c_str(),
-                        MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
-        if (response == IDYES) {
-          SendPaperDeleteRequested(paper.id);
-        }
+        SendPaperDeleteRequested(paper.id);
       }
       break;
   }
