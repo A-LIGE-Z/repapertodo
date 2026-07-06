@@ -32,7 +32,8 @@ commit, Android 14-17/API 34-37 compatibility, signing mode, validation
 commands, skipped validation commands for local smoke packages, and artifact
 hashes.
 Validation includes `git diff --check`, tests, analysis, and Windows/APK
-release builds.
+release builds. Release packaging reads the Android Gradle SDK settings and
+stops if they drift from Android 14-17/API 34-37.
 
 ```powershell
 .\scripts\release.ps1

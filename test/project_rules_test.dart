@@ -1434,5 +1434,7 @@ void main() {
     expect(readme, contains('SHA-256 checksum file'));
     expect(readme, contains('release metadata JSON file'));
     expect(readme, contains('Android 14-17/API 34-37 compatibility'));
+    expect(readme, contains('reads the Android Gradle SDK settings'));
+    expect(readme, contains('stops if they drift'));
   });
 }
