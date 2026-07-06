@@ -1647,6 +1647,9 @@ void main() {
     final elements = controller.state.papers.single.noteCanvasElements;
     final primary =
         elements.firstWhere((element) => element.id.endsWith('primary'));
+    final primaryElement = find.byKey(
+      const ValueKey('note-canvas-element-pinned-canvas-action-primary'),
+    );
     final field = find.byKey(
       const ValueKey('note-canvas-element-text-pinned-canvas-action-primary'),
     );
@@ -1675,20 +1678,50 @@ void main() {
       true,
     );
     expect(find.text('Canvas block geometry'), findsNothing);
-    expect(find.widgetWithIcon(IconButton, Icons.tune_outlined), findsWidgets);
     expect(
-      find.widgetWithIcon(IconButton, Icons.content_copy_outlined),
-      findsWidgets,
+      tester
+          .widget<IconButton>(
+            find.descendant(
+              of: primaryElement,
+              matching: find.widgetWithIcon(IconButton, Icons.tune_outlined),
+            ),
+          )
+          .onPressed,
+      isNull,
     );
     expect(
+      tester
+          .widget<IconButton>(
+            find.descendant(
+              of: primaryElement,
+              matching: find.widgetWithIcon(
+                IconButton,
+                Icons.content_copy_outlined,
+              ),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    final layerMenu = tester.widget<PopupMenuButton<dynamic>>(
       find.byKey(
         const ValueKey(
           'note-canvas-layer-actions-pinned-canvas-action-primary',
         ),
       ),
-      findsOneWidget,
     );
-    expect(find.widgetWithIcon(IconButton, Icons.close_outlined), findsWidgets);
+    expect(layerMenu.enabled, false);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.descendant(
+              of: primaryElement,
+              matching: find.widgetWithIcon(IconButton, Icons.close_outlined),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
     expect(primary.x, 16);
     expect(primary.width, 220);
     expect(primary.zIndex, 1);

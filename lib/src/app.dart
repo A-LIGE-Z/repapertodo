@@ -4802,10 +4802,12 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             minimumSize: Size.zero,
                           ),
-                          onPressed: () {
-                            widget.onSelect(element);
-                            unawaited(widget.onEdit(element));
-                          },
+                          onPressed: widget.geometryGesturesEnabled
+                              ? () {
+                                  widget.onSelect(element);
+                                  unawaited(widget.onEdit(element));
+                                }
+                              : null,
                           iconSize:
                               (18 * widget.scale).clamp(16, 18).toDouble(),
                           padding: EdgeInsets.zero,
@@ -4821,10 +4823,12 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             minimumSize: Size.zero,
                           ),
-                          onPressed: () {
-                            widget.onSelect(element);
-                            widget.onDuplicate(element);
-                          },
+                          onPressed: widget.geometryGesturesEnabled
+                              ? () {
+                                  widget.onSelect(element);
+                                  widget.onDuplicate(element);
+                                }
+                              : null,
                           iconSize:
                               (18 * widget.scale).clamp(16, 18).toDouble(),
                           padding: EdgeInsets.zero,
@@ -4837,6 +4841,7 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                           key: ValueKey(
                             'note-canvas-layer-actions-${element.id}',
                           ),
+                          enabled: widget.geometryGesturesEnabled,
                           tooltip: widget.strings
                               .get(PaperTodoStringKeys.canvasLayerActions),
                           child: Center(
@@ -4895,10 +4900,12 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             minimumSize: Size.zero,
                           ),
-                          onPressed: () {
-                            widget.onSelect(element);
-                            widget.onDelete(element);
-                          },
+                          onPressed: widget.geometryGesturesEnabled
+                              ? () {
+                                  widget.onSelect(element);
+                                  widget.onDelete(element);
+                                }
+                              : null,
                           iconSize:
                               (18 * widget.scale).clamp(16, 18).toDouble(),
                           padding: EdgeInsets.zero,
@@ -4912,6 +4919,7 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                           key: ValueKey(
                             'note-canvas-compact-actions-${element.id}',
                           ),
+                          enabled: widget.geometryGesturesEnabled,
                           tooltip: widget.strings
                               .get(PaperTodoStringKeys.canvasBlockActions),
                           child: Center(
