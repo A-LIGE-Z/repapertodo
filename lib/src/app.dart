@@ -26,6 +26,7 @@ import 'core/model/paper_item.dart';
 import 'core/model/paper_titles.dart';
 import 'core/model/sync_settings.dart';
 import 'core/model/todo_paste.dart';
+import 'core/model/todo_due_date.dart';
 import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
 import 'core/startup/startup_command.dart';
@@ -2047,7 +2048,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         if (item.done) {
           continue;
         }
-        final dueAt = DateTime.tryParse(item.dueAtLocal ?? '')?.toLocal();
+        final dueAt = parsePaperTodoDueAtLocal(item.dueAtLocal);
         if (dueAt == null) {
           continue;
         }
@@ -6868,7 +6869,7 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   Future<void> _pickDueDate(BuildContext context, PaperItem item) async {
     final now = DateTime.now();
-    final initialDate = DateTime.tryParse(item.dueAtLocal ?? '')?.toLocal() ??
+    final initialDate = parsePaperTodoDueAtLocal(item.dueAtLocal) ??
         now.add(const Duration(hours: 1));
     final result = await showDialog<_TodoDueSelection>(
       context: context,
@@ -7079,7 +7080,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   String? _formatDueDate(String? value) {
-    final date = DateTime.tryParse(value ?? '')?.toLocal();
+    final date = parsePaperTodoDueAtLocal(value);
     if (date == null) {
       return null;
     }
@@ -7125,13 +7126,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   String _formatDueAtLocalValue(DateTime date) {
-    final year = date.year.toString().padLeft(4, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-    final second = date.second.toString().padLeft(2, '0');
-    return '$year-$month-${day}T$hour:$minute:$second';
+    return formatPaperTodoDueAtLocal(date);
   }
 
   String? _formatReminderInterval(PaperItem item) {

@@ -1,5 +1,6 @@
 import 'json_helpers.dart';
 import 'paper_constants.dart';
+import 'todo_due_date.dart';
 
 class PaperItem {
   PaperItem({
@@ -136,25 +137,9 @@ double _normalizeColumnWidth(double value) {
 }
 
 String? _normalizeDueAtLocal(String? value) {
-  final trimmed = value?.trim() ?? '';
-  if (trimmed.isEmpty) {
-    return null;
-  }
-  final dueAt = DateTime.tryParse(trimmed)?.toLocal();
+  final dueAt = parsePaperTodoDueAtLocal(value);
   if (dueAt == null) {
     return null;
   }
-  return [
-    dueAt.year.toString().padLeft(4, '0'),
-    '-',
-    dueAt.month.toString().padLeft(2, '0'),
-    '-',
-    dueAt.day.toString().padLeft(2, '0'),
-    'T',
-    dueAt.hour.toString().padLeft(2, '0'),
-    ':',
-    dueAt.minute.toString().padLeft(2, '0'),
-    ':',
-    dueAt.second.toString().padLeft(2, '0'),
-  ].join();
+  return formatPaperTodoDueAtLocal(dueAt);
 }

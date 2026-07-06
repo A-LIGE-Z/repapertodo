@@ -963,6 +963,14 @@ Plain item
               'id': 'invalid-due',
               'dueAtLocal': 'not a date',
             },
+            {
+              'id': 'slash-due',
+              'dueAtLocal': '2026/6/30 9:08',
+            },
+            {
+              'id': 'day-first-due',
+              'dueAtLocal': '30/6/2026 09:08',
+            },
           ],
         },
       ],
@@ -979,6 +987,8 @@ Plain item
     );
     expect(itemsById['columns']?.dueAtLocal, '2026-06-30T09:08:07');
     expect(itemsById['invalid-due']?.dueAtLocal, isNull);
+    expect(itemsById['slash-due']?.dueAtLocal, '2026-06-30T09:08:00');
+    expect(itemsById['day-first-due']?.dueAtLocal, '2026-06-30T09:08:00');
   });
 
   test('serializes todo column lists as defensive snapshots', () {

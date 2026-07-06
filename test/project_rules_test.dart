@@ -827,8 +827,11 @@ void main() {
   test('PaperTodo todo due date time precision is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
+    final dueDateHelper =
+        File('lib/src/core/model/todo_due_date.dart').readAsStringSync();
 
     expect(design, contains('Todo due editing should preserve PaperTodo'));
+    expect(design, contains('PaperTodo-compatible due dates'));
     expect(design, contains('existing Todo due chip'));
     expect(design, contains("PaperTodo's due badge"));
     expect(design, contains('existing Todo reminder chip'));
@@ -854,6 +857,8 @@ void main() {
     expect(app, contains('_pickReminderInterval(context, item)'));
     expect(app, contains("ValueKey('todo-due-hour')"));
     expect(app, contains("ValueKey('todo-due-minute')"));
+    expect(app, contains('parsePaperTodoDueAtLocal'));
+    expect(app, contains('formatPaperTodoDueAtLocal'));
     expect(app, contains('_formatDueAtLocalValue'));
     expect(app, contains("return 'Tomorrow \$time'"));
     expect(app, contains('Duration.microsecondsPerMinute'));
@@ -869,6 +874,9 @@ void main() {
     expect(app, contains('fallbackValue'));
     expect(app, contains('rawValue <= 0 ? 1 : rawValue'));
     expect(app, contains('shouldRefreshRelativeDueLabels'));
+    expect(dueDateHelper, contains('parsePaperTodoDueAtLocal'));
+    expect(dueDateHelper, contains('formatPaperTodoDueAtLocal'));
+    expect(dueDateHelper, contains(r"replaceAll('\u5e74', '-')"));
   });
 
   test('PaperTodo todo reorder data semantics are preserved', () {

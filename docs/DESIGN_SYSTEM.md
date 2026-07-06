@@ -331,6 +331,9 @@ Todo due editing should preserve PaperTodo date-and-time precision: the picker
 must expose a calendar date plus 00-23 hour and 00-59 minute choices, default a
 new due time to roughly one hour from now, and save local values as
 `yyyy-MM-ddTHH:mm:ss` without milliseconds.
+PaperTodo-compatible due dates read from storage should accept common
+year-first, slash-separated, day-first, and Chinese year/month/day forms before
+normalizing back to the canonical local format.
 Clicking an existing Todo due chip should reopen the due editor just like
 PaperTodo's due badge.
 Clicking an existing Todo reminder chip should reopen the reminder interval
