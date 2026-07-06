@@ -1397,7 +1397,13 @@ void main() {
       script,
       contains('GitHub Release publishing from GitHub Actions must run'),
     );
-    expect(script, contains('git status --porcelain'));
+    expect(script, contains('git update-index --refresh'));
+    expect(script, contains('stat-only status noise'));
+    expect(script, contains('git diff --quiet --'));
+    expect(script, contains('git diff --cached --quiet --'));
+    expect(script, contains('git ls-files --others --exclude-standard'));
+    expect(script, contains('Dirty git status:'));
+    expect(script, contains('git status --porcelain --untracked-files=all'));
     expect(script, contains('Verify release inputs stayed clean'));
     expect(script, contains('git diff --check'));
     expect(script, contains('git diff --cached --check'));
@@ -1506,6 +1512,9 @@ void main() {
     expect(readme, contains('runs again immediately before packaging'));
     expect(readme, contains('drift away from the metadata'));
     expect(readme, contains('commit unnoticed'));
+    expect(readme, contains("refreshing Git's index"));
+    expect(readme, contains('normalized content'));
+    expect(readme, contains('is unchanged'));
     expect(readme, contains('GitHub Release publishing always requires'));
     expect(readme, contains('combined with `-SkipTests`'));
     expect(readme, contains('`-SkipBuild`, or `-AllowDirty`'));

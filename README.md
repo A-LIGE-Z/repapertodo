@@ -74,6 +74,10 @@ steps in the release metadata JSON.
 The clean-tree check also runs again immediately before packaging, so package
 resolution or generated project files cannot drift away from the metadata
 commit unnoticed.
+That packaging check compares real working-tree, staged, and untracked content
+after refreshing Git's index, so Flutter's Windows build can touch generated
+plugin files without falsely failing the release when their normalized content
+is unchanged.
 
 GitHub Release publishing always requires the full validation path. The script
 will refuse `-PublishGitHubRelease` when it is combined with `-SkipTests`,

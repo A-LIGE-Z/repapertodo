@@ -102,11 +102,40 @@ function Assert-CleanGitTree {
     return
   }
 
-  $status = & git status --porcelain
-  if ($LASTEXITCODE -ne 0) {
-    throw "git status --porcelain failed with exit code $LASTEXITCODE."
+  # Flutter's Windows build can rewrite generated plugin files without changing
+  # their normalized content. Refresh the index, then check real content/staged
+  # diffs plus untracked files instead of blocking on stat-only status noise.
+  & git update-index --refresh 2>$null
+  if ($LASTEXITCODE -gt 1) {
+    throw "git update-index --refresh failed with exit code $LASTEXITCODE."
   }
-  if ($status) {
+
+  & git diff --quiet --
+  $workingTreeDiffExitCode = $LASTEXITCODE
+  if ($workingTreeDiffExitCode -gt 1) {
+    throw "git diff --quiet failed with exit code $workingTreeDiffExitCode."
+  }
+
+  & git diff --cached --quiet --
+  $stagedDiffExitCode = $LASTEXITCODE
+  if ($stagedDiffExitCode -gt 1) {
+    throw "git diff --cached --quiet failed with exit code $stagedDiffExitCode."
+  }
+
+  $untrackedFiles = & git ls-files --others --exclude-standard
+  if ($LASTEXITCODE -ne 0) {
+    throw "git ls-files --others --exclude-standard failed with exit code $LASTEXITCODE."
+  }
+
+  if ($workingTreeDiffExitCode -ne 0 -or
+      $stagedDiffExitCode -ne 0 -or
+      $untrackedFiles) {
+    Write-Host "Dirty git status:"
+    $status = & git status --porcelain --untracked-files=all
+    if ($LASTEXITCODE -ne 0) {
+      throw "git status --porcelain --untracked-files=all failed with exit code $LASTEXITCODE."
+    }
+    $status | ForEach-Object { Write-Host "  $_" }
     throw "Working tree has uncommitted changes. Commit or stash them before release, or rerun with -AllowDirty for a local-only test package."
   }
 }
