@@ -325,8 +325,8 @@ into the main text. Inserting or deleting later columns should keep the other
 columns in order and preserve normalized per-column widths.
 Todo column width resizing should preserve PaperTodo splitter semantics: wide
 multi-column rows show an 8px drag target between adjacent columns, dragging
-resizes only that column pair, each column width is clamped to at least 0.2,
-and the normalized widths are saved without creating a todo undo snapshot.
+resizes only that column pair, each column width is clamped to at least 0.2 and
+at most 8. Width saves happen without creating a todo undo snapshot.
 Todo due editing should preserve PaperTodo date-and-time precision: the picker
 must expose a calendar date plus 00-23 hour and 00-59 minute choices, default a
 new due time to roughly one hour from now, and save local values as

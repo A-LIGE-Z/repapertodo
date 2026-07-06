@@ -42,7 +42,7 @@ abstract final class TodoColumnLimits {
   static const minCount = 1;
   static const maxCount = 4;
   static const minWidth = 0.2;
-  static const maxWidth = 10000.0;
+  static const maxWidth = 8.0;
 }
 
 abstract final class UiFontPresets {

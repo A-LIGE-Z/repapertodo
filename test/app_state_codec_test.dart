@@ -975,7 +975,7 @@ Plain item
     expect(itemsById['columns']?.todoExtraColumns, ['A', '', '']);
     expect(
       itemsById['columns']?.todoColumnWidths,
-      [0.2, 1.235, 99, 10000],
+      [0.2, 1.235, 8, 8],
     );
     expect(itemsById['columns']?.dueAtLocal, '2026-06-30T09:08:07');
     expect(itemsById['invalid-due']?.dueAtLocal, isNull);

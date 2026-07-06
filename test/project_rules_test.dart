@@ -712,10 +712,10 @@ void main() {
     final app = File('lib/src/app.dart').readAsStringSync();
 
     expect(model, contains('static const maxCount = 4'));
-    expect(model, contains('static const maxWidth = 10000.0'));
+    expect(model, contains('static const maxWidth = 8.0'));
     expect(item, contains('TodoColumnLimits.maxCount'));
     expect(item, contains('TodoColumnLimits.maxWidth'));
-    expect(item, isNot(contains('clamp(1, 8)')));
+    expect(app, contains('_maxTodoColumnWidth = TodoColumnLimits.maxWidth'));
     expect(app, contains('TodoColumnLimits.maxCount'));
     expect(app, isNot(contains('todoColumnCount < 8')));
   });
@@ -812,9 +812,11 @@ void main() {
     expect(design, contains('8px drag target'));
     expect(design, contains('resizes only that column pair'));
     expect(design, contains('clamped to at least 0.2'));
+    expect(design, contains('at most 8'));
     expect(design, contains('without creating a todo undo snapshot'));
     expect(app, contains('_todoColumnSplitterWidth = 8.0'));
     expect(app, contains('_minTodoColumnWidth = 0.2'));
+    expect(app, contains('_maxTodoColumnWidth = TodoColumnLimits.maxWidth'));
     expect(app, contains('_todoColumnSplitter'));
     expect(app, contains('_resizeTodoColumnPair'));
     expect(app, contains('column-splitter-'));

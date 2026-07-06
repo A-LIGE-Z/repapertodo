@@ -5125,6 +5125,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   static const _maxTodoUndoDepth = 100;
   static const _todoColumnSplitterWidth = 8.0;
   static const _minTodoColumnWidth = 0.2;
+  static const _maxTodoColumnWidth = TodoColumnLimits.maxWidth;
 
   final _todoFocusNode = FocusNode(debugLabel: 'todo-editor');
   final _todoMainFieldFocusNodes = <String, FocusNode>{};
@@ -6305,7 +6306,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       return [
         for (final width in item.todoColumnWidths)
           width.isFinite && width >= _minTodoColumnWidth
-              ? width
+              ? width.clamp(_minTodoColumnWidth, _maxTodoColumnWidth).toDouble()
               : _minTodoColumnWidth,
       ];
     }
@@ -6313,7 +6314,8 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   double _roundTodoColumnWidth(double value) {
-    return (value.clamp(_minTodoColumnWidth, 10000.0) * 1000).roundToDouble() /
+    return (value.clamp(_minTodoColumnWidth, _maxTodoColumnWidth) * 1000)
+            .roundToDouble() /
         1000;
   }
 
@@ -6523,7 +6525,9 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (width <= 0 || !width.isFinite) {
       return 1;
     }
-    return (width * 100).round().clamp(1, 10000).toInt();
+    final normalizedWidth =
+        width.clamp(_minTodoColumnWidth, _maxTodoColumnWidth).toDouble();
+    return (normalizedWidth * 100).round().clamp(1, 800).toInt();
   }
 
   void _updateColumns(PaperItem item, String action) {
