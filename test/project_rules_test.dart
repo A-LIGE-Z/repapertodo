@@ -786,6 +786,8 @@ void main() {
     expect(design, contains('every Todo text column'));
     expect(design, contains('first cleaned line replaces'));
     expect(design, contains("last-row\nrebuild focus"));
+    expect(design, contains("PaperTodo's `ReplaceSelection`"));
+    expect(design, contains('surrounding text remains intact'));
     expect(design, contains('MaxLength = 5000'));
     expect(design, contains('main and extra columns'));
     expect(design, contains('Backspace'));
@@ -796,6 +798,7 @@ void main() {
     expect(app, contains('_insertItemAfter'));
     expect(app, contains('extraColumnIndex'));
     expect(app, contains('_TodoPasteTextInputFormatter'));
+    expect(app, contains('_TodoTextEdit.betweenValues'));
     expect(app, contains('newItems.last.id'));
     expect(app, contains('LengthLimitingTextInputFormatter'));
     expect(app, contains('TodoPasteItems.maxLineLength'));

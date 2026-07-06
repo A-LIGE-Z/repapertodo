@@ -6969,10 +6969,12 @@ class _TodoEditorState extends State<_TodoEditor> {
             ),
             inputFormatters: [
               _TodoPasteTextInputFormatter(
-                onPaste: (value, previousValue) => _handleMultiLinePaste(
+                onPaste: (lines, replacementText, previousValue) =>
+                    _handleMultiLinePaste(
                   item,
-                  value,
+                  replacementText,
                   previousColumnText: previousValue,
+                  parsedLines: lines,
                 ),
               ),
               LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
@@ -6996,14 +6998,16 @@ class _TodoEditorState extends State<_TodoEditor> {
     String value, {
     int? extraColumnIndex,
     String? previousColumnText,
+    List<String>? parsedLines,
   }) {
-    if (!value.contains('\n') && !value.contains('\r')) {
+    if (parsedLines == null && !value.contains('\n') && !value.contains('\r')) {
       return false;
     }
-    final lines = TodoPasteItems.parseLines(value);
+    final lines = parsedLines ?? TodoPasteItems.parseLines(value);
     if (lines.length <= 1) {
       return false;
     }
+    final replacementText = parsedLines == null ? lines.first : value;
     if (extraColumnIndex != null) {
       item.normalize();
       if (extraColumnIndex < 0 ||
@@ -7015,7 +7019,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       item,
       extraColumnIndex,
       previousColumnText,
-      lines.first,
+      replacementText,
     );
     final currentColumnText = _todoColumnText(item, extraColumnIndex);
     if (previousColumnText == null && snapshotText == currentColumnText) {
@@ -7026,7 +7030,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
     late final List<PaperItem> newItems;
     setState(() {
-      _setTodoColumnText(item, extraColumnIndex, lines.first);
+      _setTodoColumnText(item, extraColumnIndex, replacementText);
       newItems = _addItemsAfter(item, lines.skip(1));
       widget.paper.normalize();
       _textFieldRevision++;
@@ -7100,11 +7104,13 @@ class _TodoEditorState extends State<_TodoEditor> {
           ),
           inputFormatters: [
             _TodoPasteTextInputFormatter(
-              onPaste: (value, previousValue) => _handleMultiLinePaste(
+              onPaste: (lines, replacementText, previousValue) =>
+                  _handleMultiLinePaste(
                 item,
-                value,
+                replacementText,
                 extraColumnIndex: index,
                 previousColumnText: previousValue,
+                parsedLines: lines,
               ),
             ),
             LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
@@ -7999,27 +8005,98 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
 class _TodoPasteTextInputFormatter extends TextInputFormatter {
   const _TodoPasteTextInputFormatter({required this.onPaste});
 
-  final void Function(String text, String previousText) onPaste;
+  final void Function(
+    List<String> lines,
+    String replacementText,
+    String previousText,
+  ) onPaste;
 
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    if (!newValue.text.contains('\n') && !newValue.text.contains('\r')) {
+    final edit = _TodoTextEdit.betweenValues(oldValue, newValue);
+    final inserted = newValue.text.substring(edit.start, edit.newEnd);
+    if (!inserted.contains('\n') && !inserted.contains('\r')) {
       return newValue;
     }
-    final lines = TodoPasteItems.parseLines(newValue.text);
+    final lines = TodoPasteItems.parseLines(inserted);
     if (lines.length <= 1) {
-      final text = lines.isEmpty ? oldValue.text : lines.single;
+      final replacement = lines.isEmpty ? '' : lines.single;
+      final text = oldValue.text.replaceRange(
+        edit.start,
+        edit.oldEnd,
+        replacement,
+      );
       return TextEditingValue(
         text: text,
-        selection: TextSelection.collapsed(offset: text.length),
+        selection: TextSelection.collapsed(
+          offset: edit.start + replacement.length,
+        ),
       );
     }
-    scheduleMicrotask(() => onPaste(newValue.text, oldValue.text));
+    final replacementText = oldValue.text.replaceRange(
+      edit.start,
+      edit.oldEnd,
+      lines.first,
+    );
+    scheduleMicrotask(() => onPaste(lines, replacementText, oldValue.text));
     return oldValue;
   }
+}
+
+class _TodoTextEdit {
+  const _TodoTextEdit({
+    required this.start,
+    required this.oldEnd,
+    required this.newEnd,
+  });
+
+  factory _TodoTextEdit.betweenValues(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final selection = oldValue.selection;
+    if (selection.isValid) {
+      final oldText = oldValue.text;
+      final newText = newValue.text;
+      final start = selection.start.clamp(0, oldText.length).toInt();
+      final oldEnd = selection.end.clamp(start, oldText.length).toInt();
+      final suffixLength = oldText.length - oldEnd;
+      final newEnd = newText.length - suffixLength;
+      if (newEnd >= start &&
+          newText.startsWith(oldText.substring(0, start)) &&
+          newText.endsWith(oldText.substring(oldEnd))) {
+        return _TodoTextEdit(start: start, oldEnd: oldEnd, newEnd: newEnd);
+      }
+    }
+    return _TodoTextEdit.between(oldValue.text, newValue.text);
+  }
+
+  factory _TodoTextEdit.between(String oldText, String newText) {
+    var start = 0;
+    while (start < oldText.length &&
+        start < newText.length &&
+        oldText[start] == newText[start]) {
+      start++;
+    }
+
+    var oldEnd = oldText.length;
+    var newEnd = newText.length;
+    while (oldEnd > start &&
+        newEnd > start &&
+        oldText[oldEnd - 1] == newText[newEnd - 1]) {
+      oldEnd--;
+      newEnd--;
+    }
+
+    return _TodoTextEdit(start: start, oldEnd: oldEnd, newEnd: newEnd);
+  }
+
+  final int start;
+  final int oldEnd;
+  final int newEnd;
 }
 
 class _MarkdownPasteTextInputFormatter extends TextInputFormatter {

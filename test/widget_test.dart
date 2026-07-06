@@ -8585,6 +8585,62 @@ void main() {
     expect(restored.todoExtraColumns, ['Old status']);
   });
 
+  testWidgets('replaces todo paste selection like PaperTodo', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'selection-paste-paper',
+            type: PaperTypes.todo,
+            title: 'Selection paste paper',
+            items: [
+              PaperItem(id: 'selection-paste-item', text: 'Read  today'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final field = find.descendant(
+      of: find.byKey(
+        const ValueKey('selection-paste-paper-selection-paste-item-text'),
+      ),
+      matching: find.byType(EditableText),
+    );
+    await tester.tap(field);
+    final editable = tester.widget<EditableText>(field);
+    editable.controller.selection = const TextSelection.collapsed(offset: 5);
+
+    await tester.enterText(field, 'Read - [ ] paper\n2) notes today');
+    await tester.pumpAndSettle();
+
+    final items = controller.state.papers.single.items;
+    expect(items.map((item) => item.text), [
+      'Read paper today',
+      'notes',
+    ]);
+    final lastPastedField = tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(
+          ValueKey('selection-paste-paper-${items.last.id}-text'),
+        ),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(lastPastedField.focusNode.hasFocus, true);
+  });
+
   testWidgets('limits todo text columns to PaperTodo max length',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

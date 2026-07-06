@@ -325,6 +325,9 @@ subsequent cleaned lines create default single-column Todo rows after the
 active row. After a multiline paste creates rows, focus should move to the last
 newly inserted Todo item's main text field, matching PaperTodo's last-row
 rebuild focus.
+When a Todo column has a selection or caret, multiline paste should preserve
+PaperTodo's `ReplaceSelection` behavior: the first cleaned line replaces only
+the selected range while surrounding text remains intact.
 Todo text fields should preserve PaperTodo's `MaxLength = 5000` rule for both
 main and extra columns, so normal typing and single-line paste cannot exceed
 the same per-column length used by multiline Todo paste cleanup.
