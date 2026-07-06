@@ -463,6 +463,8 @@ void main() {
     expect(design, contains('preserving ordinary spaces used by aliases'));
     expect(design, contains('must include at least one real modifier'));
     expect(design, contains('single-key global shortcuts are ignored'));
+    expect(design, contains("PaperTodo's reveal model"));
+    expect(design, contains('do not create new papers'));
     expect(appState, contains('_normalizeHotKeyForSettings'));
     expect(
       appState,
@@ -471,6 +473,8 @@ void main() {
     expect(runner, contains('bool has_modifier = false'));
     expect(runner, contains('has_modifier = true'));
     expect(runner, contains('return has_modifier && *key != 0'));
+    expect(runner, contains('reveal-pinned-todo'));
+    expect(runner, contains('reveal-pinned-note'));
   });
 
   test('Windows fullscreen avoidance uses PaperTodo defensive detection', () {

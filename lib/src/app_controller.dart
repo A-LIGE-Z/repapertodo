@@ -380,6 +380,10 @@ class RePaperTodoController {
         if (paper != null) {
           await showPaper(paper);
         }
+      case StartupCommandKind.revealPinnedTodo:
+        await _revealPinnedPaper(PaperTypes.todo);
+      case StartupCommandKind.revealPinnedNote:
+        await _revealPinnedPaper(PaperTypes.note);
       case StartupCommandKind.settings:
         _pendingUiStartupCommand = command;
         return;
@@ -539,6 +543,18 @@ class RePaperTodoController {
     if (clampAwayFromDeepCapsuleStrip &&
         _canClampNewPaperAwayFromDeepCapsuleStrip(paper)) {
       _clampNewPaperAwayFromDeepCapsuleStrip(paper, area);
+    }
+  }
+
+  Future<void> _revealPinnedPaper(String type) async {
+    final normalizedType = PaperTypes.normalize(type);
+    for (final paper in state.papers) {
+      if (PaperTypes.normalize(paper.type) == normalizedType &&
+          paper.isPinnedToDesktop &&
+          paper.isVisible) {
+        await showPaper(paper);
+        return;
+      }
     }
   }
 

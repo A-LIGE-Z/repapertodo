@@ -314,6 +314,47 @@ void main() {
     expect(controller.state.showDeepCapsuleWhileExpanded, true);
   });
 
+  test('pinned hotkey commands reveal existing pinned papers', () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'pinned-todo',
+            type: PaperTypes.todo,
+            title: 'Pinned todo',
+            isPinnedToDesktop: true,
+          ),
+          PaperData(
+            id: 'plain-todo',
+            type: PaperTypes.todo,
+            title: 'Plain todo',
+          ),
+          PaperData(
+            id: 'plain-note',
+            type: PaperTypes.note,
+            title: 'Plain note',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.revealPinnedTodo),
+    );
+    await controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.revealPinnedNote),
+    );
+
+    expect(platform.paperWindows.shownIds, ['pinned-todo']);
+    expect(controller.state.papers.map((paper) => paper.id), [
+      'pinned-todo',
+      'plain-todo',
+      'plain-note',
+    ]);
+  });
+
   test('unpinning from desktop expands collapsed pinned papers', () {
     final controller = RePaperTodoController(
       initialState: AppState(

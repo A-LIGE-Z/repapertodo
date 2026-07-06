@@ -2390,11 +2390,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       return 0;
     case WM_HOTKEY:
       if (wparam == kPinnedTodoHotkeyId && todo_hotkey_registered_) {
-        SendStartupCommandRequested("new-todo");
+        SendStartupCommandRequested("reveal-pinned-todo");
         return 0;
       }
       if (wparam == kPinnedNoteHotkeyId && note_hotkey_registered_) {
-        SendStartupCommandRequested("new-note");
+        SendStartupCommandRequested("reveal-pinned-note");
         return 0;
       }
       break;

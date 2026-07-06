@@ -5,6 +5,8 @@ enum StartupCommandKind {
   toggle,
   newTodo,
   newNote,
+  revealPinnedTodo,
+  revealPinnedNote,
   settings,
   exit,
 }
@@ -74,6 +76,16 @@ StartupCommandKind _kindFor(String normalized) {
     'note' ||
     'paper' =>
       StartupCommandKind.newNote,
+    'reveal-pinned-todo' ||
+    'reveal-pinnedtodo' ||
+    'show-pinned-todo' ||
+    'pinned-todo' =>
+      StartupCommandKind.revealPinnedTodo,
+    'reveal-pinned-note' ||
+    'reveal-pinnednote' ||
+    'show-pinned-note' ||
+    'pinned-note' =>
+      StartupCommandKind.revealPinnedNote,
     'settings' ||
     'setting' ||
     'preferences' ||

@@ -140,6 +140,9 @@ Global hotkey registration should follow PaperTodo's safety model: a valid
 hotkey must include at least one real modifier (`Ctrl`, `Alt`, `Shift`, or
 `Win`) plus one non-modifier key, so single-key global shortcuts are ignored
 instead of stealing normal typing.
+Pinned paper hotkeys should follow PaperTodo's reveal model: the Todo and Note
+hotkeys reveal the first visible desktop-pinned paper of the matching type and
+do not create new papers when no matching pinned surface exists.
 Hotkey settings should strip control characters before saving or platform
 registration while preserving ordinary spaces used by aliases.
 For PaperTodo font parity, when no explicit system font family is configured,

@@ -8,6 +8,10 @@ void main() {
     expect(StartupCommand.parse(['toggle']).kind, StartupCommandKind.toggle);
     expect(StartupCommand.parse(['todo']).kind, StartupCommandKind.newTodo);
     expect(StartupCommand.parse(['paper']).kind, StartupCommandKind.newNote);
+    expect(StartupCommand.parse(['pinned-todo']).kind,
+        StartupCommandKind.revealPinnedTodo);
+    expect(StartupCommand.parse(['pinned-note']).kind,
+        StartupCommandKind.revealPinnedNote);
     expect(StartupCommand.parse(['prefs']).kind, StartupCommandKind.settings);
     expect(StartupCommand.parse(['quit']).kind, StartupCommandKind.exit);
   });
