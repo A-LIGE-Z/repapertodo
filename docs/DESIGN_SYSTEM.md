@@ -345,3 +345,6 @@ blocks use the 28px origin plus a capped 12px cascade clamped to the canvas with
 a 10px margin, new and duplicated blocks use the current top z-index plus 10,
 duplicates offset by 18px on both axes, one-step layer moves swap z-indexes, and
 front/back commands assign max+10 or min-10.
+Note canvas text and code block editors should accept Tab like the main
+Markdown note editor: Tab inserts or indents literal tab characters and
+Shift+Tab outdents without moving focus away from the canvas block.

@@ -4371,6 +4371,34 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   bool _geometryChanged = false;
   int? _geometryPointer;
   _CanvasGeometryDragMode? _geometryDragMode;
+  late final TextEditingController _textController;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.element.text);
+  }
+
+  @override
+  void didUpdateWidget(covariant _NoteCanvasElementPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.element.id != widget.element.id ||
+        widget.element.text != _textController.text) {
+      final offset = _textController.selection.baseOffset
+          .clamp(0, widget.element.text.length)
+          .toInt();
+      _textController.value = TextEditingValue(
+        text: widget.element.text,
+        selection: TextSelection.collapsed(offset: offset),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4645,27 +4673,27 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                             ),
                           ),
                         )
-                      : TextFormField(
-                          key: ValueKey(
-                            'note-canvas-element-text-${element.id}',
+                      : Focus(
+                          onKeyEvent: _handleCanvasTextKeyEvent,
+                          child: TextFormField(
+                            key: ValueKey(
+                              'note-canvas-element-text-${element.id}',
+                            ),
+                            controller: _textController,
+                            expands: true,
+                            maxLines: null,
+                            minLines: null,
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                            style: style?.copyWith(
+                              color: colorScheme.onSurface,
+                              height: 1.35,
+                            ),
+                            onTap: () => widget.onSelect(element),
+                            onChanged: _commitCanvasText,
                           ),
-                          initialValue: element.text,
-                          expands: true,
-                          maxLines: null,
-                          minLines: null,
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            isDense: true,
-                          ),
-                          style: style?.copyWith(
-                            color: colorScheme.onSurface,
-                            height: 1.35,
-                          ),
-                          onTap: () => widget.onSelect(element),
-                          onChanged: (value) {
-                            element.text = value;
-                            unawaited(widget.onChanged());
-                          },
                         ),
                 ),
               ],
@@ -4748,6 +4776,28 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
       case _compactCanvasActionDelete:
         widget.onDelete(element);
     }
+  }
+
+  KeyEventResult _handleCanvasTextKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.tab ||
+        !widget.geometryGesturesEnabled) {
+      return KeyEventResult.ignored;
+    }
+    _textController.value = MarkdownFormatting.handleTab(
+      _textController.value,
+      outdent: HardwareKeyboard.instance.isShiftPressed,
+    );
+    _commitCanvasText(_textController.text);
+    return KeyEventResult.handled;
+  }
+
+  void _commitCanvasText(String value) {
+    if (widget.element.text == value) {
+      return;
+    }
+    widget.element.text = value;
+    unawaited(widget.onChanged());
   }
 
   void _updateGeometryGesture(PointerMoveEvent event) {

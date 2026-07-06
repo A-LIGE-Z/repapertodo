@@ -988,6 +988,8 @@ void main() {
     expect(design, contains('top z-index plus 10'));
     expect(design, contains('duplicates offset by 18px'));
     expect(design, contains('one-step layer moves swap z-indexes'));
+    expect(design, contains('Note canvas text and code block editors'));
+    expect(design, contains('Shift+Tab outdents without moving focus'));
     expect(app, contains('_nextNoteCanvasElementPoint'));
     expect(app, contains('math.min(80.0, existingCount * 12.0)'));
     expect(app, contains('math.max(220.0, widget.paper.width - 40)'));
@@ -995,6 +997,8 @@ void main() {
     expect(app, contains('_minCanvasElementLayer(elements)'));
     expect(app, contains('element.zIndex = maxLayer + 10'));
     expect(app, contains('element.zIndex = minLayer - 10'));
+    expect(app, contains('_handleCanvasTextKeyEvent'));
+    expect(app, contains('_commitCanvasText'));
   });
 
   test('Windows runner preserves external URI safety checks', () {

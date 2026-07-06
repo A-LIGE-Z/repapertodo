@@ -1387,6 +1387,64 @@ void main() {
     expect(controller.state.papers.single.noteCanvasElements, hasLength(1));
   });
 
+  testWidgets('note canvas text accepts tab indentation like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'canvas-tab-note',
+            type: PaperTypes.note,
+            title: 'Canvas tab note',
+            content: 'Canvas body',
+            noteCanvasElements: [
+              NoteCanvasElement(
+                id: 'canvas-tab-element',
+                type: NoteCanvasElementTypes.text,
+                text: 'Line',
+                x: 16,
+                y: 24,
+                width: 220,
+                height: 110,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final field = find.byKey(
+      const ValueKey('note-canvas-element-text-canvas-tab-element'),
+    );
+    final element = controller.state.papers.single.noteCanvasElements.single;
+
+    await tester.tap(field);
+    await tester.enterText(field, 'Line');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(element.text, 'Line\t');
+
+    await tester.enterText(field, '\tLine');
+    await tester.pump();
+    await _pressShiftShortcut(tester, LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(element.text, 'Line');
+  });
+
   testWidgets('clips oversized markdown note input', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
