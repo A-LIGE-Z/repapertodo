@@ -1028,7 +1028,8 @@ void main() {
     expect(markdownLinks, contains('_htmlAnchorLinks'));
     expect(markdownLinks, contains('_tryParseHtmlOpeningAnchor'));
     expect(markdownLinks, contains('_tryGetHtmlHrefAttribute'));
-    expect(markdownLinks, contains("startsWith('www.')"));
+    expect(markdownLinks, contains('normalizeExternalUriTarget'));
+    expect(markdownLinks, contains('allowBareWww: true'));
     expect(markdownLinks, contains('_closedInlineCodeSpans'));
     expect(markdownLinks, contains("indexOf(']('"));
     expect(markdownLinks, contains('normalizeMarkdownLocalPathTarget'));

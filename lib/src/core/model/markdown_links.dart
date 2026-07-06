@@ -1,3 +1,4 @@
+import 'external_uri_targets.dart';
 import 'markdown_link_targets.dart';
 
 class MarkdownLinkSpan {
@@ -323,12 +324,9 @@ abstract final class MarkdownLinks {
   }
 
   static String? _normalizeHref(String? rawHref, {bool? isWindows}) {
-    var href = rawHref?.trim();
+    final href = rawHref?.trim();
     if (href == null || href.isEmpty) {
       return null;
-    }
-    if (href.toLowerCase().startsWith('www.')) {
-      href = 'https://$href';
     }
     if (_hasRawControlCharacter(href) || _hasEncodedControlCharacter(href)) {
       return null;
@@ -342,46 +340,15 @@ abstract final class MarkdownLinks {
       return localPath;
     }
 
-    final uri = Uri.tryParse(href);
-    if (uri == null) {
+    final externalUri = normalizeExternalUriTarget(href, allowBareWww: true);
+    if (externalUri == null) {
       return null;
     }
-    final scheme = uri.scheme.toLowerCase();
-    if (scheme != 'http' && scheme != 'https' && scheme != 'mailto') {
-      return null;
-    }
-    if ((scheme == 'http' || scheme == 'https') &&
-        !_hasValidRawUriAuthority(href)) {
-      return null;
-    }
-    return uri.toString();
-  }
-
-  static bool _hasValidRawUriAuthority(String value) {
-    final separator = value.indexOf('://');
-    if (separator < 0) {
-      return false;
-    }
-    final authorityStart = separator + 3;
-    var authorityEnd = value.length;
-    for (final delimiter in const ['/', '?', '#']) {
-      final delimiterIndex = value.indexOf(delimiter, authorityStart);
-      if (delimiterIndex >= 0 && delimiterIndex < authorityEnd) {
-        authorityEnd = delimiterIndex;
-      }
-    }
-    final authority = value.substring(authorityStart, authorityEnd);
-    return authority.isNotEmpty && !_hasRawWhitespaceOrControl(authority);
+    return Uri.tryParse(externalUri)?.toString() ?? externalUri;
   }
 
   static bool _hasRawControlCharacter(String value) {
     return value.runes.any(_isControlRune);
-  }
-
-  static bool _hasRawWhitespaceOrControl(String value) {
-    return value.runes.any(
-      (rune) => rune <= 0x20 || (rune >= 0x7F && rune <= 0x9F),
-    );
   }
 
   static bool _hasEncodedControlCharacter(String value) {

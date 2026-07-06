@@ -108,6 +108,8 @@ void main() {
     const localPath = r'[Local](C:/PaperTodo/My File.md)';
     const fileUri = '[File](file:///C:/PaperTodo/File%20Uri.md)';
     const mailto = '[Mail](mailto:paper@example.com)';
+    const emptyMailto = '[Empty mail](mailto:?subject=paper)';
+    const authorityMailto = '[Authority mail](mailto://paper@example.com)';
     const ftp = '[FTP](ftp://example.com/file)';
     const script = '[Script](javascript:alert(1))';
 
@@ -123,6 +125,17 @@ void main() {
     );
     expect(MarkdownLinks.hrefAt(mailto, mailto.indexOf('Mail')),
         'mailto:paper@example.com');
+    expect(
+      MarkdownLinks.hrefAt(emptyMailto, emptyMailto.indexOf('Empty mail')),
+      isNull,
+    );
+    expect(
+      MarkdownLinks.hrefAt(
+        authorityMailto,
+        authorityMailto.indexOf('Authority mail'),
+      ),
+      isNull,
+    );
     expect(MarkdownLinks.hrefAt(ftp, ftp.indexOf('FTP')), isNull);
     expect(MarkdownLinks.hrefAt(script, script.indexOf('Script')), isNull);
   });
