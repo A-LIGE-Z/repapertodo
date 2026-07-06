@@ -60,6 +60,26 @@ void main() {
     expect(zh.get('unknown.key'), 'unknown.key');
   });
 
+  test('looks up localized Windows tray menu strings', () {
+    final en = PaperTodoStrings.resolve(const Locale('en'));
+    final zh = PaperTodoStrings.resolve(const Locale('zh'));
+    final ja = PaperTodoStrings.resolve(const Locale('ja'));
+    final ko = PaperTodoStrings.resolve(const Locale('ko'));
+
+    expect(en.get(PaperTodoStringKeys.trayNewTodo), '+ New todo paper');
+    expect(en.get(PaperTodoStringKeys.trayHideAll), 'Hide all papers');
+    expect(zh.get(PaperTodoStringKeys.trayNewTodo), '＋ 新建待办纸');
+    expect(zh.get(PaperTodoStringKeys.trayPapers), '纸片');
+    expect(ja.get(PaperTodoStringKeys.trayNewTodo), '＋ ToDo紙を作成');
+    expect(ja.get(PaperTodoStringKeys.trayHideAll), 'すべての紙片を隠す');
+    expect(ko.get(PaperTodoStringKeys.trayNewTodo), '＋ 할 일 종이 만들기');
+    expect(ko.get(PaperTodoStringKeys.trayPapers), '종이');
+    expect(
+      zh.format(PaperTodoStringKeys.trayDeleteConfirmMessage, ['X']),
+      '删除“X”？',
+    );
+  });
+
   testWidgets('uses Chinese system locale for primary settings UI',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

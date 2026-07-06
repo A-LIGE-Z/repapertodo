@@ -595,7 +595,7 @@ class _RecordingBootstrapTrayHost extends NoopTrayHost {
   final rebuiltTitles = <List<String>>[];
 
   @override
-  Future<void> rebuildMenu(AppState state) async {
+  Future<void> rebuildMenu(AppState state, {TrayMenuLabels? labels}) async {
     rebuiltTitles.add(state.papers.map((paper) => paper.title).toList());
   }
 }

@@ -236,8 +236,8 @@ class RePaperTodoController {
     state.normalize();
   }
 
-  Future<void> rebuildTrayMenu() async {
-    await _platform.tray.rebuildMenu(state);
+  Future<void> rebuildTrayMenu({TrayMenuLabels? labels}) async {
+    await _platform.tray.rebuildMenu(state, labels: labels);
   }
 
   void _restorePapersForStartupSession() {

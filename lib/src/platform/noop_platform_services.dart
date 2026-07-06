@@ -83,7 +83,7 @@ class NoopTrayHost implements TrayHost {
   Future<void> initialize() async {}
 
   @override
-  Future<void> rebuildMenu(AppState state) async {}
+  Future<void> rebuildMenu(AppState state, {TrayMenuLabels? labels}) async {}
 }
 
 class NoopStartupHost implements StartupHost {

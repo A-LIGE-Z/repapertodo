@@ -232,6 +232,24 @@ abstract final class PaperTodoStringKeys {
   static const small = 'small';
   static const startAtLogin = 'startAtLogin';
   static const stayOnTop = 'stayOnTop';
+  static const trayCollapsed = 'trayCollapsed';
+  static const trayDeleteConfirmMessage = 'trayDeleteConfirmMessage';
+  static const trayDeleteConfirmTitle = 'trayDeleteConfirmTitle';
+  static const trayDeletePaper = 'trayDeletePaper';
+  static const trayDesktop = 'trayDesktop';
+  static const trayExit = 'trayExit';
+  static const trayHidden = 'trayHidden';
+  static const trayHideAll = 'trayHideAll';
+  static const trayNewNote = 'trayNewNote';
+  static const trayNewTodo = 'trayNewTodo';
+  static const trayNotePaper = 'trayNotePaper';
+  static const trayPapers = 'trayPapers';
+  static const trayScriptPaper = 'trayScriptPaper';
+  static const traySettings = 'traySettings';
+  static const trayShowAll = 'trayShowAll';
+  static const trayTodoPaper = 'trayTodoPaper';
+  static const trayToggleAll = 'trayToggleAll';
+  static const trayTopmost = 'trayTopmost';
   static const syncCompleteConfiguration = 'syncCompleteConfiguration';
   static const syncConflict = 'syncConflict';
   static const syncConflictSnapshotPreserved = 'syncConflictSnapshotPreserved';
@@ -630,6 +648,24 @@ const _enStrings = {
   PaperTodoStringKeys.small: 'Small',
   PaperTodoStringKeys.startAtLogin: 'Start at login',
   PaperTodoStringKeys.stayOnTop: 'Stay on top',
+  PaperTodoStringKeys.trayCollapsed: 'collapsed',
+  PaperTodoStringKeys.trayDeleteConfirmMessage: 'Delete "{0}"?',
+  PaperTodoStringKeys.trayDeleteConfirmTitle: 'Delete paper?',
+  PaperTodoStringKeys.trayDeletePaper: 'Delete paper...',
+  PaperTodoStringKeys.trayDesktop: 'desktop',
+  PaperTodoStringKeys.trayExit: 'Exit',
+  PaperTodoStringKeys.trayHidden: 'hidden',
+  PaperTodoStringKeys.trayHideAll: 'Hide all papers',
+  PaperTodoStringKeys.trayNewNote: '+ New note paper',
+  PaperTodoStringKeys.trayNewTodo: '+ New todo paper',
+  PaperTodoStringKeys.trayNotePaper: 'Note',
+  PaperTodoStringKeys.trayPapers: 'Papers',
+  PaperTodoStringKeys.trayScriptPaper: 'Script',
+  PaperTodoStringKeys.traySettings: 'Settings',
+  PaperTodoStringKeys.trayShowAll: 'Show all papers',
+  PaperTodoStringKeys.trayTodoPaper: 'Todo',
+  PaperTodoStringKeys.trayToggleAll: 'Toggle all papers',
+  PaperTodoStringKeys.trayTopmost: 'topmost',
   PaperTodoStringKeys.syncCompleteConfiguration:
       'Complete WebDAV sync settings and encryption passphrase first.',
   PaperTodoStringKeys.syncConflict:
@@ -935,6 +971,24 @@ const _zhStrings = {
   PaperTodoStringKeys.small: '小',
   PaperTodoStringKeys.startAtLogin: '开机启动',
   PaperTodoStringKeys.stayOnTop: '保持置顶',
+  PaperTodoStringKeys.trayCollapsed: '已折叠',
+  PaperTodoStringKeys.trayDeleteConfirmMessage: '删除“{0}”？',
+  PaperTodoStringKeys.trayDeleteConfirmTitle: '删除纸片？',
+  PaperTodoStringKeys.trayDeletePaper: '删除纸片...',
+  PaperTodoStringKeys.trayDesktop: '桌面',
+  PaperTodoStringKeys.trayExit: '退出',
+  PaperTodoStringKeys.trayHidden: '已隐藏',
+  PaperTodoStringKeys.trayHideAll: '隐藏全部纸片',
+  PaperTodoStringKeys.trayNewNote: '＋ 新建笔记纸',
+  PaperTodoStringKeys.trayNewTodo: '＋ 新建待办纸',
+  PaperTodoStringKeys.trayNotePaper: '笔记',
+  PaperTodoStringKeys.trayPapers: '纸片',
+  PaperTodoStringKeys.trayScriptPaper: '脚本',
+  PaperTodoStringKeys.traySettings: '设置',
+  PaperTodoStringKeys.trayShowAll: '显示全部纸片',
+  PaperTodoStringKeys.trayTodoPaper: '待办',
+  PaperTodoStringKeys.trayToggleAll: '切换全部纸片',
+  PaperTodoStringKeys.trayTopmost: '置顶',
   PaperTodoStringKeys.syncCompleteConfiguration: '请先完成 WebDAV 同步设置和同步加密密钥短语。',
   PaperTodoStringKeys.syncConflict: '同步期间远端数据已变化，请先拉取后再上传。',
   PaperTodoStringKeys.syncConflictSnapshotPreserved:
@@ -1234,6 +1288,24 @@ const _jaStrings = {
   PaperTodoStringKeys.small: '小',
   PaperTodoStringKeys.startAtLogin: 'ログイン時に開始',
   PaperTodoStringKeys.stayOnTop: '最前面を維持',
+  PaperTodoStringKeys.trayCollapsed: '折りたたみ',
+  PaperTodoStringKeys.trayDeleteConfirmMessage: '「{0}」を削除しますか？',
+  PaperTodoStringKeys.trayDeleteConfirmTitle: '紙片を削除しますか？',
+  PaperTodoStringKeys.trayDeletePaper: '紙片を削除...',
+  PaperTodoStringKeys.trayDesktop: 'デスクトップ',
+  PaperTodoStringKeys.trayExit: '終了',
+  PaperTodoStringKeys.trayHidden: '非表示',
+  PaperTodoStringKeys.trayHideAll: 'すべての紙片を隠す',
+  PaperTodoStringKeys.trayNewNote: '＋ メモ紙を作成',
+  PaperTodoStringKeys.trayNewTodo: '＋ ToDo紙を作成',
+  PaperTodoStringKeys.trayNotePaper: 'メモ',
+  PaperTodoStringKeys.trayPapers: '紙片',
+  PaperTodoStringKeys.trayScriptPaper: 'スクリプト',
+  PaperTodoStringKeys.traySettings: '設定',
+  PaperTodoStringKeys.trayShowAll: 'すべての紙片を表示',
+  PaperTodoStringKeys.trayTodoPaper: 'ToDo',
+  PaperTodoStringKeys.trayToggleAll: 'すべての紙片を切り替え',
+  PaperTodoStringKeys.trayTopmost: '最前面',
   PaperTodoStringKeys.syncCompleteConfiguration:
       '先に WebDAV 同期設定と同期暗号化パスフレーズを完了してください。',
   PaperTodoStringKeys.syncConflict: '同期中にリモートデータが変更されました。アップロード前に再取得してください。',
@@ -1537,6 +1609,24 @@ const _koStrings = {
   PaperTodoStringKeys.small: '작음',
   PaperTodoStringKeys.startAtLogin: '로그인 시 시작',
   PaperTodoStringKeys.stayOnTop: '항상 위에 유지',
+  PaperTodoStringKeys.trayCollapsed: '접힘',
+  PaperTodoStringKeys.trayDeleteConfirmMessage: '"{0}" 삭제할까요?',
+  PaperTodoStringKeys.trayDeleteConfirmTitle: '종이를 삭제할까요?',
+  PaperTodoStringKeys.trayDeletePaper: '종이 삭제...',
+  PaperTodoStringKeys.trayDesktop: '데스크톱',
+  PaperTodoStringKeys.trayExit: '종료',
+  PaperTodoStringKeys.trayHidden: '숨김',
+  PaperTodoStringKeys.trayHideAll: '모든 종이 숨기기',
+  PaperTodoStringKeys.trayNewNote: '＋ 메모 종이 만들기',
+  PaperTodoStringKeys.trayNewTodo: '＋ 할 일 종이 만들기',
+  PaperTodoStringKeys.trayNotePaper: '메모',
+  PaperTodoStringKeys.trayPapers: '종이',
+  PaperTodoStringKeys.trayScriptPaper: '스크립트',
+  PaperTodoStringKeys.traySettings: '설정',
+  PaperTodoStringKeys.trayShowAll: '모든 종이 보이기',
+  PaperTodoStringKeys.trayTodoPaper: '할 일',
+  PaperTodoStringKeys.trayToggleAll: '모든 종이 전환',
+  PaperTodoStringKeys.trayTopmost: '항상 위',
   PaperTodoStringKeys.syncCompleteConfiguration:
       '먼저 WebDAV 동기화 설정과 동기화 암호화 암호 구문을 완료하세요.',
   PaperTodoStringKeys.syncConflict: '동기화 중 원격 데이터가 변경되었습니다. 업로드 전에 다시 가져오세요.',

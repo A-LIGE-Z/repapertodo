@@ -1213,13 +1213,30 @@ void main() {
   });
 
   test('Windows tray menu keeps PaperTodo action labels', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final platform =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final header = _readProjectText('windows/runner/flutter_window.h');
 
-    expect(runner, contains('L"+ New todo paper"'));
-    expect(runner, contains('L"+ New note paper"'));
-    expect(runner, contains('L"Show all papers"'));
-    expect(runner, contains('L"Hide all papers"'));
-    expect(runner, contains('L"Toggle all papers"'));
+    expect(header, contains('std::wstring new_todo = L"+ New todo paper"'));
+    expect(header, contains('std::wstring new_note = L"+ New note paper"'));
+    expect(header, contains('std::wstring show_all = L"Show all papers"'));
+    expect(header, contains('std::wstring hide_all = L"Hide all papers"'));
+    expect(header, contains('std::wstring toggle_all = L"Toggle all papers"'));
+    expect(runner, contains('TrayMenuLabelsFromMap'));
+    expect(runner, contains('tray_labels_.new_todo.c_str()'));
+    expect(runner, contains('tray_labels_.new_note.c_str()'));
+    expect(runner, contains('tray_labels_.show_all.c_str()'));
+    expect(runner, contains('tray_labels_.hide_all.c_str()'));
+    expect(runner, contains('tray_labels_.toggle_all.c_str()'));
+    expect(runner, contains('tray_labels_.delete_confirm_message'));
+    expect(runner, contains('FormatWideMessage'));
+    expect(platform, contains("'labels': labels.toJson()"));
+    expect(platform,
+        contains("'trayLabel': _trayPaperLabel(paper, title, labels)"));
+    expect(app, contains('PaperTodoStringKeys.trayNewTodo'));
+    expect(app, contains('_trayMenuLabelsFor'));
     expect(runner, contains('SendStartupCommandRequested("new-todo");'));
     expect(runner, contains('SendStartupCommandRequested("new-note");'));
     expect(runner, contains('SendStartupCommandRequested("show");'));
@@ -1261,7 +1278,8 @@ void main() {
         _readProjectText('lib/src/platform/windows_platform_services.dart');
 
     expect(runner, contains('kTrayPaperDeleteCommandBase'));
-    expect(runner, contains('L"Delete paper..."'));
+    expect(runner, contains('tray_labels_.delete_paper.c_str()'));
+    expect(runner, contains('tray_labels_.delete_confirm_title.c_str()'));
     expect(runner, contains('MessageBoxW'));
     expect(runner, contains('SendPaperDeleteRequested'));
     expect(runner, contains('"paperDeleteRequested"'));
@@ -1384,8 +1402,10 @@ void main() {
 
     expect(dartHost, contains("'isScriptCapsule'"));
     expect(dartHost, contains('ScriptCapsuleSpec.isScriptCapsuleContent'));
+    expect(dartHost,
+        contains("'trayLabel': _trayPaperLabel(paper, title, labels)"));
     expect(runner, contains('is_script_capsule'));
-    expect(runner, contains('L"Script - "'));
+    expect(runner, contains('labels.script_paper + L" - "'));
     expect(runner, contains('GetBoolArgument(map, "isScriptCapsule"'));
   });
 

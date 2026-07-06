@@ -474,21 +474,36 @@ class WindowsTrayHost implements TrayHost {
   Future<void> initialize() async {}
 
   @override
-  Future<void> rebuildMenu(AppState state) async {
+  Future<void> rebuildMenu(AppState state, {TrayMenuLabels? labels}) async {
     _paperWindows._syncKnownPapers(state);
     await _channel.invokeMethod<void>(
       'setTrayMenu',
-      _paperSurfaceRegistryEntries(state),
+      _trayMenuPayload(state, labels),
     );
   }
 }
 
-List<Map<String, Object?>> _paperSurfaceRegistryEntries(AppState state) {
+Object _trayMenuPayload(AppState state, TrayMenuLabels? labels) {
+  final papers = _paperSurfaceRegistryEntries(state, labels: labels);
+  if (labels == null) {
+    return papers;
+  }
+  return <String, Object?>{
+    'labels': labels.toJson(),
+    'papers': papers,
+  };
+}
+
+List<Map<String, Object?>> _paperSurfaceRegistryEntries(
+  AppState state, {
+  TrayMenuLabels? labels,
+}) {
   final typeCounts = <String, int>{};
   return [
     for (final paper in state.papers)
       _paperSurfaceRegistryEntry(
         paper,
+        labels: labels,
         fallbackNumber: typeCounts.update(
           PaperTypes.normalize(paper.type),
           (value) => value + 1,
@@ -500,6 +515,7 @@ List<Map<String, Object?>> _paperSurfaceRegistryEntries(AppState state) {
 
 Map<String, Object?> _paperSurfaceRegistryEntry(
   PaperData paper, {
+  TrayMenuLabels? labels,
   required int fallbackNumber,
 }) {
   final title = PaperTitles.effectiveTitle(
@@ -521,7 +537,31 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
     'isPinnedToDesktop': paper.isPinnedToDesktop,
     'isScriptCapsule':
         paper.isNote && ScriptCapsuleSpec.isScriptCapsuleContent(paper.content),
+    if (labels != null) 'trayLabel': _trayPaperLabel(paper, title, labels),
   };
+}
+
+String _trayPaperLabel(
+  PaperData paper,
+  String title,
+  TrayMenuLabels labels,
+) {
+  final type = PaperTypes.normalize(paper.type);
+  final isScriptCapsule =
+      paper.isNote && ScriptCapsuleSpec.isScriptCapsuleContent(paper.content);
+  final typeLabel = isScriptCapsule
+      ? labels.scriptPaper
+      : (type == PaperTypes.note ? labels.notePaper : labels.todoPaper);
+  final status = <String>[
+    if (!paper.isVisible) labels.hidden,
+    if (paper.isCollapsed) labels.collapsed,
+    if (paper.isPinnedToDesktop) labels.desktop,
+    if (paper.alwaysOnTop) labels.topmost,
+  ];
+  if (status.isEmpty) {
+    return '$typeLabel - $title';
+  }
+  return '$typeLabel - $title (${status.join(', ')})';
 }
 
 class WindowsStartupHost implements StartupHost {

@@ -31,6 +31,7 @@ import 'core/model/todo_due_date.dart';
 import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
 import 'core/startup/startup_command.dart';
+import 'platform/platform_services.dart';
 import 'sync/app_sync_service.dart';
 import 'sync/webdav/webdav_client.dart';
 import 'sync/webdav/webdav_payload_codec.dart';
@@ -392,6 +393,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   AppState? _pendingLocalEditLatestState;
   int? _pendingLocalEditGeneration;
   String? _surfacePaperId;
+  String? _lastTrayMenuLanguageCode;
+  TrayMenuLabels? _cachedTrayMenuLabels;
   final Map<String, bool> _surfaceVisibilityByPaperId = <String, bool>{};
   final Map<String, DateTime> _lastTodoReminderAt = <String, DateTime>{};
   final Set<String> _activeTodoReminderItemIds = <String>{};
@@ -427,6 +430,22 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _refreshSurfaceVisibilitySnapshot();
     _restartAutoSyncTimer();
     _restartTodoReminderTimer();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final currentStrings = strings;
+    if (_lastTrayMenuLanguageCode == currentStrings.languageCode) {
+      return;
+    }
+    _lastTrayMenuLanguageCode = currentStrings.languageCode;
+    _cachedTrayMenuLabels = _trayMenuLabelsFor(currentStrings);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_rebuildTrayMenu());
+      }
+    });
   }
 
   @override
@@ -852,7 +871,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         beforeState = null;
       }
       await widget.store.save(controller.state);
-      await controller.rebuildTrayMenu();
+      await _rebuildTrayMenu();
       _refreshSurfaceVisibilitySnapshot();
     });
     await _saveQueue;
@@ -1261,7 +1280,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         _refreshSurfaceVisibilitySnapshot();
       });
     }
-    await controller.rebuildTrayMenu();
+    await _rebuildTrayMenu();
     await _saveState();
   }
 
@@ -1284,7 +1303,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final visibilityChanged = _rememberSurfaceVisibility(paper);
     setState(() {});
     if (visibilityChanged) {
-      unawaited(controller.rebuildTrayMenu());
+      unawaited(_rebuildTrayMenu());
     }
     _surfaceSaveDebounce?.cancel();
     _surfaceSaveDebounce = Timer(const Duration(milliseconds: 500), () {
@@ -1306,6 +1325,36 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           (paper) => MapEntry(paper.id, paper.isVisible),
         ),
       );
+  }
+
+  Future<void> _rebuildTrayMenu() async {
+    final labels = _cachedTrayMenuLabels ?? _trayMenuLabelsFor(strings);
+    await controller.rebuildTrayMenu(labels: labels);
+  }
+
+  TrayMenuLabels _trayMenuLabelsFor(PaperTodoStrings strings) {
+    return TrayMenuLabels(
+      newTodo: strings.get(PaperTodoStringKeys.trayNewTodo),
+      newNote: strings.get(PaperTodoStringKeys.trayNewNote),
+      settings: strings.get(PaperTodoStringKeys.traySettings),
+      showAll: strings.get(PaperTodoStringKeys.trayShowAll),
+      hideAll: strings.get(PaperTodoStringKeys.trayHideAll),
+      toggleAll: strings.get(PaperTodoStringKeys.trayToggleAll),
+      papers: strings.get(PaperTodoStringKeys.trayPapers),
+      deletePaper: strings.get(PaperTodoStringKeys.trayDeletePaper),
+      deleteConfirmTitle:
+          strings.get(PaperTodoStringKeys.trayDeleteConfirmTitle),
+      deleteConfirmMessage:
+          strings.get(PaperTodoStringKeys.trayDeleteConfirmMessage),
+      exit: strings.get(PaperTodoStringKeys.trayExit),
+      todoPaper: strings.get(PaperTodoStringKeys.trayTodoPaper),
+      notePaper: strings.get(PaperTodoStringKeys.trayNotePaper),
+      scriptPaper: strings.get(PaperTodoStringKeys.trayScriptPaper),
+      hidden: strings.get(PaperTodoStringKeys.trayHidden),
+      collapsed: strings.get(PaperTodoStringKeys.trayCollapsed),
+      desktop: strings.get(PaperTodoStringKeys.trayDesktop),
+      topmost: strings.get(PaperTodoStringKeys.trayTopmost),
+    );
   }
 
   Future<void> _replaceStateAndApplyPlatform(

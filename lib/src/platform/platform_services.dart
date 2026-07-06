@@ -57,8 +57,73 @@ class PaperWorkArea {
 
 abstract interface class TrayHost {
   Future<void> initialize();
-  Future<void> rebuildMenu(AppState state);
+  Future<void> rebuildMenu(AppState state, {TrayMenuLabels? labels});
   Future<void> dispose();
+}
+
+class TrayMenuLabels {
+  const TrayMenuLabels({
+    required this.newTodo,
+    required this.newNote,
+    required this.settings,
+    required this.showAll,
+    required this.hideAll,
+    required this.toggleAll,
+    required this.papers,
+    required this.deletePaper,
+    required this.deleteConfirmTitle,
+    required this.deleteConfirmMessage,
+    required this.exit,
+    required this.todoPaper,
+    required this.notePaper,
+    required this.scriptPaper,
+    required this.hidden,
+    required this.collapsed,
+    required this.desktop,
+    required this.topmost,
+  });
+
+  final String newTodo;
+  final String newNote;
+  final String settings;
+  final String showAll;
+  final String hideAll;
+  final String toggleAll;
+  final String papers;
+  final String deletePaper;
+  final String deleteConfirmTitle;
+  final String deleteConfirmMessage;
+  final String exit;
+  final String todoPaper;
+  final String notePaper;
+  final String scriptPaper;
+  final String hidden;
+  final String collapsed;
+  final String desktop;
+  final String topmost;
+
+  Map<String, Object?> toJson() {
+    return {
+      'newTodo': newTodo,
+      'newNote': newNote,
+      'settings': settings,
+      'showAll': showAll,
+      'hideAll': hideAll,
+      'toggleAll': toggleAll,
+      'papers': papers,
+      'deletePaper': deletePaper,
+      'deleteConfirmTitle': deleteConfirmTitle,
+      'deleteConfirmMessage': deleteConfirmMessage,
+      'exit': exit,
+      'todoPaper': todoPaper,
+      'notePaper': notePaper,
+      'scriptPaper': scriptPaper,
+      'hidden': hidden,
+      'collapsed': collapsed,
+      'desktop': desktop,
+      'topmost': topmost,
+    };
+  }
 }
 
 abstract interface class StartupHost {

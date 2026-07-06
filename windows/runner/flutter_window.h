@@ -17,6 +17,27 @@
 
 #include "win32_window.h"
 
+struct TrayMenuLabels {
+  std::wstring new_todo = L"+ New todo paper";
+  std::wstring new_note = L"+ New note paper";
+  std::wstring settings = L"Settings";
+  std::wstring show_all = L"Show all papers";
+  std::wstring hide_all = L"Hide all papers";
+  std::wstring toggle_all = L"Toggle all papers";
+  std::wstring papers = L"Papers";
+  std::wstring delete_paper = L"Delete paper...";
+  std::wstring delete_confirm_title = L"Delete paper?";
+  std::wstring delete_confirm_message = L"Delete \"{0}\"?";
+  std::wstring exit = L"Exit";
+  std::wstring todo_paper = L"Todo";
+  std::wstring note_paper = L"Note";
+  std::wstring script_paper = L"Script";
+  std::wstring hidden = L"hidden";
+  std::wstring collapsed = L"collapsed";
+  std::wstring desktop = L"desktop";
+  std::wstring topmost = L"topmost";
+};
+
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
  public:
@@ -88,6 +109,7 @@ class FlutterWindow : public Win32Window {
     bool is_visible = false;
   };
   std::vector<TrayPaperMenuItem> tray_papers_;
+  TrayMenuLabels tray_labels_;
   struct PaperSurfaceState {
     RECT bounds = {};
     bool has_bounds = false;

@@ -384,6 +384,63 @@ std::wstring Utf8ToWide(const std::string& value) {
   return wide_value;
 }
 
+std::wstring GetWideStringArgument(const flutter::EncodableMap& map,
+                                   const std::string& key,
+                                   const std::wstring& fallback) {
+  const std::string value = GetStringArgument(map, key, "");
+  if (value.empty()) {
+    return fallback;
+  }
+  return Utf8ToWide(value);
+}
+
+std::wstring FormatWideMessage(std::wstring template_text,
+                               const std::wstring& value) {
+  const std::wstring placeholder = L"{0}";
+  const size_t index = template_text.find(placeholder);
+  if (index == std::wstring::npos) {
+    if (!template_text.empty() && template_text.back() != L' ') {
+      template_text += L" ";
+    }
+    template_text += value;
+    return template_text;
+  }
+  template_text.replace(index, placeholder.size(), value);
+  return template_text;
+}
+
+TrayMenuLabels TrayMenuLabelsFromMap(const flutter::EncodableMap& map,
+                                     const TrayMenuLabels& fallback) {
+  TrayMenuLabels labels = fallback;
+  labels.new_todo = GetWideStringArgument(map, "newTodo", labels.new_todo);
+  labels.new_note = GetWideStringArgument(map, "newNote", labels.new_note);
+  labels.settings = GetWideStringArgument(map, "settings", labels.settings);
+  labels.show_all = GetWideStringArgument(map, "showAll", labels.show_all);
+  labels.hide_all = GetWideStringArgument(map, "hideAll", labels.hide_all);
+  labels.toggle_all =
+      GetWideStringArgument(map, "toggleAll", labels.toggle_all);
+  labels.papers = GetWideStringArgument(map, "papers", labels.papers);
+  labels.delete_paper =
+      GetWideStringArgument(map, "deletePaper", labels.delete_paper);
+  labels.delete_confirm_title = GetWideStringArgument(
+      map, "deleteConfirmTitle", labels.delete_confirm_title);
+  labels.delete_confirm_message = GetWideStringArgument(
+      map, "deleteConfirmMessage", labels.delete_confirm_message);
+  labels.exit = GetWideStringArgument(map, "exit", labels.exit);
+  labels.todo_paper =
+      GetWideStringArgument(map, "todoPaper", labels.todo_paper);
+  labels.note_paper =
+      GetWideStringArgument(map, "notePaper", labels.note_paper);
+  labels.script_paper =
+      GetWideStringArgument(map, "scriptPaper", labels.script_paper);
+  labels.hidden = GetWideStringArgument(map, "hidden", labels.hidden);
+  labels.collapsed =
+      GetWideStringArgument(map, "collapsed", labels.collapsed);
+  labels.desktop = GetWideStringArgument(map, "desktop", labels.desktop);
+  labels.topmost = GetWideStringArgument(map, "topmost", labels.topmost);
+  return labels;
+}
+
 std::string Base64Encode(const unsigned char* data, size_t size) {
   constexpr char kAlphabet[] =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -801,7 +858,13 @@ void StopPersistentScriptProcesses() {
   g_persistent_script_processes.clear();
 }
 
-std::wstring TrayPaperLabel(const flutter::EncodableMap& map) {
+std::wstring TrayPaperLabel(const flutter::EncodableMap& map,
+                            const TrayMenuLabels& labels) {
+  const std::wstring tray_label =
+      GetWideStringArgument(map, "trayLabel", std::wstring());
+  if (!tray_label.empty()) {
+    return tray_label;
+  }
   const std::string type = GetStringArgument(map, "type", "todo");
   const bool is_visible = GetBoolArgument(map, "isVisible", false);
   const bool is_collapsed = GetBoolArgument(map, "isCollapsed", false);
@@ -814,28 +877,29 @@ std::wstring TrayPaperLabel(const flutter::EncodableMap& map) {
   if (title.empty()) {
     title = L"Untitled";
   }
-  std::wstring label =
-      is_script_capsule ? L"Script - " : (type == "note" ? L"Note - "
-                                                          : L"Todo - ");
+  std::wstring label = is_script_capsule
+                           ? labels.script_paper + L" - "
+                           : (type == "note" ? labels.note_paper + L" - "
+                                             : labels.todo_paper + L" - ");
   label += title;
   std::wstring status;
-  auto append_status = [&status](const wchar_t* value) {
+  auto append_status = [&status](const std::wstring& value) {
     if (!status.empty()) {
       status += L", ";
     }
     status += value;
   };
   if (!is_visible) {
-    append_status(L"hidden");
+    append_status(labels.hidden);
   }
   if (is_collapsed) {
-    append_status(L"collapsed");
+    append_status(labels.collapsed);
   }
   if (is_pinned_to_desktop) {
-    append_status(L"desktop");
+    append_status(labels.desktop);
   }
   if (always_on_top) {
-    append_status(L"topmost");
+    append_status(labels.topmost);
   }
   if (!status.empty()) {
     label += L" (";
@@ -1653,9 +1717,30 @@ bool FlutterWindow::OnCreate() {
         if (method == "setTrayMenu") {
           tray_papers_.clear();
           std::vector<std::string> current_paper_ids;
+          const flutter::EncodableList* papers = nullptr;
           if (call.arguments()) {
-            if (const auto* papers =
-                    std::get_if<flutter::EncodableList>(call.arguments())) {
+            papers = std::get_if<flutter::EncodableList>(call.arguments());
+            if (const auto* payload =
+                    std::get_if<flutter::EncodableMap>(call.arguments())) {
+              const auto labels_iterator =
+                  payload->find(flutter::EncodableValue("labels"));
+              if (labels_iterator != payload->end()) {
+                if (const auto* labels_map =
+                        std::get_if<flutter::EncodableMap>(
+                            &labels_iterator->second)) {
+                  tray_labels_ =
+                      TrayMenuLabelsFromMap(*labels_map, tray_labels_);
+                }
+              }
+              const auto papers_iterator =
+                  payload->find(flutter::EncodableValue("papers"));
+              if (papers_iterator != payload->end()) {
+                papers =
+                    std::get_if<flutter::EncodableList>(
+                        &papers_iterator->second);
+              }
+            }
+            if (papers) {
               for (const auto& paper : *papers) {
                 if (const auto* paper_map =
                         std::get_if<flutter::EncodableMap>(&paper)) {
@@ -1686,7 +1771,7 @@ bool FlutterWindow::OnCreate() {
                       RememberPaperBounds(id, paper_bounds);
                     }
                     tray_papers_.push_back(
-                        {id, TrayPaperLabel(*paper_map),
+                        {id, TrayPaperLabel(*paper_map, tray_labels_),
                          GetBoolArgument(*paper_map, "isVisible", false)});
                   }
                 }
@@ -2154,17 +2239,24 @@ void FlutterWindow::ShowTrayMenu() {
   POINT cursor_position;
   GetCursorPos(&cursor_position);
   HMENU menu = CreatePopupMenu();
-  AppendMenu(menu, MF_STRING, kTrayNewTodoCommand, L"+ New todo paper");
-  AppendMenu(menu, MF_STRING, kTrayNewNoteCommand, L"+ New note paper");
+  AppendMenu(menu, MF_STRING, kTrayNewTodoCommand,
+             tray_labels_.new_todo.c_str());
+  AppendMenu(menu, MF_STRING, kTrayNewNoteCommand,
+             tray_labels_.new_note.c_str());
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
-  AppendMenu(menu, MF_STRING, kTraySettingsCommand, L"Settings");
+  AppendMenu(menu, MF_STRING, kTraySettingsCommand,
+             tray_labels_.settings.c_str());
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
-  AppendMenu(menu, MF_STRING, kTrayShowCommand, L"Show all papers");
-  AppendMenu(menu, MF_STRING, kTrayHideCommand, L"Hide all papers");
-  AppendMenu(menu, MF_STRING, kTrayToggleCommand, L"Toggle all papers");
+  AppendMenu(menu, MF_STRING, kTrayShowCommand,
+             tray_labels_.show_all.c_str());
+  AppendMenu(menu, MF_STRING, kTrayHideCommand,
+             tray_labels_.hide_all.c_str());
+  AppendMenu(menu, MF_STRING, kTrayToggleCommand,
+             tray_labels_.toggle_all.c_str());
   if (!tray_papers_.empty()) {
     AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenu(menu, MF_STRING | MF_DISABLED, 0, L"Papers");
+    AppendMenu(menu, MF_STRING | MF_DISABLED, 0,
+               tray_labels_.papers.c_str());
     for (size_t index = 0; index < tray_papers_.size(); index++) {
       const UINT flags =
           MF_STRING | (tray_papers_[index].is_visible ? MF_CHECKED
@@ -2181,11 +2273,11 @@ void FlutterWindow::ShowTrayMenu() {
                    tray_papers_[index].label.c_str());
       }
       AppendMenu(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(delete_menu),
-                 L"Delete paper...");
+                 tray_labels_.delete_paper.c_str());
     }
   }
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
-  AppendMenu(menu, MF_STRING, kTrayExitCommand, L"Exit");
+  AppendMenu(menu, MF_STRING, kTrayExitCommand, tray_labels_.exit.c_str());
 
   SetForegroundWindow(window);
   UINT command = TrackPopupMenu(menu,
@@ -2232,11 +2324,12 @@ void FlutterWindow::ShowTrayMenu() {
                      kTrayPaperDeleteCommandBase + tray_papers_.size()) {
         const auto& paper =
             tray_papers_[command - kTrayPaperDeleteCommandBase];
-        std::wstring message = L"Delete \"";
-        message += paper.label;
-        message += L"\"?";
+        const std::wstring message =
+            FormatWideMessage(tray_labels_.delete_confirm_message,
+                              paper.label);
         const int response =
-            MessageBoxW(window, message.c_str(), L"Delete paper?",
+            MessageBoxW(window, message.c_str(),
+                        tray_labels_.delete_confirm_title.c_str(),
                         MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
         if (response == IDYES) {
           SendPaperDeleteRequested(paper.id);

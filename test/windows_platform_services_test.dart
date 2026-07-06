@@ -605,6 +605,56 @@ void main() {
     ]);
   });
 
+  test('tray rebuild can send localized labels with paper menu text', () async {
+    const channel = MethodChannel('repapertodo/window_tray_labels_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final todoPaper = PaperData(
+      id: 'localized-todo',
+      type: PaperTypes.todo,
+      title: 'First',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+    );
+    final scriptPaper = PaperData(
+      id: 'localized-script',
+      type: PaperTypes.note,
+      title: 'Second',
+      content: '!p\nWrite-Output tray',
+      isVisible: false,
+      isCollapsed: true,
+      isPinnedToDesktop: true,
+      alwaysOnTop: true,
+    );
+
+    await services.tray.rebuildMenu(
+      AppState(papers: [todoPaper, scriptPaper]),
+      labels: _localizedTrayLabels,
+    );
+
+    final trayMenuCall =
+        calls.lastWhere((call) => call.method == 'setTrayMenu');
+    final payload = trayMenuCall.arguments as Map<Object?, Object?>;
+    expect(payload['labels'], _localizedTrayLabels.toJson());
+    final papers = payload['papers'] as List<Object?>;
+    expect((papers[0] as Map<Object?, Object?>)['trayLabel'], 'Task - First');
+    expect(
+      (papers[1] as Map<Object?, Object?>)['trayLabel'],
+      'ScriptLocal - Second (hidden-l10n, collapsed-l10n, desktop-l10n, topmost-l10n)',
+    );
+  });
+
   test('paper host ignores unknown paper-id surface events', () async {
     const channel = MethodChannel('repapertodo/window_unknown_event_test');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -984,3 +1034,24 @@ void main() {
     );
   });
 }
+
+const _localizedTrayLabels = TrayMenuLabels(
+  newTodo: '+ Local todo',
+  newNote: '+ Local note',
+  settings: 'Local settings',
+  showAll: 'Show local papers',
+  hideAll: 'Hide local papers',
+  toggleAll: 'Toggle local papers',
+  papers: 'Local papers',
+  deletePaper: 'Delete local paper...',
+  deleteConfirmTitle: 'Delete local paper?',
+  deleteConfirmMessage: 'Delete local "{0}"?',
+  exit: 'Local exit',
+  todoPaper: 'Task',
+  notePaper: 'Memo',
+  scriptPaper: 'ScriptLocal',
+  hidden: 'hidden-l10n',
+  collapsed: 'collapsed-l10n',
+  desktop: 'desktop-l10n',
+  topmost: 'topmost-l10n',
+);

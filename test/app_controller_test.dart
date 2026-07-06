@@ -848,7 +848,7 @@ class _RecordingTrayHost extends NoopTrayHost {
   }
 
   @override
-  Future<void> rebuildMenu(AppState state) async {
+  Future<void> rebuildMenu(AppState state, {TrayMenuLabels? labels}) async {
     rebuildMenuCount += 1;
   }
 }
