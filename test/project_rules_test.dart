@@ -1428,6 +1428,7 @@ void main() {
     expect(script, contains('gh release edit'));
     expect(script, contains('gh release upload'));
     expect(script, contains('gh auth status'));
+    expect(script, contains(r'--target $gitCommit'));
     expect(script, contains(r'$releaseViewExitCode'));
     expect(script, contains(r'--notes $releaseNotes'));
     expect(script, contains(r'$checksumsFile $metadataFile --clobber'));
@@ -1444,6 +1445,7 @@ void main() {
     expect(readme, contains('Publishing checks `gh auth status`'));
     expect(readme, contains('fetches `origin/main`'));
     expect(readme, contains('local `main` HEAD'));
+    expect(readme, contains('validated commit SHA'));
     expect(readme, contains('target tag already exists'));
     expect(readme, contains('reused version cannot'));
     expect(readme, contains('-AllowDirty'));

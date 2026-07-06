@@ -50,6 +50,8 @@ validation and build steps, so missing GitHub credentials fail early.
 Publishing also fetches `origin/main` and requires the local `main` HEAD to
 match it before building, so release metadata, artifacts, and the GitHub tag
 all point at the same commit.
+New release tags are created against the validated commit SHA, not a moving
+branch name.
 If the target tag already exists on GitHub, it must already point to the same
 commit being packaged; otherwise the script stops so a reused version cannot
 publish new artifacts under an old tag.

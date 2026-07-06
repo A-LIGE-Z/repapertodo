@@ -213,7 +213,7 @@ function Assert-GitHubReleaseGitState {
     & git rev-parse --abbrev-ref HEAD
   }
   if ($branch -ne "main") {
-    throw "GitHub Release publishing must run from the main branch because the release tag targets main."
+    throw "GitHub Release publishing must run from the main branch."
   }
 
   $headCommit = Invoke-NativeText "git rev-parse HEAD" {
@@ -494,7 +494,7 @@ if ($PublishGitHubRelease) {
     } else {
       Invoke-Native "gh release create $TagName" {
         & gh release create $TagName $windowsZip $androidApk $checksumsFile $metadataFile `
-          --target main `
+          --target $gitCommit `
           --title $ReleaseTitle `
           --notes $releaseNotes
       }
