@@ -1234,6 +1234,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (_isSyncing) {
       return;
     }
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isSyncing = true);
     _localEditSyncDebounce?.cancel();
     _localEditSyncDebounce = null;
     try {
@@ -1248,18 +1252,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         _pendingLocalEditBaseState = null;
         _pendingLocalEditLatestState = null;
       }
-    } catch (error) {
-      if (!mounted || !showMessage) {
+
+      if (!mounted) {
         return;
       }
-      _showSyncFailureSnackBar(error);
-      return;
-    }
-    if (!mounted) {
-      return;
-    }
-    setState(() => _isSyncing = true);
-    try {
       final result = await widget.syncService.syncAndMergeNow(
         localState: controller.state,
         store: widget.store,

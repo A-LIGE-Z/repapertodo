@@ -4715,6 +4715,120 @@ void main() {
     expect(find.text('Remote data downloaded.'), findsOneWidget);
   });
 
+  testWidgets('sync stays busy while pending local upload is running',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'overlap-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: platform,
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final uploadedState = AppState(
+      sync: syncSettings.copy()
+        ..operationDeviceSequences = const {'device-a': 1},
+      papers: [
+        PaperData(
+          id: 'overlap-note',
+          type: PaperTypes.note,
+          title: 'Draft',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncedState = AppState(
+      sync: syncSettings.copy()
+        ..operationDeviceSequences = const {'device-a': 2},
+      papers: [
+        PaperData(
+          id: 'overlap-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final localUploadGate = Completer<void>();
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+      ),
+      firstLocalUploadGate: localUploadGate.future,
+      localUploadState: uploadedState,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('overlap-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+
+    expect(syncService.events, ['upload']);
+    expect(syncService.calls, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(syncService.events, ['upload']);
+    expect(syncService.calls, 0);
+
+    localUploadGate.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.localUploadCalls, 1);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(platform.paperWindows.restoredTitleSnapshots, [
+      ['Draft'],
+      ['Synced'],
+    ]);
+    expect(find.text('Remote data downloaded.'), findsOneWidget);
+  });
+
   testWidgets('manual sync keeps malformed local upload payload messages',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -10931,6 +11045,7 @@ class _ManualSyncService extends AppSyncService {
   _ManualSyncService({
     required this.result,
     this.firstSyncGate,
+    this.firstLocalUploadGate,
     this.firstSyncError,
     this.firstLocalUploadError,
     this.localUploadState,
@@ -10941,6 +11056,7 @@ class _ManualSyncService extends AppSyncService {
 
   final AppSyncRunResult result;
   final Future<void>? firstSyncGate;
+  final Future<void>? firstLocalUploadGate;
   final Object? firstSyncError;
   final Object? firstLocalUploadError;
   final AppState? localUploadState;
@@ -10988,6 +11104,10 @@ class _ManualSyncService extends AppSyncService {
     events.add('upload');
     localUploadBeforeTitles.add(beforeState.papers.single.title);
     localUploadAfterTitles.add(afterState.papers.single.title);
+    final gate = firstLocalUploadGate;
+    if (localUploadCalls == 1 && gate != null) {
+      await gate;
+    }
     final error = firstLocalUploadError;
     if (localUploadCalls == 1 && error != null) {
       throw error;
