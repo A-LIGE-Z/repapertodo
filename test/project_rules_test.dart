@@ -1224,6 +1224,7 @@ void main() {
     expect(header, contains('std::wstring show_all = L"Show all papers"'));
     expect(header, contains('std::wstring hide_all = L"Hide all papers"'));
     expect(header, contains('std::wstring toggle_all = L"Toggle all papers"'));
+    expect(runner, contains('MF_STRING | MF_DISABLED, 0, L"RePaperTodo"'));
     expect(runner, contains('TrayMenuLabelsFromMap'));
     expect(runner, contains('tray_labels_.new_todo.c_str()'));
     expect(runner, contains('tray_labels_.new_note.c_str()'));

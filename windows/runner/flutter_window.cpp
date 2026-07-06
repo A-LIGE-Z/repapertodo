@@ -2239,6 +2239,7 @@ void FlutterWindow::ShowTrayMenu() {
   POINT cursor_position;
   GetCursorPos(&cursor_position);
   HMENU menu = CreatePopupMenu();
+  AppendMenu(menu, MF_STRING | MF_DISABLED, 0, L"RePaperTodo");
   AppendMenu(menu, MF_STRING, kTrayNewTodoCommand,
              tray_labels_.new_todo.c_str());
   AppendMenu(menu, MF_STRING, kTrayNewNoteCommand,
