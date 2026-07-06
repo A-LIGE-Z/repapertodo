@@ -3328,6 +3328,85 @@ void main() {
     expect(find.text('Snapshot restored.'), findsOneWidget);
   });
 
+  testWidgets('recovery snapshot restore exits stale surface view',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'opened-local-paper',
+            type: PaperTypes.note,
+            title: 'Opened local',
+            content: 'This paper will be replaced.',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      snapshots: [
+        WebDavSnapshotRecord(
+          path:
+              'repapertodo/snapshots/snapshot-20260701T110000000Z-laptop.json',
+          deviceId: 'laptop',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 11),
+        ),
+      ],
+      restoredState: AppState(
+        papers: [
+          PaperData(
+            id: 'restored-paper',
+            type: PaperTypes.note,
+            title: 'Restored board paper',
+            content: 'Back on the board.',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Open paper surface'));
+    await tester.pump();
+
+    expect(find.byTooltip('Back to board'), findsOneWidget);
+    expect(find.text('This paper will be replaced.'), findsWidgets);
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(
+        'restore-snapshot-repapertodo/snapshots/snapshot-20260701T110000000Z-laptop.json')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Back to board'), findsNothing);
+    expect(find.text('This paper will be replaced.'), findsNothing);
+    expect(find.text('Restored board paper'), findsOneWidget);
+    expect(find.text('Back on the board.'), findsWidgets);
+    expect(find.text('Snapshot restored.'), findsOneWidget);
+  });
+
   testWidgets('recovery snapshot restore failure can retry from snackbar',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

@@ -743,6 +743,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return null;
   }
 
+  void _reconcileSurfacePaperAfterReplacement() {
+    final surfacePaperId = _surfacePaperId;
+    if (surfacePaperId == null) {
+      return;
+    }
+    final surfacePaperStillVisible = controller.state.papers.any(
+      (paper) => paper.id == surfacePaperId && paper.isVisible,
+    );
+    if (!surfacePaperStillVisible) {
+      _surfacePaperId = null;
+    }
+  }
+
   PaperPreview _paperPreview(PaperData paper, List<PaperData> notePapers) {
     return PaperPreview(
       paper: paper,
@@ -1299,6 +1312,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final previousReminderCadence = _todoReminderCadence(controller.state);
     setState(() {
       controller.replaceState(state);
+      _reconcileSurfacePaperAfterReplacement();
       _refreshSurfaceVisibilitySnapshot();
     });
     if (previousReminderCadence != _todoReminderCadence(controller.state)) {
