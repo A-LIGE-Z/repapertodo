@@ -969,6 +969,7 @@ void main() {
 
     final result = await service.syncNow(
       localState: AppState(
+        startAtLogin: true,
         sync: localSync
           ..operationDeviceSequences = {
             'local-device': 5,
@@ -980,9 +981,11 @@ void main() {
     );
 
     expect(result.status, AppSyncStatus.downloaded);
+    expect(result.state?.startAtLogin, true);
     expect(remoteState.toJson(), originalRemoteStateJson);
     final stored = await store.load();
     expect(stored.papers.single.title, 'Remote');
+    expect(stored.startAtLogin, true);
     expect(stored.sync.enabled, true);
     expect(stored.sync.provider, SyncProviderIds.webDav);
     expect(stored.sync.webDav.endpoint, 'https://dav.example.test/');
@@ -3631,6 +3634,7 @@ void main() {
 
     final result = await service.restoreRecoverySnapshot(
       localState: AppState(
+        startAtLogin: true,
         sync: _configuredSyncSettings(
           rootPath: 'LocalRoot',
           autoSyncIntervalMinutes: 60,
@@ -3643,9 +3647,11 @@ void main() {
     expect(result.status, AppSyncStatus.downloaded);
     expect(result.message, 'Snapshot restored.');
     expect(result.snapshotPath, 'repapertodo/snapshots/snapshot.json');
+    expect(result.state?.startAtLogin, true);
     expect(snapshotState.toJson(), originalSnapshotStateJson);
     final stored = await store.load();
     expect(stored.papers.single.title, 'Snap');
+    expect(stored.startAtLogin, true);
     expect(stored.sync.enabled, true);
     expect(stored.sync.provider, SyncProviderIds.webDav);
     expect(stored.sync.webDav.endpoint, 'https://dav.example.test/');

@@ -94,8 +94,9 @@ the dialog open and expose a retry action instead of forcing users to close and
 reopen the flow.
 Remote snapshots redact local WebDAV configuration, credentials, and
 startup-at-login state before upload. Downloading or restoring a snapshot
-preserves the current device's local WebDAV settings while merging non-secret
-sync metadata such as device sequence progress and delete tombstones.
+preserves the current device's local WebDAV settings and startup-at-login state
+while merging non-secret sync metadata such as device sequence progress and
+delete tombstones.
 
 ```text
 /RePaperTodo/

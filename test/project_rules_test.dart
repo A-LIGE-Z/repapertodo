@@ -125,6 +125,8 @@ void main() {
     final syncDesign = File('docs/SYNC.md').readAsStringSync();
     final appStateCodec =
         File('lib/src/core/state/app_state_codec.dart').readAsStringSync();
+    final appSyncServiceSource =
+        File('lib/src/sync/app_sync_service.dart').readAsStringSync();
 
     expect(syncDesign, contains('earliest `createdAtUtc` first'));
     expect(syncDesign, contains('Tombstone timestamps only move forward'));
@@ -132,6 +134,7 @@ void main() {
         syncDesign, contains('Settings operations are intentionally limited'));
     expect(syncDesign, contains('startup-at-login state'));
     expect(appStateCodec, contains("json.remove('startAtLogin')"));
+    expect(appSyncServiceSource, contains('remoteState.startAtLogin'));
     expect(syncDesign,
         contains('Local device sequence progress must never move backward'));
     expect(syncDesign, contains('Upload result sequence maps'));

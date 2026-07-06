@@ -161,7 +161,7 @@ class AppSyncService {
             );
           }
           final remoteState = AppState.fromJson(downloadedState.toJson());
-          _preserveLocalSyncConfiguration(remoteState, syncState.sync);
+          _preserveLocalDeviceState(remoteState, syncState);
           _applyManifestDeviceSequences(remoteState, result);
           await store.save(remoteState);
           final legacyPlainPayloadDetected =
@@ -534,7 +534,7 @@ class AppSyncService {
         );
       }
       final snapshotState = AppState.fromJson(downloadedSnapshotState.toJson());
-      _preserveLocalSyncConfiguration(snapshotState, localState.sync);
+      _preserveLocalDeviceState(snapshotState, localState);
       await store.save(snapshotState);
       return AppSyncResult(
         status: AppSyncStatus.downloaded,
@@ -614,11 +614,9 @@ class AppSyncService {
     state.normalize();
   }
 
-  void _preserveLocalSyncConfiguration(
-    AppState remoteState,
-    SyncSettings localSync,
-  ) {
+  void _preserveLocalDeviceState(AppState remoteState, AppState localState) {
     final remoteSync = remoteState.sync.copy()..normalize();
+    final localSync = localState.sync;
     final preservedSync = localSync.copy()..normalize();
     preservedSync.operationDeviceSequences = _mergeDeviceSequences(
       preservedSync.operationDeviceSequences,
@@ -633,6 +631,7 @@ class AppSyncService {
       preservedSync.deletedTodoItemTombstones,
       remoteSync.deletedTodoItemTombstones,
     );
+    remoteState.startAtLogin = localState.startAtLogin;
     remoteState.sync = preservedSync;
     remoteState.normalize();
   }
