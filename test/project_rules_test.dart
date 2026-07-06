@@ -1129,6 +1129,21 @@ void main() {
     expect(runner, contains('ShellExecuteW'));
   });
 
+  test('Windows tray menu keeps PaperTodo action labels', () {
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+
+    expect(runner, contains('L"+ New todo paper"'));
+    expect(runner, contains('L"+ New note paper"'));
+    expect(runner, contains('L"Show all papers"'));
+    expect(runner, contains('L"Hide all papers"'));
+    expect(runner, contains('L"Toggle all papers"'));
+    expect(runner, contains('SendStartupCommandRequested("new-todo");'));
+    expect(runner, contains('SendStartupCommandRequested("new-note");'));
+    expect(runner, contains('SendStartupCommandRequested("show");'));
+    expect(runner, contains('SendStartupCommandRequested("hide");'));
+    expect(runner, contains('SendStartupCommandRequested("toggle");'));
+  });
+
   test('Windows tray settings command shows the app window', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final settingsCaseStart = runner.indexOf('case kTraySettingsCommand:');

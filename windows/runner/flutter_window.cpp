@@ -2068,14 +2068,14 @@ void FlutterWindow::ShowTrayMenu() {
   POINT cursor_position;
   GetCursorPos(&cursor_position);
   HMENU menu = CreatePopupMenu();
-  AppendMenu(menu, MF_STRING, kTrayNewTodoCommand, L"New todo");
-  AppendMenu(menu, MF_STRING, kTrayNewNoteCommand, L"New note");
+  AppendMenu(menu, MF_STRING, kTrayNewTodoCommand, L"+ New todo paper");
+  AppendMenu(menu, MF_STRING, kTrayNewNoteCommand, L"+ New note paper");
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenu(menu, MF_STRING, kTraySettingsCommand, L"Settings");
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
-  AppendMenu(menu, MF_STRING, kTrayShowCommand, L"Show");
-  AppendMenu(menu, MF_STRING, kTrayHideCommand, L"Hide");
-  AppendMenu(menu, MF_STRING, kTrayToggleCommand, L"Toggle");
+  AppendMenu(menu, MF_STRING, kTrayShowCommand, L"Show all papers");
+  AppendMenu(menu, MF_STRING, kTrayHideCommand, L"Hide all papers");
+  AppendMenu(menu, MF_STRING, kTrayToggleCommand, L"Toggle all papers");
   if (!tray_papers_.empty()) {
     AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenu(menu, MF_STRING | MF_DISABLED, 0, L"Papers");
