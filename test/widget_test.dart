@@ -7171,6 +7171,76 @@ void main() {
     ]);
   });
 
+  testWidgets('splits pasted todo lists from extra columns like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'extra-paste-paper',
+            type: PaperTypes.todo,
+            title: 'Extra paste paper',
+            items: [
+              PaperItem(
+                id: 'extra-paste-item',
+                text: 'Title',
+                todoColumnCount: 2,
+                todoExtraColumns: ['Old status'],
+                todoColumnWidths: [2, 1],
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final extraField = find.descendant(
+      of: find.byKey(
+        const ValueKey('extra-paste-paper-extra-paste-item-column-2'),
+      ),
+      matching: find.byType(EditableText),
+    );
+
+    await tester.tap(extraField);
+    await tester.enterText(
+      extraField,
+      '- [ ] Reading\n2) Draft notes\n+ Publish',
+    );
+    await tester.pumpAndSettle();
+
+    final items = controller.state.papers.single.items;
+    expect(items.map((item) => item.text), [
+      'Title',
+      'Draft notes',
+      'Publish',
+    ]);
+    expect(items.first.todoExtraColumns, ['Reading']);
+    expect(items.map((item) => item.todoColumnCount), [2, 1, 1]);
+    expect(items.map((item) => item.todoColumnWidths), [
+      [2, 1],
+      [1],
+      [1],
+    ]);
+
+    await tester.tap(find.byTooltip('Undo todo change'));
+    await tester.pumpAndSettle();
+
+    final restored = controller.state.papers.single.items.single;
+    expect(restored.text, 'Title');
+    expect(restored.todoExtraColumns, ['Old status']);
+  });
+
   testWidgets('inserts todo items after the focused row from keyboard',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

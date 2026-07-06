@@ -654,10 +654,14 @@ void main() {
     expect(design, contains('Enter with no modifiers inserts'));
     expect(design, contains("PaperTodo's `AddItemAfter` semantics"));
     expect(design, contains('default single-column'));
+    expect(design, contains('every Todo text column'));
+    expect(design, contains('first cleaned line replaces'));
     expect(design, contains('Backspace'));
     expect(design, contains('suppresses repeated'));
     expect(app, contains('_handleTodoItemKeyEvent'));
     expect(app, contains('_insertItemAfter'));
+    expect(app, contains('extraColumnIndex'));
+    expect(app, contains('_TodoPasteTextInputFormatter'));
     expect(app, contains('PaperItem _newTodoItem({String text = \'\'}'));
     expect(app, contains('_deleteBlankTodoItemFromKeyboard'));
     expect(app, contains('_allTodoTextColumnsBlank'));
@@ -687,6 +691,7 @@ void main() {
   test('PaperTodo per-column todo editing is preserved', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
+    final item = File('lib/src/core/model/paper_item.dart').readAsStringSync();
 
     expect(design, contains('Todo column editing should preserve PaperTodo'));
     expect(design, contains('before column 1 moves'));
@@ -697,6 +702,8 @@ void main() {
     expect(app, contains('_deleteTodoColumn'));
     expect(app, contains('item.todoExtraColumns.insert(0, item.text)'));
     expect(app, contains('item.text = item.todoExtraColumns.first'));
+    expect(item, contains("'todoExtraColumns': [...todoExtraColumns]"));
+    expect(item, contains("'todoColumnWidths': [...todoColumnWidths]"));
   });
 
   test('PaperTodo todo column splitter resizing is preserved', () {

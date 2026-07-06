@@ -5184,6 +5184,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   var _textFieldRevision = 0;
   var _suppressTodoBackspaceUntilKeyUp = false;
   String? _activeOriginalTodoItemId;
+  int? _activeOriginalTodoColumnIndex;
   String? _activeOriginalTodoText;
 
   @override
@@ -5860,8 +5861,10 @@ class _TodoEditorState extends State<_TodoEditor> {
     ];
   }
 
-  void _pushTodoUndoSnapshot() {
-    _commitFocusedTodoTextIfNeeded();
+  void _pushTodoUndoSnapshot({bool commitFocusedText = true}) {
+    if (commitFocusedText) {
+      _commitFocusedTodoTextIfNeeded();
+    }
     _undoStack.add(_snapshotTodoItems());
     if (_undoStack.length > _maxTodoUndoDepth) {
       _undoStack.removeAt(0);
@@ -5878,20 +5881,28 @@ class _TodoEditorState extends State<_TodoEditor> {
     final item = _todoItemById(itemId);
     if (item == null) {
       _activeOriginalTodoItemId = null;
+      _activeOriginalTodoColumnIndex = null;
       _activeOriginalTodoText = null;
       return false;
     }
-    if (item.text == originalText) {
+    final columnIndex = _activeOriginalTodoColumnIndex;
+    final currentText = _todoColumnText(item, columnIndex);
+    if (currentText == null) {
+      _activeOriginalTodoItemId = null;
+      _activeOriginalTodoColumnIndex = null;
+      _activeOriginalTodoText = null;
+      return false;
+    }
+    if (currentText == originalText) {
       return false;
     }
 
-    final currentText = item.text;
-    item.text = originalText;
+    _setTodoColumnText(item, columnIndex, originalText);
     _undoStack.add(_snapshotTodoItems());
     if (_undoStack.length > _maxTodoUndoDepth) {
       _undoStack.removeAt(0);
     }
-    item.text = currentText;
+    _setTodoColumnText(item, columnIndex, currentText);
     _activeOriginalTodoText = currentText;
     if (clearRedo) {
       _redoStack.clear();
@@ -5908,9 +5919,10 @@ class _TodoEditorState extends State<_TodoEditor> {
     return null;
   }
 
-  void _markTodoTextEditCommitted(PaperItem item) {
-    if (_activeOriginalTodoItemId == item.id) {
-      _activeOriginalTodoText = item.text;
+  void _markTodoTextEditCommitted(PaperItem item, {int? columnIndex}) {
+    if (_activeOriginalTodoItemId == item.id &&
+        _activeOriginalTodoColumnIndex == columnIndex) {
+      _activeOriginalTodoText = _todoColumnText(item, columnIndex);
     }
   }
 
@@ -5982,10 +5994,12 @@ class _TodoEditorState extends State<_TodoEditor> {
   void _handleMainTodoFieldFocusChange(String itemId, FocusNode focusNode) {
     if (focusNode.hasFocus) {
       _activeOriginalTodoItemId = itemId;
+      _activeOriginalTodoColumnIndex = null;
       _activeOriginalTodoText = _todoItemById(itemId)?.text ?? '';
       return;
     }
-    if (_activeOriginalTodoItemId != itemId) {
+    if (_activeOriginalTodoItemId != itemId ||
+        _activeOriginalTodoColumnIndex != null) {
       return;
     }
     if (_commitFocusedTodoTextIfNeeded(clearRedo: true) && mounted) {
@@ -5997,11 +6011,39 @@ class _TodoEditorState extends State<_TodoEditor> {
     final focusKey = '${item.id}:$index';
     final focusNode = _todoExtraFieldFocusNodes.putIfAbsent(
       focusKey,
-      () => FocusNode(debugLabel: 'todo-extra-$focusKey'),
+      () {
+        final node = FocusNode(debugLabel: 'todo-extra-$focusKey');
+        node.addListener(
+          () => _handleExtraTodoFieldFocusChange(item.id, index, node),
+        );
+        return node;
+      },
     );
     focusNode.onKeyEvent =
         (node, event) => _handleTodoItemKeyEvent(node, item, event);
     return focusNode;
+  }
+
+  void _handleExtraTodoFieldFocusChange(
+    String itemId,
+    int columnIndex,
+    FocusNode focusNode,
+  ) {
+    if (focusNode.hasFocus) {
+      final item = _todoItemById(itemId);
+      _activeOriginalTodoItemId = itemId;
+      _activeOriginalTodoColumnIndex = columnIndex;
+      _activeOriginalTodoText =
+          item == null ? '' : _todoColumnText(item, columnIndex) ?? '';
+      return;
+    }
+    if (_activeOriginalTodoItemId != itemId ||
+        _activeOriginalTodoColumnIndex != columnIndex) {
+      return;
+    }
+    if (_commitFocusedTodoTextIfNeeded(clearRedo: true) && mounted) {
+      setState(() {});
+    }
   }
 
   void _requestTodoItemFocus(String? itemId) {
@@ -6135,15 +6177,23 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   bool get _focusedTodoTextHasUncommittedEdit {
     final itemId = _activeOriginalTodoItemId;
+    final columnIndex = _activeOriginalTodoColumnIndex;
     final originalText = _activeOriginalTodoText;
     if (itemId == null || originalText == null) {
       return false;
     }
-    if (_todoMainFieldFocusNodes[itemId]?.hasFocus != true) {
+    if (!_isTodoColumnFocused(itemId, columnIndex)) {
       return false;
     }
     final item = _todoItemById(itemId);
-    return item != null && item.text != originalText;
+    return item != null && _todoColumnText(item, columnIndex) != originalText;
+  }
+
+  bool _isTodoColumnFocused(String itemId, int? columnIndex) {
+    if (columnIndex == null) {
+      return _todoMainFieldFocusNodes[itemId]?.hasFocus == true;
+    }
+    return _todoExtraFieldFocusNodes['$itemId:$columnIndex']?.hasFocus == true;
   }
 
   bool get _noKeyboardModifiersPressed {
@@ -6348,7 +6398,11 @@ class _TodoEditorState extends State<_TodoEditor> {
           ),
           inputFormatters: [
             _TodoPasteTextInputFormatter(
-              onPaste: (value) => _handleMultiLinePaste(item, value),
+              onPaste: (value, previousValue) => _handleMultiLinePaste(
+                item,
+                value,
+                previousColumnText: previousValue,
+              ),
             ),
           ],
           onChanged: (value) {
@@ -6364,7 +6418,12 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
   }
 
-  bool _handleMultiLinePaste(PaperItem item, String value) {
+  bool _handleMultiLinePaste(
+    PaperItem item,
+    String value, {
+    int? extraColumnIndex,
+    String? previousColumnText,
+  }) {
     if (!value.contains('\n') && !value.contains('\r')) {
       return false;
     }
@@ -6372,17 +6431,62 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (lines.length <= 1) {
       return false;
     }
-    _pushTodoUndoSnapshot();
+    if (extraColumnIndex != null) {
+      item.normalize();
+      if (extraColumnIndex < 0 ||
+          extraColumnIndex >= item.todoExtraColumns.length) {
+        return false;
+      }
+    }
+    final snapshotText = _todoPasteSnapshotText(
+      item,
+      extraColumnIndex,
+      previousColumnText,
+      lines.first,
+    );
+    final currentColumnText = _todoColumnText(item, extraColumnIndex);
+    if (previousColumnText == null && snapshotText == currentColumnText) {
+      _pushTodoUndoSnapshot();
+    } else {
+      _setTodoColumnText(item, extraColumnIndex, snapshotText);
+      _pushTodoUndoSnapshot(commitFocusedText: false);
+    }
     setState(() {
-      item.text = lines.first;
+      _setTodoColumnText(item, extraColumnIndex, lines.first);
       _addItemsAfter(item, lines.skip(1));
       widget.paper.normalize();
       _textFieldRevision++;
     });
-    _markTodoTextEditCommitted(item);
+    _markTodoTextEditCommitted(item, columnIndex: extraColumnIndex);
     _requestTodoFocus();
     unawaited(widget.onChanged());
     return true;
+  }
+
+  String _todoPasteSnapshotText(
+    PaperItem item,
+    int? columnIndex,
+    String? previousColumnText,
+    String firstPastedLine,
+  ) {
+    if (previousColumnText == firstPastedLine &&
+        _activeOriginalTodoItemId == item.id &&
+        _activeOriginalTodoColumnIndex == columnIndex &&
+        _activeOriginalTodoText != null) {
+      return _activeOriginalTodoText!;
+    }
+    final currentText = _todoColumnText(item, columnIndex);
+    if (previousColumnText == null &&
+        currentText == firstPastedLine &&
+        _activeOriginalTodoItemId == item.id &&
+        _activeOriginalTodoColumnIndex == columnIndex &&
+        _activeOriginalTodoText != null) {
+      return _activeOriginalTodoText!;
+    }
+    if (previousColumnText == null) {
+      return currentText ?? '';
+    }
+    return previousColumnText;
   }
 
   Widget _extraColumnField(
@@ -6400,6 +6504,9 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
         focusNode: _extraTodoFieldFocusNode(item, index),
         initialValue: item.todoExtraColumns[index],
+        keyboardType: TextInputType.multiline,
+        minLines: 1,
+        maxLines: null,
         textInputAction: TextInputAction.next,
         decoration: InputDecoration(
           border: const OutlineInputBorder(),
@@ -6410,13 +6517,49 @@ class _TodoEditorState extends State<_TodoEditor> {
           color: item.done ? colorScheme.outline : colorScheme.onSurface,
           decoration: item.done ? TextDecoration.lineThrough : null,
         ),
+        inputFormatters: [
+          _TodoPasteTextInputFormatter(
+            onPaste: (value, previousValue) => _handleMultiLinePaste(
+              item,
+              value,
+              extraColumnIndex: index,
+              previousColumnText: previousValue,
+            ),
+          ),
+        ],
         onChanged: (value) {
+          if (_handleMultiLinePaste(item, value, extraColumnIndex: index)) {
+            return;
+          }
           item.todoExtraColumns[index] = value;
           unawaited(widget.onChanged());
         },
         onFieldSubmitted: (_) => _insertItemAfter(item),
       ),
     );
+  }
+
+  void _setTodoColumnText(
+    PaperItem item,
+    int? extraColumnIndex,
+    String value,
+  ) {
+    if (extraColumnIndex == null) {
+      item.text = value;
+      return;
+    }
+    item.todoExtraColumns[extraColumnIndex] = value;
+  }
+
+  String? _todoColumnText(PaperItem item, int? extraColumnIndex) {
+    if (extraColumnIndex == null) {
+      return item.text;
+    }
+    if (extraColumnIndex < 0 ||
+        extraColumnIndex >= item.todoExtraColumns.length) {
+      return null;
+    }
+    return item.todoExtraColumns[extraColumnIndex];
   }
 
   int _columnFlex(PaperItem item, int index) {
@@ -7226,7 +7369,7 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
 class _TodoPasteTextInputFormatter extends TextInputFormatter {
   const _TodoPasteTextInputFormatter({required this.onPaste});
 
-  final void Function(String text) onPaste;
+  final void Function(String text, String previousText) onPaste;
 
   @override
   TextEditingValue formatEditUpdate(
@@ -7244,7 +7387,7 @@ class _TodoPasteTextInputFormatter extends TextInputFormatter {
         selection: TextSelection.collapsed(offset: text.length),
       );
     }
-    scheduleMicrotask(() => onPaste(newValue.text));
+    scheduleMicrotask(() => onPaste(newValue.text, oldValue.text));
     return oldValue;
   }
 }

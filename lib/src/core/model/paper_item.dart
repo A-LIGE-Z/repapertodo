@@ -113,8 +113,8 @@ class PaperItem {
       'done': done,
       'order': order,
       'todoColumnCount': todoColumnCount,
-      'todoExtraColumns': todoExtraColumns,
-      'todoColumnWidths': todoColumnWidths,
+      'todoExtraColumns': [...todoExtraColumns],
+      'todoColumnWidths': [...todoColumnWidths],
       if (linkedNoteId != null) 'linkedNoteId': linkedNoteId,
       if (dueAtLocal != null) 'dueAtLocal': dueAtLocal,
       if (reminderIntervalValue != null)

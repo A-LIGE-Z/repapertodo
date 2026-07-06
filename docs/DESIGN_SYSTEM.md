@@ -275,6 +275,10 @@ New Todo rows created by Enter, the append affordance, or multiline paste
 should follow PaperTodo's `AddItemAfter` semantics: the active row keeps its
 existing columns, while newly inserted rows start as default single-column
 items instead of inheriting the source row's column layout.
+Multiline Todo paste should be available from every Todo text column, not only
+the main column. The first cleaned line replaces the focused column text, and
+subsequent cleaned lines create default single-column Todo rows after the
+active row.
 Todo text editing should follow PaperTodo's undo snapshot timing: focusing a
 main todo text field records its original text, losing focus after a change
 pushes that pre-edit item snapshot, and structural edits first commit any

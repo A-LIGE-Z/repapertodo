@@ -976,6 +976,23 @@ Plain item
     expect(itemsById['invalid-due']?.dueAtLocal, isNull);
   });
 
+  test('serializes todo column lists as defensive snapshots', () {
+    final item = PaperItem(
+      id: 'snapshot-columns',
+      text: 'Title',
+      todoColumnCount: 2,
+      todoExtraColumns: ['Status'],
+      todoColumnWidths: [2, 1],
+    );
+
+    final json = item.toJson();
+    item.todoExtraColumns[0] = 'Changed';
+    item.todoColumnWidths[0] = 4;
+
+    expect(json['todoExtraColumns'], ['Status']);
+    expect(json['todoColumnWidths'], [2, 1]);
+  });
+
   test('normalizes note canvas element types', () {
     final state = AppState(
       papers: [
