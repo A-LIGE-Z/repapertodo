@@ -75,6 +75,16 @@ std::string CanonicalStartupCommand(const std::string& normalized) {
       normalized == "note" || normalized == "paper") {
     return "new-note";
   }
+  if (normalized == "reveal-pinned-todo" ||
+      normalized == "reveal-pinnedtodo" ||
+      normalized == "show-pinned-todo" || normalized == "pinned-todo") {
+    return "reveal-pinned-todo";
+  }
+  if (normalized == "reveal-pinned-note" ||
+      normalized == "reveal-pinnednote" ||
+      normalized == "show-pinned-note" || normalized == "pinned-note") {
+    return "reveal-pinned-note";
+  }
   if (normalized == "settings" || normalized == "setting" ||
       normalized == "preferences" || normalized == "preference" ||
       normalized == "prefs") {

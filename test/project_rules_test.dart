@@ -439,12 +439,18 @@ void main() {
   test('Windows runner forwards secondary instance startup commands', () {
     final entrypoint = File('windows/runner/main.cpp').readAsStringSync();
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final dartParser =
+        File('lib/src/core/startup/startup_command.dart').readAsStringSync();
 
     expect(entrypoint, contains('kSingleInstanceMutexName'));
     expect(entrypoint, contains('kSingleInstancePipeName'));
     expect(entrypoint, contains('CreateMutexW'));
     expect(entrypoint, contains('ERROR_ALREADY_EXISTS'));
     expect(entrypoint, contains('StartupCommandFromArgs'));
+    expect(entrypoint, contains('reveal-pinned-todo'));
+    expect(entrypoint, contains('reveal-pinned-note'));
+    expect(dartParser, contains('reveal-pinned-todo'));
+    expect(dartParser, contains('reveal-pinned-note'));
     expect(
         entrypoint, contains('SignalPrimaryInstance(command_line_arguments)'));
     expect(entrypoint, contains('CreateFileW(kSingleInstancePipeName'));
