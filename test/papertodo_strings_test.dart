@@ -68,6 +68,17 @@ void main() {
 
     expect(en.get(PaperTodoStringKeys.trayNewTodo), '+ New todo paper');
     expect(en.get(PaperTodoStringKeys.trayHideAll), 'Hide all papers');
+    expect(en.get(PaperTodoStringKeys.trayInlineConfirmDelete), '⚠ Delete');
+    expect(en.get(PaperTodoStringKeys.trayInlineConfirmAction), 'Confirm');
+    expect(
+        zh.get(PaperTodoStringKeys.trayInlineConfirmDelete), startsWith('⚠ '));
+    expect(zh.get(PaperTodoStringKeys.trayInlineConfirmAction), isNotEmpty);
+    expect(
+        ja.get(PaperTodoStringKeys.trayInlineConfirmDelete), startsWith('⚠ '));
+    expect(ja.get(PaperTodoStringKeys.trayInlineConfirmAction), isNotEmpty);
+    expect(
+        ko.get(PaperTodoStringKeys.trayInlineConfirmDelete), startsWith('⚠ '));
+    expect(ko.get(PaperTodoStringKeys.trayInlineConfirmAction), isNotEmpty);
     expect(zh.get(PaperTodoStringKeys.trayNewTodo), '＋ 新建待办纸');
     expect(zh.get(PaperTodoStringKeys.trayPapers), '纸片');
     expect(ja.get(PaperTodoStringKeys.trayNewTodo), '＋ ToDo紙を作成');
