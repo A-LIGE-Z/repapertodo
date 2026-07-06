@@ -29,7 +29,7 @@ bool isAllowedExternalUriTarget(String value) {
         !hasEncodedExternalUriAuthoritySeparator(value);
   }
   if (scheme == 'mailto') {
-    return uri.path.trim().isNotEmpty;
+    return uri.authority.isEmpty && uri.path.trim().isNotEmpty;
   }
   return false;
 }
