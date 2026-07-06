@@ -672,6 +672,85 @@ void main() {
     expect(activePaper.isVisible, false);
   });
 
+  test('tray rebuild prunes stale paper-id event targets', () async {
+    const channel = MethodChannel('repapertodo/window_pruned_event_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final remainingPaper = PaperData(
+      id: 'remaining-paper',
+      type: PaperTypes.todo,
+      title: 'Remaining',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+    );
+    final prunedPaper = PaperData(
+      id: 'pruned-paper',
+      type: PaperTypes.note,
+      title: 'Pruned',
+      x: 30,
+      y: 40,
+      width: 420,
+      height: 360,
+    );
+
+    await services.paperWindows.restoreAll(
+      AppState(papers: [remainingPaper, prunedPaper]),
+    );
+    await services.paperWindows.showPaper(prunedPaper);
+    await services.tray.rebuildMenu(AppState(papers: [remainingPaper]));
+
+    var updateEmitted = false;
+    final subscription = services.paperWindows.surfaceUpdates.listen((_) {
+      updateEmitted = true;
+    });
+    addTearDown(subscription.cancel);
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('boundsChanged', {
+          'paperId': 'pruned-paper',
+          'bounds': {
+            'x': 700,
+            'y': 800,
+            'width': 900,
+            'height': 1000,
+          },
+        }),
+      ),
+      (_) {},
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(updateEmitted, false);
+    expect(prunedPaper.x, 30);
+    expect(prunedPaper.y, 40);
+    expect(prunedPaper.width, 420);
+    expect(prunedPaper.height, 360);
+
+    final legacyCloseUpdate = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('closeRequested'),
+      ),
+      (_) {},
+    );
+
+    expect((await legacyCloseUpdate).id, 'remaining-paper');
+    expect(remainingPaper.isVisible, false);
+    expect(prunedPaper.isVisible, true);
+  });
+
   test('tray menu uses PaperTodo default titles for blank paper titles',
       () async {
     const channel = MethodChannel('repapertodo/window_blank_title_test');

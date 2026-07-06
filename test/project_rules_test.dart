@@ -1123,6 +1123,11 @@ void main() {
     final lookupEnd = platform.indexOf('String? _paperIdFromArguments');
 
     expect(design, contains('explicitly name an unknown `paperId`'));
+    expect(design, contains('Registry refreshes from restore or tray rebuild'));
+    expect(platform, contains('WindowsTrayHost(channel, paperWindowHost)'));
+    expect(platform, contains('void _syncKnownPapers(AppState state)'));
+    expect(platform, contains('_knownPapers.clear();'));
+    expect(platform, contains('_paperWindows._syncKnownPapers(state);'));
     expect(lookupStart, isNonNegative);
     expect(lookupEnd, greaterThan(lookupStart));
     final lookupBlock = platform.substring(lookupStart, lookupEnd);

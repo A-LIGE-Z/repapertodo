@@ -37,6 +37,9 @@ show, hide, bounds, or tray commands.
 Events that explicitly name an unknown `paperId` should be ignored instead of
 falling back to the active paper, while legacy events without a `paperId` may
 still target the active paper for backward compatibility.
+Registry refreshes from restore or tray rebuild should prune paper IDs that are
+no longer present in the current state so late native events from deleted or
+replaced papers are ignored.
 Surface commands that change visibility, desktop pinning, or always-on-top
 state should send structured arguments with the `paperId`, while the runner
 keeps compatibility with older string and bool arguments. The runner should

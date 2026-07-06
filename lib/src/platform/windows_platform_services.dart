@@ -20,8 +20,18 @@ class WindowsPlatformServices implements PlatformServices {
   WindowsPlatformServices._(
     MethodChannel channel,
     WindowsStartupHost startupHost,
-  )   : paperWindows = WindowsPaperWindowHost(channel, startupHost),
-        tray = WindowsTrayHost(channel),
+  ) : this._withPaperHost(
+          channel,
+          startupHost,
+          WindowsPaperWindowHost(channel, startupHost),
+        );
+
+  WindowsPlatformServices._withPaperHost(
+    MethodChannel channel,
+    WindowsStartupHost startupHost,
+    WindowsPaperWindowHost paperWindowHost,
+  )   : paperWindows = paperWindowHost,
+        tray = WindowsTrayHost(channel, paperWindowHost),
         startup = startupHost,
         systemIntegration = WindowsSystemIntegrationHost(channel),
         externalFiles = WindowsExternalFileHost(channel),
@@ -187,9 +197,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<void> restoreAll(AppState state) async {
-    for (final paper in state.papers) {
-      _rememberPaper(paper);
-    }
+    _syncKnownPapers(state);
     await _syncPaperSurfaceRegistry(state);
     final visiblePapers =
         state.papers.where((paper) => paper.isVisible).toList();
@@ -297,6 +305,25 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       return;
     }
     _knownPapers[paperId] = paper;
+  }
+
+  void _syncKnownPapers(AppState state) {
+    _knownPapers.clear();
+    for (final paper in state.papers) {
+      _rememberPaper(paper);
+    }
+    final activePaperId = _activePaper?.id.trim() ?? '';
+    if (activePaperId.isNotEmpty && _knownPapers.containsKey(activePaperId)) {
+      _activePaper = _knownPapers[activePaperId];
+      return;
+    }
+    _activePaper = null;
+    for (final paper in state.papers) {
+      if (paper.isVisible && _knownPapers.containsKey(paper.id.trim())) {
+        _activePaper = paper;
+        return;
+      }
+    }
   }
 
   PaperData? _paperFromEventArguments(Object? arguments) {
@@ -412,9 +439,10 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 }
 
 class WindowsTrayHost implements TrayHost {
-  WindowsTrayHost(this._channel);
+  WindowsTrayHost(this._channel, this._paperWindows);
 
   final MethodChannel _channel;
+  final WindowsPaperWindowHost _paperWindows;
 
   @override
   Future<void> dispose() async {
@@ -426,6 +454,7 @@ class WindowsTrayHost implements TrayHost {
 
   @override
   Future<void> rebuildMenu(AppState state) async {
+    _paperWindows._syncKnownPapers(state);
     await _channel.invokeMethod<void>(
       'setTrayMenu',
       _paperSurfaceRegistryEntries(state),
