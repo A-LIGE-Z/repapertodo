@@ -3407,6 +3407,99 @@ void main() {
     expect(find.text('Snapshot restored.'), findsOneWidget);
   });
 
+  testWidgets('recovery snapshot restore clears pending local edit upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'pending-restore-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _RecoverySnapshotSyncService(
+      snapshots: [
+        WebDavSnapshotRecord(
+          path:
+              'repapertodo/snapshots/snapshot-20260701T113000000Z-laptop.json',
+          deviceId: 'laptop',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 11, 30),
+        ),
+      ],
+      restoredState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'laptop': 8},
+        papers: [
+          PaperData(
+            id: 'snapshot-note',
+            type: PaperTypes.note,
+            title: 'Snapshot',
+            content: 'Restored body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('pending-restore-note-title')),
+      'Draft before restore',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(
+        'restore-snapshot-repapertodo/snapshots/snapshot-20260701T113000000Z-laptop.json')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.title, 'Snapshot');
+    expect(syncService.localUploadCalls, 0);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+
+    expect(syncService.localUploadCalls, 0);
+    expect(syncService.localUploadBeforeTitles, isEmpty);
+    expect(syncService.localUploadAfterTitles, isEmpty);
+    expect(controller.state.papers.single.title, 'Snapshot');
+    expect(find.text('Draft before restore'), findsNothing);
+    expect(find.text('Snapshot restored.'), findsOneWidget);
+  });
+
   testWidgets('recovery snapshot restore failure can retry from snackbar',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -11306,8 +11399,11 @@ class _RecoverySnapshotSyncService extends AppSyncService {
   final String restoreMessage;
   final bool includeRestoredState;
   final restoredPaths = <String>[];
+  final localUploadBeforeTitles = <String>[];
+  final localUploadAfterTitles = <String>[];
   var listCalls = 0;
   var restoreCalls = 0;
+  var localUploadCalls = 0;
 
   @override
   Future<List<WebDavSnapshotRecord>> listRecoverySnapshots({
@@ -11339,6 +11435,26 @@ class _RecoverySnapshotSyncService extends AppSyncService {
       state: includeRestoredState ? restoredState : null,
       message: restoreMessage,
       snapshotPath: snapshotPath,
+    );
+  }
+
+  @override
+  Future<AppSyncLocalOperationUploadResult> uploadLocalOperations({
+    required AppState beforeState,
+    required AppState afterState,
+    required StateStore store,
+    DateTime? createdAtUtc,
+  }) async {
+    localUploadCalls += 1;
+    localUploadBeforeTitles.add(beforeState.papers.single.title);
+    localUploadAfterTitles.add(afterState.papers.single.title);
+    await store.save(afterState);
+    return AppSyncLocalOperationUploadResult(
+      state: afterState,
+      deviceSequences: afterState.sync.operationDeviceSequences,
+      generatedCount: 1,
+      uploadedCount: 1,
+      stateChanged: false,
     );
   }
 }

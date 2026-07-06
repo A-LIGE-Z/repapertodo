@@ -1308,8 +1308,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       );
   }
 
-  Future<void> _replaceStateAndApplyPlatform(AppState state) async {
+  Future<void> _replaceStateAndApplyPlatform(
+    AppState state, {
+    bool invalidatePendingLocalEdits = false,
+  }) async {
     final previousReminderCadence = _todoReminderCadence(controller.state);
+    if (invalidatePendingLocalEdits) {
+      _invalidatePendingLocalEditSyncForStateReplacement();
+    }
     setState(() {
       controller.replaceState(state);
       _reconcileSurfacePaperAfterReplacement();
@@ -1468,7 +1474,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         return;
       }
       if (result.state != null) {
-        await _replaceStateAndApplyPlatform(result.state!);
+        await _replaceStateAndApplyPlatform(
+          result.state!,
+          invalidatePendingLocalEdits: true,
+        );
       }
       if (!mounted) {
         return;
@@ -2112,6 +2121,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _pendingLocalEditBaseState = null;
     _pendingLocalEditLatestState = null;
     _pendingLocalEditGeneration = null;
+  }
+
+  void _invalidatePendingLocalEditSyncForStateReplacement() {
+    _localEditSyncGeneration += 1;
+    _clearPendingLocalEditSync();
   }
 
   AppState _stateSnapshot(AppState state) {
