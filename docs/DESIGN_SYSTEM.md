@@ -297,6 +297,8 @@ Todo due editing should preserve PaperTodo date-and-time precision: the picker
 must expose a calendar date plus 00-23 hour and 00-59 minute choices, default a
 new due time to roughly one hour from now, and save local values as
 `yyyy-MM-ddTHH:mm:ss` without milliseconds.
+Clicking an existing Todo due chip should reopen the due editor just like
+PaperTodo's due badge.
 Todo overflow actions should mirror PaperTodo item menus for due and reminder
 state: existing due dates show change plus clear actions, existing reminder
 intervals show change plus clear actions, and clear actions no-op when the

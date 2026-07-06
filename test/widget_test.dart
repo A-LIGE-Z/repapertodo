@@ -6650,6 +6650,57 @@ void main() {
     expect(find.text('Due 06-30 10:30'), findsOneWidget);
   });
 
+  testWidgets('opens todo due editor from due chip like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'due-chip-paper',
+            type: PaperTypes.todo,
+            title: 'Due chip paper',
+            items: [
+              PaperItem(
+                id: 'due-chip-item',
+                text: 'Timed task',
+                dueAtLocal: '2026-06-30T09:15:00',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(InputChip, 'Due 06-30 09:15'));
+    await tester.pumpAndSettle();
+
+    tester
+        .widget<DropdownButtonFormField<int>>(
+          find.byKey(const ValueKey('todo-due-minute')),
+        )
+        .onChanged
+        ?.call(45);
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final item = controller.state.papers.single.items.single;
+    expect(item.dueAtLocal, '2026-06-30T09:45:00');
+    expect(find.text('Due 06-30 09:45'), findsOneWidget);
+  });
+
   testWidgets('formats absolute todo due times like PaperTodo', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -5315,6 +5315,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                         size: visualSpec.chipIconSize,
                       ),
                       label: Text('Due $dueDate'),
+                      onPressed: () => unawaited(_pickDueDate(context, item)),
                       onDeleted: () => _clearDueDate(item),
                       deleteIcon: Icon(
                         Icons.close_outlined,

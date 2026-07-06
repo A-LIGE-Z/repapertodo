@@ -729,6 +729,8 @@ void main() {
     final app = File('lib/src/app.dart').readAsStringSync();
 
     expect(design, contains('Todo due editing should preserve PaperTodo'));
+    expect(design, contains('existing Todo due chip'));
+    expect(design, contains("PaperTodo's due badge"));
     expect(design, contains('Todo overflow actions should mirror PaperTodo'));
     expect(design, contains('change plus clear actions'));
     expect(design, contains('global reminder interval value and unit'));
@@ -744,6 +746,10 @@ void main() {
     expect(design, contains('{duration} overdue'));
     expect(design, contains('visible countdown text does not go stale'));
     expect(app, contains('_TodoDueSelectionDialog'));
+    expect(
+      app,
+      contains('onPressed: () => unawaited(_pickDueDate(context, item))'),
+    );
     expect(app, contains("ValueKey('todo-due-hour')"));
     expect(app, contains("ValueKey('todo-due-minute')"));
     expect(app, contains('_formatDueAtLocalValue'));
