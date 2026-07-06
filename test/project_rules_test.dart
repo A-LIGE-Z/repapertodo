@@ -918,6 +918,9 @@ void main() {
     expect(design, contains('Markdown image syntax should follow'));
     expect(design, contains('treated as a source'));
     expect(design, contains('link hit target'));
+    expect(design, contains('PaperTodo-scoped extension set'));
+    expect(design, contains('no GitHub'));
+    expect(design, contains('table or task-checkbox expansion'));
     expect(design, contains('Markdown source link scanning'));
     expect(design, contains('first literal `](`'));
     expect(design, contains('backslash'));
@@ -946,6 +949,10 @@ void main() {
     expect(app, contains('pointerSignalResolver'));
     expect(app, contains('_textZoomAfterWheel'));
     expect(app, contains('paperTodoMarkdownInlineHtmlSyntaxes'));
+    expect(app, contains('_paperTodoMarkdownExtensionSet'));
+    expect(app, contains('md.ExtensionSet.commonMark'));
+    expect(app, contains('md.StrikethroughSyntax'));
+    expect(app, contains('_paperTodoMarkdownImageBuilder'));
     expect(app, contains('_paperTodoMarkdownBuilders'));
     expect(app, contains('class _UnderlineMarkdownElementBuilder'));
     expect(app, contains("_previewMarkdownStyleSheet"));

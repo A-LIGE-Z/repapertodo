@@ -576,6 +576,57 @@ void main() {
     ]);
   });
 
+  testWidgets('keeps markdown images and tables source-like like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        papers: [
+          PaperData(
+            id: 'source-like-markdown-note',
+            type: PaperTypes.note,
+            title: 'Source-like markdown note',
+            content: '![Alt text](https://example.com/image.png)\n\n'
+                '| A | B |\n'
+                '| - | - |\n'
+                '| 1 | 2 |\n\n'
+                '~~Done~~',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final preview =
+        find.byKey(const ValueKey('source-like-markdown-note-preview'));
+    expect(
+      find.descendant(of: preview, matching: find.byType(Image)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: preview, matching: find.byType(Table)),
+      findsNothing,
+    );
+    expect(
+      find.text('![Alt text](https://example.com/image.png)'),
+      findsOneWidget,
+    );
+    expect(_markdownTextSpan(tester, '| A | B |'), isNotNull);
+    expect(_markdownTextSpan(tester, '| 1 | 2 |'), isNotNull);
+    expect(_markdownTextSpan(tester, 'Done').style?.decoration,
+        TextDecoration.lineThrough);
+  });
+
   testWidgets('opens editor markdown links only on control click',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

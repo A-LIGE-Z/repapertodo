@@ -66,6 +66,13 @@ const _dengXianFontFamilyFallback = [
 final _paperTodoMarkdownBuilders = <String, MarkdownElementBuilder>{
   'u': _UnderlineMarkdownElementBuilder(),
 };
+final _paperTodoMarkdownExtensionSet = md.ExtensionSet(
+  md.ExtensionSet.commonMark.blockSyntaxes,
+  <md.InlineSyntax>[
+    ...md.ExtensionSet.commonMark.inlineSyntaxes,
+    md.StrikethroughSyntax(),
+  ],
+);
 
 class _UnderlineMarkdownElementBuilder extends MarkdownElementBuilder {
   @override
@@ -3900,7 +3907,9 @@ class _NoteEditorState extends State<_NoteEditor> {
                   ? '_No note content._'
                   : widget.paper.content,
               inlineSyntaxes: paperTodoMarkdownInlineHtmlSyntaxes(),
+              extensionSet: _paperTodoMarkdownExtensionSet,
               builders: _paperTodoMarkdownBuilders,
+              imageBuilder: _paperTodoMarkdownImageBuilder,
               onTapLink: (text, href, title) =>
                   _openMarkdownLink(context, href),
               styleSheet: _previewMarkdownStyleSheet(context),
@@ -3910,6 +3919,14 @@ class _NoteEditorState extends State<_NoteEditor> {
         ),
       ),
     );
+  }
+
+  Widget _paperTodoMarkdownImageBuilder(
+    Uri uri,
+    String? title,
+    String? alt,
+  ) {
+    return SelectableText('![${alt ?? ''}]($uri)');
   }
 
   MarkdownStyleSheet _previewMarkdownStyleSheet(BuildContext context) {

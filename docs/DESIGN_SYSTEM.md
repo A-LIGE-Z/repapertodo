@@ -222,6 +222,9 @@ matching PaperTodo's source editor highlighting and Ctrl+click behavior.
 Markdown image syntax should follow PaperTodo's lightweight scanner rather than
 full Markdown image rendering: `![label](url)` is still treated as a source
 link hit target on the label text.
+Markdown preview should stay on a PaperTodo-scoped extension set: no GitHub
+table or task-checkbox expansion, while code fences and strikethrough remain
+available for lightweight notes.
 Markdown source link scanning should stay deliberately small like PaperTodo:
 the first literal `](` and following literal `)` delimit the target, backslash
 escapes are not interpreted, CommonMark angle destinations and title suffixes
