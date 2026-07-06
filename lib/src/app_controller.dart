@@ -363,7 +363,7 @@ class RePaperTodoController {
           await hidePaper(paper);
         }
       case StartupCommandKind.toggle:
-        final shouldHide = state.papers.any((paper) => paper.isVisible);
+        final shouldHide = await _hasVisibleSurfacesForToggle();
         await executeStartupCommand(
           StartupCommand(
               shouldHide ? StartupCommandKind.hide : StartupCommandKind.show),
@@ -391,6 +391,14 @@ class RePaperTodoController {
         }
         await _platform.tray.dispose();
         await _platform.systemIntegration.exitApplication();
+    }
+  }
+
+  Future<bool> _hasVisibleSurfacesForToggle() async {
+    try {
+      return await _platform.paperWindows.hasVisibleSurfaces(state);
+    } catch (_) {
+      return state.papers.any((paper) => paper.isVisible);
     }
   }
 

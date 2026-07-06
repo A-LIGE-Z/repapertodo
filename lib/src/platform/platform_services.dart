@@ -24,6 +24,7 @@ abstract interface class PaperWindowHost {
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper);
   Future<void> showPaper(PaperData paper);
   Future<void> hidePaper(PaperData paper);
+  Future<bool> hasVisibleSurfaces(AppState state);
   Future<void> closePaperSurface(PaperData paper);
   Future<void> updatePaperSurface(PaperData paper);
   Future<void> capturePaperSurfaceBounds(PaperData paper);

@@ -358,6 +358,34 @@ void main() {
     });
   });
 
+  test('paper host asks Windows for actual visible surfaces', () async {
+    const channel = MethodChannel('repapertodo/window_visible_surface_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'hasVisibleSurfaces') {
+        return false;
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final state = AppState(
+      papers: [
+        PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'First'),
+      ],
+    );
+
+    expect(await services.paperWindows.hasVisibleSurfaces(state), false);
+
+    expect(calls.single.method, 'hasVisibleSurfaces');
+    expect(calls.single.arguments, isNull);
+  });
+
   test('Windows script capsule host rejects invalid requests locally',
       () async {
     const channel = MethodChannel('repapertodo/window_script_invalid_test');

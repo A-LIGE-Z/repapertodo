@@ -197,6 +197,13 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   }
 
   @override
+  Future<bool> hasVisibleSurfaces(AppState state) async {
+    _syncKnownPapers(state);
+    return await _channel.invokeMethod<bool>('hasVisibleSurfaces') ??
+        state.papers.any((paper) => paper.isVisible);
+  }
+
+  @override
   Future<void> restoreAll(AppState state) async {
     _syncKnownPapers(state);
     await _syncPaperSurfaceRegistry(state);

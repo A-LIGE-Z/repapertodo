@@ -656,6 +656,31 @@ void main() {
     expect(platform.paperWindows.shownIds, ['paper-1', 'paper-2']);
   });
 
+  test('startup toggle follows visible native surfaces like PaperTodo',
+      () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.visibleSurfaces = false;
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'First'),
+          PaperData(id: 'paper-2', type: PaperTypes.note, title: 'Second'),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.toggle),
+    );
+
+    expect(platform.paperWindows.visibleSurfaceSnapshots, [
+      ['paper-1', 'paper-2'],
+    ]);
+    expect(platform.paperWindows.hiddenIds, isEmpty);
+    expect(platform.paperWindows.shownIds, ['paper-1', 'paper-2']);
+  });
+
   test('startup settings command is retained for the UI layer', () async {
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
@@ -858,8 +883,10 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final hiddenIds = <String>[];
   final workAreaRequestIds = <String>[];
   final restoredVisibilitySnapshots = <List<bool>>[];
+  final visibleSurfaceSnapshots = <List<String>>[];
   PaperWorkArea? workArea;
   Object? workAreaError;
+  bool? visibleSurfaces;
   var restoreAllCount = 0;
 
   @override
@@ -878,6 +905,17 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
     restoredVisibilitySnapshots.add(
       state.papers.map((paper) => paper.isVisible).toList(),
     );
+  }
+
+  @override
+  Future<bool> hasVisibleSurfaces(AppState state) async {
+    visibleSurfaceSnapshots.add(
+      state.papers
+          .where((paper) => paper.isVisible)
+          .map((paper) => paper.id)
+          .toList(),
+    );
+    return visibleSurfaces ?? super.hasVisibleSurfaces(state);
   }
 
   @override

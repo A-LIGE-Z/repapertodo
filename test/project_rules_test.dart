@@ -1352,6 +1352,19 @@ void main() {
     expect(hideBlock, isNot(contains('RememberActivePaperId')));
   });
 
+  test('Windows startup toggle checks the actual native surface visibility',
+      () {
+    final controller = _readProjectText('lib/src/app_controller.dart');
+    final platformHost =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+
+    expect(controller, contains('hasVisibleSurfacesForToggle'));
+    expect(platformHost, contains("'hasVisibleSurfaces'"));
+    expect(runner, contains('if (method == "hasVisibleSurfaces")'));
+    expect(runner, contains('IsWindowVisible(window) != 0'));
+  });
+
   test('Windows runner keeps non-active surface refreshes cached', () {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final runner = _readProjectText('windows/runner/flutter_window.cpp');

@@ -1642,6 +1642,10 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (method == "hasVisibleSurfaces") {
+          result->Success(flutter::EncodableValue(IsWindowVisible(window) != 0));
+          return;
+        }
         if (method == "setAlwaysOnTop") {
           const std::string requested_paper_id =
               GetPaperIdArgument(call.arguments());
