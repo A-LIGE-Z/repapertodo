@@ -129,7 +129,74 @@ int HexDigitValue(char character) {
   return -1;
 }
 
-bool HasEncodedUnsafeExternalUriCharacter(const std::string& uri) {
+bool IsControlCodePoint(wchar_t character) {
+  const auto code = static_cast<unsigned int>(character);
+  return code < 0x20 || (code >= 0x7F && code <= 0x9F);
+}
+
+std::optional<std::wstring> Utf8ToWideStrict(const std::string& value) {
+  if (value.empty()) {
+    return std::wstring();
+  }
+  const int size = MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+      static_cast<int>(value.size()), nullptr, 0);
+  if (size <= 0) {
+    return std::nullopt;
+  }
+  std::wstring wide_value(size, L'\0');
+  const int converted = MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+      static_cast<int>(value.size()), wide_value.data(), size);
+  if (converted != size) {
+    return std::nullopt;
+  }
+  return wide_value;
+}
+
+bool HasControlCodePoint(const std::string& value) {
+  const auto wide_value = Utf8ToWideStrict(value);
+  if (!wide_value) {
+    return false;
+  }
+  return std::any_of(wide_value->begin(), wide_value->end(),
+                     IsControlCodePoint);
+}
+
+bool HasWhitespaceOrControlCodePoint(const std::string& value) {
+  const auto wide_value = Utf8ToWideStrict(value);
+  if (!wide_value) {
+    return false;
+  }
+  return std::any_of(wide_value->begin(), wide_value->end(),
+                     [](wchar_t character) {
+                       const auto code = static_cast<unsigned int>(character);
+                       return code <= 0x20 ||
+                              (code >= 0x7F && code <= 0x9F);
+                     });
+}
+
+std::optional<std::string> PercentDecodedBytes(const std::string& value) {
+  std::string decoded;
+  decoded.reserve(value.size());
+  bool found_escape = false;
+  for (size_t index = 0; index < value.size(); ++index) {
+    if (value[index] == '%' && index + 2 < value.size()) {
+      const int high = HexDigitValue(value[index + 1]);
+      const int low = HexDigitValue(value[index + 2]);
+      if (high >= 0 && low >= 0) {
+        decoded.push_back(static_cast<char>((high << 4) + low));
+        index += 2;
+        found_escape = true;
+        continue;
+      }
+    }
+    decoded.push_back(value[index]);
+  }
+  return found_escape ? std::optional<std::string>(decoded) : std::nullopt;
+}
+
+bool HasEncodedControlByte(const std::string& uri) {
   for (size_t index = 0; index + 2 < uri.size(); ++index) {
     if (uri[index] != '%') {
       continue;
@@ -140,11 +207,25 @@ bool HasEncodedUnsafeExternalUriCharacter(const std::string& uri) {
       continue;
     }
     const int code = (high << 4) + low;
-    if (code < 0x20 || code == 0x7F) {
+    if (code < 0x20 || (code >= 0x7F && code <= 0x9F)) {
       return true;
     }
   }
   return false;
+}
+
+bool HasEncodedUnsafeExternalUriCharacter(const std::string& uri) {
+  const auto decoded = PercentDecodedBytes(uri);
+  if (!decoded) {
+    return false;
+  }
+  const auto decoded_wide = Utf8ToWideStrict(*decoded);
+  if (decoded_wide &&
+      std::any_of(decoded_wide->begin(), decoded_wide->end(),
+                  IsControlCodePoint)) {
+    return true;
+  }
+  return !decoded_wide && HasEncodedControlByte(uri);
 }
 
 bool HasEncodedExternalUriAuthoritySeparator(const std::string& authority) {
@@ -165,7 +246,7 @@ bool HasUnsafeExternalFilePathCharacter(const std::string& path) {
       return true;
     }
   }
-  return false;
+  return HasControlCodePoint(path);
 }
 
 bool IsAllowedExternalUri(const std::string& value) {
@@ -178,6 +259,9 @@ bool IsAllowedExternalUri(const std::string& value) {
     if (ascii <= 0x20 || ascii == 0x7F) {
       return false;
     }
+  }
+  if (HasWhitespaceOrControlCodePoint(uri)) {
+    return false;
   }
   if (HasEncodedUnsafeExternalUriCharacter(uri)) {
     return false;

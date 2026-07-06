@@ -390,21 +390,32 @@ bool _hasEncodedExternalUriAuthoritySeparator(String authority) {
 }
 
 bool _hasUnsafeExternalUriCharacter(String value) {
-  return value.codeUnits.any((unit) => unit <= 0x20 || unit == 0x7F);
+  return value.runes.any(
+    (rune) => rune <= 0x20 || (rune >= 0x7F && rune <= 0x9F),
+  );
 }
 
 bool _hasRawControlCharacter(String value) {
-  return value.codeUnits.any((unit) => unit < 0x20 || unit == 0x7F);
+  return value.runes.any(_isControlRune);
 }
 
 bool _hasEncodedUnsafeExternalUriCharacter(String value) {
+  try {
+    return Uri.decodeFull(value).runes.any(_isControlRune);
+  } on FormatException {
+    // Malformed escapes should still reject obvious percent-encoded controls.
+  }
   for (final match in RegExp(r'%([0-9a-fA-F]{2})').allMatches(value)) {
     final unit = int.parse(match.group(1)!, radix: 16);
-    if (unit < 0x20 || unit == 0x7F) {
+    if (unit < 0x20 || (unit >= 0x7F && unit <= 0x9F)) {
       return true;
     }
   }
   return false;
+}
+
+bool _isControlRune(int rune) {
+  return rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
 }
 
 class _CompactAppBarActions {

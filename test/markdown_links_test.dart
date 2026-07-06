@@ -127,6 +127,31 @@ void main() {
     expect(MarkdownLinks.hrefAt(script, script.indexOf('Script')), isNull);
   });
 
+  test('rejects raw and encoded control characters without blocking UTF-8', () {
+    const rawC1 = '[Raw C1](https://example.com/\u0085path)';
+    const encodedC0 = '[Encoded C0](https://example.com/%0Apath)';
+    const encodedC1 = '[Encoded C1](https://example.com/%C2%85path)';
+    const malformedC1 = '[Malformed C1](https://example.com/%85path)';
+    const utf8 = '[UTF8](https://example.com/%E2%82%ACpath)';
+    const localRawC1 = '[Local C1](C:/PaperTodo/\u0085file.md)';
+
+    expect(MarkdownLinks.hrefAt(rawC1, rawC1.indexOf('Raw C1')), isNull);
+    expect(MarkdownLinks.hrefAt(encodedC0, encodedC0.indexOf('Encoded C0')),
+        isNull);
+    expect(MarkdownLinks.hrefAt(encodedC1, encodedC1.indexOf('Encoded C1')),
+        isNull);
+    expect(
+        MarkdownLinks.hrefAt(
+          malformedC1,
+          malformedC1.indexOf('Malformed C1'),
+        ),
+        isNull);
+    expect(MarkdownLinks.hrefAt(utf8, utf8.indexOf('UTF8')),
+        'https://example.com/%E2%82%ACpath');
+    expect(MarkdownLinks.hrefAt(localRawC1, localRawC1.indexOf('Local C1')),
+        isNull);
+  });
+
   test('ignores links inside closed inline code spans like PaperTodo', () {
     const markdown =
         '`[Code](https://example.com/code)` [Real](https://example.com/real)';

@@ -312,6 +312,9 @@ abstract final class MarkdownLinks {
     if (href.toLowerCase().startsWith('www.')) {
       href = 'https://$href';
     }
+    if (_hasRawControlCharacter(href) || _hasEncodedControlCharacter(href)) {
+      return null;
+    }
 
     final localPath = _normalizeLocalMarkdownPath(href);
     if (localPath != null) {
@@ -419,11 +422,32 @@ abstract final class MarkdownLinks {
   }
 
   static bool _hasRawControlCharacter(String value) {
-    return value.codeUnits.any((unit) => unit < 0x20 || unit == 0x7F);
+    return value.runes.any(_isControlRune);
   }
 
   static bool _hasRawWhitespaceOrControl(String value) {
-    return value.codeUnits.any((unit) => unit <= 0x20 || unit == 0x7F);
+    return value.runes.any(
+      (rune) => rune <= 0x20 || (rune >= 0x7F && rune <= 0x9F),
+    );
+  }
+
+  static bool _hasEncodedControlCharacter(String value) {
+    try {
+      return Uri.decodeFull(value).runes.any(_isControlRune);
+    } on FormatException {
+      // Malformed escapes should still reject obvious percent-encoded controls.
+    }
+    for (final match in RegExp(r'%([0-9a-fA-F]{2})').allMatches(value)) {
+      final unit = int.parse(match.group(1)!, radix: 16);
+      if (unit < 0x20 || (unit >= 0x7F && unit <= 0x9F)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _isControlRune(int rune) {
+    return rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
   }
 }
 

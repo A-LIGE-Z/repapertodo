@@ -157,17 +157,25 @@ class MainActivity : FlutterActivity() {
 
     private fun hasUnsafeExternalUriCharacter(uri: String): Boolean {
         return uri.any { character ->
-            character.code <= 0x20 || character.code == 0x7F
+            character.code <= 0x20 || character.code in 0x7F..0x9F
         }
     }
 
     private fun hasUnsafeExternalFilePathCharacter(path: String): Boolean {
         return path.any { character ->
-            character.code < 0x20 || character.code == 0x7F
+            isControlCharacter(character)
         }
     }
 
     private fun hasEncodedUnsafeExternalUriCharacter(uri: String): Boolean {
+        val decoded = try {
+            Uri.decode(uri)
+        } catch (error: IllegalArgumentException) {
+            null
+        }
+        if (decoded != null && decoded.any { character -> isControlCharacter(character) }) {
+            return true
+        }
         var index = 0
         while (index + 2 < uri.length) {
             if (uri[index] == '%') {
@@ -175,7 +183,7 @@ class MainActivity : FlutterActivity() {
                 val low = Character.digit(uri[index + 2], 16)
                 if (high >= 0 && low >= 0) {
                     val code = (high shl 4) + low
-                    if (code < 0x20 || code == 0x7F) {
+                    if (code < 0x20 || code in 0x7F..0x9F) {
                         return true
                     }
                 }
@@ -183,5 +191,9 @@ class MainActivity : FlutterActivity() {
             index += 1
         }
         return false
+    }
+
+    private fun isControlCharacter(character: Char): Boolean {
+        return character.code < 0x20 || character.code in 0x7F..0x9F
     }
 }

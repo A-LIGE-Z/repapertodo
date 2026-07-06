@@ -867,7 +867,8 @@ void main() {
     expect(find.textContaining('unsupported link target'), findsOneWidget);
   });
 
-  testWidgets('blocks encoded control markdown links before platform open',
+  testWidgets(
+      'blocks UTF-8 encoded control markdown links before platform open',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -881,7 +882,8 @@ void main() {
             id: 'encoded-control-link-note',
             type: PaperTypes.note,
             title: 'Encoded control link note',
-            content: '[Open encoded control link](https://example.com/%0Apath)',
+            content:
+                '[Open encoded control link](https://example.com/%C2%85path)',
           ),
         ],
       ),

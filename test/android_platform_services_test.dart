@@ -85,4 +85,66 @@ void main() {
 
     expect(calls, isEmpty);
   });
+
+  test('platform services reject C1 controls without blocking UTF-8 escapes',
+      () async {
+    const androidChannel = MethodChannel('repapertodo/android_c1_test');
+    const windowsChannel = MethodChannel('repapertodo/windows_c1_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(androidChannel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(windowsChannel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(androidChannel, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(windowsChannel, null);
+    });
+
+    final hosts = [
+      (
+        uriOpener: AndroidPlatformServices(channel: androidChannel).uriOpener,
+        externalFiles:
+            AndroidPlatformServices(channel: androidChannel).externalFiles,
+      ),
+      (
+        uriOpener: WindowsPlatformServices(channel: windowsChannel).uriOpener,
+        externalFiles:
+            WindowsPlatformServices(channel: windowsChannel).externalFiles,
+      ),
+    ];
+
+    for (final host in hosts) {
+      await expectLater(
+        host.uriOpener.openUri('https://example.com/\u0085path'),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        host.uriOpener.openUri('https://example.com/%C2%85path'),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        host.uriOpener.openUri('https://example.com/%85path'),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        host.externalFiles.openFile('/tmp/RePaperTodo/bad\u0085note.md'),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      await host.uriOpener.openUri('https://example.com/%E2%82%ACpath');
+    }
+
+    expect(calls.map((call) => call.arguments), [
+      'https://example.com/%E2%82%ACpath',
+      'https://example.com/%E2%82%ACpath',
+    ]);
+  });
 }
