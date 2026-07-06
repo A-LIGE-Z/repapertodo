@@ -88,6 +88,37 @@ void main() {
     );
   });
 
+  test('recovers valid temp data when primary is corrupt', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'repapertodo_store_temp_over_corrupt_primary_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await File(store.filePath).writeAsString('{bad json');
+    await File(store.backupPath).writeAsString('{"theme":"light","papers":[]}');
+    await File(store.tempPath).writeAsString('{"theme":"dark","papers":[]}');
+
+    final state = await store.load();
+
+    expect(state.theme, 'dark');
+    final recoveryFiles = directory.listSync().map((entry) {
+      return p.basename(entry.path);
+    }).toList();
+    expect(
+      recoveryFiles.where((name) => name.startsWith('data.failed_load')),
+      isNotEmpty,
+    );
+    expect(
+      recoveryFiles.where(
+        (name) =>
+            name.startsWith('data.json.used_for_recovery') &&
+            name.endsWith('.tmp'),
+      ),
+      isNotEmpty,
+    );
+  });
+
   test('recovers legacy PaperTodo temp data when primary is missing', () async {
     final directory = await Directory.systemTemp.createTemp(
       'repapertodo_store_legacy_temp_test_',

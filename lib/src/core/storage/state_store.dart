@@ -40,7 +40,7 @@ class StateStore {
     Object? primaryError;
     Object? tempError;
     final primaryExists = await primary.exists();
-    if (await primary.exists()) {
+    if (primaryExists) {
       try {
         return _codec.decode(await primary.readAsString());
       } catch (error) {
@@ -48,9 +48,12 @@ class StateStore {
       }
     }
 
-    if (!primaryExists && await temp.exists()) {
+    if (await temp.exists()) {
       try {
         final recovered = _codec.decode(await temp.readAsString());
+        if (primaryExists) {
+          await _copyRecoverySource(primary, 'failed_load');
+        }
         await _copyRecoverySource(temp, 'used_for_recovery');
         return recovered;
       } catch (error) {
