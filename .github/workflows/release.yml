@@ -65,7 +65,7 @@ jobs:
           }
           $licenses = ("y`n" * 200)
           $licenses | & $sdkManager.FullName --licenses
-          & $sdkManager.FullName "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+          & $sdkManager.FullName "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Verify Flutter toolchain
         shell: pwsh

@@ -1487,7 +1487,8 @@ void main() {
     expect(workflow, contains('actions/setup-java@v4'));
     expect(workflow, contains('subosito/flutter-action@v2'));
     expect(workflow, contains('channel: stable'));
-    expect(workflow, contains('platforms;android-37'));
+    expect(workflow, contains('platforms;android-37.0'));
+    expect(workflow, isNot(contains('"platforms;android-37"')));
     expect(workflow, contains('build-tools;37.0.0'));
     expect(workflow, contains(r'Remove-Item -LiteralPath "Env:\$name"'));
     expect(workflow, isNot(contains('HTTP_PROXY: ""')));
