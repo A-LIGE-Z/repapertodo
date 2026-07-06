@@ -466,6 +466,36 @@ void main() {
     expect(runner, contains('single_instance_listener_thread_.join()'));
   });
 
+  test('Windows tray icon keeps PaperTodo external icon behavior', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final header = File('windows/runner/flutter_window.h').readAsStringSync();
+
+    expect(design, contains('TaskbarCreated'));
+    expect(design, contains('re-adding the notification icon'));
+    expect(design, contains('PaperTodo.ico'));
+    expect(design, contains('RePaperTodo.ico'));
+    expect(design, contains('Windows executable should override'));
+    expect(runner, contains('RegisterWindowMessageW(L"TaskbarCreated")'));
+    expect(runner, contains('message == taskbar_created_message_'));
+    expect(runner, contains('tray_icon_added_ = false'));
+    expect(runner, contains('AddTrayIcon();'));
+    expect(runner, contains('ExecutableDirectory()'));
+    expect(runner, contains('LoadCustomTrayIcon'));
+    expect(runner, contains('LoadImageW('));
+    expect(runner, contains('LR_LOADFROMFILE'));
+    expect(runner, contains('L"PaperTodo.ico"'));
+    expect(runner, contains('L"RePaperTodo.ico"'));
+    expect(runner, contains('LoadIcon(GetModuleHandle(nullptr)'));
+    expect(runner, contains('Shell_NotifyIcon(NIM_ADD'));
+    expect(runner, contains('Shell_NotifyIcon(NIM_SETVERSION'));
+    expect(runner, contains('Shell_NotifyIcon(NIM_DELETE'));
+    expect(runner, contains('DestroyIcon(tray_icon_handle_)'));
+    expect(header, contains('HICON tray_icon_handle_'));
+    expect(header, contains('tray_icon_handle_is_custom_'));
+    expect(header, contains('taskbar_created_message_'));
+  });
+
   test('hotkey settings keep forgiving aliases without control characters', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final appState =
