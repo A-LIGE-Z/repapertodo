@@ -1550,10 +1550,18 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "hide") {
-          RememberActivePaperId(call.arguments());
-          RememberPaperVisibility(active_paper_id_, false);
-          ShowWindow(window, SW_HIDE);
-          z_order_state_initialized_ = false;
+          const std::string requested_paper_id =
+              GetPaperIdArgument(call.arguments());
+          if (requested_paper_id.empty()) {
+            RememberPaperVisibility(active_paper_id_, false);
+          } else {
+            RememberPaperVisibility(requested_paper_id, false);
+          }
+          if (requested_paper_id.empty() ||
+              requested_paper_id == active_paper_id_) {
+            ShowWindow(window, SW_HIDE);
+            z_order_state_initialized_ = false;
+          }
           result->Success();
           return;
         }

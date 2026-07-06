@@ -112,6 +112,8 @@ Hiding a paper should follow PaperTodo's single-paper rules: clear desktop
 pinning, mark the paper hidden, and expand it before persisting or refreshing
 platform surfaces. Deleting the last remaining paper should immediately create
 a visible default Todo paper so the app never settles into an empty board.
+Native hide requests for a specific non-active paper must update that paper's
+surface state without hiding the currently active Windows host window.
 Tray-level Exit and forwarded `quit`/`exit` commands must also go through the
 Dart startup command path so the app can save local state and run the configured
 sync-before-exit flow before the native runner destroys the window.

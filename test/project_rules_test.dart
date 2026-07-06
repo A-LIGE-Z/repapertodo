@@ -1102,6 +1102,25 @@ void main() {
     expect(platform, contains("case 'paperDeleteRequested':"));
   });
 
+  test('Windows runner hides only the active native paper surface', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final hideStart = runner.indexOf('if (method == "hide")');
+    final hideEnd = runner.indexOf('if (method == "setAlwaysOnTop")');
+
+    expect(design, contains('specific non-active paper'));
+    expect(hideStart, isNonNegative);
+    expect(hideEnd, greaterThan(hideStart));
+    final hideBlock = runner.substring(hideStart, hideEnd);
+    expect(hideBlock, contains('GetPaperIdArgument'));
+    expect(
+      hideBlock,
+      contains('RememberPaperVisibility(requested_paper_id, false)'),
+    );
+    expect(hideBlock, contains('requested_paper_id == active_paper_id_'));
+    expect(hideBlock, isNot(contains('RememberActivePaperId')));
+  });
+
   test('Windows tray marks script capsule notes distinctly', () {
     final dartHost = File('lib/src/platform/windows_platform_services.dart')
         .readAsStringSync();
