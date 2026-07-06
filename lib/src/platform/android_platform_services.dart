@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../core/model/external_uri_targets.dart';
 import 'noop_platform_services.dart';
 import 'platform_services.dart';
 
@@ -51,28 +52,28 @@ class AndroidUriOpenHost implements UriOpenHost {
     if (trimmedUri.isEmpty) {
       throw ArgumentError.value(uri, 'uri', 'Android URI must not be blank.');
     }
-    if (_hasUnsafeExternalUriCharacter(trimmedUri)) {
+    if (hasUnsafeExternalUriCharacter(trimmedUri)) {
       throw ArgumentError.value(
         uri,
         'uri',
         'Android URI must not contain control characters.',
       );
     }
-    if (_hasEncodedUnsafeExternalUriCharacter(trimmedUri)) {
+    if (hasEncodedUnsafeExternalUriCharacter(trimmedUri)) {
       throw ArgumentError.value(
         uri,
         'uri',
         'Android URI must not contain encoded control characters.',
       );
     }
-    if (_hasEncodedExternalUriAuthoritySeparator(trimmedUri)) {
+    if (hasEncodedExternalUriAuthoritySeparator(trimmedUri)) {
       throw ArgumentError.value(
         uri,
         'uri',
         'Android URI must not contain encoded authority separators.',
       );
     }
-    if (!_isAllowedExternalUri(trimmedUri)) {
+    if (!isAllowedExternalUriTarget(trimmedUri)) {
       throw ArgumentError.value(
         uri,
         'uri',
@@ -123,68 +124,6 @@ class AndroidAppStorageHost implements AppStorageHost {
     }
     return trimmedPath;
   }
-}
-
-bool _hasEncodedUnsafeExternalUriCharacter(String value) {
-  try {
-    return Uri.decodeFull(value).runes.any(_isControlRune);
-  } on FormatException {
-    // Malformed escapes should still reject obvious percent-encoded controls.
-  }
-  for (final match in RegExp(r'%([0-9a-fA-F]{2})').allMatches(value)) {
-    final unit = int.parse(match.group(1)!, radix: 16);
-    if (unit < 0x20 || (unit >= 0x7F && unit <= 0x9F)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool _hasEncodedExternalUriAuthoritySeparator(String value) {
-  final uri = Uri.tryParse(value);
-  final scheme = uri?.scheme.toLowerCase();
-  if (uri == null || (scheme != 'http' && scheme != 'https')) {
-    return false;
-  }
-  final authority = uri.authority.toLowerCase();
-  for (final encodedSeparator in const [
-    '%23',
-    '%2f',
-    '%3a',
-    '%3f',
-    '%40',
-    '%5b',
-    '%5c',
-    '%5d',
-  ]) {
-    if (authority.contains(encodedSeparator)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool _isAllowedExternalUri(String value) {
-  final uri = Uri.tryParse(value);
-  if (uri == null) {
-    return false;
-  }
-  final scheme = uri.scheme.toLowerCase();
-  if (scheme == 'http' || scheme == 'https') {
-    return uri.host.trim().isNotEmpty &&
-        uri.userInfo.isEmpty &&
-        !_hasEncodedExternalUriAuthoritySeparator(value);
-  }
-  if (scheme == 'mailto') {
-    return uri.path.trim().isNotEmpty;
-  }
-  return false;
-}
-
-bool _hasUnsafeExternalUriCharacter(String value) {
-  return value.runes.any(
-    (rune) => rune <= 0x20 || (rune >= 0x7F && rune <= 0x9F),
-  );
 }
 
 bool _hasUnsafeExternalFilePathCharacter(String value) {

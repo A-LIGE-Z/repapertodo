@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 
 import 'app_controller.dart';
 import 'core/model/app_state.dart';
+import 'core/model/external_uri_targets.dart';
 import 'core/model/markdown_formatting.dart';
 import 'core/model/markdown_inline_html.dart';
 import 'core/model/markdown_link_targets.dart';
@@ -311,83 +312,11 @@ String _platformFailureMessage({
 }
 
 String? _normalizeExternalUri(String value) {
-  var trimmed = value.trim();
-  if (trimmed.isEmpty) {
-    return null;
-  }
-  if (trimmed.toLowerCase().startsWith('www.')) {
-    trimmed = 'https://$trimmed';
-  }
-  if (_hasUnsafeExternalUriCharacter(trimmed)) {
-    return null;
-  }
-  if (_hasEncodedUnsafeExternalUriCharacter(trimmed)) {
-    return null;
-  }
-  final uri = Uri.tryParse(trimmed);
-  if (uri == null) {
-    return null;
-  }
-  final scheme = uri.scheme.toLowerCase();
-  if (scheme == 'http' || scheme == 'https') {
-    return uri.host.trim().isEmpty ||
-            uri.userInfo.isNotEmpty ||
-            _hasEncodedExternalUriAuthoritySeparator(uri.authority)
-        ? null
-        : trimmed;
-  }
-  if (scheme == 'mailto') {
-    return uri.path.trim().isEmpty ? null : trimmed;
-  }
-  return null;
+  return normalizeExternalUriTarget(value, allowBareWww: true);
 }
 
 String? _normalizeMarkdownLocalPath(String value) {
   return normalizeMarkdownLocalPathTarget(value);
-}
-
-bool _hasEncodedExternalUriAuthoritySeparator(String authority) {
-  final normalized = authority.toLowerCase();
-  for (final encodedSeparator in const [
-    '%23',
-    '%2f',
-    '%3a',
-    '%3f',
-    '%40',
-    '%5b',
-    '%5c',
-    '%5d',
-  ]) {
-    if (normalized.contains(encodedSeparator)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool _hasUnsafeExternalUriCharacter(String value) {
-  return value.runes.any(
-    (rune) => rune <= 0x20 || (rune >= 0x7F && rune <= 0x9F),
-  );
-}
-
-bool _hasEncodedUnsafeExternalUriCharacter(String value) {
-  try {
-    return Uri.decodeFull(value).runes.any(_isControlRune);
-  } on FormatException {
-    // Malformed escapes should still reject obvious percent-encoded controls.
-  }
-  for (final match in RegExp(r'%([0-9a-fA-F]{2})').allMatches(value)) {
-    final unit = int.parse(match.group(1)!, radix: 16);
-    if (unit < 0x20 || (unit >= 0x7F && unit <= 0x9F)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool _isControlRune(int rune) {
-  return rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
 }
 
 class _CompactAppBarActions {

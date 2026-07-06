@@ -73,6 +73,8 @@ void main() {
   test('platform launch hosts reject blank native channel arguments', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
+    final externalUriTargets =
+        File('lib/src/core/model/external_uri_targets.dart').readAsStringSync();
     final android = File('lib/src/platform/android_platform_services.dart')
         .readAsStringSync();
     final windows = File('lib/src/platform/windows_platform_services.dart')
@@ -86,8 +88,13 @@ void main() {
     expect(design, contains('External Markdown extension settings'));
     expect(design, contains('including DEL and C1 controls'));
     expect(app, contains(r'[<>:"/\\|?*\x00-\x1F\x7F-\x9F]'));
-    expect(app, contains('_hasEncodedUnsafeExternalUriCharacter'));
-    expect(app, contains('_hasEncodedExternalUriAuthoritySeparator'));
+    expect(app, contains('normalizeExternalUriTarget'));
+    expect(
+        externalUriTargets, contains('hasEncodedUnsafeExternalUriCharacter'));
+    expect(
+      externalUriTargets,
+      contains('hasEncodedExternalUriAuthoritySeparator'),
+    );
     expect(android, contains('Android URI must not be blank.'));
     expect(
         android, contains('Android URI must not contain control characters.'));
@@ -95,7 +102,8 @@ void main() {
         contains('Android URI must not contain encoded control characters.'));
     expect(android,
         contains('Android URI must not contain encoded authority separators.'));
-    expect(android, contains('_hasEncodedExternalUriAuthoritySeparator'));
+    expect(android, contains('hasEncodedExternalUriAuthoritySeparator'));
+    expect(android, contains('isAllowedExternalUriTarget'));
     expect(android, contains('Android external file path must not be blank.'));
     expect(
         android,
@@ -108,7 +116,8 @@ void main() {
         contains('Windows URI must not contain encoded control characters.'));
     expect(windows,
         contains('Windows URI must not contain encoded authority separators.'));
-    expect(windows, contains('_hasEncodedExternalUriAuthoritySeparator'));
+    expect(windows, contains('hasEncodedExternalUriAuthoritySeparator'));
+    expect(windows, contains('isAllowedExternalUriTarget'));
     expect(windows, contains('Windows external file path must not be blank.'));
     expect(
         windows,
@@ -522,7 +531,8 @@ void main() {
     expect(runner, contains('has_modifier = true'));
     expect(runner, contains('return has_modifier && *key != 0'));
     expect(runner, contains('hotkey_registration_failed'));
-    expect(runner, contains('todo_hotkey_requested && !todo_hotkey_registered_'));
+    expect(
+        runner, contains('todo_hotkey_requested && !todo_hotkey_registered_'));
     expect(runner, contains('reveal-pinned-todo'));
     expect(runner, contains('reveal-pinned-note'));
   });
@@ -934,6 +944,8 @@ void main() {
     final markdownLinkTargets =
         File('lib/src/core/model/markdown_link_targets.dart')
             .readAsStringSync();
+    final externalUriTargets =
+        File('lib/src/core/model/external_uri_targets.dart').readAsStringSync();
     final markdownLinks =
         File('lib/src/core/model/markdown_links.dart').readAsStringSync();
 
@@ -997,7 +1009,7 @@ void main() {
     expect(app, contains('_paperTodoMarkdownBuilders'));
     expect(app, contains('class _UnderlineMarkdownElementBuilder'));
     expect(app, contains("_previewMarkdownStyleSheet"));
-    expect(app, contains("startsWith('www.')"));
+    expect(externalUriTargets, contains("startsWith('www.')"));
     expect(app, contains('_normalizeMarkdownLocalPath'));
     expect(app, contains('controller.openExternalFile(localPath)'));
     expect(app, contains('normalizeMarkdownLocalPathTarget'));
@@ -1128,11 +1140,18 @@ void main() {
   test('Windows runner preserves external URI safety checks', () {
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final app = File('lib/src/app.dart').readAsStringSync();
+    final externalUriTargets =
+        File('lib/src/core/model/external_uri_targets.dart').readAsStringSync();
 
-    expect(app, contains('_hasUnsafeExternalUriCharacter'));
-    expect(app, contains('_hasEncodedUnsafeExternalUriCharacter'));
-    expect(app, contains('uri.userInfo.isNotEmpty'));
-    expect(app, contains('_hasEncodedExternalUriAuthoritySeparator'));
+    expect(app, contains('normalizeExternalUriTarget'));
+    expect(externalUriTargets, contains('hasUnsafeExternalUriCharacter'));
+    expect(
+        externalUriTargets, contains('hasEncodedUnsafeExternalUriCharacter'));
+    expect(externalUriTargets, contains('uri.userInfo.isEmpty'));
+    expect(
+      externalUriTargets,
+      contains('hasEncodedExternalUriAuthoritySeparator'),
+    );
     expect(runner, contains('IsAllowedExternalUri'));
     expect(runner, contains('HasEncodedUnsafeExternalUriCharacter'));
     expect(runner, contains('HasEncodedExternalUriAuthoritySeparator'));
