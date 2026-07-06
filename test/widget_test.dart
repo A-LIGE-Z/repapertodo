@@ -6893,6 +6893,117 @@ void main() {
     expect(find.text('Local data uploaded.'), findsNothing);
   });
 
+  testWidgets('settings save failure restores paused pending local edit upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      customThemeColorHex: '#112233',
+      papers: [
+        PaperData(
+          id: 'settings-save-paused-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncedState = AppState(
+      sync: syncSettings.copy(),
+      customThemeColorHex: '#336699',
+      papers: [
+        PaperData(
+          id: 'settings-save-paused-note',
+          type: PaperTypes.note,
+          title: 'Synced',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      localUploadState: AppState(
+        sync: syncSettings.copy()
+          ..operationDeviceSequences = const {'device-a': 1},
+        customThemeColorHex: '#336699',
+        papers: [
+          PaperData(
+            id: 'settings-save-paused-note',
+            type: PaperTypes.note,
+            title: 'Draft',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-save-paused-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Custom theme color'),
+      '336699',
+    );
+    store.nextSaveError =
+        const StateStoreException('settings save failed', 'disk full');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('Settings save failed:'), findsOneWidget);
+    expect(syncService.events, isEmpty);
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+    expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
   testWidgets('settings save failure does not block later local edit upload',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
