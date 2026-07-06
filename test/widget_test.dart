@@ -3144,6 +3144,91 @@ void main() {
     expect(find.text('Snapshot restored.'), findsOneWidget);
   });
 
+  testWidgets('recovery snapshot restore clears stale todo reminders',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        todoReminderIntervalValue: 10,
+        todoReminderBubbleDurationSeconds: 30,
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'local-reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Remind me',
+            items: [
+              PaperItem(
+                id: 'local-reminder-item',
+                text: 'Replace me',
+                dueAtLocal: DateTime.now()
+                    .subtract(const Duration(minutes: 11))
+                    .toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _RecoverySnapshotSyncService(
+      snapshots: [
+        WebDavSnapshotRecord(
+          path:
+              'repapertodo/snapshots/snapshot-20260701T100000000Z-laptop.json',
+          deviceId: 'laptop',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 10),
+        ),
+      ],
+      restoredState: AppState(
+        papers: [
+          PaperData(
+            id: 'restored-note',
+            type: PaperTypes.note,
+            title: 'Restored note',
+            content: 'No stale reminders here.',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Reminder: Remind - Replace me'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Recovery snapshots'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(
+        'restore-snapshot-repapertodo/snapshots/snapshot-20260701T100000000Z-laptop.json')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.title, 'Restored note');
+    expect(find.text('Reminder: Remind - Replace me'), findsNothing);
+    expect(find.text('Snapshot restored.'), findsOneWidget);
+  });
+
   testWidgets('recovery snapshot restore failure can retry from snackbar',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

@@ -395,6 +395,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   final Map<String, bool> _surfaceVisibilityByPaperId = <String, bool>{};
   final Map<String, DateTime> _lastTodoReminderAt = <String, DateTime>{};
   final Set<String> _activeTodoReminderItemIds = <String>{};
+  final Set<String> _activeTodoReminderKeys = <String>{};
 
   RePaperTodoController get controller => widget.controller;
   PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
@@ -1299,6 +1300,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       controller.replaceState(state);
       _refreshSurfaceVisibilitySnapshot();
     });
+    _reconcileTodoReminderStateAfterReplacement();
     await controller.applyCurrentStateToPlatform();
   }
 
@@ -2263,9 +2265,13 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         .map((candidate) => candidate.item.id.trim())
         .where((id) => id.isNotEmpty)
         .toSet();
+    final reminderKeys = candidates.map((candidate) => candidate.key).toSet();
     _activeTodoReminderItemIds
       ..clear()
       ..addAll(reminderItemIds);
+    _activeTodoReminderKeys
+      ..clear()
+      ..addAll(reminderKeys);
     final first = candidates.first;
     final message = candidates.length == 1
         ? strings.format(
@@ -2289,10 +2295,32 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       ),
     );
     unawaited(snackBarController.closed.then((_) {
-      if (_sameStringSet(_activeTodoReminderItemIds, reminderItemIds)) {
+      if (_sameStringSet(_activeTodoReminderKeys, reminderKeys)) {
         _activeTodoReminderItemIds.clear();
+        _activeTodoReminderKeys.clear();
       }
     }));
+  }
+
+  void _reconcileTodoReminderStateAfterReplacement() {
+    final candidateKeys = <String>{};
+    final candidateItemIds = <String>{};
+    for (final candidate in _reminderCandidates(DateTime.now())) {
+      candidateKeys.add(candidate.key);
+      final itemId = candidate.item.id.trim();
+      if (itemId.isNotEmpty) {
+        candidateItemIds.add(itemId);
+      }
+    }
+    _lastTodoReminderAt.removeWhere((key, _) => !candidateKeys.contains(key));
+    final activeReminderStillExists =
+        _activeTodoReminderKeys.every(candidateKeys.contains) &&
+            _activeTodoReminderItemIds.every(candidateItemIds.contains);
+    if (_activeTodoReminderKeys.isNotEmpty && !activeReminderStillExists) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _activeTodoReminderItemIds.clear();
+      _activeTodoReminderKeys.clear();
+    }
   }
 
   void _clearTodoReminderStateForItems(
@@ -2313,9 +2341,13 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         _activeTodoReminderItemIds.any(itemIds.contains)) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       _activeTodoReminderItemIds.clear();
+      _activeTodoReminderKeys.clear();
       return;
     }
     _activeTodoReminderItemIds.removeWhere(itemIds.contains);
+    _activeTodoReminderKeys.removeWhere((key) {
+      return itemIds.any((itemId) => key.startsWith('$itemId|'));
+    });
   }
 
   String _displayItemText(PaperItem item) {
