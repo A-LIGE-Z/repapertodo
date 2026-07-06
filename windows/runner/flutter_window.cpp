@@ -272,7 +272,12 @@ bool IsAllowedExternalUri(const std::string& value) {
   }
   const std::string scheme = LowerAscii(uri.substr(0, scheme_separator));
   if (scheme == "mailto") {
-    return !TrimAscii(uri.substr(scheme_separator + 1)).empty();
+    const std::string recipient = TrimAscii(uri.substr(scheme_separator + 1));
+    if (recipient.empty() || StartsWith(recipient, "?") ||
+        StartsWith(recipient, "//")) {
+      return false;
+    }
+    return true;
   }
   if (scheme != "http" && scheme != "https") {
     return false;

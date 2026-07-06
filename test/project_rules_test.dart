@@ -1165,6 +1165,9 @@ void main() {
     expect(runner, contains('authority_host'));
     expect(runner, contains("authority.front() == '['"));
     expect(runner, contains('scheme == "mailto"'));
+    expect(runner, contains('const std::string recipient = TrimAscii'));
+    expect(runner, contains('StartsWith(recipient, "?")'));
+    expect(runner, contains('StartsWith(recipient, "//")'));
     expect(runner, contains('scheme != "http" && scheme != "https"'));
     expect(runner, contains('ShellExecuteW'));
   });
