@@ -75,22 +75,32 @@ abstract final class WebDavPresets {
 }
 
 String? _normalizePresetId(String? id) {
-  final value = id?.trim().toLowerCase().replaceAll(RegExp(r'[\s_]+'), '-');
-  return switch (value) {
-    null || '' => null,
+  final rawValue = id?.trim().toLowerCase();
+  if (rawValue == null || rawValue.isEmpty) {
+    return null;
+  }
+  final value = rawValue.replaceAll(RegExp(r'[\s_]+'), '-');
+  final compactValue = rawValue.replaceAll(RegExp(r'[\s_-]+'), '');
+  if (switch (compactValue) {
     '坚果云' ||
-    '坚果云-webdav' ||
+    '坚果云webdav' ||
     'jianguoyun' ||
+    'jianguoyunwebdav' ||
+    'nutstore' ||
+    'nutstorewebdav' =>
+      true,
+    _ => false,
+  }) {
+    return WebDavPresetIds.jianguoyun;
+  }
+  return switch (value) {
     'jianguo-yun' ||
     'jian-guoyun' ||
     'jian-guo-yun' ||
-    'jianguoyun-webdav' ||
     'jianguo-yun-webdav' ||
     'jian-guoyun-webdav' ||
     'jian-guo-yun-webdav' ||
-    'nutstore' ||
     'nut-store' ||
-    'nutstore-webdav' ||
     'nut-store-webdav' =>
       WebDavPresetIds.jianguoyun,
     'custom' ||

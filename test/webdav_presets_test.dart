@@ -9,6 +9,9 @@ void main() {
     expect(WebDavPresets.all, containsAll([preset, WebDavPresets.custom]));
     expect(WebDavPresets.byId(' jianguoyun '), same(preset));
     expect(WebDavPresets.byId('坚果云'), same(preset));
+    expect(WebDavPresets.byId('坚 果 云'), same(preset));
+    expect(WebDavPresets.byId('坚_果_云'), same(preset));
+    expect(WebDavPresets.byId('坚-果-云 WebDAV'), same(preset));
     expect(WebDavPresets.byId('jian guo yun'), same(preset));
     expect(WebDavPresets.byId('jian_guo_yun'), same(preset));
     expect(WebDavPresets.byId('Jian-Guo-Yun'), same(preset));
