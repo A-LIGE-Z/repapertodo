@@ -72,6 +72,13 @@ class AndroidUriOpenHost implements UriOpenHost {
         'Android URI must not contain encoded authority separators.',
       );
     }
+    if (!_isAllowedExternalUri(trimmedUri)) {
+      throw ArgumentError.value(
+        uri,
+        'uri',
+        'Android URI scheme is not supported.',
+      );
+    }
     await _channel.invokeMethod<void>('openUri', trimmedUri);
   }
 }
@@ -153,6 +160,23 @@ bool _hasEncodedExternalUriAuthoritySeparator(String value) {
     if (authority.contains(encodedSeparator)) {
       return true;
     }
+  }
+  return false;
+}
+
+bool _isAllowedExternalUri(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null) {
+    return false;
+  }
+  final scheme = uri.scheme.toLowerCase();
+  if (scheme == 'http' || scheme == 'https') {
+    return uri.host.trim().isNotEmpty &&
+        uri.userInfo.isEmpty &&
+        !_hasEncodedExternalUriAuthoritySeparator(value);
+  }
+  if (scheme == 'mailto') {
+    return uri.path.trim().isNotEmpty;
   }
   return false;
 }

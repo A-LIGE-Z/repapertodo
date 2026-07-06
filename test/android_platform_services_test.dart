@@ -147,4 +147,53 @@ void main() {
       'https://example.com/%E2%82%ACpath',
     ]);
   });
+
+  test('platform services reject unsupported URI schemes locally', () async {
+    const androidChannel = MethodChannel('repapertodo/android_scheme_test');
+    const windowsChannel = MethodChannel('repapertodo/windows_scheme_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(androidChannel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(windowsChannel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(androidChannel, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(windowsChannel, null);
+    });
+
+    final openers = [
+      AndroidPlatformServices(channel: androidChannel).uriOpener,
+      WindowsPlatformServices(channel: windowsChannel).uriOpener,
+    ];
+
+    for (final opener in openers) {
+      await expectLater(
+        opener.openUri('ftp://example.com/file'),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        opener.openUri('javascript:alert(1)'),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        opener.openUri('https:///missing-host'),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      await opener.openUri('mailto:paper@example.com');
+    }
+
+    expect(calls.map((call) => call.arguments), [
+      'mailto:paper@example.com',
+      'mailto:paper@example.com',
+    ]);
+  });
 }
