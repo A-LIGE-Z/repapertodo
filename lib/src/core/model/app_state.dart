@@ -516,7 +516,7 @@ double _normalizeZoom(double value) {
 String _normalizeHotKeyForSettings(String value) {
   final cleaned = StringBuffer();
   for (final unit in value.codeUnits) {
-    if (unit <= 0x1F || unit == 0x7F) {
+    if (unit <= 0x1F || (unit >= 0x7F && unit <= 0x9F)) {
       continue;
     }
     cleaned.writeCharCode(unit);

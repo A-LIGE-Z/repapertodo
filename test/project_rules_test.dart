@@ -456,7 +456,10 @@ void main() {
     expect(design, contains('must include at least one real modifier'));
     expect(design, contains('single-key global shortcuts are ignored'));
     expect(appState, contains('_normalizeHotKeyForSettings'));
-    expect(appState, contains('unit <= 0x1F || unit == 0x7F'));
+    expect(
+      appState,
+      contains('unit <= 0x1F || (unit >= 0x7F && unit <= 0x9F)'),
+    );
     expect(runner, contains('bool has_modifier = false'));
     expect(runner, contains('has_modifier = true'));
     expect(runner, contains('return has_modifier && *key != 0'));

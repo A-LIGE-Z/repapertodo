@@ -667,7 +667,7 @@ Plain item
   test('normalizes pinned hotkeys like PaperTodo', () {
     final longHotKey = 'Ctrl+Alt+${List.filled(80, 'A').join()}';
     final state = AppState.fromJson({
-      'pinnedTodoHotKey': '  Ctrl+\nAlt+\u007FT  ',
+      'pinnedTodoHotKey': '  Ctrl+\nAlt+\u007F\u0085T  ',
       'pinnedNoteHotKey': '$longHotKey\n',
     });
 
