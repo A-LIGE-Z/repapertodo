@@ -1115,6 +1115,22 @@ void main() {
     expect(platform, contains("case 'paperDeleteRequested':"));
   });
 
+  test('Windows platform ignores unknown explicit paper IDs', () {
+    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
+    final platform = File('lib/src/platform/windows_platform_services.dart')
+        .readAsStringSync();
+    final lookupStart = platform.indexOf('PaperData? _paperFromEventArguments');
+    final lookupEnd = platform.indexOf('String? _paperIdFromArguments');
+
+    expect(design, contains('explicitly name an unknown `paperId`'));
+    expect(lookupStart, isNonNegative);
+    expect(lookupEnd, greaterThan(lookupStart));
+    final lookupBlock = platform.substring(lookupStart, lookupEnd);
+    expect(lookupBlock, contains('return _activePaper;'));
+    expect(lookupBlock, contains('return _knownPapers[paperId];'));
+    expect(lookupBlock, isNot(contains('?? _activePaper')));
+  });
+
   test('Windows runner hides only the active native paper surface', () {
     final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
     final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();

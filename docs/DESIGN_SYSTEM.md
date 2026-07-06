@@ -34,6 +34,9 @@ show/hide, close, and open requests to the correct `PaperData` even while the
 current runner still hosts one Flutter window. The native runner should
 preserve that `paperId` in follow-up window events after Dart sends it through
 show, hide, bounds, or tray commands.
+Events that explicitly name an unknown `paperId` should be ignored instead of
+falling back to the active paper, while legacy events without a `paperId` may
+still target the active paper for backward compatibility.
 Surface commands that change visibility, desktop pinning, or always-on-top
 state should send structured arguments with the `paperId`, while the runner
 keeps compatibility with older string and bool arguments. The runner should

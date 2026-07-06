@@ -304,7 +304,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     if (paperId == null) {
       return _activePaper;
     }
-    return _knownPapers[paperId] ?? _activePaper;
+    return _knownPapers[paperId];
   }
 
   String? _paperIdFromArguments(Object? arguments) {
