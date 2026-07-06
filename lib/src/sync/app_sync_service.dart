@@ -367,6 +367,7 @@ class AppSyncService {
       final records = _contiguousOperationRecords(
         await client.listOperationLogs(),
         previousSequences,
+        paths: _operationLogPathsFor(localState),
       );
       final operations = <SyncOperation>[];
       var legacyPlainOperationLogCount = 0;
@@ -931,8 +932,9 @@ class _ConfiguredWebDavClient {
 
 List<WebDavOperationLogRecord> _contiguousOperationRecords(
   Iterable<WebDavOperationLogRecord> records,
-  Map<String, int> previousSequences,
-) {
+  Map<String, int> previousSequences, {
+  WebDavStateSyncPaths paths = const WebDavStateSyncPaths(),
+}) {
   final candidates = <_OperationLogCandidate>[];
   for (final record in records) {
     final deviceId = normalizeSyncDeviceId(record.deviceId, fallback: '');
@@ -955,6 +957,17 @@ List<WebDavOperationLogRecord> _contiguousOperationRecords(
     final sequenceComparison = a.record.sequence.compareTo(b.record.sequence);
     if (sequenceComparison != 0) {
       return sequenceComparison;
+    }
+    final canonicalComparison =
+        _compareCanonicalOperationLogRecords(a, b, paths);
+    if (canonicalComparison != 0) {
+      return canonicalComparison;
+    }
+    final metadataComparison = _operationLogMetadataScore(b.record).compareTo(
+      _operationLogMetadataScore(a.record),
+    );
+    if (metadataComparison != 0) {
+      return metadataComparison;
     }
     final pathComparison = a.record.path.compareTo(b.record.path);
     if (pathComparison != 0) {
@@ -999,6 +1012,50 @@ List<WebDavOperationLogRecord> _contiguousOperationRecords(
     expectedSequences[candidate.deviceId] = expectedSequence + 1;
   }
   return selected;
+}
+
+WebDavStateSyncPaths _operationLogPathsFor(AppState state) {
+  final settings = state.sync.webDav.copy()..normalize();
+  return WebDavStateSyncPaths(rootPath: settings.rootPath);
+}
+
+int _compareCanonicalOperationLogRecords(
+  _OperationLogCandidate left,
+  _OperationLogCandidate right,
+  WebDavStateSyncPaths paths,
+) {
+  final leftIsCanonical = _isCanonicalOperationLogRecord(
+    left.record,
+    left.deviceId,
+    paths,
+  );
+  final rightIsCanonical = _isCanonicalOperationLogRecord(
+    right.record,
+    right.deviceId,
+    paths,
+  );
+  if (leftIsCanonical == rightIsCanonical) {
+    return 0;
+  }
+  return leftIsCanonical ? -1 : 1;
+}
+
+bool _isCanonicalOperationLogRecord(
+  WebDavOperationLogRecord record,
+  String deviceId,
+  WebDavStateSyncPaths paths,
+) {
+  try {
+    return record.path == paths.operationLogPath(deviceId, record.sequence);
+  } on WebDavSyncConfigurationException {
+    return false;
+  }
+}
+
+int _operationLogMetadataScore(WebDavOperationLogRecord record) {
+  return (record.etag == null ? 0 : 4) +
+      (record.contentLength == null ? 0 : 2) +
+      (record.lastModifiedUtc == null ? 0 : 1);
 }
 
 class _OperationLogCandidate {

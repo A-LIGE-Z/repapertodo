@@ -3634,6 +3634,70 @@ void main() {
     expect(result.state.papers.single.title, 'Remote');
   });
 
+  test('merge prefers canonical duplicate operation log records', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_canonical_duplicate_records_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final downloadedPaths = <String>[];
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/a-device-a-000000000001.jsonl',
+              deviceId: ' Device A ',
+              sequence: 1,
+              etag: 'rich-duplicate',
+              contentLength: 1024,
+              lastModifiedUtc: DateTime.utc(2026, 7, 1, 9, 5),
+            ),
+            const WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          downloadedPaths.add(operationLogPath);
+          if (operationLogPath !=
+              'repapertodo/ops/device-a-000000000001.jsonl') {
+            throw StateError('Unexpected duplicate record selected.');
+          }
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'paper': PaperData(
+                  id: 'remote',
+                  type: PaperTypes.note,
+                  title: 'Canonical',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+    );
+
+    expect(downloadedPaths, [
+      'repapertodo/ops/device-a-000000000001.jsonl',
+    ]);
+    expect(result.appliedCount, 1);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.papers.single.title, 'Canonical');
+  });
+
   test('merge skips operation logs outside the remote sequence range',
       () async {
     final directory = await Directory.systemTemp
