@@ -214,9 +214,10 @@ or arbitrary tags.
 Markdown URL normalization should preserve PaperTodo's bare-host convenience:
 links beginning with `www.` open as `https://www...` in both preview mode and
 edit-mode source link handling before platform URI validation runs.
-Markdown local path links should preserve PaperTodo Windows behavior: drive,
-UNC, and `file:` targets open through the external-file host, while device paths
-such as `\\.\` and `\\?\` are rejected before native launch.
+Markdown local path links should preserve PaperTodo Windows behavior while
+remaining useful on Android: Windows drive/UNC paths, Android POSIX absolute
+paths, and `file:` targets open through the external-file host, while Windows
+device paths such as `\\.\` and `\\?\` are rejected before native launch.
 Markdown link hit-testing should skip links inside closed inline code spans,
 matching PaperTodo's source editor highlighting and Ctrl+click behavior.
 Markdown image syntax should follow PaperTodo's lightweight scanner rather than
@@ -229,8 +230,8 @@ Markdown source link scanning should stay deliberately small like PaperTodo:
 the first literal `](` and following literal `)` delimit the target, backslash
 escapes are not interpreted, CommonMark angle destinations and title suffixes
 are not source link targets, and only `http`, `https`, `mailto`, `www.`,
-Windows drive/UNC paths, and `file:` paths are accepted before the app-level
-launch validation runs.
+Windows drive/UNC paths, Android POSIX absolute paths, and `file:` paths are
+accepted before the app-level launch validation runs.
 Markdown line classification should share one PaperTodo-compatible model for
 heading, quote, unordered list, ordered list, task list, horizontal rule, fenced
 code fence, and fenced code block detection so editor rendering and Enter-key

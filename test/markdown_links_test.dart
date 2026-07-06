@@ -127,6 +127,46 @@ void main() {
     expect(MarkdownLinks.hrefAt(script, script.indexOf('Script')), isNull);
   });
 
+  test('accepts Android local markdown URL target families when requested', () {
+    const localPath = '[Local](/storage/emulated/0/Download/My File.md)';
+    const fileUri = '[File](file:///storage/emulated/0/Download/File%20Uri.md)';
+    const protocolRelative = '[Protocol](//example.com/file.md)';
+    const windowsPath = r'[Windows](C:/PaperTodo/My File.md)';
+
+    expect(
+      MarkdownLinks.hrefAt(
+        localPath,
+        localPath.indexOf('Local'),
+        isWindows: false,
+      ),
+      '/storage/emulated/0/Download/My File.md',
+    );
+    expect(
+      MarkdownLinks.hrefAt(
+        fileUri,
+        fileUri.indexOf('File'),
+        isWindows: false,
+      ),
+      '/storage/emulated/0/Download/File Uri.md',
+    );
+    expect(
+      MarkdownLinks.hrefAt(
+        protocolRelative,
+        protocolRelative.indexOf('Protocol'),
+        isWindows: false,
+      ),
+      isNull,
+    );
+    expect(
+      MarkdownLinks.hrefAt(
+        windowsPath,
+        windowsPath.indexOf('Windows'),
+        isWindows: false,
+      ),
+      isNull,
+    );
+  });
+
   test('rejects raw and encoded control characters without blocking UTF-8', () {
     const rawC1 = '[Raw C1](https://example.com/\u0085path)';
     const encodedC0 = '[Encoded C0](https://example.com/%0Apath)';

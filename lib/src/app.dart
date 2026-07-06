@@ -14,6 +14,7 @@ import 'app_controller.dart';
 import 'core/model/app_state.dart';
 import 'core/model/markdown_formatting.dart';
 import 'core/model/markdown_inline_html.dart';
+import 'core/model/markdown_link_targets.dart';
 import 'core/model/markdown_links.dart';
 import 'core/model/markdown_list_continuation.dart';
 import 'core/model/markdown_paste.dart';
@@ -342,64 +343,7 @@ String? _normalizeExternalUri(String value) {
 }
 
 String? _normalizeMarkdownLocalPath(String value) {
-  var trimmed = value.trim();
-  if (trimmed.isEmpty || _hasRawControlCharacter(trimmed)) {
-    return null;
-  }
-
-  final uri = Uri.tryParse(trimmed);
-  if (uri != null && uri.scheme.toLowerCase() == 'file') {
-    try {
-      trimmed = uri.toFilePath(windows: Platform.isWindows);
-    } on UnsupportedError {
-      return null;
-    } on ArgumentError {
-      return null;
-    }
-  }
-
-  if (!_looksLikeLocalMarkdownPath(trimmed) || _isDeviceMarkdownPath(trimmed)) {
-    return null;
-  }
-
-  try {
-    final fullPath = p.normalize(p.absolute(trimmed));
-    return _isDeviceMarkdownPath(fullPath) ? null : fullPath;
-  } on ArgumentError {
-    return null;
-  } on FileSystemException {
-    return null;
-  }
-}
-
-bool _looksLikeLocalMarkdownPath(String value) {
-  return _isWindowsDrivePath(value) || _isUncPath(value);
-}
-
-bool _isWindowsDrivePath(String value) {
-  return value.length >= 3 &&
-      _isAsciiLetter(value.codeUnitAt(0)) &&
-      value[1] == ':' &&
-      _isDirectorySeparator(value[2]);
-}
-
-bool _isUncPath(String value) {
-  return value.length >= 3 &&
-      _isDirectorySeparator(value[0]) &&
-      _isDirectorySeparator(value[1]) &&
-      !_isDirectorySeparator(value[2]);
-}
-
-bool _isDeviceMarkdownPath(String value) {
-  final normalized = value.replaceAll('/', '\\');
-  return normalized.startsWith('\\\\.\\') || normalized.startsWith('\\\\?\\');
-}
-
-bool _isDirectorySeparator(String value) => value == '\\' || value == '/';
-
-bool _isAsciiLetter(int codeUnit) {
-  return (codeUnit >= 0x41 && codeUnit <= 0x5A) ||
-      (codeUnit >= 0x61 && codeUnit <= 0x7A);
+  return normalizeMarkdownLocalPathTarget(value);
 }
 
 bool _hasEncodedExternalUriAuthoritySeparator(String authority) {
@@ -425,10 +369,6 @@ bool _hasUnsafeExternalUriCharacter(String value) {
   return value.runes.any(
     (rune) => rune <= 0x20 || (rune >= 0x7F && rune <= 0x9F),
   );
-}
-
-bool _hasRawControlCharacter(String value) {
-  return value.runes.any(_isControlRune);
 }
 
 bool _hasEncodedUnsafeExternalUriCharacter(String value) {

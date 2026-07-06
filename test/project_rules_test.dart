@@ -924,6 +924,9 @@ void main() {
     final app = File('lib/src/app.dart').readAsStringSync();
     final inlineHtml =
         File('lib/src/core/model/markdown_inline_html.dart').readAsStringSync();
+    final markdownLinkTargets =
+        File('lib/src/core/model/markdown_link_targets.dart')
+            .readAsStringSync();
     final markdownLinks =
         File('lib/src/core/model/markdown_links.dart').readAsStringSync();
 
@@ -941,8 +944,9 @@ void main() {
     expect(design, contains("bare-host convenience"));
     expect(design, contains('links beginning with `www.`'));
     expect(design, contains('Markdown local path links should preserve'));
-    expect(design, contains('drive,'));
-    expect(design, contains('UNC, and `file:` targets'));
+    expect(design, contains('drive/UNC paths'));
+    expect(design, contains('Android POSIX absolute paths'));
+    expect(design, contains('and `file:` targets'));
     expect(design, contains('device paths'));
     expect(design, contains('closed inline code spans'));
     expect(design, contains('Markdown image syntax should follow'));
@@ -989,8 +993,13 @@ void main() {
     expect(app, contains("startsWith('www.')"));
     expect(app, contains('_normalizeMarkdownLocalPath'));
     expect(app, contains('controller.openExternalFile(localPath)'));
-    expect(app, contains('_isDeviceMarkdownPath'));
+    expect(app, contains('normalizeMarkdownLocalPathTarget'));
     expect(app, contains('MarkdownLinks.hrefAt'));
+    expect(markdownLinkTargets, contains('normalizeMarkdownLocalPathTarget'));
+    expect(markdownLinkTargets, contains('p.Style.windows'));
+    expect(markdownLinkTargets, contains('p.Style.posix'));
+    expect(markdownLinkTargets, contains('_isUnsafeDevicePath'));
+    expect(markdownLinkTargets, contains('_isPosixAbsolutePath'));
     expect(markdownLinks, contains('class MarkdownLinkSpan'));
     expect(markdownLinks, contains('_htmlAnchorLinks'));
     expect(markdownLinks, contains('_tryParseHtmlOpeningAnchor'));
@@ -998,7 +1007,7 @@ void main() {
     expect(markdownLinks, contains("startsWith('www.')"));
     expect(markdownLinks, contains('_closedInlineCodeSpans'));
     expect(markdownLinks, contains("indexOf(']('"));
-    expect(markdownLinks, contains("_normalizeLocalMarkdownPath"));
+    expect(markdownLinks, contains('normalizeMarkdownLocalPathTarget'));
     expect(inlineHtml, contains('class PaperTodoMarkdownInlineHtmlSyntax'));
     expect(inlineHtml, contains("'b' || 'strong'"));
     expect(inlineHtml, contains("'i' || 'em'"));

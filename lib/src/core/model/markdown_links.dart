@@ -1,6 +1,4 @@
-import 'package:path/path.dart' as p;
-
-final _windowsPathContext = p.Context(style: p.Style.windows);
+import 'markdown_link_targets.dart';
 
 class MarkdownLinkSpan {
   const MarkdownLinkSpan({
@@ -17,7 +15,7 @@ class MarkdownLinkSpan {
 }
 
 abstract final class MarkdownLinks {
-  static String? hrefAt(String text, int offset) {
+  static String? hrefAt(String text, int offset, {bool? isWindows}) {
     if (text.isEmpty) {
       return null;
     }
@@ -27,7 +25,7 @@ abstract final class MarkdownLinks {
     final line = text.substring(lineStart, lineEnd);
     final offsetInLine =
         (normalizedOffset - lineStart).clamp(0, line.length).toInt();
-    for (final link in spans(line)) {
+    for (final link in spans(line, isWindows: isWindows)) {
       if (link.containsOffset(offsetInLine)) {
         return link.href;
       }
@@ -35,21 +33,27 @@ abstract final class MarkdownLinks {
     return null;
   }
 
-  static Iterable<MarkdownLinkSpan> spans(String text) sync* {
+  static Iterable<MarkdownLinkSpan> spans(
+    String text, {
+    bool? isWindows,
+  }) sync* {
     final ignoredSpans = _closedInlineCodeSpans(text).toList();
-    for (final link in _markdownLinks(text)) {
+    for (final link in _markdownLinks(text, isWindows: isWindows)) {
       if (!_isIgnored(ignoredSpans, link.start, link.end)) {
         yield link;
       }
     }
-    for (final link in _htmlAnchorLinks(text)) {
+    for (final link in _htmlAnchorLinks(text, isWindows: isWindows)) {
       if (!_isIgnored(ignoredSpans, link.start, link.end)) {
         yield link;
       }
     }
   }
 
-  static Iterable<MarkdownLinkSpan> _markdownLinks(String text) sync* {
+  static Iterable<MarkdownLinkSpan> _markdownLinks(
+    String text, {
+    bool? isWindows,
+  }) sync* {
     var searchStart = 0;
     while (searchStart < text.length) {
       final labelStart = text.indexOf('[', searchStart);
@@ -70,6 +74,7 @@ abstract final class MarkdownLinks {
 
       final href = _normalizeMarkdownDestination(
         text.substring(destinationStart, destinationEnd),
+        isWindows: isWindows,
       );
       if (href != null) {
         yield MarkdownLinkSpan(
@@ -82,14 +87,21 @@ abstract final class MarkdownLinks {
     }
   }
 
-  static Iterable<MarkdownLinkSpan> _htmlAnchorLinks(String text) sync* {
+  static Iterable<MarkdownLinkSpan> _htmlAnchorLinks(
+    String text, {
+    bool? isWindows,
+  }) sync* {
     var search = 0;
     while (search < text.length) {
       final openStart = text.indexOf('<', search);
       if (openStart < 0) {
         break;
       }
-      final openTag = _tryParseHtmlOpeningAnchor(text, openStart);
+      final openTag = _tryParseHtmlOpeningAnchor(
+        text,
+        openStart,
+        isWindows: isWindows,
+      );
       if (openTag == null) {
         search = openStart + 1;
         continue;
@@ -111,7 +123,10 @@ abstract final class MarkdownLinks {
   }
 
   static _HtmlOpenAnchor? _tryParseHtmlOpeningAnchor(
-      String text, int openStart) {
+    String text,
+    int openStart, {
+    bool? isWindows,
+  }) {
     if (openStart + 2 >= text.length ||
         text[openStart] != '<' ||
         text[openStart + 1] == '/') {
@@ -133,7 +148,7 @@ abstract final class MarkdownLinks {
     }
 
     final rawHref = _tryGetHtmlHrefAttribute(text.substring(nameEnd, tagEnd));
-    final href = _normalizeHref(rawHref);
+    final href = _normalizeHref(rawHref, isWindows: isWindows);
     if (href == null) {
       return null;
     }
@@ -300,11 +315,14 @@ abstract final class MarkdownLinks {
     return false;
   }
 
-  static String? _normalizeMarkdownDestination(String rawDestination) {
-    return _normalizeHref(rawDestination);
+  static String? _normalizeMarkdownDestination(
+    String rawDestination, {
+    bool? isWindows,
+  }) {
+    return _normalizeHref(rawDestination, isWindows: isWindows);
   }
 
-  static String? _normalizeHref(String? rawHref) {
+  static String? _normalizeHref(String? rawHref, {bool? isWindows}) {
     var href = rawHref?.trim();
     if (href == null || href.isEmpty) {
       return null;
@@ -316,7 +334,10 @@ abstract final class MarkdownLinks {
       return null;
     }
 
-    final localPath = _normalizeLocalMarkdownPath(href);
+    final localPath = normalizeMarkdownLocalPathTarget(
+      href,
+      isWindows: isWindows,
+    );
     if (localPath != null) {
       return localPath;
     }
@@ -324,9 +345,6 @@ abstract final class MarkdownLinks {
     final uri = Uri.tryParse(href);
     if (uri == null) {
       return null;
-    }
-    if (uri.scheme.toLowerCase() == 'file') {
-      return _normalizeFileUriMarkdownPath(uri);
     }
     final scheme = uri.scheme.toLowerCase();
     if (scheme != 'http' && scheme != 'https' && scheme != 'mailto') {
@@ -337,62 +355,6 @@ abstract final class MarkdownLinks {
       return null;
     }
     return uri.toString();
-  }
-
-  static String? _normalizeFileUriMarkdownPath(Uri uri) {
-    try {
-      return _normalizeLocalMarkdownPath(uri.toFilePath(windows: true));
-    } on UnsupportedError {
-      return null;
-    } on ArgumentError {
-      return null;
-    }
-  }
-
-  static String? _normalizeLocalMarkdownPath(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty ||
-        _hasRawControlCharacter(trimmed) ||
-        !_looksLikeLocalMarkdownPath(trimmed) ||
-        _isDeviceMarkdownPath(trimmed)) {
-      return null;
-    }
-
-    try {
-      final fullPath = _windowsPathContext.normalize(
-        _windowsPathContext.absolute(trimmed),
-      );
-      return _isDeviceMarkdownPath(fullPath) ? null : fullPath;
-    } on ArgumentError {
-      return null;
-    }
-  }
-
-  static bool _looksLikeLocalMarkdownPath(String value) {
-    return _isWindowsDrivePath(value) || _isUncPath(value);
-  }
-
-  static bool _isWindowsDrivePath(String value) {
-    return value.length >= 3 &&
-        _isAsciiLetter(value[0]) &&
-        value[1] == ':' &&
-        _isDirectorySeparator(value[2]);
-  }
-
-  static bool _isUncPath(String value) {
-    return value.length >= 3 &&
-        _isDirectorySeparator(value[0]) &&
-        _isDirectorySeparator(value[1]) &&
-        !_isDirectorySeparator(value[2]);
-  }
-
-  static bool _isDeviceMarkdownPath(String value) {
-    final normalized = value.replaceAll('/', r'\');
-    return normalized.startsWith(r'\\.\') || normalized.startsWith(r'\\?\');
-  }
-
-  static bool _isDirectorySeparator(String value) {
-    return value == r'\' || value == '/';
   }
 
   static bool _hasValidRawUriAuthority(String value) {
@@ -410,15 +372,6 @@ abstract final class MarkdownLinks {
     }
     final authority = value.substring(authorityStart, authorityEnd);
     return authority.isNotEmpty && !_hasRawWhitespaceOrControl(authority);
-  }
-
-  static bool _isAsciiLetter(String value) {
-    if (value.length != 1) {
-      return false;
-    }
-    final codeUnit = value.codeUnitAt(0);
-    return (codeUnit >= 0x41 && codeUnit <= 0x5A) ||
-        (codeUnit >= 0x61 && codeUnit <= 0x7A);
   }
 
   static bool _hasRawControlCharacter(String value) {
