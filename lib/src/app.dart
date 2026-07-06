@@ -7026,14 +7026,15 @@ class _TodoEditorState extends State<_TodoEditor> {
       _setTodoColumnText(item, extraColumnIndex, snapshotText);
       _pushTodoUndoSnapshot(commitFocusedText: false);
     }
+    late final List<PaperItem> newItems;
     setState(() {
       _setTodoColumnText(item, extraColumnIndex, lines.first);
-      _addItemsAfter(item, lines.skip(1));
+      newItems = _addItemsAfter(item, lines.skip(1));
       widget.paper.normalize();
       _textFieldRevision++;
     });
     _markTodoTextEditCommitted(item, columnIndex: extraColumnIndex);
-    _requestTodoFocus();
+    _requestTodoItemFocus(newItems.isEmpty ? item.id : newItems.last.id);
     unawaited(widget.onChanged());
     return true;
   }
@@ -7329,12 +7330,12 @@ class _TodoEditorState extends State<_TodoEditor> {
     unawaited(widget.onChanged());
   }
 
-  void _addItemsAfter(PaperItem item, Iterable<String> lines) {
+  List<PaperItem> _addItemsAfter(PaperItem item, Iterable<String> lines) {
     final insertIndex = widget.paper.items.indexWhere(
       (candidate) => candidate.id == item.id,
     );
     if (insertIndex < 0) {
-      return;
+      return const [];
     }
     final idSeed = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     var lineIndex = 0;
@@ -7346,6 +7347,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
     ];
     widget.paper.items.insertAll(insertIndex + 1, newItems);
+    return newItems;
   }
 
   PaperItem _newTodoItem({String text = ''}) {

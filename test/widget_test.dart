@@ -8485,6 +8485,17 @@ void main() {
       [1],
       [1],
     ]);
+    final lastPastedField = tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(ValueKey('paste-paper-${items.last.id}-text')),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(lastPastedField.focusNode.hasFocus, true);
+    expect(
+      lastPastedField.controller.selection,
+      TextSelection.collapsed(offset: items.last.text.length),
+    );
 
     await tester.tap(find.byTooltip('Undo todo change'));
     await tester.pumpAndSettle();

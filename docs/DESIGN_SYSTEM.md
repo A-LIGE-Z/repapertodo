@@ -322,7 +322,9 @@ items instead of inheriting the source row's column layout.
 Multiline Todo paste should be available from every Todo text column, not only
 the main column. The first cleaned line replaces the focused column text, and
 subsequent cleaned lines create default single-column Todo rows after the
-active row.
+active row. After a multiline paste creates rows, focus should move to the last
+newly inserted Todo item's main text field, matching PaperTodo's last-row
+rebuild focus.
 Todo text editing should follow PaperTodo's undo snapshot timing: focusing a
 main todo text field records its original text, losing focus after a change
 pushes that pre-edit item snapshot, and structural edits first commit any
