@@ -227,6 +227,44 @@ function Assert-GitHubReleaseGitState {
   }
 }
 
+function Assert-GitHubReleaseTagState {
+  param(
+    [string]$TagName,
+    [string]$GitCommit
+  )
+
+  $tagRef = "refs/tags/$TagName"
+  $tagLines = & git ls-remote --tags origin $tagRef "$tagRef^{}"
+  if ($LASTEXITCODE -ne 0) {
+    throw "git ls-remote --tags origin $TagName failed with exit code $LASTEXITCODE."
+  }
+  if (-not $tagLines) {
+    return
+  }
+
+  $tagCommit = ""
+  foreach ($line in $tagLines) {
+    $parts = $line -split "\s+"
+    if ($parts.Count -lt 2) {
+      continue
+    }
+    if ($parts[1] -eq "$tagRef^{}") {
+      $tagCommit = $parts[0]
+      break
+    }
+    if ($parts[1] -eq $tagRef) {
+      $tagCommit = $parts[0]
+    }
+  }
+
+  if ([string]::IsNullOrWhiteSpace($tagCommit)) {
+    throw "Unable to determine the remote commit for GitHub Release tag '$TagName'."
+  }
+  if ($tagCommit -ne $GitCommit) {
+    throw "GitHub Release tag '$TagName' already points to $tagCommit, but the release artifacts were built from $GitCommit. Bump the version or retarget the tag before publishing."
+  }
+}
+
 function New-ReleaseNotes {
   param(
     [string]$version,
@@ -302,6 +340,7 @@ Assert-CleanGitTree
 Assert-GitDiffCheck
 if ($PublishGitHubRelease) {
   Assert-GitHubReleaseGitState
+  Assert-GitHubReleaseTagState -TagName $TagName -GitCommit $gitCommit
 }
 
 $validationExecuted = @(

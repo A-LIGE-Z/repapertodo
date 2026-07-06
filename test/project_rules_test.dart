@@ -1369,6 +1369,7 @@ void main() {
     expect(script, contains('function Assert-PublishableReleaseOptions'));
     expect(script, contains('function Assert-GitHubAuthentication'));
     expect(script, contains('function Assert-GitHubReleaseGitState'));
+    expect(script, contains('function Assert-GitHubReleaseTagState'));
     expect(script, contains('function Invoke-NativeText'));
     expect(script, contains('git status --porcelain'));
     expect(script, contains('git diff --check'));
@@ -1376,12 +1377,15 @@ void main() {
     expect(script, contains('git fetch origin main'));
     expect(script, contains('git rev-parse --abbrev-ref HEAD'));
     expect(script, contains('git rev-parse --verify origin/main'));
+    expect(script, contains('git ls-remote --tags origin'));
     expect(script, contains('Working tree has uncommitted changes'));
     expect(script, contains('local-only test package'));
     expect(script, contains('GitHub Release publishing requires a clean'));
     expect(script, contains('fully validated build'));
     expect(script, contains('GitHub Release publishing must run from'));
     expect(script, contains('local HEAD to match origin/main'));
+    expect(script, contains('already points to'));
+    expect(script, contains('Bump the version or retarget the tag'));
     expect(script, contains(r"Remove $($blockedOptions -join ', ')"));
     expect(script, contains(r'failed with exit code $LASTEXITCODE'));
     expect(script, contains(r'& $flutter pub get --offline'));
@@ -1440,6 +1444,8 @@ void main() {
     expect(readme, contains('Publishing checks `gh auth status`'));
     expect(readme, contains('fetches `origin/main`'));
     expect(readme, contains('local `main` HEAD'));
+    expect(readme, contains('target tag already exists'));
+    expect(readme, contains('reused version cannot'));
     expect(readme, contains('-AllowDirty'));
     expect(readme, contains('dirty git working tree'));
     expect(readme, contains('GitHub Release publishing always requires'));
