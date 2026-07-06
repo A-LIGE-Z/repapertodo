@@ -241,8 +241,13 @@ function Assert-PublishableReleaseOptions {
 }
 
 function Assert-GitHubAuthentication {
-  Invoke-Native "gh auth status" {
-    & gh auth status
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & gh auth status
+  $authExitCode = $LASTEXITCODE
+  $ErrorActionPreference = $previousErrorActionPreference
+  if ($authExitCode -ne 0) {
+    throw 'GitHub Release publishing requires an authenticated GitHub CLI session. Run `gh auth refresh -h github.com` or `gh auth login -h github.com`, then rerun the release script.'
   }
 }
 

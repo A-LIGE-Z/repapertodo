@@ -52,7 +52,9 @@ To also create or update the GitHub Release for the version in `pubspec.yaml`:
 ```
 
 Publishing checks `gh auth status` before running the expensive Flutter
-validation and build steps, so missing GitHub credentials fail early.
+validation and build steps, so missing or expired GitHub credentials fail early
+with a direct `gh auth refresh -h github.com` or `gh auth login -h github.com`
+recovery command.
 Publishing also fetches `origin/main` and requires the local `main` HEAD to
 match it before building, so release metadata, artifacts, and the GitHub tag
 all point at the same commit.

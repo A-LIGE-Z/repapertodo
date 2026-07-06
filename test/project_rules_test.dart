@@ -1554,6 +1554,9 @@ void main() {
     expect(script, contains('gh release edit'));
     expect(script, contains('gh release upload'));
     expect(script, contains('gh auth status'));
+    expect(script, contains('authenticated GitHub CLI session'));
+    expect(script, contains('gh auth refresh -h github.com'));
+    expect(script, contains('gh auth login -h github.com'));
     expect(script, contains(r'--target $gitCommit'));
     expect(script, contains(r'$releaseViewExitCode'));
     expect(script, contains(r'--notes $releaseNotes'));
@@ -1595,6 +1598,9 @@ void main() {
     expect(readme, contains(r'.\scripts\release.ps1'));
     expect(readme, contains('-PublishGitHubRelease'));
     expect(readme, contains('Publishing checks `gh auth status`'));
+    expect(readme, contains('missing or expired GitHub credentials'));
+    expect(readme, contains('`gh auth refresh -h github.com`'));
+    expect(readme, contains('`gh auth login -h github.com`'));
     expect(readme, contains('fetches `origin/main`'));
     expect(readme, contains('local `main` HEAD'));
     expect(readme, contains('validated commit SHA'));
