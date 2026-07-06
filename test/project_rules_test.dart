@@ -80,8 +80,8 @@ void main() {
     expect(design, contains('external-file paths must reject raw control'));
     expect(design, contains('Generated external Markdown export filenames'));
     expect(design, contains('External Markdown extension settings'));
-    expect(design, contains('including DEL'));
-    expect(app, contains(r'[<>:"/\\|?*\x00-\x1F\x7F]'));
+    expect(design, contains('including DEL and C1 controls'));
+    expect(app, contains(r'[<>:"/\\|?*\x00-\x1F\x7F-\x9F]'));
     expect(app, contains('_hasEncodedUnsafeExternalUriCharacter'));
     expect(app, contains('_hasEncodedExternalUriAuthoritySeparator'));
     expect(android, contains('Android URI must not be blank.'));
@@ -114,8 +114,11 @@ void main() {
         File('lib/src/core/model/app_state.dart').readAsStringSync();
     final settingsDialog =
         File('lib/src/ui/sync_settings_dialog.dart').readAsStringSync();
-    expect(appState, contains('rune < 0x20 || rune == 0x7F'));
-    expect(settingsDialog, contains('rune < 0x20 || rune == 0x7F'));
+    expect(appState, contains('rune < 0x20 || (rune >= 0x7F && rune <= 0x9F)'));
+    expect(
+      settingsDialog,
+      contains('rune < 0x20 || (rune >= 0x7F && rune <= 0x9F)'),
+    );
   });
 
   test('sync design preserves merge safety rules', () {

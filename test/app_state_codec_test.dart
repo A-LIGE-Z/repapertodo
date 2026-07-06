@@ -352,6 +352,11 @@ void main() {
       '.md',
     );
     expect(
+      AppState.fromJson({'externalMarkdownExtension': 'm\u0085d'})
+          .externalMarkdownExtension,
+      '.md',
+    );
+    expect(
       AppState.fromJson({
         'externalMarkdownExtension': '.${List.filled(40, 'x').join()}',
       }).externalMarkdownExtension,

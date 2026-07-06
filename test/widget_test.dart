@@ -6146,7 +6146,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     final longPaperId =
-        '${List.filled(90, 'a').join()}/bad:${List.filled(65, 'z').join()}\u007Ftail';
+        '${List.filled(90, 'a').join()}/bad:${List.filled(65, 'z').join()}\u007F\u0085tail';
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
       initialState: AppState(
@@ -6182,7 +6182,10 @@ void main() {
     expect(fileName.length, lessThanOrEqualTo('paper-'.length + 96 + 3));
     expect(fileName, startsWith('paper-${List.filled(72, 'a').join()}_'));
     expect(fileName, endsWith('.md'));
-    expect(fileName, isNot(contains(RegExp(r'[<>:"/\\|?*\x00-\x1F\x7F]'))));
+    expect(
+      fileName,
+      isNot(contains(RegExp(r'[<>:"/\\|?*\x00-\x1F\x7F-\x9F]'))),
+    );
     expect(openedFile.readAsStringSync(), '# Long export');
   });
 

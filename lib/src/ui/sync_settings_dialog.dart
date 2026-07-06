@@ -1760,7 +1760,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   bool _hasInvalidFileNameCharacter(String value) {
     const invalid = {'<', '>', ':', '"', '/', '\\', '|', '?', '*'};
     return value.runes.any((rune) {
-      if (rune < 0x20 || rune == 0x7F) {
+      if (rune < 0x20 || (rune >= 0x7F && rune <= 0x9F)) {
         return true;
       }
       return invalid.contains(String.fromCharCode(rune));

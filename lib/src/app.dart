@@ -1181,7 +1181,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   String _safeFilename(String value) {
     final safe =
-        value.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F\x7F]'), '_').trim();
+        value.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F\x7F-\x9F]'), '_').trim();
     if (safe.length <= _maxExternalMarkdownPaperIdFileNameLength) {
       return safe;
     }
