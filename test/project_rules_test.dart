@@ -2,9 +2,14 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+String _readProjectText(String path) => File(path)
+    .readAsStringSync()
+    .replaceAll('\r\n', '\n')
+    .replaceAll('\r', '\n');
+
 void main() {
   test('project rules preserve the requested direction', () {
-    final rules = File('AGENTS.md').readAsStringSync();
+    final rules = _readProjectText('AGENTS.md');
 
     expect(rules, contains('Flutter-first reimplementation'));
     expect(rules, contains('Windows exe first'));
@@ -13,16 +18,15 @@ void main() {
   });
 
   test('Android build targets Android 14 through 17', () {
-    final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+    final gradle = _readProjectText('android/app/build.gradle.kts');
     final manifest =
-        File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+        _readProjectText('android/app/src/main/AndroidManifest.xml');
     final filePaths =
-        File('android/app/src/main/res/xml/file_paths.xml').readAsStringSync();
-    final gitignore = File('.gitignore').readAsStringSync();
-    final readme = File('README.md').readAsStringSync();
-    final mainActivity = File(
-            'android/app/src/main/kotlin/com/aligez/repapertodo/MainActivity.kt')
-        .readAsStringSync();
+        _readProjectText('android/app/src/main/res/xml/file_paths.xml');
+    final gitignore = _readProjectText('.gitignore');
+    final readme = _readProjectText('README.md');
+    final mainActivity = _readProjectText(
+        'android/app/src/main/kotlin/com/aligez/repapertodo/MainActivity.kt');
 
     expect(gradle, contains('compileSdk = 37'));
     expect(gradle, contains('minSdk = 34'));
@@ -78,14 +82,14 @@ void main() {
   });
 
   test('platform launch hosts reject blank native channel arguments', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
     final externalUriTargets =
-        File('lib/src/core/model/external_uri_targets.dart').readAsStringSync();
-    final android = File('lib/src/platform/android_platform_services.dart')
-        .readAsStringSync();
-    final windows = File('lib/src/platform/windows_platform_services.dart')
-        .readAsStringSync();
+        _readProjectText('lib/src/core/model/external_uri_targets.dart');
+    final android =
+        _readProjectText('lib/src/platform/android_platform_services.dart');
+    final windows =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
 
     expect(design, contains('reject blank launch\narguments'));
     expect(design, contains('percent-encoded control characters'));
@@ -137,10 +141,9 @@ void main() {
         windows,
         contains(
             'Windows external file path must not contain control characters.'));
-    final appState =
-        File('lib/src/core/model/app_state.dart').readAsStringSync();
+    final appState = _readProjectText('lib/src/core/model/app_state.dart');
     final settingsDialog =
-        File('lib/src/ui/sync_settings_dialog.dart').readAsStringSync();
+        _readProjectText('lib/src/ui/sync_settings_dialog.dart');
     expect(appState, contains('rune < 0x20 || (rune >= 0x7F && rune <= 0x9F)'));
     expect(
       settingsDialog,
@@ -149,11 +152,11 @@ void main() {
   });
 
   test('sync design preserves merge safety rules', () {
-    final syncDesign = File('docs/SYNC.md').readAsStringSync();
+    final syncDesign = _readProjectText('docs/SYNC.md');
     final appStateCodec =
-        File('lib/src/core/state/app_state_codec.dart').readAsStringSync();
+        _readProjectText('lib/src/core/state/app_state_codec.dart');
     final appSyncServiceSource =
-        File('lib/src/sync/app_sync_service.dart').readAsStringSync();
+        _readProjectText('lib/src/sync/app_sync_service.dart');
 
     expect(syncDesign, contains('earliest `createdAtUtc` first'));
     expect(syncDesign, contains('Tombstone timestamps only move forward'));
@@ -353,9 +356,9 @@ void main() {
         syncDesign, contains('must not follow HTTP redirects automatically'));
     expect(syncDesign, contains('configured endpoint'));
     final syncSettings =
-        File('lib/src/core/model/sync_settings.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/sync_settings.dart');
     final webDavClient =
-        File('lib/src/sync/webdav/webdav_client.dart').readAsStringSync();
+        _readProjectText('lib/src/sync/webdav/webdav_client.dart');
     expect(syncSettings, contains('_hasUnsafeEndpointAuthority'));
     expect(syncSettings, contains('value.trim().isNotEmpty'));
     expect(
@@ -380,10 +383,9 @@ void main() {
       ),
     );
     final syncDeviceId =
-        File('lib/src/core/model/sync_device_id.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/sync_device_id.dart');
     final webDavStateSync =
-        File('lib/src/sync/webdav/webdav_state_sync_service.dart')
-            .readAsStringSync();
+        _readProjectText('lib/src/sync/webdav/webdav_state_sync_service.dart');
     expect(syncDeviceId, contains('syncDeviceSequenceWireWidth'));
     expect(syncDeviceId, contains('maxSyncDeviceSequence'));
     expect(syncDeviceId, contains('minSyncDeviceIdLength'));
@@ -401,19 +403,16 @@ void main() {
     expect(webDavStateSync, isNot(contains('substring(0, 64')));
     expect(webDavStateSync, isNot(contains(r"RegExp(r'[^a-z0-9_-]+')")));
     final wireDateTime =
-        File('lib/src/core/model/sync_wire_datetime.dart').readAsStringSync();
-    final syncManifest =
-        File('lib/src/sync/sync_manifest.dart').readAsStringSync();
-    final syncOperation =
-        File('lib/src/sync/sync_operation.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/sync_wire_datetime.dart');
+    final syncManifest = _readProjectText('lib/src/sync/sync_manifest.dart');
+    final syncOperation = _readProjectText('lib/src/sync/sync_operation.dart');
     final syncOperationApplier =
-        File('lib/src/sync/sync_operation_applier.dart').readAsStringSync();
+        _readProjectText('lib/src/sync/sync_operation_applier.dart');
     final appSyncService =
-        File('lib/src/sync/app_sync_service.dart').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+        _readProjectText('lib/src/sync/app_sync_service.dart');
+    final app = _readProjectText('lib/src/app.dart');
     final webDavPayloadCodec =
-        File('lib/src/sync/webdav/webdav_payload_codec.dart')
-            .readAsStringSync();
+        _readProjectText('lib/src/sync/webdav/webdav_payload_codec.dart');
     expect(wireDateTime, contains('parseStrictSyncWireDateTimeUtc'));
     expect(wireDateTime, contains('tryParseStrictSyncWireDateTimeUtc'));
     expect(syncSettings, contains('tryParseStrictSyncWireDateTimeUtc'));
@@ -453,9 +452,9 @@ void main() {
   });
 
   test('Windows runner preserves startup command parsing parity', () {
-    final runner = File('windows/runner/main.cpp').readAsStringSync();
+    final runner = _readProjectText('windows/runner/main.cpp');
     final dartParser =
-        File('lib/src/core/startup/startup_command.dart').readAsStringSync();
+        _readProjectText('lib/src/core/startup/startup_command.dart');
 
     expect(runner, contains('find_first_of("=:", segment_start)'));
     expect(runner, contains('CreatedPaperStartupCommand'));
@@ -464,10 +463,10 @@ void main() {
   });
 
   test('Windows runner forwards secondary instance startup commands', () {
-    final entrypoint = File('windows/runner/main.cpp').readAsStringSync();
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final entrypoint = _readProjectText('windows/runner/main.cpp');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final dartParser =
-        File('lib/src/core/startup/startup_command.dart').readAsStringSync();
+        _readProjectText('lib/src/core/startup/startup_command.dart');
 
     expect(entrypoint, contains('kSingleInstanceMutexName'));
     expect(entrypoint, contains('kSingleInstancePipeName'));
@@ -494,9 +493,9 @@ void main() {
   });
 
   test('Windows tray icon keeps PaperTodo external icon behavior', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
-    final header = File('windows/runner/flutter_window.h').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final header = _readProjectText('windows/runner/flutter_window.h');
 
     expect(design, contains('TaskbarCreated'));
     expect(design, contains('re-adding the notification icon'));
@@ -524,10 +523,9 @@ void main() {
   });
 
   test('hotkey settings keep forgiving aliases without control characters', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final appState =
-        File('lib/src/core/model/app_state.dart').readAsStringSync();
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final appState = _readProjectText('lib/src/core/model/app_state.dart');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
     expect(design, contains('Hotkey settings should strip control characters'));
     expect(design, contains('preserving ordinary spaces used by aliases'));
@@ -552,9 +550,9 @@ void main() {
   });
 
   test('Windows fullscreen avoidance uses PaperTodo defensive detection', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final cmake = File('windows/runner/CMakeLists.txt').readAsStringSync();
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final cmake = _readProjectText('windows/runner/CMakeLists.txt');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
     expect(design, contains('prefer DWM extended frame bounds'));
     expect(design, contains('ignore'));
@@ -587,17 +585,16 @@ void main() {
   });
 
   test('new Windows papers avoid the deep capsule edge strip', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final controller = File('lib/src/app_controller.dart').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final controller = _readProjectText('lib/src/app_controller.dart');
+    final app = _readProjectText('lib/src/app.dart');
     final constants =
-        File('lib/src/core/model/paper_constants.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/paper_constants.dart');
     final platform =
-        File('lib/src/platform/platform_services.dart').readAsStringSync();
+        _readProjectText('lib/src/platform/platform_services.dart');
     final windowsPlatform =
-        File('lib/src/platform/windows_platform_services.dart')
-            .readAsStringSync();
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
     expect(design, contains('open away from the deep capsule edge strip'));
     expect(design, contains('created from an existing paper'));
@@ -644,9 +641,9 @@ void main() {
   });
 
   test('PaperTodo paper hide and last-delete rules are preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final controller = File('lib/src/app_controller.dart').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final controller = _readProjectText('lib/src/app_controller.dart');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design,
         contains("Hiding a paper should follow PaperTodo's single-paper"));
@@ -678,12 +675,11 @@ void main() {
   });
 
   test('PaperTodo runtime custom font convention is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
     final settingsDialog =
-        File('lib/src/ui/sync_settings_dialog.dart').readAsStringSync();
-    final runtimeFont =
-        File('lib/src/ui/runtime_custom_font.dart').readAsStringSync();
+        _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final runtimeFont = _readProjectText('lib/src/ui/runtime_custom_font.dart');
 
     expect(design, contains('papertodo.ttf'));
     expect(design, contains('papertodo.otf'));
@@ -706,10 +702,9 @@ void main() {
   });
 
   test('PaperTodo todo column limits are preserved', () {
-    final model =
-        File('lib/src/core/model/paper_constants.dart').readAsStringSync();
-    final item = File('lib/src/core/model/paper_item.dart').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final model = _readProjectText('lib/src/core/model/paper_constants.dart');
+    final item = _readProjectText('lib/src/core/model/paper_item.dart');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(model, contains('static const maxCount = 4'));
     expect(model, contains('static const maxWidth = 8.0'));
@@ -721,8 +716,8 @@ void main() {
   });
 
   test('PaperTodo todo reminder timing is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('10 minutes before due time'));
     expect(design, contains('2 minutes after due time'));
@@ -745,8 +740,8 @@ void main() {
   });
 
   test('PaperTodo todo keyboard editing is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('Todo keyboard editing should follow PaperTodo'));
     expect(design, contains('Enter with no modifiers inserts'));
@@ -767,8 +762,8 @@ void main() {
   });
 
   test('PaperTodo todo text undo snapshot timing is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains("Todo text editing should follow PaperTodo's"));
     expect(design, contains('focusing a'));
@@ -787,9 +782,9 @@ void main() {
   });
 
   test('PaperTodo per-column todo editing is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
-    final item = File('lib/src/core/model/paper_item.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
+    final item = _readProjectText('lib/src/core/model/paper_item.dart');
 
     expect(design, contains('Todo column editing should preserve PaperTodo'));
     expect(design, contains('before column 1 moves'));
@@ -805,8 +800,8 @@ void main() {
   });
 
   test('PaperTodo todo column splitter resizing is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('Todo column width resizing should preserve'));
     expect(design, contains('8px drag target'));
@@ -825,10 +820,10 @@ void main() {
   });
 
   test('PaperTodo todo due date time precision is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
     final dueDateHelper =
-        File('lib/src/core/model/todo_due_date.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/todo_due_date.dart');
 
     expect(design, contains('Todo due editing should preserve PaperTodo'));
     expect(design, contains('PaperTodo-compatible due dates'));
@@ -880,8 +875,8 @@ void main() {
   });
 
   test('PaperTodo todo reorder data semantics are preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('Todo ordering should preserve PaperTodo'));
     expect(design, contains('push a todo undo snapshot'));
@@ -902,8 +897,8 @@ void main() {
   });
 
   test('PaperTodo clear completed todo items is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('Clearing completed Todo items should preserve'));
     expect(design, contains('push one todo undo snapshot'));
@@ -922,8 +917,8 @@ void main() {
   });
 
   test('Todo compact item actions use paper width', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('Todo compact item actions should switch'));
     expect(design, contains('current paper/editor width'));
@@ -936,8 +931,8 @@ void main() {
   });
 
   test('PaperTodo todo note link semantics are preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('Todo-note linking should preserve'));
     expect(design, contains('Note-to-Todo drag linking should preserve'));
@@ -961,17 +956,16 @@ void main() {
   });
 
   test('PaperTodo markdown note link interaction is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
     final inlineHtml =
-        File('lib/src/core/model/markdown_inline_html.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/markdown_inline_html.dart');
     final markdownLinkTargets =
-        File('lib/src/core/model/markdown_link_targets.dart')
-            .readAsStringSync();
+        _readProjectText('lib/src/core/model/markdown_link_targets.dart');
     final externalUriTargets =
-        File('lib/src/core/model/external_uri_targets.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/external_uri_targets.dart');
     final markdownLinks =
-        File('lib/src/core/model/markdown_links.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/markdown_links.dart');
 
     expect(design, contains('Markdown note link interaction should preserve'));
     expect(design, contains('preview-mode links open directly'));
@@ -1063,29 +1057,28 @@ void main() {
     expect(inlineHtml, contains("md.Element.text('code'"));
     expect(inlineHtml, contains("md.Element('a'"));
     expect(
-      File('lib/src/core/model/markdown_line_analysis.dart').readAsStringSync(),
+      _readProjectText('lib/src/core/model/markdown_line_analysis.dart'),
       contains('enum MarkdownLineKind'),
     );
     expect(
-      File('lib/src/core/model/markdown_list_continuation.dart')
-          .readAsStringSync(),
+      _readProjectText('lib/src/core/model/markdown_list_continuation.dart'),
       contains('MarkdownLineAnalysis.analyzeLine'),
     );
     expect(
-      File('lib/src/core/model/markdown_formatting.dart').readAsStringSync(),
+      _readProjectText('lib/src/core/model/markdown_formatting.dart'),
       contains("defaultLinkLabel = 'Link'"),
     );
     expect(
-      File('lib/src/core/model/markdown_formatting.dart').readAsStringSync(),
+      _readProjectText('lib/src/core/model/markdown_formatting.dart'),
       contains("tabIndent = '\\t'"),
     );
   });
 
   test('PaperTodo markdown note paste safety is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
     final markdownPaste =
-        File('lib/src/core/model/markdown_paste.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/markdown_paste.dart');
 
     expect(design, contains('Markdown note paste safety should preserve'));
     expect(design, contains('100000 characters'));
@@ -1100,10 +1093,9 @@ void main() {
   });
 
   test('PaperTodo markdown ordered list continuation is preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final listContinuation = File(
-      'lib/src/core/model/markdown_list_continuation.dart',
-    ).readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final listContinuation =
+        _readProjectText('lib/src/core/model/markdown_list_continuation.dart');
 
     expect(design, contains('Markdown list continuation should preserve'));
     expect(design, contains('leading zero markers'));
@@ -1117,8 +1109,8 @@ void main() {
   });
 
   test('PaperTodo note canvas geometry gestures are preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('Note canvas element geometry should preserve'));
     expect(design, contains('dragging the element header moves the block'));
@@ -1139,8 +1131,8 @@ void main() {
   });
 
   test('PaperTodo note canvas placement and layer rules are preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('New note canvas blocks should follow'));
     expect(design, contains('230x116'));
@@ -1163,10 +1155,10 @@ void main() {
   });
 
   test('Windows runner preserves external URI safety checks', () {
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final app = _readProjectText('lib/src/app.dart');
     final externalUriTargets =
-        File('lib/src/core/model/external_uri_targets.dart').readAsStringSync();
+        _readProjectText('lib/src/core/model/external_uri_targets.dart');
 
     expect(app, contains('normalizeExternalUriTarget'));
     expect(externalUriTargets, contains('hasUnsafeExternalUriCharacter'));
@@ -1196,7 +1188,7 @@ void main() {
   });
 
   test('Windows tray menu keeps PaperTodo action labels', () {
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
     expect(runner, contains('L"+ New todo paper"'));
     expect(runner, contains('L"+ New note paper"'));
@@ -1211,7 +1203,7 @@ void main() {
   });
 
   test('Windows tray settings command shows the app window', () {
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final settingsCaseStart = runner.indexOf('case kTraySettingsCommand:');
     final settingsCaseEnd = runner.indexOf('break;', settingsCaseStart);
 
@@ -1224,7 +1216,7 @@ void main() {
   });
 
   test('Windows tray paper command shows the selected paper window', () {
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final paperCommandStart = runner.indexOf(
       'command >= kTrayPaperCommandBase',
     );
@@ -1239,9 +1231,9 @@ void main() {
   });
 
   test('Windows tray paper delete command confirms before Dart deletion', () {
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
-    final platform = File('lib/src/platform/windows_platform_services.dart')
-        .readAsStringSync();
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final platform =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
 
     expect(runner, contains('kTrayPaperDeleteCommandBase'));
     expect(runner, contains('L"Delete paper..."'));
@@ -1253,9 +1245,9 @@ void main() {
   });
 
   test('Windows platform ignores unknown explicit paper IDs', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final platform = File('lib/src/platform/windows_platform_services.dart')
-        .readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final platform =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
     final lookupStart = platform.indexOf('PaperData? _paperFromEventArguments');
     final lookupEnd = platform.indexOf('String? _paperIdFromArguments');
 
@@ -1274,8 +1266,8 @@ void main() {
   });
 
   test('Windows runner hides only the active native paper surface', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final hideStart = runner.indexOf('if (method == "hide")');
     final hideEnd = runner.indexOf('if (method == "setAlwaysOnTop")');
 
@@ -1293,9 +1285,9 @@ void main() {
   });
 
   test('Windows tray marks script capsule notes distinctly', () {
-    final dartHost = File('lib/src/platform/windows_platform_services.dart')
-        .readAsStringSync();
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final dartHost =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
     expect(dartHost, contains("'isScriptCapsule'"));
     expect(dartHost, contains('ScriptCapsuleSpec.isScriptCapsuleContent'));
@@ -1305,7 +1297,7 @@ void main() {
   });
 
   test('Windows runner validates external files before opening them', () {
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
     expect(runner, contains('path = TrimAscii(path)'));
     expect(runner, contains('HasUnsafeExternalFilePathCharacter'));
@@ -1316,11 +1308,11 @@ void main() {
   });
 
   test('Windows script capsule hosts validate launch requests', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
-    final dartHost = File('lib/src/platform/windows_platform_services.dart')
-        .readAsStringSync();
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
+    final dartHost =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
     expect(design, contains('Script capsule hosts must reject blank scripts'));
     expect(design, contains('Collapsed note papers whose content starts'));
@@ -1331,7 +1323,7 @@ void main() {
     expect(app, contains('_collapsedScriptCapsule'));
     expect(app, contains('_openCollapsedScriptCapsuleForEditing'));
     expect(
-      File('lib/src/core/script/script_capsule.dart').readAsStringSync(),
+      _readProjectText('lib/src/core/script/script_capsule.dart'),
       contains('Platform.lineTerminator'),
     );
     expect(dartHost, contains('Windows script capsule must not be blank.'));
@@ -1341,13 +1333,12 @@ void main() {
   });
 
   test('PaperTodo paper title editing rules are preserved', () {
-    final design = File('docs/DESIGN_SYSTEM.md').readAsStringSync();
-    final app = File('lib/src/app.dart').readAsStringSync();
-    final paperData =
-        File('lib/src/core/model/paper_data.dart').readAsStringSync();
-    final windows = File('lib/src/platform/windows_platform_services.dart')
-        .readAsStringSync();
-    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
+    final paperData = _readProjectText('lib/src/core/model/paper_data.dart');
+    final windows =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
     expect(design, contains('Paper title editing should preserve PaperTodo'));
     expect(design, contains('40 text elements'));
@@ -1374,9 +1365,9 @@ void main() {
   });
 
   test('release script packages Windows and Android artifacts', () {
-    final script = File('scripts/release.ps1').readAsStringSync();
-    final workflow = File('.github/workflows/release.yml').readAsStringSync();
-    final readme = File('README.md').readAsStringSync();
+    final script = _readProjectText('scripts/release.ps1');
+    final workflow = _readProjectText('.github/workflows/release.yml');
+    final readme = _readProjectText('README.md');
 
     expect(script, contains('function Clear-ProxyEnvironment'));
     expect(script, contains(r'Remove-Item -LiteralPath "Env:\$name"'));
