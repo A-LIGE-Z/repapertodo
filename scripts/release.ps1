@@ -3,6 +3,7 @@ param(
   [switch]$SkipBuild,
   [switch]$OfflinePubGet,
   [switch]$PublishGitHubRelease,
+  [switch]$AllowDirty,
   [string]$TagName = "",
   [string]$ReleaseTitle = ""
 )
@@ -69,6 +70,21 @@ function Get-AndroidSigningMode {
   return "release keystore from android/key.properties"
 }
 
+function Assert-CleanGitTree {
+  if ($AllowDirty) {
+    Write-Host "Working tree clean check skipped because -AllowDirty was provided."
+    return
+  }
+
+  $status = & git status --porcelain
+  if ($LASTEXITCODE -ne 0) {
+    throw "git status --porcelain failed with exit code $LASTEXITCODE."
+  }
+  if ($status) {
+    throw "Working tree has uncommitted changes. Commit or stash them before release, or rerun with -AllowDirty for a local-only test package."
+  }
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
 
@@ -103,6 +119,7 @@ $gitCommit = ""
 Invoke-Native "git rev-parse HEAD" {
   $script:gitCommit = (& git rev-parse HEAD).Trim()
 }
+Assert-CleanGitTree
 
 if (-not $SkipTests -or -not $SkipBuild) {
   Invoke-Step "Resolve Flutter packages" {

@@ -1137,7 +1137,12 @@ void main() {
     expect(script, contains(r'$env:HTTPS_PROXY = ""'));
     expect(script, contains('flutter.bat'));
     expect(script, contains(r'[switch]$OfflinePubGet'));
+    expect(script, contains(r'[switch]$AllowDirty'));
     expect(script, contains('function Invoke-Native'));
+    expect(script, contains('function Assert-CleanGitTree'));
+    expect(script, contains('git status --porcelain'));
+    expect(script, contains('Working tree has uncommitted changes'));
+    expect(script, contains('local-only test package'));
     expect(script, contains(r'failed with exit code $LASTEXITCODE'));
     expect(script, contains(r'& $flutter pub get --offline'));
     expect(script, contains(r'& $flutter test --no-pub'));
@@ -1167,6 +1172,8 @@ void main() {
     expect(script, contains('Android release APK for Android 14+'));
     expect(readme, contains(r'.\scripts\release.ps1'));
     expect(readme, contains('-PublishGitHubRelease'));
+    expect(readme, contains('-AllowDirty'));
+    expect(readme, contains('dirty git working tree'));
     expect(readme, contains('-OfflinePubGet'));
     expect(readme, contains('SHA-256 checksum file'));
     expect(readme, contains('release metadata JSON file'));
