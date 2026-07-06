@@ -1673,32 +1673,34 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     });
     final platformSettingErrors = <String>[];
     Future<void> applyPlatformSetting(
-      String label,
+      String labelKey,
       Future<void> Function() action,
     ) async {
       try {
         await action();
       } catch (error) {
-        platformSettingErrors.add('$label: ${_readableFailureMessage(error)}');
+        platformSettingErrors.add(
+          '${strings.get(labelKey)}: ${_readableFailureMessage(error)}',
+        );
       }
     }
 
     if (controller.supportsStartupAtLogin) {
       await applyPlatformSetting(
-        'Startup at login',
+        PaperTodoStringKeys.platformSettingStartupAtLogin,
         () => controller.setStartupAtLogin(result.startAtLogin),
       );
     }
     await applyPlatformSetting(
-      'Window switcher visibility',
+      PaperTodoStringKeys.platformSettingWindowSwitcherVisibility,
       () => controller.setHideFromWindowSwitcher(result.hideFromWindowSwitcher),
     );
     await applyPlatformSetting(
-      'Fullscreen/topmost mode',
+      PaperTodoStringKeys.platformSettingFullscreenTopmostMode,
       () => controller.setFullscreenTopmostMode(result.fullscreenTopmostMode),
     );
     await applyPlatformSetting(
-      'Global hotkeys',
+      PaperTodoStringKeys.platformSettingGlobalHotkeys,
       controller.registerGlobalHotkeys,
     );
     if (_shouldStopPersistentScriptCapsules(
@@ -1708,7 +1710,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       result,
     )) {
       await applyPlatformSetting(
-        'Script capsule process',
+        PaperTodoStringKeys.platformSettingScriptCapsuleProcess,
         controller.stopPersistentScriptCapsules,
       );
     }
@@ -1719,13 +1721,13 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       result,
     )) {
       await applyPlatformSetting(
-        'Script capsule process',
+        PaperTodoStringKeys.platformSettingScriptCapsuleProcess,
         controller.preparePersistentScriptCapsules,
       );
     }
     if (capsuleSettingsChanged) {
       await applyPlatformSetting(
-        'Paper surfaces',
+        PaperTodoStringKeys.platformSettingPaperSurfaces,
         controller.applyCurrentStateToPlatform,
       );
     }
@@ -1733,7 +1735,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Platform settings failed: ${platformSettingErrors.join('; ')}',
+            strings.format(
+              PaperTodoStringKeys.platformSettingsFailed,
+              [platformSettingErrors.join('; ')],
+            ),
           ),
         ),
       );
@@ -1753,7 +1758,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Settings save failed: ${_readableFailureMessage(error)}',
+              strings.format(
+                PaperTodoStringKeys.settingsSaveFailed,
+                [_readableFailureMessage(error)],
+              ),
             ),
           ),
         );
@@ -1873,7 +1881,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   String _syncMessage(AppSyncResult result) {
     if (result.message.isNotEmpty) {
-      return result.message;
+      return _localizedSyncResultMessage(result);
     }
     return switch (result.status) {
       AppSyncStatus.disabled => strings.get(PaperTodoStringKeys.syncDisabled),
@@ -1888,12 +1896,49 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     };
   }
 
+  String _localizedSyncResultMessage(AppSyncResult result) {
+    final message = result.message;
+    return switch (message) {
+      'Sync is disabled.' => strings.get(PaperTodoStringKeys.syncDisabled),
+      'Complete WebDAV sync settings and encryption passphrase first.' =>
+        strings.get(PaperTodoStringKeys.syncCompleteConfiguration),
+      'Local data uploaded.' => strings.get(PaperTodoStringKeys.syncUploaded),
+      'Remote data downloaded.' =>
+        strings.get(PaperTodoStringKeys.syncDownloaded),
+      'Remote data downloaded from legacy plain WebDAV data and migrated to encrypted payloads.' =>
+        strings.get(PaperTodoStringKeys.syncDownloadedLegacyPlainMigrated),
+      'Remote data downloaded from legacy plain WebDAV data. Automatic encryption migration could not complete; sync again to retry.' =>
+        strings.get(PaperTodoStringKeys.syncDownloadedLegacyPlainRetry),
+      'Remote data downloaded from legacy plain WebDAV data. The next successful upload will write encrypted payloads.' =>
+        strings.get(PaperTodoStringKeys.syncDownloadedLegacyPlainNextUpload),
+      'Remote snapshot is empty.' =>
+        strings.get(PaperTodoStringKeys.syncRemoteSnapshotEmpty),
+      'Snapshot restored.' =>
+        strings.get(PaperTodoStringKeys.syncSnapshotRestored),
+      'Remote data changed during sync. Pull again before upload.' =>
+        strings.get(PaperTodoStringKeys.syncConflict),
+      _
+          when message.startsWith(
+            'Remote data changed during sync. Local snapshot preserved at ',
+          ) =>
+        strings.format(
+          PaperTodoStringKeys.syncConflictSnapshotPreserved,
+          [result.snapshotPath],
+        ),
+      _ => message,
+    };
+  }
+
   String _syncRunMessage(AppSyncRunResult result) {
     final baseMessage = _syncMessage(result.syncResult);
     final appliedCount = result.operationAppliedCount;
     final parts = <String>[baseMessage];
     if (appliedCount > 0) {
-      final changeLabel = appliedCount == 1 ? 'change' : 'changes';
+      final changeLabel = strings.get(
+        appliedCount == 1
+            ? PaperTodoStringKeys.syncRemoteChange
+            : PaperTodoStringKeys.syncRemoteChanges,
+      );
       parts.add(
         strings.format(
           PaperTodoStringKeys.syncMergedRemoteChanges,
@@ -1905,18 +1950,31 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (mergeResult != null && mergeResult.legacyPlainOperationLogCount > 0) {
       final total = mergeResult.legacyPlainOperationLogCount;
       final migrated = mergeResult.legacyPlainOperationLogMigratedCount;
-      final logLabel = total == 1 ? 'operation log' : 'operation logs';
+      final logLabel = strings.get(
+        total == 1
+            ? PaperTodoStringKeys.syncOperationLog
+            : PaperTodoStringKeys.syncOperationLogs,
+      );
       if (migrated == total) {
         parts.add(
-          'Migrated $total legacy WebDAV $logLabel to encrypted payloads.',
+          strings.format(
+            PaperTodoStringKeys.syncMigratedLegacyOperationLogs,
+            [total, logLabel],
+          ),
         );
       } else if (migrated > 0) {
         parts.add(
-          'Migrated $migrated of $total legacy WebDAV $logLabel to encrypted payloads; sync again to retry the rest.',
+          strings.format(
+            PaperTodoStringKeys.syncMigratedLegacyOperationLogsPartial,
+            [migrated, total, logLabel],
+          ),
         );
       } else {
         parts.add(
-          'Found $total legacy plain WebDAV $logLabel; sync again after remote ETags are available to retry encryption migration.',
+          strings.format(
+            PaperTodoStringKeys.syncFoundLegacyOperationLogs,
+            [total, logLabel],
+          ),
         );
       }
     }

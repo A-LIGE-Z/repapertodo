@@ -630,7 +630,8 @@ void main() {
     expect(controller, contains('_clampNewPaperAwayFromDeepCapsuleStrip'));
     expect(controller, contains('_newPaperInitialPosition'));
     expect(controller, contains('workAreaForPaper'));
-    expect(app, contains("'Paper surfaces'"));
+    expect(app, contains('PaperTodoStringKeys.platformSettingPaperSurfaces'));
+    expect(app, contains('controller.applyCurrentStateToPlatform'));
     expect(windowsPlatform, contains("'getWorkArea'"));
     expect(runner, contains('getWorkArea'));
     expect(runner, contains('EnumDisplayMonitors'));

@@ -421,6 +421,101 @@ void main() {
     expect(controller.state.papers.single.title, '远端快照');
     expect(syncService.restoreCalls, 2);
   });
+
+  testWidgets('uses Chinese system locale for sync feedback', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    tester.binding.platformDispatcher.localeTestValue =
+        const Locale('zh', 'CN');
+    tester.binding.platformDispatcher.localesTestValue = [
+      const Locale('zh', 'CN'),
+    ];
+    addTearDown(() {
+      tester.binding.platformDispatcher.clearLocaleTestValue();
+      tester.binding.platformDispatcher.clearLocalesTestValue();
+      tester.binding.setSurfaceSize(null);
+    });
+
+    final syncedState = AppState(
+      theme: 'light',
+      papers: [
+        PaperData(
+          id: 'localized-sync-paper',
+          type: PaperTypes.note,
+          title: '远端笔记',
+          content: '合并后的内容',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        theme: 'light',
+        papers: [
+          PaperData(
+            id: 'localized-sync-paper',
+            type: PaperTypes.note,
+            title: '本地笔记',
+            content: '本地内容',
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+    final syncService = _LocalizedManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+        operationMergeResult: AppSyncOperationMergeResult(
+          state: syncedState,
+          deviceSequences: const {'phone': 1},
+          appliedCount: 1,
+          legacyPlainOperationLogCount: 1,
+          legacyPlainOperationLogMigratedCount: 1,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: StateStore(filePath: 'build/test-localized-sync.json'),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('立即同步'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, '远端笔记');
+    expect(find.textContaining('已下载远端数据。'), findsOneWidget);
+    expect(find.textContaining('已合并 1 个远端变更。'), findsOneWidget);
+    expect(find.textContaining('旧版 WebDAV 操作日志'), findsOneWidget);
+    expect(find.textContaining('Remote data downloaded'), findsNothing);
+    expect(find.textContaining('remote change'), findsNothing);
+    expect(find.textContaining('operation log'), findsNothing);
+  });
+}
+
+class _LocalizedManualSyncService extends AppSyncService {
+  _LocalizedManualSyncService({required this.result});
+
+  final AppSyncRunResult result;
+  var calls = 0;
+
+  @override
+  Future<AppSyncRunResult> syncAndMergeNow({
+    required AppState localState,
+    required StateStore store,
+    DateTime? localUpdatedAtUtc,
+  }) async {
+    calls += 1;
+    return result;
+  }
 }
 
 class _LocalizedRecoverySnapshotSyncService extends AppSyncService {

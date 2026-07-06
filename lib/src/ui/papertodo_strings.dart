@@ -191,6 +191,16 @@ abstract final class PaperTodoStringKeys {
   static const passphraseHelper = 'passphraseHelper';
   static const password = 'password';
   static const persistentPowerShellProcess = 'persistentPowerShellProcess';
+  static const platformSettingFullscreenTopmostMode =
+      'platformSettingFullscreenTopmostMode';
+  static const platformSettingGlobalHotkeys = 'platformSettingGlobalHotkeys';
+  static const platformSettingPaperSurfaces = 'platformSettingPaperSurfaces';
+  static const platformSettingScriptCapsuleProcess =
+      'platformSettingScriptCapsuleProcess';
+  static const platformSettingStartupAtLogin = 'platformSettingStartupAtLogin';
+  static const platformSettingWindowSwitcherVisibility =
+      'platformSettingWindowSwitcherVisibility';
+  static const platformSettingsFailed = 'platformSettingsFailed';
   static const pinnedNoteHotkey = 'pinnedNoteHotkey';
   static const pinnedTodoHotkey = 'pinnedTodoHotkey';
   static const preferPowerShell7 = 'preferPowerShell7';
@@ -214,6 +224,7 @@ abstract final class PaperTodoStringKeys {
       'runLinkedScriptCapsulesOnClick';
   static const scriptCapsuleFailed = 'scriptCapsuleFailed';
   static const serif = 'serif';
+  static const settingsSaveFailed = 'settingsSaveFailed';
   static const showDeepCapsuleWhileExpanded = 'showDeepCapsuleWhileExpanded';
   static const showLinkedNoteName = 'showLinkedNoteName';
   static const showPassphrase = 'showPassphrase';
@@ -223,14 +234,32 @@ abstract final class PaperTodoStringKeys {
   static const stayOnTop = 'stayOnTop';
   static const syncCompleteConfiguration = 'syncCompleteConfiguration';
   static const syncConflict = 'syncConflict';
+  static const syncConflictSnapshotPreserved = 'syncConflictSnapshotPreserved';
   static const syncDisabled = 'syncDisabled';
   static const syncDownloaded = 'syncDownloaded';
+  static const syncDownloadedLegacyPlainMigrated =
+      'syncDownloadedLegacyPlainMigrated';
+  static const syncDownloadedLegacyPlainNextUpload =
+      'syncDownloadedLegacyPlainNextUpload';
+  static const syncDownloadedLegacyPlainRetry =
+      'syncDownloadedLegacyPlainRetry';
   static const syncEncryptionPassphrase = 'syncEncryptionPassphrase';
   static const syncFailed = 'syncFailed';
+  static const syncFoundLegacyOperationLogs = 'syncFoundLegacyOperationLogs';
   static const syncMergedRemoteChanges = 'syncMergedRemoteChanges';
+  static const syncMigratedLegacyOperationLogs =
+      'syncMigratedLegacyOperationLogs';
+  static const syncMigratedLegacyOperationLogsPartial =
+      'syncMigratedLegacyOperationLogsPartial';
   static const syncOnStart = 'syncOnStart';
+  static const syncOperationLog = 'syncOperationLog';
+  static const syncOperationLogs = 'syncOperationLogs';
   static const syncPayloadUnreadable = 'syncPayloadUnreadable';
+  static const syncRemoteChange = 'syncRemoteChange';
+  static const syncRemoteChanges = 'syncRemoteChanges';
+  static const syncRemoteSnapshotEmpty = 'syncRemoteSnapshotEmpty';
   static const syncRestoreSnapshotFailed = 'syncRestoreSnapshotFailed';
+  static const syncSnapshotRestored = 'syncSnapshotRestored';
   static const syncUploaded = 'syncUploaded';
   static const theme = 'theme';
   static const themeDark = 'themeDark';
@@ -558,6 +587,16 @@ const _enStrings = {
   PaperTodoStringKeys.password: 'Password',
   PaperTodoStringKeys.persistentPowerShellProcess:
       'Persistent PowerShell process',
+  PaperTodoStringKeys.platformSettingFullscreenTopmostMode:
+      'Fullscreen/topmost mode',
+  PaperTodoStringKeys.platformSettingGlobalHotkeys: 'Global hotkeys',
+  PaperTodoStringKeys.platformSettingPaperSurfaces: 'Paper surfaces',
+  PaperTodoStringKeys.platformSettingScriptCapsuleProcess:
+      'Script capsule process',
+  PaperTodoStringKeys.platformSettingStartupAtLogin: 'Startup at login',
+  PaperTodoStringKeys.platformSettingWindowSwitcherVisibility:
+      'Window switcher visibility',
+  PaperTodoStringKeys.platformSettingsFailed: 'Platform settings failed: {0}',
   PaperTodoStringKeys.pinnedNoteHotkey: 'Pinned note hotkey',
   PaperTodoStringKeys.pinnedTodoHotkey: 'Pinned todo hotkey',
   PaperTodoStringKeys.preferPowerShell7: 'Prefer PowerShell 7',
@@ -582,6 +621,7 @@ const _enStrings = {
       'Run linked script capsules on click',
   PaperTodoStringKeys.scriptCapsuleFailed: 'Script capsule failed: {0}',
   PaperTodoStringKeys.serif: 'Serif',
+  PaperTodoStringKeys.settingsSaveFailed: 'Settings save failed: {0}',
   PaperTodoStringKeys.showDeepCapsuleWhileExpanded:
       'Show deep capsule while expanded',
   PaperTodoStringKeys.showLinkedNoteName: 'Show linked note name',
@@ -594,15 +634,35 @@ const _enStrings = {
       'Complete WebDAV sync settings and encryption passphrase first.',
   PaperTodoStringKeys.syncConflict:
       'Remote data changed during sync. Pull again before upload.',
+  PaperTodoStringKeys.syncConflictSnapshotPreserved:
+      'Remote data changed during sync. Local snapshot preserved at {0}.',
   PaperTodoStringKeys.syncDisabled: 'Sync is disabled.',
   PaperTodoStringKeys.syncDownloaded: 'Remote data downloaded.',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainMigrated:
+      'Remote data downloaded from legacy plain WebDAV data and migrated to encrypted payloads.',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainNextUpload:
+      'Remote data downloaded from legacy plain WebDAV data. The next successful upload will write encrypted payloads.',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainRetry:
+      'Remote data downloaded from legacy plain WebDAV data. Automatic encryption migration could not complete; sync again to retry.',
   PaperTodoStringKeys.syncEncryptionPassphrase: 'Sync encryption passphrase',
   PaperTodoStringKeys.syncFailed: 'Sync failed: {0}',
+  PaperTodoStringKeys.syncFoundLegacyOperationLogs:
+      'Found {0} legacy plain WebDAV {1}; sync again after remote ETags are available to retry encryption migration.',
   PaperTodoStringKeys.syncMergedRemoteChanges: 'Merged {0} remote {1}.',
+  PaperTodoStringKeys.syncMigratedLegacyOperationLogs:
+      'Migrated {0} legacy WebDAV {1} to encrypted payloads.',
+  PaperTodoStringKeys.syncMigratedLegacyOperationLogsPartial:
+      'Migrated {0} of {1} legacy WebDAV {2} to encrypted payloads; sync again to retry the rest.',
   PaperTodoStringKeys.syncOnStart: 'Sync on start',
+  PaperTodoStringKeys.syncOperationLog: 'operation log',
+  PaperTodoStringKeys.syncOperationLogs: 'operation logs',
   PaperTodoStringKeys.syncPayloadUnreadable:
       'Unable to decrypt remote sync data. Check the sync encryption passphrase.',
+  PaperTodoStringKeys.syncRemoteChange: 'change',
+  PaperTodoStringKeys.syncRemoteChanges: 'changes',
+  PaperTodoStringKeys.syncRemoteSnapshotEmpty: 'Remote snapshot is empty.',
   PaperTodoStringKeys.syncRestoreSnapshotFailed: 'Restore failed: {0}',
+  PaperTodoStringKeys.syncSnapshotRestored: 'Snapshot restored.',
   PaperTodoStringKeys.syncUploaded: 'Local data uploaded.',
   PaperTodoStringKeys.theme: 'Theme',
   PaperTodoStringKeys.themeDark: 'Dark',
@@ -838,6 +898,13 @@ const _zhStrings = {
   PaperTodoStringKeys.passphraseHelper: '用于 Windows 与 Android 加密同步。',
   PaperTodoStringKeys.password: '密码',
   PaperTodoStringKeys.persistentPowerShellProcess: '常驻 PowerShell 进程',
+  PaperTodoStringKeys.platformSettingFullscreenTopmostMode: '全屏/置顶模式',
+  PaperTodoStringKeys.platformSettingGlobalHotkeys: '全局快捷键',
+  PaperTodoStringKeys.platformSettingPaperSurfaces: '纸片窗口',
+  PaperTodoStringKeys.platformSettingScriptCapsuleProcess: '脚本胶囊进程',
+  PaperTodoStringKeys.platformSettingStartupAtLogin: '开机启动',
+  PaperTodoStringKeys.platformSettingWindowSwitcherVisibility: '任务切换器可见性',
+  PaperTodoStringKeys.platformSettingsFailed: '平台设置失败：{0}',
   PaperTodoStringKeys.pinnedNoteHotkey: '置顶笔记快捷键',
   PaperTodoStringKeys.pinnedTodoHotkey: '置顶待办快捷键',
   PaperTodoStringKeys.preferPowerShell7: '优先使用 PowerShell 7',
@@ -860,6 +927,7 @@ const _zhStrings = {
   PaperTodoStringKeys.runLinkedScriptCapsulesOnClick: '点击时运行关联脚本胶囊',
   PaperTodoStringKeys.scriptCapsuleFailed: '脚本胶囊运行失败：{0}',
   PaperTodoStringKeys.serif: '衬线',
+  PaperTodoStringKeys.settingsSaveFailed: '设置保存失败：{0}',
   PaperTodoStringKeys.showDeepCapsuleWhileExpanded: '展开时保留边缘胶囊',
   PaperTodoStringKeys.showLinkedNoteName: '显示关联笔记名称',
   PaperTodoStringKeys.showPassphrase: '显示密钥短语',
@@ -869,14 +937,34 @@ const _zhStrings = {
   PaperTodoStringKeys.stayOnTop: '保持置顶',
   PaperTodoStringKeys.syncCompleteConfiguration: '请先完成 WebDAV 同步设置和同步加密密钥短语。',
   PaperTodoStringKeys.syncConflict: '同步期间远端数据已变化，请先拉取后再上传。',
+  PaperTodoStringKeys.syncConflictSnapshotPreserved:
+      '同步期间远端数据已变化。本地快照已保存在 {0}。',
   PaperTodoStringKeys.syncDisabled: '同步已关闭。',
   PaperTodoStringKeys.syncDownloaded: '已下载远端数据。',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainMigrated:
+      '已从旧版明文 WebDAV 数据下载远端数据，并迁移为加密载荷。',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainNextUpload:
+      '已从旧版明文 WebDAV 数据下载远端数据。下次成功上传时会写入加密载荷。',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainRetry:
+      '已从旧版明文 WebDAV 数据下载远端数据。自动加密迁移未完成，请再次同步重试。',
   PaperTodoStringKeys.syncEncryptionPassphrase: '同步加密密钥短语',
   PaperTodoStringKeys.syncFailed: '同步失败：{0}',
+  PaperTodoStringKeys.syncFoundLegacyOperationLogs:
+      '发现 {0} 个旧版明文 WebDAV {1}；远端 ETag 可用后再次同步以重试加密迁移。',
   PaperTodoStringKeys.syncMergedRemoteChanges: '已合并 {0} 个远端{1}。',
+  PaperTodoStringKeys.syncMigratedLegacyOperationLogs:
+      '已将 {0} 个旧版 WebDAV {1} 迁移为加密载荷。',
+  PaperTodoStringKeys.syncMigratedLegacyOperationLogsPartial:
+      '已将 {1} 个旧版 WebDAV {2} 中的 {0} 个迁移为加密载荷；请再次同步重试剩余部分。',
   PaperTodoStringKeys.syncOnStart: '启动时同步',
+  PaperTodoStringKeys.syncOperationLog: '操作日志',
+  PaperTodoStringKeys.syncOperationLogs: '操作日志',
   PaperTodoStringKeys.syncPayloadUnreadable: '无法解密远端同步数据，请检查同步加密密钥短语。',
+  PaperTodoStringKeys.syncRemoteChange: '变更',
+  PaperTodoStringKeys.syncRemoteChanges: '变更',
+  PaperTodoStringKeys.syncRemoteSnapshotEmpty: '远端快照为空。',
   PaperTodoStringKeys.syncRestoreSnapshotFailed: '恢复失败：{0}',
+  PaperTodoStringKeys.syncSnapshotRestored: '快照已恢复。',
   PaperTodoStringKeys.syncUploaded: '已上传本地数据。',
   PaperTodoStringKeys.theme: '主题',
   PaperTodoStringKeys.themeDark: '深色',
@@ -1109,6 +1197,13 @@ const _jaStrings = {
   PaperTodoStringKeys.passphraseHelper: 'Windows と Android の暗号化同期に必要です。',
   PaperTodoStringKeys.password: 'パスワード',
   PaperTodoStringKeys.persistentPowerShellProcess: '常駐 PowerShell プロセス',
+  PaperTodoStringKeys.platformSettingFullscreenTopmostMode: '全画面/最前面モード',
+  PaperTodoStringKeys.platformSettingGlobalHotkeys: 'グローバルホットキー',
+  PaperTodoStringKeys.platformSettingPaperSurfaces: '紙片ウィンドウ',
+  PaperTodoStringKeys.platformSettingScriptCapsuleProcess: 'スクリプトカプセルプロセス',
+  PaperTodoStringKeys.platformSettingStartupAtLogin: 'ログイン時に開始',
+  PaperTodoStringKeys.platformSettingWindowSwitcherVisibility: 'タスク切り替え表示',
+  PaperTodoStringKeys.platformSettingsFailed: 'プラットフォーム設定に失敗しました: {0}',
   PaperTodoStringKeys.pinnedNoteHotkey: '固定ノートのホットキー',
   PaperTodoStringKeys.pinnedTodoHotkey: '固定 ToDo のホットキー',
   PaperTodoStringKeys.preferPowerShell7: 'PowerShell 7 を優先',
@@ -1131,6 +1226,7 @@ const _jaStrings = {
   PaperTodoStringKeys.runLinkedScriptCapsulesOnClick: 'クリックでリンク済みスクリプトカプセルを実行',
   PaperTodoStringKeys.scriptCapsuleFailed: 'スクリプトカプセルを実行できませんでした: {0}',
   PaperTodoStringKeys.serif: 'セリフ',
+  PaperTodoStringKeys.settingsSaveFailed: '設定を保存できませんでした: {0}',
   PaperTodoStringKeys.showDeepCapsuleWhileExpanded: '展開中も端カプセルを表示',
   PaperTodoStringKeys.showLinkedNoteName: 'リンク済みノート名を表示',
   PaperTodoStringKeys.showPassphrase: 'パスフレーズを表示',
@@ -1141,15 +1237,35 @@ const _jaStrings = {
   PaperTodoStringKeys.syncCompleteConfiguration:
       '先に WebDAV 同期設定と同期暗号化パスフレーズを完了してください。',
   PaperTodoStringKeys.syncConflict: '同期中にリモートデータが変更されました。アップロード前に再取得してください。',
+  PaperTodoStringKeys.syncConflictSnapshotPreserved:
+      '同期中にリモートデータが変更されました。ローカルスナップショットは {0} に保存されました。',
   PaperTodoStringKeys.syncDisabled: '同期は無効です。',
   PaperTodoStringKeys.syncDownloaded: 'リモートデータをダウンロードしました。',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainMigrated:
+      '旧式の平文 WebDAV データからリモートデータをダウンロードし、暗号化ペイロードへ移行しました。',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainNextUpload:
+      '旧式の平文 WebDAV データからリモートデータをダウンロードしました。次の正常なアップロードで暗号化ペイロードを書き込みます。',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainRetry:
+      '旧式の平文 WebDAV データからリモートデータをダウンロードしました。自動暗号化移行は完了できませんでした。もう一度同期してください。',
   PaperTodoStringKeys.syncEncryptionPassphrase: '同期暗号化パスフレーズ',
   PaperTodoStringKeys.syncFailed: '同期に失敗しました: {0}',
+  PaperTodoStringKeys.syncFoundLegacyOperationLogs:
+      '旧式の平文 WebDAV {1} が {0} 件見つかりました。リモート ETag が利用可能になった後、もう一度同期して暗号化移行を再試行してください。',
   PaperTodoStringKeys.syncMergedRemoteChanges: 'リモートの変更 {0} 件を結合しました。',
+  PaperTodoStringKeys.syncMigratedLegacyOperationLogs:
+      '旧式の WebDAV {1} {0} 件を暗号化ペイロードへ移行しました。',
+  PaperTodoStringKeys.syncMigratedLegacyOperationLogsPartial:
+      '旧式の WebDAV {2} {1} 件のうち {0} 件を暗号化ペイロードへ移行しました。残りはもう一度同期して再試行してください。',
   PaperTodoStringKeys.syncOnStart: '起動時に同期',
+  PaperTodoStringKeys.syncOperationLog: '操作ログ',
+  PaperTodoStringKeys.syncOperationLogs: '操作ログ',
   PaperTodoStringKeys.syncPayloadUnreadable:
       'リモート同期データを復号できません。同期暗号化パスフレーズを確認してください。',
+  PaperTodoStringKeys.syncRemoteChange: '変更',
+  PaperTodoStringKeys.syncRemoteChanges: '変更',
+  PaperTodoStringKeys.syncRemoteSnapshotEmpty: 'リモートスナップショットは空です。',
   PaperTodoStringKeys.syncRestoreSnapshotFailed: '復元に失敗しました: {0}',
+  PaperTodoStringKeys.syncSnapshotRestored: 'スナップショットを復元しました。',
   PaperTodoStringKeys.syncUploaded: 'ローカルデータをアップロードしました。',
   PaperTodoStringKeys.theme: 'テーマ',
   PaperTodoStringKeys.themeDark: 'ダーク',
@@ -1384,6 +1500,13 @@ const _koStrings = {
   PaperTodoStringKeys.passphraseHelper: 'Windows와 Android 암호화 동기화에 필요합니다.',
   PaperTodoStringKeys.password: '비밀번호',
   PaperTodoStringKeys.persistentPowerShellProcess: '상주 PowerShell 프로세스',
+  PaperTodoStringKeys.platformSettingFullscreenTopmostMode: '전체 화면/항상 위 모드',
+  PaperTodoStringKeys.platformSettingGlobalHotkeys: '전역 단축키',
+  PaperTodoStringKeys.platformSettingPaperSurfaces: '종이 창',
+  PaperTodoStringKeys.platformSettingScriptCapsuleProcess: '스크립트 캡슐 프로세스',
+  PaperTodoStringKeys.platformSettingStartupAtLogin: '로그인 시 시작',
+  PaperTodoStringKeys.platformSettingWindowSwitcherVisibility: '작업 전환기 표시',
+  PaperTodoStringKeys.platformSettingsFailed: '플랫폼 설정 실패: {0}',
   PaperTodoStringKeys.pinnedNoteHotkey: '고정 노트 단축키',
   PaperTodoStringKeys.pinnedTodoHotkey: '고정 할 일 단축키',
   PaperTodoStringKeys.preferPowerShell7: 'PowerShell 7 우선 사용',
@@ -1406,6 +1529,7 @@ const _koStrings = {
   PaperTodoStringKeys.runLinkedScriptCapsulesOnClick: '클릭 시 연결된 스크립트 캡슐 실행',
   PaperTodoStringKeys.scriptCapsuleFailed: '스크립트 캡슐 실행 실패: {0}',
   PaperTodoStringKeys.serif: '세리프',
+  PaperTodoStringKeys.settingsSaveFailed: '설정 저장 실패: {0}',
   PaperTodoStringKeys.showDeepCapsuleWhileExpanded: '펼친 동안 가장자리 캡슐 표시',
   PaperTodoStringKeys.showLinkedNoteName: '연결된 노트 이름 표시',
   PaperTodoStringKeys.showPassphrase: '암호 구문 표시',
@@ -1416,15 +1540,35 @@ const _koStrings = {
   PaperTodoStringKeys.syncCompleteConfiguration:
       '먼저 WebDAV 동기화 설정과 동기화 암호화 암호 구문을 완료하세요.',
   PaperTodoStringKeys.syncConflict: '동기화 중 원격 데이터가 변경되었습니다. 업로드 전에 다시 가져오세요.',
+  PaperTodoStringKeys.syncConflictSnapshotPreserved:
+      '동기화 중 원격 데이터가 변경되었습니다. 로컬 스냅샷은 {0}에 보존되었습니다.',
   PaperTodoStringKeys.syncDisabled: '동기화가 꺼져 있습니다.',
   PaperTodoStringKeys.syncDownloaded: '원격 데이터를 다운로드했습니다.',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainMigrated:
+      '이전 평문 WebDAV 데이터에서 원격 데이터를 다운로드하고 암호화 페이로드로 이전했습니다.',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainNextUpload:
+      '이전 평문 WebDAV 데이터에서 원격 데이터를 다운로드했습니다. 다음 업로드가 성공하면 암호화 페이로드를 씁니다.',
+  PaperTodoStringKeys.syncDownloadedLegacyPlainRetry:
+      '이전 평문 WebDAV 데이터에서 원격 데이터를 다운로드했습니다. 자동 암호화 이전을 완료하지 못했습니다. 다시 동기화해 주세요.',
   PaperTodoStringKeys.syncEncryptionPassphrase: '동기화 암호화 암호 구문',
   PaperTodoStringKeys.syncFailed: '동기화 실패: {0}',
+  PaperTodoStringKeys.syncFoundLegacyOperationLogs:
+      '이전 평문 WebDAV {1} {0}개를 발견했습니다. 원격 ETag를 사용할 수 있게 되면 다시 동기화해 암호화 이전을 재시도하세요.',
   PaperTodoStringKeys.syncMergedRemoteChanges: '원격 변경 {0}개를 병합했습니다.',
+  PaperTodoStringKeys.syncMigratedLegacyOperationLogs:
+      '이전 WebDAV {1} {0}개를 암호화 페이로드로 이전했습니다.',
+  PaperTodoStringKeys.syncMigratedLegacyOperationLogsPartial:
+      '이전 WebDAV {2} {1}개 중 {0}개를 암호화 페이로드로 이전했습니다. 나머지는 다시 동기화해 재시도하세요.',
   PaperTodoStringKeys.syncOnStart: '시작 시 동기화',
+  PaperTodoStringKeys.syncOperationLog: '작업 로그',
+  PaperTodoStringKeys.syncOperationLogs: '작업 로그',
   PaperTodoStringKeys.syncPayloadUnreadable:
       '원격 동기화 데이터를 복호화할 수 없습니다. 동기화 암호화 암호 구문을 확인하세요.',
+  PaperTodoStringKeys.syncRemoteChange: '변경',
+  PaperTodoStringKeys.syncRemoteChanges: '변경',
+  PaperTodoStringKeys.syncRemoteSnapshotEmpty: '원격 스냅샷이 비어 있습니다.',
   PaperTodoStringKeys.syncRestoreSnapshotFailed: '복구 실패: {0}',
+  PaperTodoStringKeys.syncSnapshotRestored: '스냅샷을 복구했습니다.',
   PaperTodoStringKeys.syncUploaded: '로컬 데이터를 업로드했습니다.',
   PaperTodoStringKeys.theme: '테마',
   PaperTodoStringKeys.themeDark: '어둡게',
