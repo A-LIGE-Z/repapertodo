@@ -325,6 +325,9 @@ subsequent cleaned lines create default single-column Todo rows after the
 active row. After a multiline paste creates rows, focus should move to the last
 newly inserted Todo item's main text field, matching PaperTodo's last-row
 rebuild focus.
+Todo text fields should preserve PaperTodo's `MaxLength = 5000` rule for both
+main and extra columns, so normal typing and single-line paste cannot exceed
+the same per-column length used by multiline Todo paste cleanup.
 Todo text editing should follow PaperTodo's undo snapshot timing: focusing a
 main todo text field records its original text, losing focus after a change
 pushes that pre-edit item snapshot, and structural edits first commit any

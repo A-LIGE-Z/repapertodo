@@ -14,6 +14,7 @@ import 'package:repapertodo/src/core/model/paper_data.dart';
 import 'package:repapertodo/src/core/model/paper_item.dart';
 import 'package:repapertodo/src/core/model/paper_titles.dart';
 import 'package:repapertodo/src/core/model/sync_settings.dart';
+import 'package:repapertodo/src/core/model/todo_paste.dart';
 import 'package:repapertodo/src/core/script/script_capsule.dart';
 import 'package:repapertodo/src/core/storage/state_store.dart';
 import 'package:repapertodo/src/core/state/app_state_codec.dart';
@@ -8582,6 +8583,69 @@ void main() {
     final restored = controller.state.papers.single.items.single;
     expect(restored.text, 'Title');
     expect(restored.todoExtraColumns, ['Old status']);
+  });
+
+  testWidgets('limits todo text columns to PaperTodo max length',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'todo-length-paper',
+            type: PaperTypes.todo,
+            title: 'Todo length paper',
+            items: [
+              PaperItem(
+                id: 'todo-length-item',
+                text: '',
+                todoColumnCount: 2,
+                todoExtraColumns: [''],
+                todoColumnWidths: [1, 1],
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final mainField = find.descendant(
+      of: find.byKey(const ValueKey('todo-length-paper-todo-length-item-text')),
+      matching: find.byType(EditableText),
+    );
+    final extraField = find.descendant(
+      of: find.byKey(
+        const ValueKey('todo-length-paper-todo-length-item-column-2'),
+      ),
+      matching: find.byType(EditableText),
+    );
+    final oversizedText =
+        List.filled(TodoPasteItems.maxLineLength + 25, 'x').join();
+    final oversizedExtra =
+        List.filled(TodoPasteItems.maxLineLength + 10, 'y').join();
+
+    await tester.enterText(mainField, oversizedText);
+    await tester.enterText(extraField, oversizedExtra);
+    await tester.pumpAndSettle();
+
+    final item = controller.state.papers.single.items.single;
+    expect(item.text, hasLength(TodoPasteItems.maxLineLength));
+    expect(
+        item.todoExtraColumns.single, hasLength(TodoPasteItems.maxLineLength));
+    expect(tester.widget<EditableText>(mainField).controller.text,
+        hasLength(TodoPasteItems.maxLineLength));
+    expect(tester.widget<EditableText>(extraField).controller.text,
+        hasLength(TodoPasteItems.maxLineLength));
   });
 
   testWidgets('inserts todo items after the focused row from keyboard',

@@ -6978,6 +6978,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                   previousColumnText: previousValue,
                 ),
               ),
+              LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
             ],
             onChanged: (value) {
               if (_handleMultiLinePaste(item, value)) {
@@ -7109,6 +7110,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                 previousColumnText: previousValue,
               ),
             ),
+            LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
           ],
           onChanged: (value) {
             if (_handleMultiLinePaste(item, value, extraColumnIndex: index)) {

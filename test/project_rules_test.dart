@@ -786,6 +786,8 @@ void main() {
     expect(design, contains('every Todo text column'));
     expect(design, contains('first cleaned line replaces'));
     expect(design, contains("last-row\nrebuild focus"));
+    expect(design, contains('MaxLength = 5000'));
+    expect(design, contains('main and extra columns'));
     expect(design, contains('Backspace'));
     expect(design, contains('suppresses repeated'));
     expect(design, contains("previous Todo item's text end"));
@@ -795,6 +797,8 @@ void main() {
     expect(app, contains('extraColumnIndex'));
     expect(app, contains('_TodoPasteTextInputFormatter'));
     expect(app, contains('newItems.last.id'));
+    expect(app, contains('LengthLimitingTextInputFormatter'));
+    expect(app, contains('TodoPasteItems.maxLineLength'));
     expect(app, contains('PaperItem _newTodoItem({String text = \'\'}'));
     expect(app, contains('_deleteBlankTodoItemFromKeyboard'));
     expect(app, contains('_allTodoTextColumnsBlank'));
