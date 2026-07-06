@@ -934,10 +934,16 @@ List<String> _normalizeRequestPathSegments(String path) {
       'WebDAV path must not contain leading or trailing whitespace.',
     );
   }
-  final withForwardSlashes = trimmedPath.replaceAll('\\', '/');
+  if (trimmedPath.contains('\\')) {
+    throw ArgumentError.value(
+      path,
+      'path',
+      'WebDAV path must not contain backslashes.',
+    );
+  }
   late final String decoded;
   try {
-    decoded = Uri.decodeComponent(withForwardSlashes);
+    decoded = Uri.decodeComponent(trimmedPath);
   } on ArgumentError catch (error) {
     throw ArgumentError.value(
       path,
@@ -959,7 +965,7 @@ List<String> _normalizeRequestPathSegments(String path) {
     );
   }
   final segments = <String>[];
-  final rawSegments = withForwardSlashes.split('/');
+  final rawSegments = trimmedPath.split('/');
   for (var index = 0; index < rawSegments.length; index += 1) {
     final rawSegment = rawSegments[index];
     if (rawSegment.isEmpty && index > 0 && index < rawSegments.length - 1) {

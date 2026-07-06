@@ -193,9 +193,9 @@ absolute URL references are ignored before root-folder matching. Plain relative
 values must stay under the configured endpoint path before they can be reduced
 to endpoint-relative sync paths.
 The WebDAV client itself also refuses absolute or parent-traversing request
-paths, paths with control characters, unsafe base URI authorities with encoded
-separators, unsafe base URI paths including control characters, encoded path
-separators, blank path segments, and request path segments that decode to path
+paths, request paths with backslashes, paths with control characters,
+unsafe base URI authorities with encoded separators, unsafe base URI paths including control
+characters, encoded path separators, blank path segments, and request path segments that decode to path
 separators.
 Request path segments that collapse to blank after trimming are also refused.
 Request paths and their decoded segments must not contain leading or trailing

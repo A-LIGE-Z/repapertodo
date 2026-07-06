@@ -978,6 +978,7 @@ void main() {
     for (final path in const [
       '../manifest.json',
       'repapertodo/%2e%2e/manifest.json',
+      r'repapertodo\manifest.json',
       r'repapertodo\..\manifest.json',
       'https://evil.example.test/manifest.json',
       '//evil.example.test/manifest.json',

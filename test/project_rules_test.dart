@@ -239,6 +239,7 @@ void main() {
     expect(syncDesign, contains('unsafe base URI paths including control'));
     expect(syncDesign, contains('unsafe base URI authorities'));
     expect(syncDesign, contains('request path'));
+    expect(syncDesign, contains('request paths with backslashes'));
     expect(syncDesign, contains('segments that decode to path\nseparators'));
     expect(
         syncDesign, contains('Request path segments that collapse to blank'));
@@ -403,6 +404,10 @@ void main() {
       contains(
         'WebDAV path segments must not contain leading or trailing whitespace.',
       ),
+    );
+    expect(
+      webDavClient,
+      contains('WebDAV path must not contain backslashes.'),
     );
     final syncDeviceId =
         _readProjectText('lib/src/core/model/sync_device_id.dart');
