@@ -19,6 +19,7 @@ abstract interface class PlatformServices {
 abstract interface class PaperWindowHost {
   Stream<PaperData> get surfaceUpdates;
   Stream<String> get paperOpenRequests;
+  Stream<String> get paperDeleteRequests;
 
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper);
   Future<void> showPaper(PaperData paper);

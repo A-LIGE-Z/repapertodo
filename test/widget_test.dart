@@ -9920,6 +9920,69 @@ void main() {
     expect(find.text('Tray hidden'), findsOneWidget);
   });
 
+  testWidgets('paper delete requests delete with PaperTodo tray semantics',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        enableTodoNoteLinks: true,
+        showLinkedNoteName: true,
+        papers: [
+          PaperData(
+            id: 'tray-delete-todo',
+            type: PaperTypes.todo,
+            title: 'Tray todo',
+            items: [
+              PaperItem(
+                id: 'tray-delete-item',
+                text: 'Linked from tray',
+                linkedNoteId: 'tray-delete-note',
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'tray-delete-note',
+            type: PaperTypes.note,
+            title: 'Tray note',
+            content: 'Delete from tray.',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    platform.paperWindows.emitPaperDeleteRequest('tray-delete-note');
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    });
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Delete paper?'), findsNothing);
+    expect(controller.state.papers.map((paper) => paper.id), [
+      'tray-delete-todo',
+    ]);
+    expect(controller.state.papers.single.items.single.linkedNoteId, isNull);
+    expect(controller.state.sync.isPaperDeleted('tray-delete-note'), true);
+    expect(platform.paperWindows.hiddenTitles, contains('Tray note'));
+    expect(find.text('Tray n deleted.'), findsOneWidget);
+
+    await tester.pumpAndSettle();
+    expect(store.savedState.papers.map((paper) => paper.id), [
+      'tray-delete-todo',
+    ]);
+  });
+
   testWidgets('links todo items to note papers', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -10852,6 +10915,7 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final hiddenTitles = <String>[];
   final _surfaceUpdates = StreamController<PaperData>.broadcast();
   final _paperOpenRequests = StreamController<String>.broadcast();
+  final _paperDeleteRequests = StreamController<String>.broadcast();
 
   @override
   Stream<PaperData> get surfaceUpdates => _surfaceUpdates.stream;
@@ -10859,12 +10923,19 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   @override
   Stream<String> get paperOpenRequests => _paperOpenRequests.stream;
 
+  @override
+  Stream<String> get paperDeleteRequests => _paperDeleteRequests.stream;
+
   void emitSurfaceUpdate(PaperData paper) {
     _surfaceUpdates.add(paper);
   }
 
   void emitPaperOpenRequest(String paperId) {
     _paperOpenRequests.add(paperId);
+  }
+
+  void emitPaperDeleteRequest(String paperId) {
+    _paperDeleteRequests.add(paperId);
   }
 
   @override

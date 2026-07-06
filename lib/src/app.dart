@@ -455,6 +455,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   Future<void> _saveQueue = Future<void>.value();
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
   StreamSubscription<String>? _paperOpenSubscription;
+  StreamSubscription<String>? _paperDeleteSubscription;
   StreamSubscription<StartupCommand>? _startupCommandSubscription;
   Timer? _autoSyncTimer;
   Timer? _localEditSyncDebounce;
@@ -480,6 +481,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         controller.paperSurfaceUpdates.listen(_handleSurfaceUpdate);
     _paperOpenSubscription = controller.paperOpenRequests.listen((paperId) {
       unawaited(_handlePaperOpenRequest(paperId));
+    });
+    _paperDeleteSubscription = controller.paperDeleteRequests.listen((paperId) {
+      unawaited(_handlePaperDeleteRequest(paperId));
     });
     _startupCommandSubscription = controller.startupCommands.listen((command) {
       unawaited(_handleStartupCommand(command));
@@ -508,6 +512,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _todoReminderTimer?.cancel();
     unawaited(_surfaceUpdateSubscription?.cancel());
     unawaited(_paperOpenSubscription?.cancel());
+    unawaited(_paperDeleteSubscription?.cancel());
     unawaited(_startupCommandSubscription?.cancel());
     super.dispose();
   }
@@ -811,7 +816,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       onOpenExternalMarkdown: _openNoteMarkdownExternally,
       onOpenUri: _openUri,
       onHide: _hidePaper,
-      onDelete: _deletePaper,
+      onDelete: (paper) => _deletePaper(paper),
       onTodoItemDeleted: _markTodoItemDeleted,
       onTodoItemRestored: _clearTodoItemDeleted,
       onTodoReminderReset: _resetTodoReminder,
@@ -908,10 +913,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     await _saveState();
   }
 
-  Future<void> _deletePaper(PaperData paper) async {
-    final confirmed = await _confirmDeletePaper(paper);
-    if (!confirmed) {
-      return;
+  Future<void> _deletePaper(PaperData paper, {bool confirm = true}) async {
+    if (confirm) {
+      final confirmed = await _confirmDeletePaper(paper);
+      if (!confirmed) {
+        return;
+      }
     }
     final removedIndex = controller.state.papers.indexWhere(
       (candidate) => candidate.id == paper.id,
@@ -1222,6 +1229,16 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     }
     final paper = controller.state.papers[paperIndex];
     await _openPaper(paper);
+  }
+
+  Future<void> _handlePaperDeleteRequest(String paperId) async {
+    final paperIndex = controller.state.papers.indexWhere(
+      (paper) => paper.id == paperId,
+    );
+    if (paperIndex < 0) {
+      return;
+    }
+    await _deletePaper(controller.state.papers[paperIndex], confirm: false);
   }
 
   Future<void> _handleStartupCommand(StartupCommand command) async {

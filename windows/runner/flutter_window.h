@@ -40,6 +40,7 @@ class FlutterWindow : public Win32Window {
   void SendBoundsChanged();
   void SendCloseRequested();
   void SendPaperRequested(const std::string& paper_id);
+  void SendPaperDeleteRequested(const std::string& paper_id);
   void SendStartupCommandRequested(const std::string& command);
   void SendWindowEvent(const char* method);
   void RememberActivePaperId(const flutter::EncodableValue* arguments);

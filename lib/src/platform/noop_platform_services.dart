@@ -45,6 +45,9 @@ class NoopPlatformServices implements PlatformServices {
 
 class NoopPaperWindowHost implements PaperWindowHost {
   @override
+  Stream<String> get paperDeleteRequests => const Stream.empty();
+
+  @override
   Stream<String> get paperOpenRequests => const Stream.empty();
 
   @override

@@ -65,6 +65,8 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       StreamController<PaperData>.broadcast();
   final StreamController<String> _paperOpenRequests =
       StreamController<String>.broadcast();
+  final StreamController<String> _paperDeleteRequests =
+      StreamController<String>.broadcast();
   final Map<String, PaperData> _knownPapers = <String, PaperData>{};
   PaperData? _activePaper;
 
@@ -73,6 +75,9 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Stream<String> get paperOpenRequests => _paperOpenRequests.stream;
+
+  @override
+  Stream<String> get paperDeleteRequests => _paperDeleteRequests.stream;
 
   @override
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async {
@@ -100,6 +105,11 @@ class WindowsPaperWindowHost implements PaperWindowHost {
         final paperId = _paperIdFromArguments(call.arguments);
         if (paperId != null) {
           _paperOpenRequests.add(paperId);
+        }
+      case 'paperDeleteRequested':
+        final paperId = _paperIdFromArguments(call.arguments);
+        if (paperId != null) {
+          _paperDeleteRequests.add(paperId);
         }
       case 'boundsChanged':
         final paper = _paperFromEventArguments(call.arguments);

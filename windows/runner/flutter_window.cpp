@@ -1477,6 +1477,7 @@ constexpr UINT kTrayHideCommand = 40005;
 constexpr UINT kTrayExitCommand = 40006;
 constexpr UINT kTrayToggleCommand = 40007;
 constexpr UINT kTrayPaperCommandBase = 41000;
+constexpr UINT kTrayPaperDeleteCommandBase = 45000;
 constexpr int kPinnedTodoHotkeyId = 42001;
 constexpr int kPinnedNoteHotkeyId = 42002;
 constexpr UINT_PTR kFullscreenTopmostRefreshTimerId = 43001;
@@ -2073,6 +2074,16 @@ void FlutterWindow::ShowTrayMenu() {
                  kTrayPaperCommandBase + static_cast<UINT>(index),
                  tray_papers_[index].label.c_str());
     }
+    HMENU delete_menu = CreatePopupMenu();
+    if (delete_menu) {
+      for (size_t index = 0; index < tray_papers_.size(); index++) {
+        AppendMenu(delete_menu, MF_STRING,
+                   kTrayPaperDeleteCommandBase + static_cast<UINT>(index),
+                   tray_papers_[index].label.c_str());
+      }
+      AppendMenu(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(delete_menu),
+                 L"Delete paper...");
+    }
   }
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenu(menu, MF_STRING, kTrayExitCommand, L"Exit");
@@ -2117,6 +2128,20 @@ void FlutterWindow::ShowTrayMenu() {
         SendPaperRequested(tray_papers_[command - kTrayPaperCommandBase].id);
         ShowWindow(window, SW_SHOWNORMAL);
         SetForegroundWindow(window);
+      } else if (command >= kTrayPaperDeleteCommandBase &&
+                 command <
+                     kTrayPaperDeleteCommandBase + tray_papers_.size()) {
+        const auto& paper =
+            tray_papers_[command - kTrayPaperDeleteCommandBase];
+        std::wstring message = L"Delete \"";
+        message += paper.label;
+        message += L"\"?";
+        const int response =
+            MessageBoxW(window, message.c_str(), L"Delete paper?",
+                        MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+        if (response == IDYES) {
+          SendPaperDeleteRequested(paper.id);
+        }
       }
       break;
   }
@@ -2149,6 +2174,17 @@ void FlutterWindow::SendPaperRequested(const std::string& paper_id) {
   event[flutter::EncodableValue("paperId")] = flutter::EncodableValue(paper_id);
   window_channel_->InvokeMethod(
       "paperRequested", std::make_unique<flutter::EncodableValue>(event));
+}
+
+void FlutterWindow::SendPaperDeleteRequested(const std::string& paper_id) {
+  if (!window_channel_) {
+    return;
+  }
+  flutter::EncodableMap event;
+  event[flutter::EncodableValue("paperId")] = flutter::EncodableValue(paper_id);
+  window_channel_->InvokeMethod(
+      "paperDeleteRequested",
+      std::make_unique<flutter::EncodableValue>(event));
 }
 
 void FlutterWindow::SendStartupCommandRequested(const std::string& command) {

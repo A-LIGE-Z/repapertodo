@@ -572,6 +572,8 @@ void main() {
     expect(design, contains('Deleting the last remaining paper'));
     expect(design, contains('Surface mode controls'));
     expect(design, contains('rebuild the tray menu'));
+    expect(design, contains('Paper deletion should remain available'));
+    expect(design, contains('route through Dart deletion'));
     expect(design, contains('interaction-locked like'));
     expect(design, contains('desktop unpin'));
     expect(design, contains('control remains reachable'));
@@ -590,6 +592,7 @@ void main() {
         contains('defaultPaper = controller.tryCreatePaper(PaperTypes.todo)'));
     expect(app, contains('await controller.showPaper(createdDefaultPaper)'));
     expect(app, contains('await controller.updatePaperSurface(paper)'));
+    expect(app, contains('_handlePaperDeleteRequest'));
     expect(app, contains('_undoDeletePaper'));
   });
 
@@ -1076,6 +1079,20 @@ void main() {
     expect(paperCommand, contains('SendPaperRequested('));
     expect(paperCommand, contains('ShowWindow(window, SW_SHOWNORMAL);'));
     expect(paperCommand, contains('SetForegroundWindow(window);'));
+  });
+
+  test('Windows tray paper delete command confirms before Dart deletion', () {
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final platform = File('lib/src/platform/windows_platform_services.dart')
+        .readAsStringSync();
+
+    expect(runner, contains('kTrayPaperDeleteCommandBase'));
+    expect(runner, contains('L"Delete paper..."'));
+    expect(runner, contains('MessageBoxW'));
+    expect(runner, contains('SendPaperDeleteRequested'));
+    expect(runner, contains('"paperDeleteRequested"'));
+    expect(platform, contains('_paperDeleteRequests'));
+    expect(platform, contains("case 'paperDeleteRequested':"));
   });
 
   test('Windows tray marks script capsule notes distinctly', () {

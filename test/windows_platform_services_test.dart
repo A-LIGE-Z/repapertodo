@@ -552,6 +552,17 @@ void main() {
     );
     expect(await openRequest, 'paper-2');
 
+    final deleteRequest = services.paperWindows.paperDeleteRequests.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('paperDeleteRequested', {'paperId': 'paper-2'}),
+      ),
+      (_) {},
+    );
+    expect(await deleteRequest, 'paper-2');
+
     await services.tray
         .rebuildMenu(AppState(papers: [firstPaper, secondPaper]));
     final trayMenuCall =

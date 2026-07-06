@@ -31,6 +31,9 @@ class RePaperTodoController {
   Stream<String> get paperOpenRequests =>
       _platform.paperWindows.paperOpenRequests;
 
+  Stream<String> get paperDeleteRequests =>
+      _platform.paperWindows.paperDeleteRequests;
+
   Stream<StartupCommand> get startupCommands => _platform.startup.commands;
 
   bool get supportsStartupAtLogin =>
