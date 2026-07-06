@@ -1614,6 +1614,10 @@ void main() {
     expect(workflow, contains('actions/setup-java@v4'));
     expect(workflow, contains('subosito/flutter-action@v2'));
     expect(workflow, contains('channel: stable'));
+    expect(workflow, contains('function Invoke-Native'));
+    expect(workflow, contains('"sdkmanager --licenses"'));
+    expect(workflow, contains('"sdkmanager install Android API 37"'));
+    expect(workflow, contains(r'failed with exit code $LASTEXITCODE'));
     expect(workflow, contains('platforms;android-37.0'));
     expect(workflow, isNot(contains('"platforms;android-37"')));
     expect(workflow, contains('build-tools;37.0.0'));

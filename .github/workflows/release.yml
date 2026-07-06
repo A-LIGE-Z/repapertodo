@@ -55,6 +55,18 @@ jobs:
       - name: Install Android API 37
         shell: pwsh
         run: |
+          function Invoke-Native {
+            param(
+              [string]$Name,
+              [scriptblock]$Action
+            )
+
+            & $Action
+            if ($LASTEXITCODE -ne 0) {
+              throw "$Name failed with exit code $LASTEXITCODE."
+            }
+          }
+
           foreach ($name in @("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")) {
             Remove-Item -LiteralPath "Env:\$name" -ErrorAction SilentlyContinue
           }
@@ -64,8 +76,12 @@ jobs:
             throw "Android sdkmanager.bat was not found under ANDROID_HOME."
           }
           $licenses = ("y`n" * 200)
-          $licenses | & $sdkManager.FullName --licenses
-          & $sdkManager.FullName "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+          Invoke-Native "sdkmanager --licenses" {
+            $licenses | & $sdkManager.FullName --licenses
+          }
+          Invoke-Native "sdkmanager install Android API 37" {
+            & $sdkManager.FullName "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+          }
 
       - name: Verify Flutter toolchain
         shell: pwsh
