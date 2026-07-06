@@ -107,6 +107,7 @@ void main() {
       deviceId: 'test-device',
     );
     final pushedState = AppState(
+      startAtLogin: true,
       papers: [
         PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'Private sync'),
       ],
@@ -142,6 +143,7 @@ void main() {
     final sync = snapshot['sync'] as Map<String, Object?>;
     final snapshotWebDav = sync['webDav'] as Map<String, Object?>;
 
+    expect(snapshot.containsKey('startAtLogin'), false);
     expect(sync['enabled'], false);
     expect(sync['provider'], SyncProviderIds.none);
     expect(sync['operationDeviceSequences'], {'phone-device': 2});

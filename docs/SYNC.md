@@ -92,10 +92,10 @@ of showing an empty snapshot list.
 Transient WebDAV listing failures in the recovery snapshot browser should keep
 the dialog open and expose a retry action instead of forcing users to close and
 reopen the flow.
-Remote snapshots redact local WebDAV configuration and credentials before
-upload. Downloading or restoring a snapshot preserves the current device's
-local WebDAV settings while merging non-secret sync metadata such as device
-sequence progress and delete tombstones.
+Remote snapshots redact local WebDAV configuration, credentials, and
+startup-at-login state before upload. Downloading or restoring a snapshot
+preserves the current device's local WebDAV settings while merging non-secret
+sync metadata such as device sequence progress and delete tombstones.
 
 ```text
 /RePaperTodo/
@@ -419,7 +419,8 @@ Snapshot and operation-log file contents are encrypted for user-facing sync;
 - Keep tombstones long enough to prevent deleted content from reappearing from stale devices.
 - Keep WebDAV settings, credentials, sequence progress, tombstones, and local
   startup-at-login state out of remote settings operations.
-- Keep WebDAV settings and credentials out of uploaded remote snapshots.
+- Keep WebDAV settings, credentials, and local startup-at-login state out of
+  uploaded remote snapshots.
 - Sync on startup, exit, foreground/background transitions, manual request, and debounced local edits.
 - Opening settings must pause pending debounced local-edit uploads; canceling settings or saving settings without changing sync configuration restores the pending upload, even when platform setting application reports errors, while saving sync setting changes clears stale pending uploads so edits are not sent under a new sync configuration. Settings save failures must surface as readable UI errors and must not leave later local edits blocked from debounced upload.
 - After any sync, recovery restore, or local-operation upload replaces local state, reapply the resulting state to the platform layer so Windows surfaces, tray state, hotkeys, and window policies match the accepted data.

@@ -26,6 +26,7 @@ class AppStateCodec {
   String encodeRemoteSnapshot(AppState state) {
     state.normalize();
     final json = state.toJson();
+    json.remove('startAtLogin');
     json['sync'] = _remoteSnapshotSyncJson(state.sync);
     return _prettyJson.convert(json);
   }
