@@ -33,6 +33,8 @@ void main() {
       'https://example.com/%C2%85paper',
       'https://example.com/\u0085paper',
       'mailto:',
+      'mailto:?subject=paper',
+      'mailto://paper@example.com',
     ]) {
       expect(normalizeExternalUriTarget(target), isNull, reason: target);
     }

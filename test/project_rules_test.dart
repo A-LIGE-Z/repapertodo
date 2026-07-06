@@ -65,6 +65,11 @@ void main() {
     expect(mainActivity, contains('hasUnsafeExternalFilePathCharacter'));
     expect(mainActivity, contains('isAllowedExternalUri'));
     expect(mainActivity, contains('"mailto"'));
+    expect(mainActivity, contains('val recipient = uri.schemeSpecificPart'));
+    expect(
+      mainActivity,
+      contains('uri.authority.isNullOrBlank() && recipient.isNotBlank()'),
+    );
     expect(mainActivity, contains('Intent.CATEGORY_BROWSABLE'));
     expect(mainActivity, contains('file_provider_failed'));
     expect(mainActivity, contains('SecurityException'));

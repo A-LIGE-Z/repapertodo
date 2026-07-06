@@ -151,7 +151,13 @@ class MainActivity : FlutterActivity() {
             "http", "https" -> !uri.host.isNullOrBlank() &&
                 uri.userInfo.isNullOrBlank() &&
                 !hasEncodedExternalUriAuthoritySeparator(uri.encodedAuthority)
-            "mailto" -> !uri.schemeSpecificPart.isNullOrBlank()
+            "mailto" -> {
+                val recipient = uri.schemeSpecificPart
+                    ?.substringBefore("?")
+                    ?.trim()
+                    ?: ""
+                uri.authority.isNullOrBlank() && recipient.isNotBlank()
+            }
             else -> false
         }
     }

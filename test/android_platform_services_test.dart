@@ -187,6 +187,14 @@ void main() {
         opener.openUri('https:///missing-host'),
         throwsA(isA<ArgumentError>()),
       );
+      await expectLater(
+        opener.openUri('mailto:?subject=paper'),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        opener.openUri('mailto://paper@example.com'),
+        throwsA(isA<ArgumentError>()),
+      );
 
       await opener.openUri('mailto:paper@example.com');
     }
