@@ -2228,6 +2228,84 @@ void main() {
     });
   });
 
+  test('sync preserves manifest conflict when operation cleanup fails',
+      () async {
+    final requests = <http.Request>[];
+    final webDavClient = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('', 200, headers: {'etag': '"manifest-v1"'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            jsonEncode(
+              SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 6, 30, 11),
+                latestSnapshotPath: 'repapertodo/state.json',
+                deviceSequences: {'other-device': 2, 'test-device': 4},
+              ).toJson(),
+            ),
+            200,
+          );
+        }
+        if (request.method == 'MKCOL') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.contains('/snapshots/')) {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' && request.url.path.contains('/ops/')) {
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response('precondition failed', 412);
+        }
+        if (request.method == 'DELETE' && request.url.path.contains('/ops/')) {
+          return http.Response('locked', 423);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+    final service = WebDavStateSyncService(
+      client: webDavClient,
+      deviceId: 'test-device',
+    );
+
+    final result = await service.sync(
+      localState: AppState(
+        papers: [
+          PaperData(id: 'paper-local', type: PaperTypes.todo, title: 'Local'),
+        ],
+      ),
+      localUpdatedAtUtc: DateTime.utc(2026, 7),
+    );
+
+    expect(result.status, WebDavStateSyncStatus.conflict);
+    expect(
+      result.snapshotPath,
+      'repapertodo/snapshots/snapshot-20260701T000000000Z-test-device-seq-000000000005.json',
+    );
+    expect(result.manifest?.deviceSequences, {
+      'other-device': 2,
+      'test-device': 5,
+    });
+    expect(
+      requests
+          .where((request) => request.url.path.contains('/ops/'))
+          .map((request) => request.method),
+      ['PUT', 'DELETE'],
+    );
+  });
+
   test('sync treats weak manifest etags as conditional conflicts', () async {
     final requests = <http.Request>[];
     final webDavClient = WebDavClient(
