@@ -1253,6 +1253,34 @@ void main() {
     expect(find.text('12 chars | 1 line | 4 elements'), findsOneWidget);
   });
 
+  testWidgets('counts note status characters like PaperTodo', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'status-count-note',
+            type: PaperTypes.note,
+            title: 'Status count note',
+            content: 'A\tB\nC\u0085D😀',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    expect(find.text('6 chars | 2 lines | 0 elements'), findsOneWidget);
+  });
+
   testWidgets('drags and resizes note canvas elements like PaperTodo',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

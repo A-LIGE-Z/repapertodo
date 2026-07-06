@@ -3802,10 +3802,14 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   int _countNoteTextCharacters(String text) {
-    return text.runes.where((rune) {
-      final character = String.fromCharCode(rune);
-      return rune >= 32 && rune != 127 && character.trim().isNotEmpty;
-    }).length;
+    return text.codeUnits.where(_isPaperTodoCountedNoteCharacter).length;
+  }
+
+  bool _isPaperTodoCountedNoteCharacter(int codeUnit) {
+    if (codeUnit < 0x20 || (codeUnit >= 0x7F && codeUnit <= 0x9F)) {
+      return false;
+    }
+    return String.fromCharCode(codeUnit).trim().isNotEmpty;
   }
 
   int _countNoteLines(String text) {
