@@ -96,6 +96,34 @@ function Assert-GitDiffCheck {
   }
 }
 
+function Assert-PublishableReleaseOptions {
+  param(
+    [bool]$PublishGitHubRelease,
+    [bool]$SkipTests,
+    [bool]$SkipBuild,
+    [bool]$AllowDirty
+  )
+
+  if (-not $PublishGitHubRelease) {
+    return
+  }
+
+  $blockedOptions = @()
+  if ($SkipTests) {
+    $blockedOptions += "-SkipTests"
+  }
+  if ($SkipBuild) {
+    $blockedOptions += "-SkipBuild"
+  }
+  if ($AllowDirty) {
+    $blockedOptions += "-AllowDirty"
+  }
+
+  if ($blockedOptions.Count -gt 0) {
+    throw "GitHub Release publishing requires a clean, fully validated build. Remove $($blockedOptions -join ', ') before publishing."
+  }
+}
+
 function New-ReleaseNotes {
   param(
     [string]$version,
@@ -138,6 +166,11 @@ if (-not (Test-Path -LiteralPath $flutter)) {
 }
 
 Assert-Command "git"
+Assert-PublishableReleaseOptions `
+  -PublishGitHubRelease $PublishGitHubRelease `
+  -SkipTests $SkipTests `
+  -SkipBuild $SkipBuild `
+  -AllowDirty $AllowDirty
 if ($PublishGitHubRelease) {
   Assert-Command "gh"
 }

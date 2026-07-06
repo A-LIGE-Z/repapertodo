@@ -1318,11 +1318,15 @@ void main() {
     expect(script, contains('function Invoke-Native'));
     expect(script, contains('function Assert-CleanGitTree'));
     expect(script, contains('function Assert-GitDiffCheck'));
+    expect(script, contains('function Assert-PublishableReleaseOptions'));
     expect(script, contains('git status --porcelain'));
     expect(script, contains('git diff --check'));
     expect(script, contains('git diff --cached --check'));
     expect(script, contains('Working tree has uncommitted changes'));
     expect(script, contains('local-only test package'));
+    expect(script, contains('GitHub Release publishing requires a clean'));
+    expect(script, contains('fully validated build'));
+    expect(script, contains(r"Remove $($blockedOptions -join ', ')"));
     expect(script, contains(r'failed with exit code $LASTEXITCODE'));
     expect(script, contains(r'& $flutter pub get --offline'));
     expect(script, contains(r'& $flutter test --no-pub'));
@@ -1362,6 +1366,9 @@ void main() {
     expect(readme, contains('-PublishGitHubRelease'));
     expect(readme, contains('-AllowDirty'));
     expect(readme, contains('dirty git working tree'));
+    expect(readme, contains('GitHub Release publishing always requires'));
+    expect(readme, contains('combined with `-SkipTests`'));
+    expect(readme, contains('`-SkipBuild`, or `-AllowDirty`'));
     expect(readme, contains('-OfflinePubGet'));
     expect(readme, contains('Validation includes `git diff --check`'));
     expect(readme, contains('SHA-256 checksum file'));

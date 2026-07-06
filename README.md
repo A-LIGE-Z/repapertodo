@@ -51,6 +51,10 @@ By default the release script refuses to package a dirty git working tree so
 the artifact metadata commit matches the files being shipped. For a local-only
 smoke package from uncommitted changes, pass `-AllowDirty`.
 
+GitHub Release publishing always requires the full validation path. The script
+will refuse `-PublishGitHubRelease` when it is combined with `-SkipTests`,
+`-SkipBuild`, or `-AllowDirty`.
+
 If dependencies are already cached and network access to pub.dev is unreliable,
 use offline package resolution:
 
