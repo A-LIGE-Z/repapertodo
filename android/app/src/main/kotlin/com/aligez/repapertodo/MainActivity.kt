@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
+import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import java.io.File
 import io.flutter.embedding.android.FlutterActivity
@@ -132,11 +133,17 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun mimeTypesFor(file: File): List<String> {
-        return when (file.extension.lowercase()) {
-            "md", "markdown" -> listOf("text/markdown", "text/plain", "*/*")
-            "txt" -> listOf("text/plain", "*/*")
-            else -> listOf("*/*")
+        val extension = file.extension.lowercase()
+        val paperTodoPreferredTypes = when (extension) {
+            "md", "markdown" -> listOf("text/markdown", "text/plain")
+            "txt" -> listOf("text/plain")
+            else -> emptyList()
         }
+        val platformMimeType = MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(extension)
+            ?.takeIf { mimeType -> mimeType.isNotBlank() }
+        return (paperTodoPreferredTypes + listOfNotNull(platformMimeType) + "*/*")
+            .distinct()
     }
 
     private fun isAllowedExternalUri(uri: Uri): Boolean {

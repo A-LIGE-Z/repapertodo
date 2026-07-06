@@ -175,7 +175,9 @@ should be hidden on Android unless the platform layer exposes a real
 implementation.
 External Markdown exports should be written under the platform documents area
 so Windows keeps portable files near the executable and Android FileProvider can
-grant temporary read access to other apps.
+grant temporary read access to other apps. Android FileProvider paths should
+also include accessible external storage so validated `/storage/...` Markdown
+links can be handed to the user's preferred editor or viewer.
 Generated external Markdown export filenames must replace platform-reserved
 characters and raw control characters, including DEL and C1 controls, before
 file creation. External Markdown extension settings must reject

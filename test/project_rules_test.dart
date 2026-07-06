@@ -45,7 +45,11 @@ void main() {
     expect(filePaths, contains('<files-path'));
     expect(filePaths, contains('<cache-path'));
     expect(filePaths, contains('<external-files-path'));
+    expect(filePaths, contains('<external-path'));
     expect(mainActivity, contains('FileProvider.getUriForFile'));
+    expect(mainActivity, contains('MimeTypeMap'));
+    expect(mainActivity, contains('getMimeTypeFromExtension'));
+    expect(mainActivity, contains('distinct()'));
     expect(mainActivity, contains('ClipData.newUri'));
     expect(mainActivity, contains('val trimmedUri = uri.trim()'));
     expect(mainActivity, contains('val parsedUri = try'));
