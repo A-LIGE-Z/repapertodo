@@ -107,7 +107,7 @@ Release build for RePaperTodo $version.
 
 Artifacts:
 - Windows x64 release zip containing repapertodo.exe and runtime files.
-- Android release APK for Android 14+ target SDK 37.
+- Android release APK targeting Android 14-17 / API 34-37.
 - SHA-256 checksums for release artifacts.
 - Release metadata JSON with version, commit, Android SDK/signing, validation, and artifact hashes.
 
@@ -253,6 +253,7 @@ Invoke-Step "Package release artifacts" {
     android = [ordered]@{
       minSdk = 34
       targetSdk = 37
+      compatibility = "Android 14-17 / API 34-37"
       signing = $androidSigningMode
     }
     validation = @(

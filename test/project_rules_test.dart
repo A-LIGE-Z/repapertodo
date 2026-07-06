@@ -1261,6 +1261,8 @@ void main() {
     expect(script, contains('Get-AndroidSigningMode'));
     expect(script, contains(r'Android signing mode: $androidSigningMode'));
     expect(script, contains(r'Android signing: $androidSigningMode.'));
+    expect(script, contains('Android 14-17 / API 34-37'));
+    expect(script, contains('compatibility = "Android 14-17 / API 34-37"'));
     expect(script, contains('Compress-Archive'));
     expect(script, contains('Get-FileHash -Algorithm SHA256'));
     expect(script, contains(r'Set-Content -LiteralPath $checksumsFile'));
@@ -1281,7 +1283,10 @@ void main() {
     expect(script, contains(r'$checksumsFile $metadataFile --clobber'));
     expect(script, contains('SHA-256 checksums for release artifacts.'));
     expect(script, contains('Release metadata JSON with version'));
-    expect(script, contains('Android release APK for Android 14+'));
+    expect(
+      script,
+      contains('Android release APK targeting Android 14-17 / API 34-37.'),
+    );
     expect(readme, contains(r'.\scripts\release.ps1'));
     expect(readme, contains('-PublishGitHubRelease'));
     expect(readme, contains('-AllowDirty'));
@@ -1290,5 +1295,6 @@ void main() {
     expect(readme, contains('Validation includes `git diff --check`'));
     expect(readme, contains('SHA-256 checksum file'));
     expect(readme, contains('release metadata JSON file'));
+    expect(readme, contains('Android 14-17/API 34-37 compatibility'));
   });
 }
