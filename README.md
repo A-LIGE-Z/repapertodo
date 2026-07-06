@@ -65,6 +65,9 @@ the artifact metadata commit matches the files being shipped. For a local-only
 smoke package from uncommitted changes, pass `-AllowDirty`. Local smoke
 packages made with `-SkipTests` or `-SkipBuild` record those skipped validation
 steps in the release metadata JSON.
+The clean-tree check also runs again immediately before packaging, so package
+resolution or generated project files cannot drift away from the metadata
+commit unnoticed.
 
 GitHub Release publishing always requires the full validation path. The script
 will refuse `-PublishGitHubRelease` when it is combined with `-SkipTests`,

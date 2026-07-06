@@ -1372,6 +1372,7 @@ void main() {
     expect(script, contains('function Assert-GitHubReleaseTagState'));
     expect(script, contains('function Invoke-NativeText'));
     expect(script, contains('git status --porcelain'));
+    expect(script, contains('Verify release inputs stayed clean'));
     expect(script, contains('git diff --check'));
     expect(script, contains('git diff --cached --check'));
     expect(script, contains('git fetch origin main'));
@@ -1450,6 +1451,9 @@ void main() {
     expect(readme, contains('reused version cannot'));
     expect(readme, contains('-AllowDirty'));
     expect(readme, contains('dirty git working tree'));
+    expect(readme, contains('runs again immediately before packaging'));
+    expect(readme, contains('drift away from the metadata'));
+    expect(readme, contains('commit unnoticed'));
     expect(readme, contains('GitHub Release publishing always requires'));
     expect(readme, contains('combined with `-SkipTests`'));
     expect(readme, contains('`-SkipBuild`, or `-AllowDirty`'));

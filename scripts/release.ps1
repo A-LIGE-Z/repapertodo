@@ -399,6 +399,10 @@ if (-not $SkipBuild) {
   $validationSkipped += "flutter build apk --release --no-pub"
 }
 
+Invoke-Step "Verify release inputs stayed clean" {
+  Assert-CleanGitTree
+}
+
 $dist = Join-Path $repoRoot "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
