@@ -9081,6 +9081,75 @@ void main() {
     );
   });
 
+  testWidgets('deleting only todo item leaves fallback row like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'delete-only-paper',
+            type: PaperTypes.todo,
+            title: 'Delete only paper',
+            items: [
+              PaperItem(id: 'only-item', text: 'Only item'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Delete item'));
+    await tester.pumpAndSettle();
+
+    final fallback = controller.state.papers.single.items.single;
+    expect(fallback.id, isNot('only-item'));
+    expect(fallback.text, '');
+    expect(fallback.order, 0);
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['delete-only-paper']
+          ?.containsKey('only-item'),
+      true,
+    );
+    final fallbackField = tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(ValueKey('delete-only-paper-${fallback.id}-text')),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(fallbackField.focusNode.hasFocus, true);
+
+    final undoAction = tester.widget<SnackBarAction>(
+      find.byWidgetPredicate(
+        (widget) => widget is SnackBarAction && widget.label == 'Undo',
+      ),
+    );
+    undoAction.onPressed();
+    tester
+        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+        .hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.items.map((item) => item.id), [
+      'only-item',
+    ]);
+    expect(
+      controller.state.sync.deletedTodoItemTombstones['delete-only-paper']
+          ?.containsKey('only-item'),
+      isNot(true),
+    );
+  });
+
   testWidgets('moves todo items up and down with undoable ordering',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

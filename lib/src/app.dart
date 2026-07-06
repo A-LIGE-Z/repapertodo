@@ -5972,7 +5972,6 @@ class _TodoEditorState extends State<_TodoEditor> {
                 value: _compactTodoActionDelete,
                 icon: Icons.delete_outline,
                 label: strings.get(PaperTodoStringKeys.actionDeleteItem),
-                enabled: widget.paper.items.length > 1,
               ),
               _todoActionMenuItem(
                 value: _compactTodoActionClearDone,
@@ -6276,9 +6275,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           widget.enableToolTips,
           strings.get(PaperTodoStringKeys.actionDeleteItem),
         ),
-        onPressed: widget.paper.items.length <= 1
-            ? null
-            : () => _deleteItem(context, item),
+        onPressed: () => _deleteItem(context, item),
         iconSize: visualSpec.iconSize,
         constraints: BoxConstraints.tightFor(
           width: visualSpec.controlExtent,
@@ -7467,16 +7464,31 @@ class _TodoEditorState extends State<_TodoEditor> {
     final removedIndex = widget.paper.items.indexWhere(
       (candidate) => candidate.id == item.id,
     );
-    if (removedIndex < 0 || widget.paper.items.length <= 1) {
+    if (removedIndex < 0) {
       return;
     }
+    final previousItem =
+        removedIndex > 0 ? widget.paper.items[removedIndex - 1] : null;
+    final nextItem = removedIndex + 1 < widget.paper.items.length
+        ? widget.paper.items[removedIndex + 1]
+        : null;
+    var focusTargetId = previousItem?.id ?? nextItem?.id;
+    String? fallbackItemId;
+
     _pushTodoUndoSnapshot();
     _unfocusTodoItem(item);
     setState(() {
       widget.paper.items.removeAt(removedIndex);
+      if (widget.paper.items.isEmpty) {
+        final replacement = _newTodoItem();
+        widget.paper.items.add(replacement);
+        focusTargetId = replacement.id;
+        fallbackItemId = replacement.id;
+      }
       widget.paper.normalize();
     });
     widget.onItemDeleted(widget.paper, item);
+    _requestTodoItemFocus(focusTargetId);
     unawaited(widget.onChanged());
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -7491,6 +7503,11 @@ class _TodoEditorState extends State<_TodoEditor> {
           label: strings.get(PaperTodoStringKeys.actionUndo),
           onPressed: () {
             setState(() {
+              if (fallbackItemId != null) {
+                widget.paper.items.removeWhere(
+                  (candidate) => candidate.id == fallbackItemId,
+                );
+              }
               final targetIndex = removedIndex
                   .clamp(
                     0,

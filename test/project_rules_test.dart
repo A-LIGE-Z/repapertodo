@@ -943,6 +943,25 @@ void main() {
     expect(app, contains('_requestTodoItemFocus(item.id)'));
   });
 
+  test('PaperTodo individual todo delete semantics are preserved', () {
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
+
+    expect(
+        design, contains('Deleting an individual Todo item should preserve'));
+    expect(design, contains("PaperTodo's `RemoveItem`"));
+    expect(design, contains('last remaining row'));
+    expect(design, contains('creates a blank fallback row'));
+    expect(design, contains('snackbar undo'));
+    expect(app, contains('_deleteItem'));
+    expect(app, contains('final replacement = _newTodoItem()'));
+    expect(app, contains('fallbackItemId = replacement.id'));
+    expect(app, contains('candidate.id == fallbackItemId'));
+    expect(app, contains('_requestTodoItemFocus(focusTargetId)'));
+    expect(app, contains('onPressed: () => _deleteItem(context, item)'));
+    expect(app, isNot(contains('enabled: widget.paper.items.length > 1')));
+  });
+
   test('PaperTodo clear completed todo items is preserved', () {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final app = _readProjectText('lib/src/app.dart');

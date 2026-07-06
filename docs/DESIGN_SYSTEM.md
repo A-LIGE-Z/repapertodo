@@ -374,6 +374,11 @@ Todo ordering should preserve PaperTodo's reorder data semantics: item moves
 must push a todo undo snapshot, keep the moved item focused, normalize item
 orders after every move, and expose a visible drag handle for pointer reordering
 with move-up/move-down actions as a precise fallback.
+Deleting an individual Todo item should preserve PaperTodo's `RemoveItem`
+semantics: the delete action remains available for the last remaining row,
+deleting that row creates a blank fallback row, deleted-item tombstones are
+recorded, focus moves to the fallback or neighboring row, and snackbar undo
+removes any temporary fallback before restoring the original item.
 Clearing completed Todo items should preserve PaperTodo's batch-delete
 semantics: no-op when nothing is done, push one todo undo snapshot, remove every
 completed row, create a blank fallback row when all rows were completed, record
