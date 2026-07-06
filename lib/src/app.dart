@@ -251,7 +251,9 @@ String? resolveAppFontFamily(
   AppState state, {
   String? runtimeCustomFontFamily,
 }) {
-  final systemFontFamilyName = state.systemFontFamilyName.trim();
+  final systemFontFamilyName = normalizeSystemFontFamilyName(
+    state.systemFontFamilyName,
+  );
   if (systemFontFamilyName.isNotEmpty) {
     return systemFontFamilyName;
   }
@@ -272,7 +274,7 @@ List<String>? resolveAppFontFamilyFallback(
   AppState state, {
   String? runtimeCustomFontFamily,
 }) {
-  if (state.systemFontFamilyName.trim().isNotEmpty) {
+  if (normalizeSystemFontFamilyName(state.systemFontFamilyName).isNotEmpty) {
     return null;
   }
   final runtimeFamily = runtimeCustomFontFamily?.trim();

@@ -327,6 +327,18 @@ void main() {
     );
   });
 
+  test('normalizes custom system font family names safely', () {
+    final longName = List.filled(160, 'A').join();
+    final state = AppState.fromJson({
+      'systemFontFamilyName': ' \u0000$longName\u007F\u0085 ',
+    });
+
+    expect(state.systemFontFamilyName, List.filled(128, 'A').join());
+    expect(state.systemFontFamilyName, isNot(contains('\u0000')));
+    expect(state.systemFontFamilyName, isNot(contains('\u007F')));
+    expect(state.systemFontFamilyName, isNot(contains('\u0085')));
+  });
+
   test('normalizes external markdown extensions like PaperTodo', () {
     expect(
       AppState.fromJson({'externalMarkdownExtension': '*.MD'})

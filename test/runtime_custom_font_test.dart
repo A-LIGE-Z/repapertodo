@@ -98,6 +98,16 @@ void main() {
     );
   });
 
+  test('app font family normalizes unsafe explicit system font names', () {
+    expect(
+      resolveAppFontFamily(
+        AppState(systemFontFamilyName: ' \u0000Microsoft YaHei UI\u007F '),
+        runtimeCustomFontFamily: paperTodoRuntimeCustomFontFamily,
+      ),
+      'Microsoft YaHei UI',
+    );
+  });
+
   test('app font family prefers runtime font before built-in presets', () {
     expect(
       resolveAppFontFamily(

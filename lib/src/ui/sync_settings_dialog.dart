@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/model/app_state.dart';
 import '../core/model/paper_constants.dart';
 import '../core/model/sync_settings.dart';
 import '../core/model/webdav_presets.dart';
@@ -1725,7 +1726,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         markdownRenderMode: _markdownRenderMode,
         todoVisualSize: _todoVisualSize,
         uiFontPreset: _uiFontPreset,
-        systemFontFamilyName: _fontFamilyController.text.trim(),
+        systemFontFamilyName: normalizeSystemFontFamilyName(
+          _fontFamilyController.text,
+        ),
         externalMarkdownExtension:
             _normalizeExtension(_externalMarkdownExtensionController.text),
         zoom: _zoom,

@@ -279,7 +279,9 @@ class AppState {
     markdownRenderMode = MarkdownRenderModes.normalize(markdownRenderMode);
     todoVisualSize = TodoVisualSizes.normalize(todoVisualSize);
     uiFontPreset = UiFontPresets.normalize(uiFontPreset);
-    systemFontFamilyName = systemFontFamilyName.trim();
+    systemFontFamilyName = normalizeSystemFontFamilyName(
+      systemFontFamilyName,
+    );
     zoom = _normalizeZoom(zoom);
     todoDueYearDisplayMode =
         TodoDueYearDisplayModes.normalize(todoDueYearDisplayMode);
@@ -603,6 +605,18 @@ String _normalizeTheme(String value) {
     'system' => 'system',
     _ => 'system',
   };
+}
+
+String normalizeSystemFontFamilyName(String value) {
+  final cleaned = StringBuffer();
+  for (final rune in value.runes) {
+    if (rune < 0x20 || (rune >= 0x7F && rune <= 0x9F)) {
+      continue;
+    }
+    cleaned.writeCharCode(rune);
+  }
+  final text = cleaned.toString().trim();
+  return text.length > 128 ? text.substring(0, 128) : text;
 }
 
 String _newUniqueId(Set<String> usedIds) {
