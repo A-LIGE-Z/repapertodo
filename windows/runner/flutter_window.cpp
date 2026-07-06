@@ -1558,6 +1558,7 @@ bool FlutterWindow::OnCreate() {
                                      paper_surfaces_[active_paper_id_]
                                          .always_on_top));
           }
+          ApplyActivePaperBounds(window);
           if (pinned_to_desktop_) {
             ShowWindow(window, SW_SHOWNOACTIVATE);
             SetWindowPos(window, HWND_BOTTOM, 0, 0, 0, 0,
@@ -1588,33 +1589,48 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "setAlwaysOnTop") {
-          RememberActivePaperId(call.arguments());
-          const bool previous = active_paper_id_.empty()
+          const std::string requested_paper_id =
+              GetPaperIdArgument(call.arguments());
+          const std::string target_paper_id =
+              requested_paper_id.empty() ? active_paper_id_
+                                         : requested_paper_id;
+          const bool previous = target_paper_id.empty()
                                     ? false
-                                    : paper_surfaces_[active_paper_id_]
+                                    : paper_surfaces_[target_paper_id]
                                           .always_on_top;
           const bool enabled =
               GetBoolArgumentValue(call.arguments(), "enabled", previous);
-          RememberPaperAlwaysOnTop(active_paper_id_, enabled);
-          RefreshActivePaperZOrder(window);
+          RememberPaperAlwaysOnTop(target_paper_id, enabled);
+          if (target_paper_id.empty() || target_paper_id == active_paper_id_) {
+            RefreshActivePaperZOrder(window);
+          }
           result->Success();
           return;
         }
         if (method == "setPinnedToDesktop") {
-          RememberActivePaperId(call.arguments());
-          const bool previous = active_paper_id_.empty()
+          const std::string requested_paper_id =
+              GetPaperIdArgument(call.arguments());
+          const std::string target_paper_id =
+              requested_paper_id.empty() ? active_paper_id_
+                                         : requested_paper_id;
+          const bool previous = target_paper_id.empty()
                                     ? pinned_to_desktop_
-                                    : paper_surfaces_[active_paper_id_]
+                                    : paper_surfaces_[target_paper_id]
                                           .pinned_to_desktop;
-          pinned_to_desktop_ =
+          const bool enabled =
               GetBoolArgumentValue(call.arguments(), "enabled", previous);
-          RememberPaperPinnedToDesktop(active_paper_id_, pinned_to_desktop_);
-          RefreshActivePaperZOrder(window);
+          RememberPaperPinnedToDesktop(target_paper_id, enabled);
+          if (target_paper_id.empty() || target_paper_id == active_paper_id_) {
+            pinned_to_desktop_ = enabled;
+            RefreshActivePaperZOrder(window);
+          }
           result->Success();
           return;
         }
         if (method == "setTitle") {
           std::string title = "RePaperTodo";
+          std::string requested_paper_id;
+          bool structured_title = false;
           if (call.arguments()) {
             if (const auto* value =
                     std::get_if<std::string>(call.arguments())) {
@@ -1622,11 +1638,15 @@ bool FlutterWindow::OnCreate() {
             } else if (const auto* map =
                            std::get_if<flutter::EncodableMap>(
                                call.arguments())) {
-              RememberActivePaperId(call.arguments());
+              structured_title = true;
+              requested_paper_id = GetPaperIdArgument(call.arguments());
               title = GetStringArgument(*map, "title", title);
             }
           }
-          SetWindowTextW(window, Utf8ToWide(title).c_str());
+          if (!structured_title || requested_paper_id.empty() ||
+              requested_paper_id == active_paper_id_) {
+            SetWindowTextW(window, Utf8ToWide(title).c_str());
+          }
           result->Success();
           return;
         }
@@ -1946,7 +1966,11 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "setBounds") {
-          RememberActivePaperId(call.arguments());
+          const std::string requested_paper_id =
+              GetPaperIdArgument(call.arguments());
+          const std::string target_paper_id =
+              requested_paper_id.empty() ? active_paper_id_
+                                         : requested_paper_id;
           RECT current_bounds;
           GetWindowRect(window, &current_bounds);
           double x = static_cast<double>(current_bounds.left);
@@ -1964,11 +1988,16 @@ bool FlutterWindow::OnCreate() {
               height = GetNumberArgument(*bounds, "height", height);
             }
           }
-          SetWindowPos(window, nullptr, static_cast<int>(x),
-                       static_cast<int>(y), static_cast<int>(width),
-                       static_cast<int>(height),
-                       SWP_NOZORDER | SWP_NOACTIVATE);
-          RememberActivePaperBounds(window);
+          const RECT bounds = {static_cast<LONG>(x), static_cast<LONG>(y),
+                               static_cast<LONG>(x + width),
+                               static_cast<LONG>(y + height)};
+          RememberPaperBounds(target_paper_id, bounds);
+          if (target_paper_id.empty() || target_paper_id == active_paper_id_) {
+            SetWindowPos(window, nullptr, static_cast<int>(x),
+                         static_cast<int>(y), static_cast<int>(width),
+                         static_cast<int>(height),
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+          }
           result->Success();
           return;
         }
@@ -2295,6 +2324,20 @@ void FlutterWindow::RememberActivePaperBounds(HWND window) {
   if (GetWindowRect(window, &bounds)) {
     RememberPaperBounds(active_paper_id_, bounds);
   }
+}
+
+void FlutterWindow::ApplyActivePaperBounds(HWND window) {
+  if (!window || !IsWindow(window) || active_paper_id_.empty()) {
+    return;
+  }
+  const auto iterator = paper_surfaces_.find(active_paper_id_);
+  if (iterator == paper_surfaces_.end() || !iterator->second.has_bounds) {
+    return;
+  }
+  const RECT bounds = iterator->second.bounds;
+  SetWindowPos(window, nullptr, bounds.left, bounds.top,
+               bounds.right - bounds.left, bounds.bottom - bounds.top,
+               SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 void FlutterWindow::RememberPaperBounds(const std::string& paper_id,

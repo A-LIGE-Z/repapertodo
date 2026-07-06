@@ -47,9 +47,13 @@ also accept structured window title updates with both `paperId` and `title`,
 while keeping the older string title argument as a fallback. The runner should
 cache per-paper bounds from `setBounds` and move/resize events so a bounds query
 for a non-active paper does not overwrite that paper with the active window's
-geometry. Startup restore and tray menu rebuilds should include paper geometry
-so the native surface registry can refresh every paper without moving the
-current window. Minimized Windows surfaces must not persist bounds updates,
+geometry. Structured surface refreshes for a non-active paper should update the
+runner's per-paper registry without stealing the active paper, moving the
+current host window, changing the current host title, or applying z-order
+changes until that paper is shown. Startup restore and tray menu rebuilds
+should include paper geometry so the native surface registry can refresh every
+paper without moving the current window. Minimized Windows surfaces must not
+persist bounds updates,
 because Windows can report synthetic minimized coordinates that would corrupt a
 paper's saved position.
 Normal startup should restore every non-deleted paper as visible for the

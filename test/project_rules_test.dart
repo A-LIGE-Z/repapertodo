@@ -1310,6 +1310,64 @@ void main() {
     expect(hideBlock, isNot(contains('RememberActivePaperId')));
   });
 
+  test('Windows runner keeps non-active surface refreshes cached', () {
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final header = _readProjectText('windows/runner/flutter_window.h');
+    final showStart = runner.indexOf('if (method == "show")');
+    final showEnd = runner.indexOf('if (method == "hide")');
+    final alwaysOnTopStart = runner.indexOf('if (method == "setAlwaysOnTop")');
+    final alwaysOnTopEnd =
+        runner.indexOf('if (method == "setPinnedToDesktop")');
+    final pinnedStart = alwaysOnTopEnd;
+    final pinnedEnd = runner.indexOf('if (method == "setTitle")');
+    final titleStart = pinnedEnd;
+    final titleEnd = runner.indexOf('if (method == "setTrayMenu")');
+    final boundsStart = runner.indexOf('if (method == "setBounds")');
+    final boundsEnd = runner.indexOf('if (method == "getBounds")');
+
+    expect(design, contains('Structured surface refreshes for a non-active'));
+    expect(design, contains('without stealing the active paper'));
+    expect(design, contains('moving the'));
+    expect(design, contains('current host window'));
+    expect(design, contains('changing the current host title'));
+    expect(header, contains('void ApplyActivePaperBounds(HWND window);'));
+    expect(showStart, isNonNegative);
+    expect(showEnd, greaterThan(showStart));
+    final showBlock = runner.substring(showStart, showEnd);
+    expect(showBlock, contains('RememberActivePaperId(call.arguments())'));
+    expect(showBlock, contains('ApplyActivePaperBounds(window)'));
+    expect(alwaysOnTopStart, isNonNegative);
+    expect(alwaysOnTopEnd, greaterThan(alwaysOnTopStart));
+    final alwaysOnTopBlock = runner.substring(alwaysOnTopStart, alwaysOnTopEnd);
+    expect(alwaysOnTopBlock, contains('target_paper_id'));
+    expect(alwaysOnTopBlock, contains('RememberPaperAlwaysOnTop'));
+    expect(alwaysOnTopBlock, contains('target_paper_id == active_paper_id_'));
+    expect(alwaysOnTopBlock, isNot(contains('RememberActivePaperId')));
+    expect(pinnedStart, isNonNegative);
+    expect(pinnedEnd, greaterThan(pinnedStart));
+    final pinnedBlock = runner.substring(pinnedStart, pinnedEnd);
+    expect(pinnedBlock, contains('target_paper_id'));
+    expect(pinnedBlock, contains('RememberPaperPinnedToDesktop'));
+    expect(pinnedBlock, contains('target_paper_id == active_paper_id_'));
+    expect(pinnedBlock, isNot(contains('RememberActivePaperId')));
+    expect(titleStart, isNonNegative);
+    expect(titleEnd, greaterThan(titleStart));
+    final titleBlock = runner.substring(titleStart, titleEnd);
+    expect(titleBlock, contains('structured_title'));
+    expect(titleBlock, contains('requested_paper_id == active_paper_id_'));
+    expect(titleBlock, contains('SetWindowTextW'));
+    expect(titleBlock, isNot(contains('RememberActivePaperId')));
+    expect(boundsStart, isNonNegative);
+    expect(boundsEnd, greaterThan(boundsStart));
+    final boundsBlock = runner.substring(boundsStart, boundsEnd);
+    expect(boundsBlock, contains('target_paper_id'));
+    expect(boundsBlock, contains('RememberPaperBounds(target_paper_id'));
+    expect(boundsBlock, contains('target_paper_id == active_paper_id_'));
+    expect(boundsBlock, contains('SetWindowPos'));
+    expect(boundsBlock, isNot(contains('RememberActivePaperId')));
+  });
+
   test('Windows tray marks script capsule notes distinctly', () {
     final dartHost =
         _readProjectText('lib/src/platform/windows_platform_services.dart');
@@ -1383,11 +1441,11 @@ void main() {
     final titleBlock = runner.substring(titleStart, titleEnd);
     final legacyStringRead = titleBlock.indexOf('std::get_if<std::string>');
     final mapRead = titleBlock.indexOf('std::get_if<flutter::EncodableMap>');
-    final rememberPaper = titleBlock.indexOf('RememberActivePaperId');
     expect(legacyStringRead, isNonNegative);
     expect(mapRead, greaterThan(legacyStringRead));
-    expect(rememberPaper, greaterThan(mapRead));
     expect(titleBlock, contains('GetStringArgument(*map, "title", title)'));
+    expect(titleBlock, contains('requested_paper_id == active_paper_id_'));
+    expect(titleBlock, isNot(contains('RememberActivePaperId')));
   });
 
   test('release script packages Windows and Android artifacts', () {

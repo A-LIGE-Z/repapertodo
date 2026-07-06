@@ -45,6 +45,7 @@ class FlutterWindow : public Win32Window {
   void SendWindowEvent(const char* method);
   void RememberActivePaperId(const flutter::EncodableValue* arguments);
   void RememberActivePaperBounds(HWND window);
+  void ApplyActivePaperBounds(HWND window);
   void RememberPaperBounds(const std::string& paper_id, const RECT& bounds);
   void RememberPaperVisibility(const std::string& paper_id, bool is_visible);
   void RememberPaperPinnedToDesktop(const std::string& paper_id, bool enabled);
