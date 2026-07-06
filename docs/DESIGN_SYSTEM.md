@@ -43,6 +43,8 @@ replaced papers are ignored.
 Surface commands that change visibility, desktop pinning, or always-on-top
 state should send structured arguments with the `paperId`, while the runner
 keeps compatibility with older string and bool arguments. The runner should
+also accept structured window title updates with both `paperId` and `title`,
+while keeping the older string title argument as a fallback. The runner should
 cache per-paper bounds from `setBounds` and move/resize events so a bounds query
 for a non-active paper does not overwrite that paper with the active window's
 geometry. Startup restore and tray menu rebuilds should include paper geometry

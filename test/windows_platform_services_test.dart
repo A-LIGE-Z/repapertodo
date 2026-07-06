@@ -199,7 +199,10 @@ void main() {
       'isPinnedToDesktop': true,
       'alwaysOnTop': false,
     });
-    expect(calls[3].arguments, 'RePaperTodo - Inbox');
+    expect(calls[3].arguments, {
+      'paperId': 'paper-1',
+      'title': 'RePaperTodo - Inbox',
+    });
     expect(calls[4].arguments, {
       'paperId': 'paper-1',
       'enabled': false,
@@ -498,7 +501,10 @@ void main() {
       'isPinnedToDesktop': false,
       'alwaysOnTop': false,
     });
-    expect(calls[4].arguments, 'RePaperTodo - First');
+    expect(calls[4].arguments, {
+      'paperId': 'paper-1',
+      'title': 'RePaperTodo - First',
+    });
     expect(calls[5].arguments, {
       'paperId': 'paper-1',
       'enabled': false,

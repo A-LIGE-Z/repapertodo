@@ -1210,15 +1210,30 @@ void main() {
         File('lib/src/core/model/paper_data.dart').readAsStringSync();
     final windows = File('lib/src/platform/windows_platform_services.dart')
         .readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
 
     expect(design, contains('Paper title editing should preserve PaperTodo'));
     expect(design, contains('40 text elements'));
     expect(design, contains('control characters are removed'));
+    expect(design, contains('structured window title updates'));
     expect(app, contains('_PaperTitleTextInputFormatter'));
     expect(app, contains('PaperTitles.cleanCustomTitle(value)'));
     expect(app, contains('controller.paperTitleText(paper)'));
     expect(paperData, contains('PaperTitles.maxTitleLength'));
     expect(windows, contains('PaperTitles.effectiveTitle'));
+    expect(windows, contains("'title': _windowTitle(paper)"));
+    final titleStart = runner.indexOf('if (method == "setTitle")');
+    final titleEnd = runner.indexOf('if (method == "setTrayMenu")');
+    expect(titleStart, isNonNegative);
+    expect(titleEnd, greaterThan(titleStart));
+    final titleBlock = runner.substring(titleStart, titleEnd);
+    final legacyStringRead = titleBlock.indexOf('std::get_if<std::string>');
+    final mapRead = titleBlock.indexOf('std::get_if<flutter::EncodableMap>');
+    final rememberPaper = titleBlock.indexOf('RememberActivePaperId');
+    expect(legacyStringRead, isNonNegative);
+    expect(mapRead, greaterThan(legacyStringRead));
+    expect(rememberPaper, greaterThan(mapRead));
+    expect(titleBlock, contains('GetStringArgument(*map, "title", title)'));
   });
 
   test('release script packages Windows and Android artifacts', () {

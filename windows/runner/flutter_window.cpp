@@ -1597,6 +1597,11 @@ bool FlutterWindow::OnCreate() {
             if (const auto* value =
                     std::get_if<std::string>(call.arguments())) {
               title = *value;
+            } else if (const auto* map =
+                           std::get_if<flutter::EncodableMap>(
+                               call.arguments())) {
+              RememberActivePaperId(call.arguments());
+              title = GetStringArgument(*map, "title", title);
             }
           }
           SetWindowTextW(window, Utf8ToWide(title).c_str());

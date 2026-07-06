@@ -220,7 +220,9 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       _paperSurfaceArguments(visiblePapers.first),
     );
     await _channel.invokeMethod<void>(
-        'setTitle', _windowTitle(visiblePapers.first));
+      'setTitle',
+      _paperTitleArguments(visiblePapers.first),
+    );
     await _channel.invokeMethod<void>(
       'setAlwaysOnTop',
       _paperSurfaceFlagArguments(
@@ -241,7 +243,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       _paperSurfaceFlagArguments(paper, paper.isPinnedToDesktop),
     );
     await _channel.invokeMethod<void>('show', _paperSurfaceArguments(paper));
-    await _channel.invokeMethod<void>('setTitle', _windowTitle(paper));
+    await _channel.invokeMethod<void>('setTitle', _paperTitleArguments(paper));
     await _channel.invokeMethod<void>(
       'setAlwaysOnTop',
       _paperSurfaceFlagArguments(paper, paper.alwaysOnTop),
@@ -259,7 +261,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       'setPinnedToDesktop',
       _paperSurfaceFlagArguments(paper, paper.isPinnedToDesktop),
     );
-    await _channel.invokeMethod<void>('setTitle', _windowTitle(paper));
+    await _channel.invokeMethod<void>('setTitle', _paperTitleArguments(paper));
     await _channel.invokeMethod<void>(
       'setAlwaysOnTop',
       _paperSurfaceFlagArguments(paper, paper.alwaysOnTop),
@@ -271,6 +273,13 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       'paperId': paper.id,
       'isPinnedToDesktop': paper.isPinnedToDesktop,
       'alwaysOnTop': paper.alwaysOnTop,
+    };
+  }
+
+  Map<String, Object?> _paperTitleArguments(PaperData paper) {
+    return {
+      'paperId': paper.id,
+      'title': _windowTitle(paper),
     };
   }
 
