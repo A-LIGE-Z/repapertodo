@@ -44,6 +44,10 @@ so the native surface registry can refresh every paper without moving the
 current window. Minimized Windows surfaces must not persist bounds updates,
 because Windows can report synthetic minimized coordinates that would corrupt a
 paper's saved position.
+Normal startup should restore every non-deleted paper as visible for the
+current session, matching PaperTodo's model where closing or hiding a paper
+does not make it feel lost on the next launch. Explicit startup exit commands
+must not perform this visibility restore.
 The Windows tray paper list should expose useful paper state at a glance:
 visible papers are checked, while hidden, collapsed, desktop-pinned, and
 topmost states are shown in the menu label. Platform close/show/hide events

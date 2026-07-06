@@ -560,6 +560,9 @@ void main() {
     expect(runner, contains('getWorkArea'));
     expect(runner, contains('EnumDisplayMonitors'));
     expect(runner, contains('MONITORINFOEXW'));
+    expect(design, contains('Normal startup should restore every'));
+    expect(design, contains('Explicit startup exit commands'));
+    expect(controller, contains('_restorePapersForStartupSession'));
   });
 
   test('PaperTodo paper hide and last-delete rules are preserved', () {

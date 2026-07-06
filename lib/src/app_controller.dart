@@ -65,6 +65,9 @@ class RePaperTodoController {
       createPaper(PaperTypes.todo);
     }
 
+    if (startupCommand.kind != StartupCommandKind.exit) {
+      _restorePapersForStartupSession();
+    }
     await _rescuePapersIntoWorkAreas();
     await _preparePendingNewPapersForFirstShow();
     await _platform.paperWindows.restoreAll(state);
@@ -237,6 +240,16 @@ class RePaperTodoController {
 
   Future<void> rebuildTrayMenu() async {
     await _platform.tray.rebuildMenu(state);
+  }
+
+  void _restorePapersForStartupSession() {
+    for (final paper in state.papers) {
+      paper.isVisible = true;
+      if (paper.isCollapsed && !_canPaperDisplayAsCapsule(paper)) {
+        paper.isCollapsed = false;
+      }
+    }
+    state.normalize();
   }
 
   StartupCommand? takePendingUiStartupCommand() {

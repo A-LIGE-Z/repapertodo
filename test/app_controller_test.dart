@@ -673,6 +673,30 @@ void main() {
     expect(platform.paperWindows.restoreAllCount, 1);
   });
 
+  test('startup restores hidden papers for the current session', () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'hidden-startup-paper',
+            type: PaperTypes.note,
+            title: 'Hidden on exit',
+            isVisible: false,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.start();
+
+    expect(controller.state.papers.single.isVisible, true);
+    expect(platform.paperWindows.restoredVisibilitySnapshots, [
+      [true],
+    ]);
+  });
+
   test('startup exit command cleans up platform integrations then exits',
       () async {
     final platform = _RecordingPlatformServices();
@@ -791,6 +815,7 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final shownIds = <String>[];
   final hiddenIds = <String>[];
   final workAreaRequestIds = <String>[];
+  final restoredVisibilitySnapshots = <List<bool>>[];
   PaperWorkArea? workArea;
   Object? workAreaError;
   var restoreAllCount = 0;
@@ -808,6 +833,9 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   @override
   Future<void> restoreAll(AppState state) async {
     restoreAllCount += 1;
+    restoredVisibilitySnapshots.add(
+      state.papers.map((paper) => paper.isVisible).toList(),
+    );
   }
 
   @override
