@@ -239,7 +239,12 @@ void main() {
         await Directory.systemTemp.createTemp('repapertodo_bootstrap_exit_');
     addTearDown(() => directory.delete(recursive: true));
     final store = StateStore(filePath: p.join(directory.path, 'data.json'));
-    await store.save(AppState(papers: const []));
+    await File(store.filePath).writeAsString('''
+{
+  "Theme": "dark",
+  "Papers": []
+}
+''');
     final platform = _RecordingBootstrapPlatformServices();
 
     final bootstrap = await AppBootstrap.load(
@@ -251,7 +256,11 @@ void main() {
     expect(bootstrap, isNull);
     expect(platform.systemIntegration.exitApplicationCount, 1);
     expect(platform.tray.rebuiltTitles, isEmpty);
+    expect(platform.paperWindows.restoredTitles, isEmpty);
     expect((await store.load()).papers, isEmpty);
+    final savedJson = await File(store.filePath).readAsString();
+    expect(savedJson, contains('"theme": "dark"'));
+    expect(savedJson, isNot(contains('"Theme"')));
   });
 
   test('keeps desktop state file beside the executable', () async {

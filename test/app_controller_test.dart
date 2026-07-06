@@ -771,7 +771,8 @@ void main() {
     );
 
     expect(controller.state.papers, isEmpty);
-    expect(platform.paperWindows.restoreAllCount, 1);
+    expect(platform.paperWindows.restoreAllCount, 0);
+    expect(platform.paperWindows.workAreaRequestIds, isEmpty);
     expect(platform.tray.rebuildMenuCount, 0);
     expect(platform.systemIntegration.exitApplicationCount, 1);
   });

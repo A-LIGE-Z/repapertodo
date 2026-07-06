@@ -50,6 +50,7 @@ class AppBootstrap {
     );
     await controller.start(startupCommand: startupCommand);
     if (startupCommand.kind == StartupCommandKind.exit) {
+      await resolvedStore.save(controller.state);
       return null;
     }
     if (controller.state.sync.enabled &&

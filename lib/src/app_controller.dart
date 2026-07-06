@@ -56,25 +56,23 @@ class RePaperTodoController {
   Future<void> start(
       {StartupCommand startupCommand =
           const StartupCommand(StartupCommandKind.none)}) async {
+    if (startupCommand.kind == StartupCommandKind.exit) {
+      await executeStartupCommand(startupCommand);
+      return;
+    }
+
     await _platform.tray.initialize();
     await _applyStateSettingsToPlatform();
 
-    if (state.papers.isEmpty &&
-        !startupCommand.createsPaper &&
-        startupCommand.kind != StartupCommandKind.exit) {
+    if (state.papers.isEmpty && !startupCommand.createsPaper) {
       createPaper(PaperTypes.todo);
     }
 
-    if (startupCommand.kind != StartupCommandKind.exit) {
-      _restorePapersForStartupSession();
-    }
+    _restorePapersForStartupSession();
     await _rescuePapersIntoWorkAreas();
     await _preparePendingNewPapersForFirstShow();
     await _platform.paperWindows.restoreAll(state);
     await executeStartupCommand(startupCommand);
-    if (startupCommand.kind == StartupCommandKind.exit) {
-      return;
-    }
     await _platform.tray.rebuildMenu(state);
   }
 
