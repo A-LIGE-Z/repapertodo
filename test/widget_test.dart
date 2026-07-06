@@ -2595,7 +2595,105 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(rootPathErrorText), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Remote folder'))
+          .focusNode
+          ?.hasFocus,
+      true,
+    );
     expect(controller.state.sync.webDav.rootPath, 'repapertodo');
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Remote folder'),
+      'RePaperTodo',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(rootPathErrorText), findsNothing);
+    expect(
+      find.text('Username cannot contain colons or control characters.'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Username'))
+          .focusNode
+          ?.hasFocus,
+      true,
+    );
+    expect(controller.state.sync.webDav.username, 'user');
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Username'),
+      'user',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Username cannot contain colons or control characters.'),
+      findsNothing,
+    );
+    expect(
+      find.text('Password cannot contain control characters.'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Password'))
+          .focusNode
+          ?.hasFocus,
+      true,
+    );
+    expect(controller.state.sync.webDav.password, 'pass');
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'clean-pass',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Password cannot contain control characters.'),
+      findsNothing,
+    );
+    expect(find.text('Enter a sync encryption passphrase.'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(
+            find.widgetWithText(TextField, 'Sync encryption passphrase'),
+          )
+          .focusNode
+          ?.hasFocus,
+      true,
+    );
+    expect(
+      controller.state.sync.webDav.encryptionPassphrase,
+      'shared sync secret',
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Sync encryption passphrase'),
+      'shared sync secret 2',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsNothing);
+    expect(
+      controller.state.sync.webDav.endpoint,
+      'https://dav.example.test/dav/',
+    );
+    expect(controller.state.sync.webDav.rootPath, 'RePaperTodo');
+    expect(controller.state.sync.webDav.username, 'user');
+    expect(controller.state.sync.webDav.password, 'clean-pass');
+    expect(
+      controller.state.sync.webDav.encryptionPassphrase,
+      'shared sync secret 2',
+    );
   });
 
   testWidgets('uses compact WebDAV preset selector on narrow screens',
