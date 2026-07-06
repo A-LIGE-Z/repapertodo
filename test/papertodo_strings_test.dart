@@ -100,4 +100,55 @@ void main() {
     expect(find.text('WebDAV 同步'), findsOneWidget);
     expect(find.text('Sync settings'), findsNothing);
   });
+
+  testWidgets('uses Chinese system locale for paper and todo actions',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    tester.binding.platformDispatcher.localeTestValue =
+        const Locale('zh', 'CN');
+    tester.binding.platformDispatcher.localesTestValue = [
+      const Locale('zh', 'CN'),
+    ];
+    addTearDown(() {
+      tester.binding.platformDispatcher.clearLocaleTestValue();
+      tester.binding.platformDispatcher.clearLocalesTestValue();
+      tester.binding.setSurfaceSize(null);
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        theme: 'light',
+        papers: [
+          PaperData(
+            id: 'localized-todo-paper',
+            type: PaperTypes.todo,
+            title: '中文待办',
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: StateStore(filePath: 'build/test-localized-actions.json'),
+      ),
+    );
+
+    expect(find.byTooltip('打开纸片窗口'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '添加事项'), findsOneWidget);
+    expect(find.byTooltip('撤销待办更改'), findsOneWidget);
+    expect(find.byTooltip('删除纸片'), findsOneWidget);
+    expect(find.byTooltip('Open paper surface'), findsNothing);
+    expect(find.widgetWithText(TextButton, 'Add item'), findsNothing);
+
+    await tester.tap(find.byTooltip('删除纸片'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除纸片？'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '取消'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '删除'), findsOneWidget);
+    expect(find.text('Delete paper?'), findsNothing);
+  });
 }

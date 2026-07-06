@@ -855,10 +855,10 @@ void main() {
     expect(app, contains('parsePaperTodoDueAtLocal'));
     expect(app, contains('formatPaperTodoDueAtLocal'));
     expect(app, contains('_formatDueAtLocalValue'));
-    expect(app, contains("return 'Tomorrow \$time'"));
+    expect(app, contains('PaperTodoStringKeys.dueTomorrow'));
     expect(app, contains('Duration.microsecondsPerMinute'));
-    expect(app, contains("return '\$text overdue'"));
-    expect(app, contains("return 'in \$text'"));
+    expect(app, contains('PaperTodoStringKeys.relativeDueOverdue'));
+    expect(app, contains('PaperTodoStringKeys.relativeDueFuture'));
     expect(app, contains('now.add(const Duration(hours: 1))'));
     expect(app, contains('_compactTodoActionClearDueDate'));
     expect(app, contains('_compactTodoActionClearReminder'));
@@ -890,9 +890,9 @@ void main() {
     expect(app, isNot(contains('onReorder: _reorderTodoItem')));
     expect(app, contains('_compactTodoActionMoveUp'));
     expect(app, contains('_compactTodoActionMoveDown'));
-    expect(app, contains('Move item up'));
-    expect(app, contains('Move item down'));
-    expect(app, contains('Drag to reorder'));
+    expect(app, contains('PaperTodoStringKeys.actionMoveItemUp'));
+    expect(app, contains('PaperTodoStringKeys.actionMoveItemDown'));
+    expect(app, contains('PaperTodoStringKeys.actionDragToReorder'));
     expect(app, contains('_requestTodoItemFocus(item.id)'));
   });
 
@@ -907,8 +907,8 @@ void main() {
     expect(design, contains('first'));
     expect(design, contains('nonblank remaining row'));
     expect(app, contains('_compactTodoActionClearDone'));
-    expect(app, contains('Clear completed'));
-    expect(app, contains('Clear completed items'));
+    expect(app, contains('PaperTodoStringKeys.actionClearCompleted'));
+    expect(app, contains('PaperTodoStringKeys.actionClearCompletedItems'));
     expect(app, contains('_clearDoneItems'));
     expect(app, contains('completedItems.isEmpty'));
     expect(app, contains('remainingItems.add(_newTodoItem())'));
@@ -924,10 +924,7 @@ void main() {
     expect(design, contains('current paper/editor width'));
     expect(app, contains('final availableWidth = constraints.hasBoundedWidth'));
     expect(app, contains('final useCompactItemActions = availableWidth < 600'));
-    expect(
-        app,
-        contains(
-            "tooltip: _tooltipLabel(widget.enableToolTips, 'Todo item actions')"));
+    expect(app, contains('PaperTodoStringKeys.actionTodoItemActions'));
   });
 
   test('PaperTodo todo note link semantics are preserved', () {

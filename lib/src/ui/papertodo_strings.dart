@@ -2,28 +2,78 @@ import 'package:flutter/widgets.dart';
 
 abstract final class PaperTodoStringKeys {
   static const appTitle = 'appTitle';
+  static const actionAddColumn = 'actionAddColumn';
+  static const actionAddItem = 'actionAddItem';
   static const actionBackToBoard = 'actionBackToBoard';
   static const actionCancel = 'actionCancel';
+  static const actionChangeDueDate = 'actionChangeDueDate';
+  static const actionChangeReminder = 'actionChangeReminder';
+  static const actionClear = 'actionClear';
+  static const actionClearCompleted = 'actionClearCompleted';
+  static const actionClearCompletedItems = 'actionClearCompletedItems';
+  static const actionClearDueDate = 'actionClearDueDate';
+  static const actionClearReminder = 'actionClearReminder';
+  static const actionClearReminderInterval = 'actionClearReminderInterval';
   static const actionCollapseAll = 'actionCollapseAll';
   static const actionCollapseAllPapers = 'actionCollapseAllPapers';
+  static const actionCollapsePaper = 'actionCollapsePaper';
+  static const actionDelete = 'actionDelete';
+  static const actionDeleteColumn = 'actionDeleteColumn';
+  static const actionDeleteItem = 'actionDeleteItem';
+  static const actionDeletePaper = 'actionDeletePaper';
+  static const actionDisableAlwaysOnTop = 'actionDisableAlwaysOnTop';
+  static const actionDragToLinkNoteToTodo = 'actionDragToLinkNoteToTodo';
+  static const actionDragToReorder = 'actionDragToReorder';
+  static const actionEditLinkedScript = 'actionEditLinkedScript';
+  static const actionEqualWidths = 'actionEqualWidths';
   static const actionExpandAll = 'actionExpandAll';
   static const actionExpandAllPapers = 'actionExpandAllPapers';
+  static const actionExpandPaper = 'actionExpandPaper';
+  static const actionHidePaper = 'actionHidePaper';
+  static const actionInsertBeforeColumn = 'actionInsertBeforeColumn';
+  static const actionKeepOnTop = 'actionKeepOnTop';
+  static const actionLinkNote = 'actionLinkNote';
+  static const actionLinkPaper = 'actionLinkPaper';
   static const actionMore = 'actionMore';
+  static const actionMoveItemDown = 'actionMoveItemDown';
+  static const actionMoveItemUp = 'actionMoveItemUp';
   static const actionNewNote = 'actionNewNote';
   static const actionNewNotePaper = 'actionNewNotePaper';
   static const actionNewTodo = 'actionNewTodo';
   static const actionNewTodoPaper = 'actionNewTodoPaper';
   static const actionOpen = 'actionOpen';
   static const actionOpenCurrentPaperSurface = 'actionOpenCurrentPaperSurface';
+  static const actionOpenLinkedNote = 'actionOpenLinkedNote';
+  static const actionOpenMarkdownExternally = 'actionOpenMarkdownExternally';
+  static const actionOpenPaperSurface = 'actionOpenPaperSurface';
   static const actionOpenSurface = 'actionOpenSurface';
+  static const actionPaperActions = 'actionPaperActions';
+  static const actionPaperTextZoom = 'actionPaperTextZoom';
+  static const actionPinToDesktop = 'actionPinToDesktop';
   static const actionRecovery = 'actionRecovery';
   static const actionRecoverySnapshots = 'actionRecoverySnapshots';
+  static const actionRedoTodoChange = 'actionRedoTodoChange';
+  static const actionRemoveLastColumn = 'actionRemoveLastColumn';
   static const actionRetry = 'actionRetry';
+  static const actionRunPaper = 'actionRunPaper';
+  static const actionRunLinkedScriptCapsule = 'actionRunLinkedScriptCapsule';
+  static const actionRunScriptCapsule = 'actionRunScriptCapsule';
   static const actionSave = 'actionSave';
+  static const actionSaveWindowBounds = 'actionSaveWindowBounds';
+  static const actionSetDueDate = 'actionSetDueDate';
+  static const actionSetReminder = 'actionSetReminder';
+  static const actionSetReminderInterval = 'actionSetReminderInterval';
   static const actionSettings = 'actionSettings';
   static const actionShowHidden = 'actionShowHidden';
   static const actionShowHiddenPapers = 'actionShowHiddenPapers';
   static const actionSyncNow = 'actionSyncNow';
+  static const actionTodoColumns = 'actionTodoColumns';
+  static const actionTodoItemActions = 'actionTodoItemActions';
+  static const actionUndo = 'actionUndo';
+  static const actionUndoTodoChange = 'actionUndoTodoChange';
+  static const actionUnlinkNote = 'actionUnlinkNote';
+  static const actionUnpinFromDesktop = 'actionUnpinFromDesktop';
+  static const actionWideFirstColumn = 'actionWideFirstColumn';
   static const allowLongLinkedNoteTitles = 'allowLongLinkedNoteTitles';
   static const allDue = 'allDue';
   static const animations = 'animations';
@@ -49,7 +99,11 @@ abstract final class PaperTodoStringKeys {
   static const deepCapsuleTopMargin = 'deepCapsuleTopMargin';
   static const defaultFont = 'defaultFont';
   static const dengXian = 'dengXian';
+  static const dialogDeletePaper = 'dialogDeletePaper';
+  static const dialogDueDate = 'dialogDueDate';
   static const dialogSyncSettings = 'dialogSyncSettings';
+  static const dueLabel = 'dueLabel';
+  static const dueTomorrow = 'dueTomorrow';
   static const dueYearDisplay = 'dueYearDisplay';
   static const enhanced = 'enhanced';
   static const externalMarkdownExtension = 'externalMarkdownExtension';
@@ -62,7 +116,9 @@ abstract final class PaperTodoStringKeys {
   static const hidePassphrase = 'hidePassphrase';
   static const hidePassword = 'hidePassword';
   static const hideScriptRunWindow = 'hideScriptRunWindow';
+  static const hour = 'hour';
   static const hours = 'hours';
+  static const interval = 'interval';
   static const intervalMinutes = 'intervalMinutes';
   static const large = 'large';
   static const left = 'left';
@@ -70,11 +126,14 @@ abstract final class PaperTodoStringKeys {
   static const markdownOff = 'markdownOff';
   static const maxTitleLength = 'maxTitleLength';
   static const medium = 'medium';
+  static const minute = 'minute';
   static const minutes = 'minutes';
   static const mono = 'mono';
   static const nearest = 'nearest';
   static const noYear = 'noYear';
   static const noteSpacing = 'noteSpacing';
+  static const paperDeleted = 'paperDeleted';
+  static const paperLimitReached = 'paperLimitReached';
   static const passphraseHelper = 'passphraseHelper';
   static const password = 'password';
   static const persistentPowerShellProcess = 'persistentPowerShellProcess';
@@ -82,7 +141,11 @@ abstract final class PaperTodoStringKeys {
   static const pinnedTodoHotkey = 'pinnedTodoHotkey';
   static const preferPowerShell7 = 'preferPowerShell7';
   static const relativeDueDates = 'relativeDueDates';
+  static const relativeDueFuture = 'relativeDueFuture';
+  static const relativeDueOverdue = 'relativeDueOverdue';
   static const reminderDisplaySeconds = 'reminderDisplaySeconds';
+  static const reminderEveryHours = 'reminderEveryHours';
+  static const reminderEveryMinutes = 'reminderEveryMinutes';
   static const reminderInterval = 'reminderInterval';
   static const reminderScope = 'reminderScope';
   static const reminderUnit = 'reminderUnit';
@@ -116,6 +179,8 @@ abstract final class PaperTodoStringKeys {
   static const todoNoteLinks = 'todoNoteLinks';
   static const todoReminders = 'todoReminders';
   static const todoSpacing = 'todoSpacing';
+  static const todoItemDeleted = 'todoItemDeleted';
+  static const todoItemFallback = 'todoItemFallback';
   static const todoVisualSize = 'todoVisualSize';
   static const tooltips = 'tooltips';
   static const topBarNewNote = 'topBarNewNote';
@@ -233,13 +298,41 @@ final class PaperTodoStringsScope extends InheritedWidget {
 
 const _enStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
+  PaperTodoStringKeys.actionAddColumn: 'Add column',
+  PaperTodoStringKeys.actionAddItem: 'Add item',
   PaperTodoStringKeys.actionBackToBoard: 'Back to board',
   PaperTodoStringKeys.actionCancel: 'Cancel',
+  PaperTodoStringKeys.actionChangeDueDate: 'Change due date',
+  PaperTodoStringKeys.actionChangeReminder: 'Change reminder',
+  PaperTodoStringKeys.actionClear: 'Clear',
+  PaperTodoStringKeys.actionClearCompleted: 'Clear completed',
+  PaperTodoStringKeys.actionClearCompletedItems: 'Clear completed items',
+  PaperTodoStringKeys.actionClearDueDate: 'Clear due date',
+  PaperTodoStringKeys.actionClearReminder: 'Clear reminder',
+  PaperTodoStringKeys.actionClearReminderInterval: 'Clear reminder interval',
   PaperTodoStringKeys.actionCollapseAll: 'Collapse all',
   PaperTodoStringKeys.actionCollapseAllPapers: 'Collapse all papers',
+  PaperTodoStringKeys.actionCollapsePaper: 'Collapse paper',
+  PaperTodoStringKeys.actionDelete: 'Delete',
+  PaperTodoStringKeys.actionDeleteColumn: 'Delete column {0}',
+  PaperTodoStringKeys.actionDeleteItem: 'Delete item',
+  PaperTodoStringKeys.actionDeletePaper: 'Delete paper',
+  PaperTodoStringKeys.actionDisableAlwaysOnTop: 'Disable always on top',
+  PaperTodoStringKeys.actionDragToLinkNoteToTodo: 'Drag to link note to todo',
+  PaperTodoStringKeys.actionDragToReorder: 'Drag to reorder',
+  PaperTodoStringKeys.actionEditLinkedScript: 'Edit linked script',
+  PaperTodoStringKeys.actionEqualWidths: 'Equal widths',
   PaperTodoStringKeys.actionExpandAll: 'Expand all',
   PaperTodoStringKeys.actionExpandAllPapers: 'Expand all papers',
+  PaperTodoStringKeys.actionExpandPaper: 'Expand paper',
+  PaperTodoStringKeys.actionHidePaper: 'Hide paper',
+  PaperTodoStringKeys.actionInsertBeforeColumn: 'Insert before column {0}',
+  PaperTodoStringKeys.actionKeepOnTop: 'Keep on top',
+  PaperTodoStringKeys.actionLinkNote: 'Link note',
+  PaperTodoStringKeys.actionLinkPaper: 'Link {0}',
   PaperTodoStringKeys.actionMore: 'More actions',
+  PaperTodoStringKeys.actionMoveItemDown: 'Move item down',
+  PaperTodoStringKeys.actionMoveItemUp: 'Move item up',
   PaperTodoStringKeys.actionNewNote: 'New note',
   PaperTodoStringKeys.actionNewNotePaper: 'New note paper',
   PaperTodoStringKeys.actionNewTodo: 'New todo',
@@ -247,15 +340,37 @@ const _enStrings = {
   PaperTodoStringKeys.actionOpen: 'Open',
   PaperTodoStringKeys.actionOpenCurrentPaperSurface:
       'Open current paper surface',
+  PaperTodoStringKeys.actionOpenLinkedNote: 'Open linked note',
+  PaperTodoStringKeys.actionOpenMarkdownExternally: 'Open markdown externally',
+  PaperTodoStringKeys.actionOpenPaperSurface: 'Open paper surface',
   PaperTodoStringKeys.actionOpenSurface: 'Open surface',
+  PaperTodoStringKeys.actionPaperActions: 'Paper actions',
+  PaperTodoStringKeys.actionPaperTextZoom: 'Paper text zoom',
+  PaperTodoStringKeys.actionPinToDesktop: 'Pin to desktop',
   PaperTodoStringKeys.actionRecovery: 'Recovery',
   PaperTodoStringKeys.actionRecoverySnapshots: 'Recovery snapshots',
+  PaperTodoStringKeys.actionRedoTodoChange: 'Redo todo change',
+  PaperTodoStringKeys.actionRemoveLastColumn: 'Remove last column',
   PaperTodoStringKeys.actionRetry: 'Retry',
+  PaperTodoStringKeys.actionRunPaper: 'Run {0}',
+  PaperTodoStringKeys.actionRunLinkedScriptCapsule: 'Run linked script capsule',
+  PaperTodoStringKeys.actionRunScriptCapsule: 'Run script capsule',
   PaperTodoStringKeys.actionSave: 'Save',
+  PaperTodoStringKeys.actionSaveWindowBounds: 'Save window bounds',
+  PaperTodoStringKeys.actionSetDueDate: 'Set due date',
+  PaperTodoStringKeys.actionSetReminder: 'Set reminder',
+  PaperTodoStringKeys.actionSetReminderInterval: 'Set reminder interval',
   PaperTodoStringKeys.actionSettings: 'Settings',
   PaperTodoStringKeys.actionShowHidden: 'Show hidden',
   PaperTodoStringKeys.actionShowHiddenPapers: 'Show hidden papers',
   PaperTodoStringKeys.actionSyncNow: 'Sync now',
+  PaperTodoStringKeys.actionTodoColumns: 'Todo columns',
+  PaperTodoStringKeys.actionTodoItemActions: 'Todo item actions',
+  PaperTodoStringKeys.actionUndo: 'Undo',
+  PaperTodoStringKeys.actionUndoTodoChange: 'Undo todo change',
+  PaperTodoStringKeys.actionUnlinkNote: 'Unlink note',
+  PaperTodoStringKeys.actionUnpinFromDesktop: 'Unpin from desktop',
+  PaperTodoStringKeys.actionWideFirstColumn: 'Wide first column',
   PaperTodoStringKeys.allowLongLinkedNoteTitles:
       'Allow long linked note titles',
   PaperTodoStringKeys.allDue: 'All due',
@@ -282,7 +397,11 @@ const _enStrings = {
   PaperTodoStringKeys.deepCapsuleTopMargin: 'Deep capsule top margin',
   PaperTodoStringKeys.defaultFont: 'Default',
   PaperTodoStringKeys.dengXian: 'DengXian',
+  PaperTodoStringKeys.dialogDeletePaper: 'Delete paper?',
+  PaperTodoStringKeys.dialogDueDate: 'Due date',
   PaperTodoStringKeys.dialogSyncSettings: 'Sync settings',
+  PaperTodoStringKeys.dueLabel: 'Due {0}',
+  PaperTodoStringKeys.dueTomorrow: 'Tomorrow {0}',
   PaperTodoStringKeys.dueYearDisplay: 'Due year display',
   PaperTodoStringKeys.enhanced: 'Enhanced',
   PaperTodoStringKeys.externalMarkdownExtension: 'External markdown extension',
@@ -295,7 +414,9 @@ const _enStrings = {
   PaperTodoStringKeys.hidePassphrase: 'Hide passphrase',
   PaperTodoStringKeys.hidePassword: 'Hide password',
   PaperTodoStringKeys.hideScriptRunWindow: 'Hide script run window',
+  PaperTodoStringKeys.hour: 'Hour',
   PaperTodoStringKeys.hours: 'Hours',
+  PaperTodoStringKeys.interval: 'Interval',
   PaperTodoStringKeys.intervalMinutes: 'Interval minutes',
   PaperTodoStringKeys.large: 'Large',
   PaperTodoStringKeys.left: 'Left',
@@ -303,11 +424,15 @@ const _enStrings = {
   PaperTodoStringKeys.markdownOff: 'Markdown off',
   PaperTodoStringKeys.maxTitleLength: 'Max title length',
   PaperTodoStringKeys.medium: 'Medium',
+  PaperTodoStringKeys.minute: 'Minute',
   PaperTodoStringKeys.minutes: 'Minutes',
   PaperTodoStringKeys.mono: 'Mono',
   PaperTodoStringKeys.nearest: 'Nearest',
   PaperTodoStringKeys.noYear: 'No year',
   PaperTodoStringKeys.noteSpacing: 'Note spacing',
+  PaperTodoStringKeys.paperDeleted: '{0} deleted.',
+  PaperTodoStringKeys.paperLimitReached:
+      'Paper limit reached. Delete papers you no longer need before creating more.',
   PaperTodoStringKeys.passphraseHelper:
       'Required for encrypted Windows and Android sync.',
   PaperTodoStringKeys.password: 'Password',
@@ -317,7 +442,11 @@ const _enStrings = {
   PaperTodoStringKeys.pinnedTodoHotkey: 'Pinned todo hotkey',
   PaperTodoStringKeys.preferPowerShell7: 'Prefer PowerShell 7',
   PaperTodoStringKeys.relativeDueDates: 'Relative due dates',
+  PaperTodoStringKeys.relativeDueFuture: 'in {0}',
+  PaperTodoStringKeys.relativeDueOverdue: '{0} overdue',
   PaperTodoStringKeys.reminderDisplaySeconds: 'Reminder display seconds',
+  PaperTodoStringKeys.reminderEveryHours: 'Every {0} hr',
+  PaperTodoStringKeys.reminderEveryMinutes: 'Every {0} min',
   PaperTodoStringKeys.reminderInterval: 'Reminder interval',
   PaperTodoStringKeys.reminderScope: 'Reminder scope',
   PaperTodoStringKeys.reminderUnit: 'Reminder unit',
@@ -355,6 +484,8 @@ const _enStrings = {
   PaperTodoStringKeys.todoNoteLinks: 'Todo-note links',
   PaperTodoStringKeys.todoReminders: 'Todo reminders',
   PaperTodoStringKeys.todoSpacing: 'Todo spacing',
+  PaperTodoStringKeys.todoItemDeleted: '{0} deleted.',
+  PaperTodoStringKeys.todoItemFallback: 'Todo item',
   PaperTodoStringKeys.todoVisualSize: 'Todo visual size',
   PaperTodoStringKeys.tooltips: 'Tooltips',
   PaperTodoStringKeys.topBarNewNote: 'Top bar new note',
@@ -389,28 +520,78 @@ const _enStrings = {
 
 const _zhStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
+  PaperTodoStringKeys.actionAddColumn: '添加列',
+  PaperTodoStringKeys.actionAddItem: '添加事项',
   PaperTodoStringKeys.actionBackToBoard: '返回面板',
   PaperTodoStringKeys.actionCancel: '取消',
+  PaperTodoStringKeys.actionChangeDueDate: '更改到期时间',
+  PaperTodoStringKeys.actionChangeReminder: '更改提醒',
+  PaperTodoStringKeys.actionClear: '清除',
+  PaperTodoStringKeys.actionClearCompleted: '清除已完成',
+  PaperTodoStringKeys.actionClearCompletedItems: '清除已完成事项',
+  PaperTodoStringKeys.actionClearDueDate: '清除到期时间',
+  PaperTodoStringKeys.actionClearReminder: '清除提醒',
+  PaperTodoStringKeys.actionClearReminderInterval: '清除提醒间隔',
   PaperTodoStringKeys.actionCollapseAll: '全部收起',
   PaperTodoStringKeys.actionCollapseAllPapers: '收起全部纸片',
+  PaperTodoStringKeys.actionCollapsePaper: '收起纸片',
+  PaperTodoStringKeys.actionDelete: '删除',
+  PaperTodoStringKeys.actionDeleteColumn: '删除第 {0} 列',
+  PaperTodoStringKeys.actionDeleteItem: '删除事项',
+  PaperTodoStringKeys.actionDeletePaper: '删除纸片',
+  PaperTodoStringKeys.actionDisableAlwaysOnTop: '取消保持置顶',
+  PaperTodoStringKeys.actionDragToLinkNoteToTodo: '拖动以关联笔记到待办',
+  PaperTodoStringKeys.actionDragToReorder: '拖动以排序',
+  PaperTodoStringKeys.actionEditLinkedScript: '编辑关联脚本',
+  PaperTodoStringKeys.actionEqualWidths: '等宽列',
   PaperTodoStringKeys.actionExpandAll: '全部展开',
   PaperTodoStringKeys.actionExpandAllPapers: '展开全部纸片',
+  PaperTodoStringKeys.actionExpandPaper: '展开纸片',
+  PaperTodoStringKeys.actionHidePaper: '隐藏纸片',
+  PaperTodoStringKeys.actionInsertBeforeColumn: '在第 {0} 列前插入',
+  PaperTodoStringKeys.actionKeepOnTop: '保持置顶',
+  PaperTodoStringKeys.actionLinkNote: '关联笔记',
+  PaperTodoStringKeys.actionLinkPaper: '关联 {0}',
   PaperTodoStringKeys.actionMore: '更多操作',
+  PaperTodoStringKeys.actionMoveItemDown: '下移事项',
+  PaperTodoStringKeys.actionMoveItemUp: '上移事项',
   PaperTodoStringKeys.actionNewNote: '新建笔记',
   PaperTodoStringKeys.actionNewNotePaper: '新建笔记纸片',
   PaperTodoStringKeys.actionNewTodo: '新建待办',
   PaperTodoStringKeys.actionNewTodoPaper: '新建待办纸片',
   PaperTodoStringKeys.actionOpen: '打开',
   PaperTodoStringKeys.actionOpenCurrentPaperSurface: '打开当前纸片窗口',
+  PaperTodoStringKeys.actionOpenLinkedNote: '打开关联笔记',
+  PaperTodoStringKeys.actionOpenMarkdownExternally: '用外部程序打开 Markdown',
+  PaperTodoStringKeys.actionOpenPaperSurface: '打开纸片窗口',
   PaperTodoStringKeys.actionOpenSurface: '打开窗口',
+  PaperTodoStringKeys.actionPaperActions: '纸片操作',
+  PaperTodoStringKeys.actionPaperTextZoom: '纸片文字缩放',
+  PaperTodoStringKeys.actionPinToDesktop: '固定到桌面',
   PaperTodoStringKeys.actionRecovery: '恢复',
   PaperTodoStringKeys.actionRecoverySnapshots: '恢复快照',
+  PaperTodoStringKeys.actionRedoTodoChange: '重做待办更改',
+  PaperTodoStringKeys.actionRemoveLastColumn: '移除最后一列',
   PaperTodoStringKeys.actionRetry: '重试',
+  PaperTodoStringKeys.actionRunPaper: '运行 {0}',
+  PaperTodoStringKeys.actionRunLinkedScriptCapsule: '运行关联脚本胶囊',
+  PaperTodoStringKeys.actionRunScriptCapsule: '运行脚本胶囊',
   PaperTodoStringKeys.actionSave: '保存',
+  PaperTodoStringKeys.actionSaveWindowBounds: '保存窗口边界',
+  PaperTodoStringKeys.actionSetDueDate: '设置到期时间',
+  PaperTodoStringKeys.actionSetReminder: '设置提醒',
+  PaperTodoStringKeys.actionSetReminderInterval: '设置提醒间隔',
   PaperTodoStringKeys.actionSettings: '设置',
   PaperTodoStringKeys.actionShowHidden: '显示隐藏',
   PaperTodoStringKeys.actionShowHiddenPapers: '显示隐藏纸片',
   PaperTodoStringKeys.actionSyncNow: '立即同步',
+  PaperTodoStringKeys.actionTodoColumns: '待办列',
+  PaperTodoStringKeys.actionTodoItemActions: '待办事项操作',
+  PaperTodoStringKeys.actionUndo: '撤销',
+  PaperTodoStringKeys.actionUndoTodoChange: '撤销待办更改',
+  PaperTodoStringKeys.actionUnlinkNote: '取消关联笔记',
+  PaperTodoStringKeys.actionUnpinFromDesktop: '从桌面取消固定',
+  PaperTodoStringKeys.actionWideFirstColumn: '加宽第一列',
   PaperTodoStringKeys.allowLongLinkedNoteTitles: '允许较长关联笔记标题',
   PaperTodoStringKeys.allDue: '全部到期',
   PaperTodoStringKeys.animations: '动画效果',
@@ -435,7 +616,11 @@ const _zhStrings = {
   PaperTodoStringKeys.deepCapsuleTopMargin: '边缘胶囊顶部边距',
   PaperTodoStringKeys.defaultFont: '默认',
   PaperTodoStringKeys.dengXian: '等线',
+  PaperTodoStringKeys.dialogDeletePaper: '删除纸片？',
+  PaperTodoStringKeys.dialogDueDate: '到期时间',
   PaperTodoStringKeys.dialogSyncSettings: '同步设置',
+  PaperTodoStringKeys.dueLabel: '到期 {0}',
+  PaperTodoStringKeys.dueTomorrow: '明天 {0}',
   PaperTodoStringKeys.dueYearDisplay: '到期年份显示',
   PaperTodoStringKeys.enhanced: '增强',
   PaperTodoStringKeys.externalMarkdownExtension: '外部 Markdown 扩展名',
@@ -448,7 +633,9 @@ const _zhStrings = {
   PaperTodoStringKeys.hidePassphrase: '隐藏密钥短语',
   PaperTodoStringKeys.hidePassword: '隐藏密码',
   PaperTodoStringKeys.hideScriptRunWindow: '隐藏脚本运行窗口',
+  PaperTodoStringKeys.hour: '小时',
   PaperTodoStringKeys.hours: '小时',
+  PaperTodoStringKeys.interval: '间隔',
   PaperTodoStringKeys.intervalMinutes: '同步间隔分钟',
   PaperTodoStringKeys.large: '大',
   PaperTodoStringKeys.left: '左侧',
@@ -456,11 +643,14 @@ const _zhStrings = {
   PaperTodoStringKeys.markdownOff: '关闭 Markdown',
   PaperTodoStringKeys.maxTitleLength: '标题最大长度',
   PaperTodoStringKeys.medium: '中',
+  PaperTodoStringKeys.minute: '分钟',
   PaperTodoStringKeys.minutes: '分钟',
   PaperTodoStringKeys.mono: '等宽',
   PaperTodoStringKeys.nearest: '最近一项',
   PaperTodoStringKeys.noYear: '不显示年份',
   PaperTodoStringKeys.noteSpacing: '笔记行距',
+  PaperTodoStringKeys.paperDeleted: '{0} 已删除。',
+  PaperTodoStringKeys.paperLimitReached: '纸片数量已达上限。请先删除不再需要的纸片。',
   PaperTodoStringKeys.passphraseHelper: '用于 Windows 与 Android 加密同步。',
   PaperTodoStringKeys.password: '密码',
   PaperTodoStringKeys.persistentPowerShellProcess: '常驻 PowerShell 进程',
@@ -468,7 +658,11 @@ const _zhStrings = {
   PaperTodoStringKeys.pinnedTodoHotkey: '置顶待办快捷键',
   PaperTodoStringKeys.preferPowerShell7: '优先使用 PowerShell 7',
   PaperTodoStringKeys.relativeDueDates: '相对到期时间',
+  PaperTodoStringKeys.relativeDueFuture: '{0} 后',
+  PaperTodoStringKeys.relativeDueOverdue: '已逾期 {0}',
   PaperTodoStringKeys.reminderDisplaySeconds: '提醒显示秒数',
+  PaperTodoStringKeys.reminderEveryHours: '每 {0} 小时',
+  PaperTodoStringKeys.reminderEveryMinutes: '每 {0} 分钟',
   PaperTodoStringKeys.reminderInterval: '提醒间隔',
   PaperTodoStringKeys.reminderScope: '提醒范围',
   PaperTodoStringKeys.reminderUnit: '提醒单位',
@@ -501,6 +695,8 @@ const _zhStrings = {
   PaperTodoStringKeys.todoNoteLinks: '待办-笔记关联',
   PaperTodoStringKeys.todoReminders: '待办提醒',
   PaperTodoStringKeys.todoSpacing: '待办行距',
+  PaperTodoStringKeys.todoItemDeleted: '{0} 已删除。',
+  PaperTodoStringKeys.todoItemFallback: '待办事项',
   PaperTodoStringKeys.todoVisualSize: '待办显示大小',
   PaperTodoStringKeys.tooltips: '悬停提示',
   PaperTodoStringKeys.topBarNewNote: '顶栏新建笔记',
@@ -531,28 +727,78 @@ const _zhStrings = {
 
 const _jaStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
+  PaperTodoStringKeys.actionAddColumn: '列を追加',
+  PaperTodoStringKeys.actionAddItem: '項目を追加',
   PaperTodoStringKeys.actionBackToBoard: 'ボードに戻る',
   PaperTodoStringKeys.actionCancel: 'キャンセル',
+  PaperTodoStringKeys.actionChangeDueDate: '期限を変更',
+  PaperTodoStringKeys.actionChangeReminder: 'リマインダーを変更',
+  PaperTodoStringKeys.actionClear: 'クリア',
+  PaperTodoStringKeys.actionClearCompleted: '完了をクリア',
+  PaperTodoStringKeys.actionClearCompletedItems: '完了項目をクリア',
+  PaperTodoStringKeys.actionClearDueDate: '期限をクリア',
+  PaperTodoStringKeys.actionClearReminder: 'リマインダーをクリア',
+  PaperTodoStringKeys.actionClearReminderInterval: 'リマインダー間隔をクリア',
   PaperTodoStringKeys.actionCollapseAll: 'すべて折りたたむ',
   PaperTodoStringKeys.actionCollapseAllPapers: 'すべての紙片を折りたたむ',
+  PaperTodoStringKeys.actionCollapsePaper: '紙片を折りたたむ',
+  PaperTodoStringKeys.actionDelete: '削除',
+  PaperTodoStringKeys.actionDeleteColumn: '列 {0} を削除',
+  PaperTodoStringKeys.actionDeleteItem: '項目を削除',
+  PaperTodoStringKeys.actionDeletePaper: '紙片を削除',
+  PaperTodoStringKeys.actionDisableAlwaysOnTop: '最前面を解除',
+  PaperTodoStringKeys.actionDragToLinkNoteToTodo: 'ドラッグしてノートを ToDo にリンク',
+  PaperTodoStringKeys.actionDragToReorder: 'ドラッグして並べ替え',
+  PaperTodoStringKeys.actionEditLinkedScript: 'リンク済みスクリプトを編集',
+  PaperTodoStringKeys.actionEqualWidths: '同じ幅',
   PaperTodoStringKeys.actionExpandAll: 'すべて展開',
   PaperTodoStringKeys.actionExpandAllPapers: 'すべての紙片を展開',
+  PaperTodoStringKeys.actionExpandPaper: '紙片を展開',
+  PaperTodoStringKeys.actionHidePaper: '紙片を隠す',
+  PaperTodoStringKeys.actionInsertBeforeColumn: '列 {0} の前に挿入',
+  PaperTodoStringKeys.actionKeepOnTop: '最前面に固定',
+  PaperTodoStringKeys.actionLinkNote: 'ノートをリンク',
+  PaperTodoStringKeys.actionLinkPaper: '{0} をリンク',
   PaperTodoStringKeys.actionMore: 'その他の操作',
+  PaperTodoStringKeys.actionMoveItemDown: '項目を下へ移動',
+  PaperTodoStringKeys.actionMoveItemUp: '項目を上へ移動',
   PaperTodoStringKeys.actionNewNote: '新規ノート',
   PaperTodoStringKeys.actionNewNotePaper: '新規ノート紙片',
   PaperTodoStringKeys.actionNewTodo: '新規 ToDo',
   PaperTodoStringKeys.actionNewTodoPaper: '新規 ToDo 紙片',
   PaperTodoStringKeys.actionOpen: '開く',
   PaperTodoStringKeys.actionOpenCurrentPaperSurface: '現在の紙片ウィンドウを開く',
+  PaperTodoStringKeys.actionOpenLinkedNote: 'リンク済みノートを開く',
+  PaperTodoStringKeys.actionOpenMarkdownExternally: 'Markdown を外部で開く',
+  PaperTodoStringKeys.actionOpenPaperSurface: '紙片ウィンドウを開く',
   PaperTodoStringKeys.actionOpenSurface: 'ウィンドウを開く',
+  PaperTodoStringKeys.actionPaperActions: '紙片の操作',
+  PaperTodoStringKeys.actionPaperTextZoom: '紙片テキストのズーム',
+  PaperTodoStringKeys.actionPinToDesktop: 'デスクトップに固定',
   PaperTodoStringKeys.actionRecovery: '復元',
   PaperTodoStringKeys.actionRecoverySnapshots: '復元スナップショット',
+  PaperTodoStringKeys.actionRedoTodoChange: 'ToDo 変更をやり直す',
+  PaperTodoStringKeys.actionRemoveLastColumn: '最後の列を削除',
   PaperTodoStringKeys.actionRetry: '再試行',
+  PaperTodoStringKeys.actionRunPaper: '{0} を実行',
+  PaperTodoStringKeys.actionRunLinkedScriptCapsule: 'リンク済みスクリプトカプセルを実行',
+  PaperTodoStringKeys.actionRunScriptCapsule: 'スクリプトカプセルを実行',
   PaperTodoStringKeys.actionSave: '保存',
+  PaperTodoStringKeys.actionSaveWindowBounds: 'ウィンドウ位置を保存',
+  PaperTodoStringKeys.actionSetDueDate: '期限を設定',
+  PaperTodoStringKeys.actionSetReminder: 'リマインダーを設定',
+  PaperTodoStringKeys.actionSetReminderInterval: 'リマインダー間隔を設定',
   PaperTodoStringKeys.actionSettings: '設定',
   PaperTodoStringKeys.actionShowHidden: '非表示を表示',
   PaperTodoStringKeys.actionShowHiddenPapers: '非表示の紙片を表示',
   PaperTodoStringKeys.actionSyncNow: '今すぐ同期',
+  PaperTodoStringKeys.actionTodoColumns: 'ToDo の列',
+  PaperTodoStringKeys.actionTodoItemActions: 'ToDo 項目の操作',
+  PaperTodoStringKeys.actionUndo: '元に戻す',
+  PaperTodoStringKeys.actionUndoTodoChange: 'ToDo 変更を元に戻す',
+  PaperTodoStringKeys.actionUnlinkNote: 'ノートのリンクを解除',
+  PaperTodoStringKeys.actionUnpinFromDesktop: 'デスクトップ固定を解除',
+  PaperTodoStringKeys.actionWideFirstColumn: '最初の列を広く',
   PaperTodoStringKeys.allowLongLinkedNoteTitles: '長いリンク済みノート名を許可',
   PaperTodoStringKeys.allDue: 'すべての期限',
   PaperTodoStringKeys.animations: 'アニメーション',
@@ -578,7 +824,11 @@ const _jaStrings = {
   PaperTodoStringKeys.deepCapsuleTopMargin: '端カプセル上余白',
   PaperTodoStringKeys.defaultFont: '既定',
   PaperTodoStringKeys.dengXian: 'DengXian',
+  PaperTodoStringKeys.dialogDeletePaper: '紙片を削除しますか？',
+  PaperTodoStringKeys.dialogDueDate: '期限',
   PaperTodoStringKeys.dialogSyncSettings: '同期設定',
+  PaperTodoStringKeys.dueLabel: '期限 {0}',
+  PaperTodoStringKeys.dueTomorrow: '明日 {0}',
   PaperTodoStringKeys.dueYearDisplay: '期限年の表示',
   PaperTodoStringKeys.enhanced: '拡張',
   PaperTodoStringKeys.externalMarkdownExtension: '外部 Markdown 拡張子',
@@ -591,7 +841,9 @@ const _jaStrings = {
   PaperTodoStringKeys.hidePassphrase: 'パスフレーズを隠す',
   PaperTodoStringKeys.hidePassword: 'パスワードを隠す',
   PaperTodoStringKeys.hideScriptRunWindow: 'スクリプト実行ウィンドウを隠す',
+  PaperTodoStringKeys.hour: '時',
   PaperTodoStringKeys.hours: '時間',
+  PaperTodoStringKeys.interval: '間隔',
   PaperTodoStringKeys.intervalMinutes: '同期間隔（分）',
   PaperTodoStringKeys.large: '大',
   PaperTodoStringKeys.left: '左',
@@ -599,11 +851,14 @@ const _jaStrings = {
   PaperTodoStringKeys.markdownOff: 'Markdown オフ',
   PaperTodoStringKeys.maxTitleLength: 'タイトル最大長',
   PaperTodoStringKeys.medium: '中',
+  PaperTodoStringKeys.minute: '分',
   PaperTodoStringKeys.minutes: '分',
   PaperTodoStringKeys.mono: '等幅',
   PaperTodoStringKeys.nearest: '最も近い',
   PaperTodoStringKeys.noYear: '年なし',
   PaperTodoStringKeys.noteSpacing: 'ノート行間',
+  PaperTodoStringKeys.paperDeleted: '{0} を削除しました。',
+  PaperTodoStringKeys.paperLimitReached: '紙片の上限に達しました。不要な紙片を削除してから作成してください。',
   PaperTodoStringKeys.passphraseHelper: 'Windows と Android の暗号化同期に必要です。',
   PaperTodoStringKeys.password: 'パスワード',
   PaperTodoStringKeys.persistentPowerShellProcess: '常駐 PowerShell プロセス',
@@ -611,7 +866,11 @@ const _jaStrings = {
   PaperTodoStringKeys.pinnedTodoHotkey: '固定 ToDo のホットキー',
   PaperTodoStringKeys.preferPowerShell7: 'PowerShell 7 を優先',
   PaperTodoStringKeys.relativeDueDates: '相対期限',
+  PaperTodoStringKeys.relativeDueFuture: '{0} 後',
+  PaperTodoStringKeys.relativeDueOverdue: '{0} 超過',
   PaperTodoStringKeys.reminderDisplaySeconds: 'リマインダー表示秒数',
+  PaperTodoStringKeys.reminderEveryHours: '{0} 時間ごと',
+  PaperTodoStringKeys.reminderEveryMinutes: '{0} 分ごと',
   PaperTodoStringKeys.reminderInterval: 'リマインダー間隔',
   PaperTodoStringKeys.reminderScope: 'リマインダー範囲',
   PaperTodoStringKeys.reminderUnit: 'リマインダー単位',
@@ -646,6 +905,8 @@ const _jaStrings = {
   PaperTodoStringKeys.todoNoteLinks: 'ToDo-ノートリンク',
   PaperTodoStringKeys.todoReminders: 'ToDo リマインダー',
   PaperTodoStringKeys.todoSpacing: 'ToDo 行間',
+  PaperTodoStringKeys.todoItemDeleted: '{0} を削除しました。',
+  PaperTodoStringKeys.todoItemFallback: 'ToDo 項目',
   PaperTodoStringKeys.todoVisualSize: 'ToDo 表示サイズ',
   PaperTodoStringKeys.tooltips: 'ツールチップ',
   PaperTodoStringKeys.topBarNewNote: '上部バーの新規ノート',
@@ -677,28 +938,78 @@ const _jaStrings = {
 
 const _koStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
+  PaperTodoStringKeys.actionAddColumn: '열 추가',
+  PaperTodoStringKeys.actionAddItem: '항목 추가',
   PaperTodoStringKeys.actionBackToBoard: '보드로 돌아가기',
   PaperTodoStringKeys.actionCancel: '취소',
+  PaperTodoStringKeys.actionChangeDueDate: '마감 시간 변경',
+  PaperTodoStringKeys.actionChangeReminder: '알림 변경',
+  PaperTodoStringKeys.actionClear: '지우기',
+  PaperTodoStringKeys.actionClearCompleted: '완료 항목 지우기',
+  PaperTodoStringKeys.actionClearCompletedItems: '완료된 항목 지우기',
+  PaperTodoStringKeys.actionClearDueDate: '마감 시간 지우기',
+  PaperTodoStringKeys.actionClearReminder: '알림 지우기',
+  PaperTodoStringKeys.actionClearReminderInterval: '알림 간격 지우기',
   PaperTodoStringKeys.actionCollapseAll: '모두 접기',
   PaperTodoStringKeys.actionCollapseAllPapers: '모든 종이 접기',
+  PaperTodoStringKeys.actionCollapsePaper: '종이 접기',
+  PaperTodoStringKeys.actionDelete: '삭제',
+  PaperTodoStringKeys.actionDeleteColumn: '{0}열 삭제',
+  PaperTodoStringKeys.actionDeleteItem: '항목 삭제',
+  PaperTodoStringKeys.actionDeletePaper: '종이 삭제',
+  PaperTodoStringKeys.actionDisableAlwaysOnTop: '항상 위 해제',
+  PaperTodoStringKeys.actionDragToLinkNoteToTodo: '드래그하여 노트를 할 일에 연결',
+  PaperTodoStringKeys.actionDragToReorder: '드래그하여 순서 변경',
+  PaperTodoStringKeys.actionEditLinkedScript: '연결된 스크립트 편집',
+  PaperTodoStringKeys.actionEqualWidths: '같은 너비',
   PaperTodoStringKeys.actionExpandAll: '모두 펼치기',
   PaperTodoStringKeys.actionExpandAllPapers: '모든 종이 펼치기',
+  PaperTodoStringKeys.actionExpandPaper: '종이 펼치기',
+  PaperTodoStringKeys.actionHidePaper: '종이 숨기기',
+  PaperTodoStringKeys.actionInsertBeforeColumn: '{0}열 앞에 삽입',
+  PaperTodoStringKeys.actionKeepOnTop: '항상 위에 유지',
+  PaperTodoStringKeys.actionLinkNote: '노트 연결',
+  PaperTodoStringKeys.actionLinkPaper: '{0} 연결',
   PaperTodoStringKeys.actionMore: '더 많은 작업',
+  PaperTodoStringKeys.actionMoveItemDown: '항목 아래로 이동',
+  PaperTodoStringKeys.actionMoveItemUp: '항목 위로 이동',
   PaperTodoStringKeys.actionNewNote: '새 노트',
   PaperTodoStringKeys.actionNewNotePaper: '새 노트 종이',
   PaperTodoStringKeys.actionNewTodo: '새 할 일',
   PaperTodoStringKeys.actionNewTodoPaper: '새 할 일 종이',
   PaperTodoStringKeys.actionOpen: '열기',
   PaperTodoStringKeys.actionOpenCurrentPaperSurface: '현재 종이 창 열기',
+  PaperTodoStringKeys.actionOpenLinkedNote: '연결된 노트 열기',
+  PaperTodoStringKeys.actionOpenMarkdownExternally: 'Markdown 외부에서 열기',
+  PaperTodoStringKeys.actionOpenPaperSurface: '종이 창 열기',
   PaperTodoStringKeys.actionOpenSurface: '창 열기',
+  PaperTodoStringKeys.actionPaperActions: '종이 작업',
+  PaperTodoStringKeys.actionPaperTextZoom: '종이 텍스트 확대/축소',
+  PaperTodoStringKeys.actionPinToDesktop: '데스크톱에 고정',
   PaperTodoStringKeys.actionRecovery: '복구',
   PaperTodoStringKeys.actionRecoverySnapshots: '복구 스냅샷',
+  PaperTodoStringKeys.actionRedoTodoChange: '할 일 변경 다시 실행',
+  PaperTodoStringKeys.actionRemoveLastColumn: '마지막 열 제거',
   PaperTodoStringKeys.actionRetry: '다시 시도',
+  PaperTodoStringKeys.actionRunPaper: '{0} 실행',
+  PaperTodoStringKeys.actionRunLinkedScriptCapsule: '연결된 스크립트 캡슐 실행',
+  PaperTodoStringKeys.actionRunScriptCapsule: '스크립트 캡슐 실행',
   PaperTodoStringKeys.actionSave: '저장',
+  PaperTodoStringKeys.actionSaveWindowBounds: '창 위치 저장',
+  PaperTodoStringKeys.actionSetDueDate: '마감 시간 설정',
+  PaperTodoStringKeys.actionSetReminder: '알림 설정',
+  PaperTodoStringKeys.actionSetReminderInterval: '알림 간격 설정',
   PaperTodoStringKeys.actionSettings: '설정',
   PaperTodoStringKeys.actionShowHidden: '숨김 표시',
   PaperTodoStringKeys.actionShowHiddenPapers: '숨겨진 종이 표시',
   PaperTodoStringKeys.actionSyncNow: '지금 동기화',
+  PaperTodoStringKeys.actionTodoColumns: '할 일 열',
+  PaperTodoStringKeys.actionTodoItemActions: '할 일 항목 작업',
+  PaperTodoStringKeys.actionUndo: '실행 취소',
+  PaperTodoStringKeys.actionUndoTodoChange: '할 일 변경 실행 취소',
+  PaperTodoStringKeys.actionUnlinkNote: '노트 연결 해제',
+  PaperTodoStringKeys.actionUnpinFromDesktop: '데스크톱 고정 해제',
+  PaperTodoStringKeys.actionWideFirstColumn: '첫 번째 열 넓게',
   PaperTodoStringKeys.allowLongLinkedNoteTitles: '긴 연결 노트 제목 허용',
   PaperTodoStringKeys.allDue: '모든 마감',
   PaperTodoStringKeys.animations: '애니메이션',
@@ -724,7 +1035,11 @@ const _koStrings = {
   PaperTodoStringKeys.deepCapsuleTopMargin: '가장자리 캡슐 위쪽 여백',
   PaperTodoStringKeys.defaultFont: '기본값',
   PaperTodoStringKeys.dengXian: 'DengXian',
+  PaperTodoStringKeys.dialogDeletePaper: '종이를 삭제할까요?',
+  PaperTodoStringKeys.dialogDueDate: '마감 시간',
   PaperTodoStringKeys.dialogSyncSettings: '동기화 설정',
+  PaperTodoStringKeys.dueLabel: '마감 {0}',
+  PaperTodoStringKeys.dueTomorrow: '내일 {0}',
   PaperTodoStringKeys.dueYearDisplay: '마감 연도 표시',
   PaperTodoStringKeys.enhanced: '강화',
   PaperTodoStringKeys.externalMarkdownExtension: '외부 Markdown 확장자',
@@ -737,7 +1052,9 @@ const _koStrings = {
   PaperTodoStringKeys.hidePassphrase: '암호 구문 숨기기',
   PaperTodoStringKeys.hidePassword: '비밀번호 숨기기',
   PaperTodoStringKeys.hideScriptRunWindow: '스크립트 실행 창 숨기기',
+  PaperTodoStringKeys.hour: '시',
   PaperTodoStringKeys.hours: '시간',
+  PaperTodoStringKeys.interval: '간격',
   PaperTodoStringKeys.intervalMinutes: '동기화 간격(분)',
   PaperTodoStringKeys.large: '큼',
   PaperTodoStringKeys.left: '왼쪽',
@@ -745,11 +1062,15 @@ const _koStrings = {
   PaperTodoStringKeys.markdownOff: 'Markdown 끄기',
   PaperTodoStringKeys.maxTitleLength: '최대 제목 길이',
   PaperTodoStringKeys.medium: '보통',
+  PaperTodoStringKeys.minute: '분',
   PaperTodoStringKeys.minutes: '분',
   PaperTodoStringKeys.mono: '고정폭',
   PaperTodoStringKeys.nearest: '가장 가까운 항목',
   PaperTodoStringKeys.noYear: '연도 없음',
   PaperTodoStringKeys.noteSpacing: '노트 줄 간격',
+  PaperTodoStringKeys.paperDeleted: '{0} 삭제됨.',
+  PaperTodoStringKeys.paperLimitReached:
+      '종이 한도에 도달했습니다. 더 만들기 전에 필요 없는 종이를 삭제하세요.',
   PaperTodoStringKeys.passphraseHelper: 'Windows와 Android 암호화 동기화에 필요합니다.',
   PaperTodoStringKeys.password: '비밀번호',
   PaperTodoStringKeys.persistentPowerShellProcess: '상주 PowerShell 프로세스',
@@ -757,7 +1078,11 @@ const _koStrings = {
   PaperTodoStringKeys.pinnedTodoHotkey: '고정 할 일 단축키',
   PaperTodoStringKeys.preferPowerShell7: 'PowerShell 7 우선 사용',
   PaperTodoStringKeys.relativeDueDates: '상대 마감 시간',
+  PaperTodoStringKeys.relativeDueFuture: '{0} 후',
+  PaperTodoStringKeys.relativeDueOverdue: '{0} 지남',
   PaperTodoStringKeys.reminderDisplaySeconds: '알림 표시 초',
+  PaperTodoStringKeys.reminderEveryHours: '{0}시간마다',
+  PaperTodoStringKeys.reminderEveryMinutes: '{0}분마다',
   PaperTodoStringKeys.reminderInterval: '알림 간격',
   PaperTodoStringKeys.reminderScope: '알림 범위',
   PaperTodoStringKeys.reminderUnit: '알림 단위',
@@ -792,6 +1117,8 @@ const _koStrings = {
   PaperTodoStringKeys.todoNoteLinks: '할 일-노트 연결',
   PaperTodoStringKeys.todoReminders: '할 일 알림',
   PaperTodoStringKeys.todoSpacing: '할 일 줄 간격',
+  PaperTodoStringKeys.todoItemDeleted: '{0} 삭제됨.',
+  PaperTodoStringKeys.todoItemFallback: '할 일 항목',
   PaperTodoStringKeys.todoVisualSize: '할 일 표시 크기',
   PaperTodoStringKeys.tooltips: '도구 설명',
   PaperTodoStringKeys.topBarNewNote: '상단 바 새 노트',

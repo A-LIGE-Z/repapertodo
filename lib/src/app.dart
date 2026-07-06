@@ -802,9 +802,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   void _showPaperLimitSnackBar() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          'Paper limit reached. Delete papers you no longer need before creating more.',
+          strings.get(PaperTodoStringKeys.paperLimitReached),
         ),
       ),
     );
@@ -935,9 +935,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${_displayTitle(removedPaper)} deleted.'),
+        content: Text(
+          strings.format(
+            PaperTodoStringKeys.paperDeleted,
+            [_displayTitle(removedPaper)],
+          ),
+        ),
         action: SnackBarAction(
-          label: 'Undo',
+          label: strings.get(PaperTodoStringKeys.actionUndo),
           onPressed: () => unawaited(
             _undoDeletePaper(
               restoredPaper: removedPaper,
@@ -2017,18 +2022,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return await showDialog<bool>(
           context: context,
           builder: (context) {
+            final strings = PaperTodoStringsScope.of(context);
             return AlertDialog(
-              title: const Text('Delete paper?'),
+              title: Text(strings.get(PaperTodoStringKeys.dialogDeletePaper)),
               content: Text(_displayTitle(paper)),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
                 ),
                 FilledButton.icon(
                   onPressed: () => Navigator.of(context).pop(true),
                   icon: const Icon(Icons.delete_outline),
-                  label: const Text('Delete'),
+                  label: Text(strings.get(PaperTodoStringKeys.actionDelete)),
                 ),
               ],
             );
@@ -2283,8 +2289,9 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = PaperTodoStringsScope.of(context);
     return AlertDialog(
-      title: const Text('Reminder interval'),
+      title: Text(strings.get(PaperTodoStringKeys.reminderInterval)),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -2294,23 +2301,23 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
               controller: _intervalController,
               decoration: InputDecoration(
                 border: const OutlineInputBorder(),
-                labelText: 'Interval',
+                labelText: strings.get(PaperTodoStringKeys.interval),
                 prefixIcon: const Icon(Icons.notifications_active_outlined),
               ),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),
             SegmentedButton<String>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: TodoReminderIntervalUnits.minutes,
-                  icon: Icon(Icons.timer_outlined),
-                  label: Text('Minutes'),
+                  icon: const Icon(Icons.timer_outlined),
+                  label: Text(strings.get(PaperTodoStringKeys.minutes)),
                 ),
                 ButtonSegment(
                   value: TodoReminderIntervalUnits.hours,
-                  icon: Icon(Icons.schedule_outlined),
-                  label: Text('Hours'),
+                  icon: const Icon(Icons.schedule_outlined),
+                  label: Text(strings.get(PaperTodoStringKeys.hours)),
                 ),
               ],
               selected: {_unit},
@@ -2326,16 +2333,16 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
           onPressed: () => Navigator.of(context).pop(
             const _ReminderIntervalSelection.clear(),
           ),
-          child: const Text('Clear'),
+          child: Text(strings.get(PaperTodoStringKeys.actionClear)),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
         ),
         FilledButton.icon(
           onPressed: _save,
           icon: const Icon(Icons.check),
-          label: const Text('Save'),
+          label: Text(strings.get(PaperTodoStringKeys.actionSave)),
         ),
       ],
     );
@@ -2775,8 +2782,11 @@ class PaperPreview extends StatelessWidget {
 
   Widget _noteLinkDragHandle(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final strings = PaperTodoStringsScope.of(context);
+    final dragLabel =
+        strings.get(PaperTodoStringKeys.actionDragToLinkNoteToTodo);
     final handle = Semantics(
-      label: 'Drag to link note to todo',
+      label: dragLabel,
       child: MouseRegion(
         cursor: SystemMouseCursors.grab,
         child: SizedBox.square(
@@ -2819,7 +2829,10 @@ class PaperPreview extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Link ${_displayPaperTitle()}',
+                  strings.format(
+                    PaperTodoStringKeys.actionLinkPaper,
+                    [_displayPaperTitle()],
+                  ),
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         color: colorScheme.onPrimaryContainer,
                         fontWeight: FontWeight.w600,
@@ -2832,8 +2845,7 @@ class PaperPreview extends StatelessWidget {
       ),
       childWhenDragging: Opacity(opacity: 0.45, child: handle),
       child: Tooltip(
-        message:
-            _tooltipLabel(enableToolTips, 'Drag to link note to todo') ?? '',
+        message: _tooltipLabel(enableToolTips, dragLabel) ?? '',
         child: handle,
       ),
     );
@@ -2916,12 +2928,13 @@ class PaperPreview extends StatelessWidget {
       key: ValueKey('${paper.id}-script-capsule'),
       builder: (context) {
         final colorScheme = Theme.of(context).colorScheme;
+        final strings = PaperTodoStringsScope.of(context);
         return Padding(
           padding: const EdgeInsets.only(top: 10),
           child: Tooltip(
             message: _tooltipLabel(
                   enableToolTips,
-                  'Run script capsule',
+                  strings.get(PaperTodoStringKeys.actionRunScriptCapsule),
                 ) ??
                 '',
             child: GestureDetector(
@@ -2948,7 +2961,10 @@ class PaperPreview extends StatelessWidget {
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          'Run ${_displayPaperTitle()}',
+                          strings.format(
+                            PaperTodoStringKeys.actionRunPaper,
+                            [_displayPaperTitle()],
+                          ),
                           overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -2975,43 +2991,51 @@ class PaperPreview extends StatelessWidget {
     required double textZoom,
   }) {
     if (desktopInteractionLocked) {
-      return [_pinnedDesktopUnlockButton()];
+      return [_pinnedDesktopUnlockButton(context)];
     }
+    final strings = PaperTodoStringsScope.of(context);
     final compact = MediaQuery.sizeOf(context).width < 600;
     if (compact) {
       return [
-        _collapseButton(isCollapsed),
+        _collapseButton(context, isCollapsed),
         PopupMenuButton<String>(
           key: ValueKey('${paper.id}-paper-actions'),
-          tooltip: _tooltipLabel(enableToolTips, 'Paper actions'),
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            strings.get(PaperTodoStringKeys.actionPaperActions),
+          ),
           icon: const Icon(Icons.more_vert),
           onSelected: _handleCompactPaperAction,
           itemBuilder: (context) => [
             _paperActionMenuItem(
               value: _compactPaperActionOpenSurface,
               icon: Icons.open_in_new,
-              label: 'Open surface',
+              label: strings.get(PaperTodoStringKeys.actionOpenSurface),
             ),
             if (paper.isNote)
               _paperActionMenuItem(
                 value: _compactPaperActionOpenMarkdown,
                 icon: Icons.file_open_outlined,
-                label: 'Open markdown externally',
+                label: strings.get(
+                  PaperTodoStringKeys.actionOpenMarkdownExternally,
+                ),
               ),
             const PopupMenuDivider(),
             for (final option in _TextZoomOption.values)
               CheckedPopupMenuItem<String>(
                 value: '$_compactPaperZoomActionPrefix${option.value}',
                 checked: option.value == textZoom,
-                child: Text('Zoom ${option.label}'),
+                child: Text('${strings.get(PaperTodoStringKeys.zoom)} '
+                    '${option.label}'),
               ),
             const PopupMenuDivider(),
             _paperActionMenuItem(
               value: _compactPaperActionToggleAlwaysOnTop,
               icon:
                   paper.alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
-              label:
-                  paper.alwaysOnTop ? 'Disable always on top' : 'Keep on top',
+              label: paper.alwaysOnTop
+                  ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
+                  : strings.get(PaperTodoStringKeys.actionKeepOnTop),
             ),
             _paperActionMenuItem(
               value: _compactPaperActionTogglePinned,
@@ -3019,24 +3043,24 @@ class PaperPreview extends StatelessWidget {
                   ? Icons.desktop_windows
                   : Icons.desktop_windows_outlined,
               label: paper.isPinnedToDesktop
-                  ? 'Unpin from desktop'
-                  : 'Pin to desktop',
+                  ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
+                  : strings.get(PaperTodoStringKeys.actionPinToDesktop),
             ),
             _paperActionMenuItem(
               value: _compactPaperActionCaptureBounds,
               icon: Icons.aspect_ratio_outlined,
-              label: 'Save window bounds',
+              label: strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
             ),
             const PopupMenuDivider(),
             _paperActionMenuItem(
               value: _compactPaperActionHide,
               icon: Icons.visibility_off_outlined,
-              label: 'Hide paper',
+              label: strings.get(PaperTodoStringKeys.actionHidePaper),
             ),
             _paperActionMenuItem(
               value: _compactPaperActionDelete,
               icon: Icons.delete_outline,
-              label: 'Delete paper',
+              label: strings.get(PaperTodoStringKeys.actionDeletePaper),
             ),
           ],
         ),
@@ -3044,7 +3068,10 @@ class PaperPreview extends StatelessWidget {
     }
     return [
       IconButton(
-        tooltip: _tooltipLabel(enableToolTips, 'Open paper surface'),
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          strings.get(PaperTodoStringKeys.actionOpenPaperSurface),
+        ),
         onPressed: () => unawaited(onOpen(paper)),
         icon: const Icon(Icons.open_in_new),
       ),
@@ -3052,14 +3079,17 @@ class PaperPreview extends StatelessWidget {
         IconButton(
           tooltip: _tooltipLabel(
             enableToolTips,
-            'Open markdown externally',
+            strings.get(PaperTodoStringKeys.actionOpenMarkdownExternally),
           ),
           onPressed: () => unawaited(onOpenExternalMarkdown(paper)),
           icon: const Icon(Icons.file_open_outlined),
         ),
-      _collapseButton(isCollapsed),
+      _collapseButton(context, isCollapsed),
       PopupMenuButton<double>(
-        tooltip: _tooltipLabel(enableToolTips, 'Paper text zoom'),
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          strings.get(PaperTodoStringKeys.actionPaperTextZoom),
+        ),
         icon: const Icon(Icons.text_fields),
         initialValue: textZoom,
         onSelected: (value) => _setTextZoom(value),
@@ -3077,7 +3107,9 @@ class PaperPreview extends StatelessWidget {
       IconButton(
         tooltip: _tooltipLabel(
           enableToolTips,
-          paper.alwaysOnTop ? 'Disable always on top' : 'Keep on top',
+          paper.alwaysOnTop
+              ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
+              : strings.get(PaperTodoStringKeys.actionKeepOnTop),
         ),
         onPressed: _toggleAlwaysOnTop,
         icon:
@@ -3086,7 +3118,9 @@ class PaperPreview extends StatelessWidget {
       IconButton(
         tooltip: _tooltipLabel(
           enableToolTips,
-          paper.isPinnedToDesktop ? 'Unpin from desktop' : 'Pin to desktop',
+          paper.isPinnedToDesktop
+              ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
+              : strings.get(PaperTodoStringKeys.actionPinToDesktop),
         ),
         onPressed: _togglePinnedToDesktop,
         icon: Icon(paper.isPinnedToDesktop
@@ -3094,40 +3128,54 @@ class PaperPreview extends StatelessWidget {
             : Icons.desktop_windows_outlined),
       ),
       IconButton(
-        tooltip: _tooltipLabel(enableToolTips, 'Save window bounds'),
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
+        ),
         onPressed: () => unawaited(onCaptureBounds(paper)),
         icon: const Icon(Icons.aspect_ratio_outlined),
       ),
       IconButton(
-        tooltip: _tooltipLabel(enableToolTips, 'Hide paper'),
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          strings.get(PaperTodoStringKeys.actionHidePaper),
+        ),
         onPressed: () => unawaited(onHide(paper)),
         icon: const Icon(Icons.visibility_off_outlined),
       ),
       IconButton(
-        tooltip: _tooltipLabel(enableToolTips, 'Delete paper'),
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          strings.get(PaperTodoStringKeys.actionDeletePaper),
+        ),
         onPressed: () => unawaited(onDelete(paper)),
         icon: const Icon(Icons.delete_outline),
       ),
     ];
   }
 
-  IconButton _pinnedDesktopUnlockButton() {
+  IconButton _pinnedDesktopUnlockButton(BuildContext context) {
+    final strings = PaperTodoStringsScope.of(context);
     return IconButton(
-      tooltip: _tooltipLabel(enableToolTips, 'Unpin from desktop'),
+      tooltip: _tooltipLabel(
+        enableToolTips,
+        strings.get(PaperTodoStringKeys.actionUnpinFromDesktop),
+      ),
       onPressed: _togglePinnedToDesktop,
       icon: const Icon(Icons.desktop_windows),
     );
   }
 
-  IconButton _collapseButton(bool isCollapsed) {
+  IconButton _collapseButton(BuildContext context, bool isCollapsed) {
+    final strings = PaperTodoStringsScope.of(context);
     return IconButton(
       tooltip: _tooltipLabel(
         enableToolTips,
         collapseAllActive
-            ? 'Collapse all is active'
+            ? strings.get(PaperTodoStringKeys.collapseAllActive)
             : paper.isCollapsed
-                ? 'Expand paper'
-                : 'Collapse paper',
+                ? strings.get(PaperTodoStringKeys.actionExpandPaper)
+                : strings.get(PaperTodoStringKeys.actionCollapsePaper),
       ),
       onPressed: collapseAllActive ? null : _toggleCollapsed,
       icon: Icon(isCollapsed ? Icons.expand_more : Icons.expand_less),
@@ -5206,6 +5254,8 @@ class _TodoEditorState extends State<_TodoEditor> {
   int? _activeOriginalTodoColumnIndex;
   String? _activeOriginalTodoText;
 
+  PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
+
   @override
   void dispose() {
     _todoFocusNode.dispose();
@@ -5265,12 +5315,13 @@ class _TodoEditorState extends State<_TodoEditor> {
                     TextButton.icon(
                       onPressed: _addItem,
                       icon: const Icon(Icons.add),
-                      label: const Text('Add item'),
+                      label:
+                          Text(strings.get(PaperTodoStringKeys.actionAddItem)),
                     ),
                     IconButton(
                       tooltip: _tooltipLabel(
                         widget.enableToolTips,
-                        'Undo todo change',
+                        strings.get(PaperTodoStringKeys.actionUndoTodoChange),
                       ),
                       onPressed: _undoStack.isEmpty ? null : _undoTodoChange,
                       icon: const Icon(Icons.undo),
@@ -5278,7 +5329,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                     IconButton(
                       tooltip: _tooltipLabel(
                         widget.enableToolTips,
-                        'Redo todo change',
+                        strings.get(PaperTodoStringKeys.actionRedoTodoChange),
                       ),
                       onPressed: _redoStack.isEmpty ? null : _redoTodoChange,
                       icon: const Icon(Icons.redo),
@@ -5333,7 +5384,9 @@ class _TodoEditorState extends State<_TodoEditor> {
                         Icons.event_outlined,
                         size: visualSpec.chipIconSize,
                       ),
-                      label: Text('Due $dueDate'),
+                      label: Text(
+                        strings.format(PaperTodoStringKeys.dueLabel, [dueDate]),
+                      ),
                       onPressed: () => unawaited(_pickDueDate(context, item)),
                       onDeleted: () => _clearDueDate(item),
                       deleteIcon: Icon(
@@ -5342,7 +5395,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                       ),
                       deleteButtonTooltipMessage: _tooltipLabel(
                         widget.enableToolTips,
-                        'Clear due date',
+                        strings.get(PaperTodoStringKeys.actionClearDueDate),
                       ),
                     ),
                   if (_formatReminderInterval(item)
@@ -5362,7 +5415,9 @@ class _TodoEditorState extends State<_TodoEditor> {
                       ),
                       deleteButtonTooltipMessage: _tooltipLabel(
                         widget.enableToolTips,
-                        'Clear reminder interval',
+                        strings.get(
+                          PaperTodoStringKeys.actionClearReminderInterval,
+                        ),
                       ),
                     ),
                   if (widget.enableTodoNoteLinks)
@@ -5457,7 +5512,10 @@ class _TodoEditorState extends State<_TodoEditor> {
           width: visualSpec.controlExtent,
           height: visualSpec.controlExtent,
           child: PopupMenuButton<String>(
-            tooltip: _tooltipLabel(widget.enableToolTips, 'Todo item actions'),
+            tooltip: _tooltipLabel(
+              widget.enableToolTips,
+              strings.get(PaperTodoStringKeys.actionTodoItemActions),
+            ),
             iconSize: visualSpec.iconSize,
             padding: EdgeInsets.zero,
             icon: const Icon(Icons.more_vert),
@@ -5470,26 +5528,28 @@ class _TodoEditorState extends State<_TodoEditor> {
               _todoActionMenuItem(
                 value: _compactTodoActionDueDate,
                 icon: Icons.event_outlined,
-                label: _hasDueDate(item) ? 'Change due date' : 'Set due date',
+                label: _hasDueDate(item)
+                    ? strings.get(PaperTodoStringKeys.actionChangeDueDate)
+                    : strings.get(PaperTodoStringKeys.actionSetDueDate),
               ),
               if (_hasDueDate(item))
                 _todoActionMenuItem(
                   value: _compactTodoActionClearDueDate,
                   icon: Icons.event_busy_outlined,
-                  label: 'Clear due date',
+                  label: strings.get(PaperTodoStringKeys.actionClearDueDate),
                 ),
               _todoActionMenuItem(
                 value: _compactTodoActionReminder,
                 icon: Icons.notifications_none_outlined,
                 label: _hasReminderInterval(item)
-                    ? 'Change reminder'
-                    : 'Set reminder',
+                    ? strings.get(PaperTodoStringKeys.actionChangeReminder)
+                    : strings.get(PaperTodoStringKeys.actionSetReminder),
               ),
               if (_hasReminderInterval(item))
                 _todoActionMenuItem(
                   value: _compactTodoActionClearReminder,
                   icon: Icons.notifications_off_outlined,
-                  label: 'Clear reminder',
+                  label: strings.get(PaperTodoStringKeys.actionClearReminder),
                 ),
               if (widget.enableTodoNoteLinks && hasLinkedNote) ...[
                 const PopupMenuDivider(),
@@ -5500,13 +5560,14 @@ class _TodoEditorState extends State<_TodoEditor> {
                     label: widget.runLinkedScriptCapsulesOnClick &&
                             ScriptCapsuleSpec.tryParse(linkedNote.content) !=
                                 null
-                        ? 'Edit linked script'
-                        : 'Open linked note',
+                        ? strings
+                            .get(PaperTodoStringKeys.actionEditLinkedScript)
+                        : strings.get(PaperTodoStringKeys.actionOpenLinkedNote),
                   ),
                 _todoActionMenuItem(
                   value: _compactTodoActionUnlinkNote,
                   icon: Icons.link_off_outlined,
-                  label: 'Unlink note',
+                  label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
                 ),
               ],
               if (widget.enableTodoNoteLinks &&
@@ -5526,39 +5587,39 @@ class _TodoEditorState extends State<_TodoEditor> {
               _todoActionMenuItem(
                 value: _compactTodoActionDelete,
                 icon: Icons.delete_outline,
-                label: 'Delete item',
+                label: strings.get(PaperTodoStringKeys.actionDeleteItem),
                 enabled: widget.paper.items.length > 1,
               ),
               _todoActionMenuItem(
                 value: _compactTodoActionClearDone,
                 icon: Icons.delete_sweep_outlined,
-                label: 'Clear completed',
+                label: strings.get(PaperTodoStringKeys.actionClearCompleted),
                 enabled: _hasDoneTodoItems,
               ),
               const PopupMenuDivider(),
               _todoActionMenuItem(
                 value: _compactTodoActionMoveUp,
                 icon: Icons.keyboard_arrow_up,
-                label: 'Move item up',
+                label: strings.get(PaperTodoStringKeys.actionMoveItemUp),
                 enabled: _canMoveTodoItem(item, -1),
               ),
               _todoActionMenuItem(
                 value: _compactTodoActionMoveDown,
                 icon: Icons.keyboard_arrow_down,
-                label: 'Move item down',
+                label: strings.get(PaperTodoStringKeys.actionMoveItemDown),
                 enabled: _canMoveTodoItem(item, 1),
               ),
               const PopupMenuDivider(),
               _todoActionMenuItem(
                 value: '$_compactTodoColumnActionPrefix$_columnActionAdd',
                 icon: Icons.add,
-                label: 'Add column',
+                label: strings.get(PaperTodoStringKeys.actionAddColumn),
                 enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
               ),
               _todoActionMenuItem(
                 value: '$_compactTodoColumnActionPrefix$_columnActionRemove',
                 icon: Icons.remove,
-                label: 'Remove last column',
+                label: strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
                 enabled: item.todoColumnCount > 1,
               ),
               for (var columnIndex = 0;
@@ -5568,7 +5629,10 @@ class _TodoEditorState extends State<_TodoEditor> {
                   value:
                       '$_compactTodoColumnActionPrefix$_columnActionInsertBeforePrefix$columnIndex',
                   icon: Icons.add_box_outlined,
-                  label: 'Insert before column ${columnIndex + 1}',
+                  label: strings.format(
+                    PaperTodoStringKeys.actionInsertBeforeColumn,
+                    [columnIndex + 1],
+                  ),
                   enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
                 ),
               for (var columnIndex = 0;
@@ -5578,20 +5642,23 @@ class _TodoEditorState extends State<_TodoEditor> {
                   value:
                       '$_compactTodoColumnActionPrefix$_columnActionDeletePrefix$columnIndex',
                   icon: Icons.delete_sweep_outlined,
-                  label: 'Delete column ${columnIndex + 1}',
+                  label: strings.format(
+                    PaperTodoStringKeys.actionDeleteColumn,
+                    [columnIndex + 1],
+                  ),
                   enabled: item.todoColumnCount > 1,
                 ),
               _todoActionMenuItem(
                 value:
                     '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
                 icon: Icons.view_column_outlined,
-                label: 'Equal widths',
+                label: strings.get(PaperTodoStringKeys.actionEqualWidths),
                 enabled: item.todoColumnCount > 1,
               ),
               _todoActionMenuItem(
                 value: '$_compactTodoColumnActionPrefix$_columnActionWideFirst',
                 icon: Icons.view_week_outlined,
-                label: 'Wide first column',
+                label: strings.get(PaperTodoStringKeys.actionWideFirstColumn),
                 enabled: item.todoColumnCount > 1,
               ),
               if (widget.enableTodoNoteLinks &&
@@ -5618,7 +5685,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         index: itemIndex,
         child: _maybeTooltip(
           enabled: widget.enableToolTips,
-          message: 'Drag to reorder',
+          message: strings.get(PaperTodoStringKeys.actionDragToReorder),
           child: SizedBox(
             width: visualSpec.controlExtent,
             height: visualSpec.controlExtent,
@@ -5627,7 +5694,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
       ),
       IconButton(
-        tooltip: _tooltipLabel(widget.enableToolTips, 'Set due date'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionSetDueDate),
+        ),
         onPressed: () => unawaited(_pickDueDate(context, item)),
         iconSize: visualSpec.iconSize,
         constraints: BoxConstraints.tightFor(
@@ -5637,7 +5707,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         icon: const Icon(Icons.event_outlined),
       ),
       IconButton(
-        tooltip: _tooltipLabel(widget.enableToolTips, 'Set reminder interval'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionSetReminderInterval),
+        ),
         onPressed: () => unawaited(_pickReminderInterval(context, item)),
         iconSize: visualSpec.iconSize,
         constraints: BoxConstraints.tightFor(
@@ -5647,7 +5720,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         icon: const Icon(Icons.notifications_none_outlined),
       ),
       PopupMenuButton<String>(
-        tooltip: _tooltipLabel(widget.enableToolTips, 'Todo columns'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionTodoColumns),
+        ),
         iconSize: visualSpec.iconSize,
         icon: const Icon(Icons.table_chart_outlined),
         onSelected: (value) => _updateColumns(item, value),
@@ -5656,18 +5732,20 @@ class _TodoEditorState extends State<_TodoEditor> {
             PopupMenuItem(
               value: _columnActionAdd,
               enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
-              child: const ListTile(
-                leading: Icon(Icons.add),
-                title: Text('Add column'),
+              child: ListTile(
+                leading: const Icon(Icons.add),
+                title: Text(strings.get(PaperTodoStringKeys.actionAddColumn)),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
             PopupMenuItem(
               value: _columnActionRemove,
               enabled: item.todoColumnCount > 1,
-              child: const ListTile(
-                leading: Icon(Icons.remove),
-                title: Text('Remove last column'),
+              child: ListTile(
+                leading: const Icon(Icons.remove),
+                title: Text(
+                  strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
+                ),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
@@ -5680,7 +5758,12 @@ class _TodoEditorState extends State<_TodoEditor> {
                 enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
                 child: ListTile(
                   leading: const Icon(Icons.add_box_outlined),
-                  title: Text('Insert before column ${columnIndex + 1}'),
+                  title: Text(
+                    strings.format(
+                      PaperTodoStringKeys.actionInsertBeforeColumn,
+                      [columnIndex + 1],
+                    ),
+                  ),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -5692,7 +5775,12 @@ class _TodoEditorState extends State<_TodoEditor> {
                 enabled: item.todoColumnCount > 1,
                 child: ListTile(
                   leading: const Icon(Icons.delete_sweep_outlined),
-                  title: Text('Delete column ${columnIndex + 1}'),
+                  title: Text(
+                    strings.format(
+                      PaperTodoStringKeys.actionDeleteColumn,
+                      [columnIndex + 1],
+                    ),
+                  ),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -5700,18 +5788,20 @@ class _TodoEditorState extends State<_TodoEditor> {
             PopupMenuItem(
               value: _columnActionEqualWidths,
               enabled: item.todoColumnCount > 1,
-              child: const ListTile(
-                leading: Icon(Icons.view_column_outlined),
-                title: Text('Equal widths'),
+              child: ListTile(
+                leading: const Icon(Icons.view_column_outlined),
+                title: Text(strings.get(PaperTodoStringKeys.actionEqualWidths)),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
             PopupMenuItem(
               value: _columnActionWideFirst,
               enabled: item.todoColumnCount > 1,
-              child: const ListTile(
-                leading: Icon(Icons.view_week_outlined),
-                title: Text('Wide first column'),
+              child: ListTile(
+                leading: const Icon(Icons.view_week_outlined),
+                title: Text(
+                  strings.get(PaperTodoStringKeys.actionWideFirstColumn),
+                ),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
@@ -5719,7 +5809,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         },
       ),
       PopupMenuButton<String>(
-        tooltip: _tooltipLabel(widget.enableToolTips, 'Link note'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionLinkNote),
+        ),
         enabled: widget.enableTodoNoteLinks &&
             (widget.notePapers.isNotEmpty ||
                 (item.linkedNoteId?.trim().isNotEmpty ?? false)),
@@ -5740,7 +5833,7 @@ class _TodoEditorState extends State<_TodoEditor> {
               _todoActionMenuItem(
                 value: _todoLinkActionUnlink,
                 icon: Icons.link_off_outlined,
-                label: 'Unlink note',
+                label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
               ),
               if (widget.notePapers.isNotEmpty) const PopupMenuDivider(),
             ],
@@ -5756,7 +5849,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         },
       ),
       IconButton(
-        tooltip: _tooltipLabel(widget.enableToolTips, 'Move item up'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionMoveItemUp),
+        ),
         onPressed:
             _canMoveTodoItem(item, -1) ? () => _moveTodoItem(item, -1) : null,
         iconSize: visualSpec.iconSize,
@@ -5767,7 +5863,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         icon: const Icon(Icons.keyboard_arrow_up),
       ),
       IconButton(
-        tooltip: _tooltipLabel(widget.enableToolTips, 'Move item down'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionMoveItemDown),
+        ),
         onPressed:
             _canMoveTodoItem(item, 1) ? () => _moveTodoItem(item, 1) : null,
         iconSize: visualSpec.iconSize,
@@ -5778,7 +5877,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         icon: const Icon(Icons.keyboard_arrow_down),
       ),
       IconButton(
-        tooltip: _tooltipLabel(widget.enableToolTips, 'Delete item'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionDeleteItem),
+        ),
         onPressed: widget.paper.items.length <= 1
             ? null
             : () => _deleteItem(context, item),
@@ -5790,7 +5892,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         icon: const Icon(Icons.delete_outline),
       ),
       IconButton(
-        tooltip: _tooltipLabel(widget.enableToolTips, 'Clear completed items'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionClearCompletedItems),
+        ),
         onPressed: _hasDoneTodoItems ? _clearDoneItems : null,
         iconSize: visualSpec.iconSize,
         constraints: BoxConstraints.tightFor(
@@ -7082,7 +7187,9 @@ class _TodoEditorState extends State<_TodoEditor> {
       ),
       tooltip: _tooltipLabel(
         widget.enableToolTips,
-        isScriptCapsule ? 'Run linked script capsule' : 'Open linked note',
+        isScriptCapsule
+            ? strings.get(PaperTodoStringKeys.actionRunLinkedScriptCapsule)
+            : strings.get(PaperTodoStringKeys.actionOpenLinkedNote),
       ),
       onPressed: () {
         if (scriptSpec != null) {
@@ -7093,8 +7200,10 @@ class _TodoEditorState extends State<_TodoEditor> {
       },
       onDeleted: () => _clearLinkedNote(item),
       deleteIcon: Icon(Icons.close_outlined, size: visualSpec.chipIconSize),
-      deleteButtonTooltipMessage:
-          _tooltipLabel(widget.enableToolTips, 'Unlink note'),
+      deleteButtonTooltipMessage: _tooltipLabel(
+        widget.enableToolTips,
+        strings.get(PaperTodoStringKeys.actionUnlinkNote),
+      ),
     );
   }
 
@@ -7143,7 +7252,9 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   String _displayItemText(PaperItem item) {
     final text = item.text.trim();
-    return text.isEmpty ? 'Todo item' : text;
+    return text.isEmpty
+        ? strings.get(PaperTodoStringKeys.todoItemFallback)
+        : text;
   }
 
   String? _formatDueDate(String? value) {
@@ -7181,7 +7292,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       return time;
     }
     if (dueDay == today.add(const Duration(days: 1))) {
-      return 'Tomorrow $time';
+      return strings.format(PaperTodoStringKeys.dueTomorrow, [time]);
     }
     return '$month-$day $time';
   }
@@ -7202,8 +7313,10 @@ class _TodoEditorState extends State<_TodoEditor> {
       return null;
     }
     final unit = TodoReminderIntervalUnits.normalize(item.reminderIntervalUnit);
-    final suffix = unit == TodoReminderIntervalUnits.hours ? 'hr' : 'min';
-    return 'Every $value $suffix';
+    final key = unit == TodoReminderIntervalUnits.hours
+        ? PaperTodoStringKeys.reminderEveryHours
+        : PaperTodoStringKeys.reminderEveryMinutes;
+    return strings.format(key, [value]);
   }
 
   String _relativeDueDate(DateTime date) {
@@ -7227,9 +7340,9 @@ class _TodoEditorState extends State<_TodoEditor> {
     ];
     final text = parts.join();
     if (isPast) {
-      return '$text overdue';
+      return strings.format(PaperTodoStringKeys.relativeDueOverdue, [text]);
     }
-    return 'in $text';
+    return strings.format(PaperTodoStringKeys.relativeDueFuture, [text]);
   }
 }
 
@@ -7273,8 +7386,9 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = PaperTodoStringsScope.of(context);
     return AlertDialog(
-      title: const Text('Due date'),
+      title: Text(strings.get(PaperTodoStringKeys.dialogDueDate)),
       content: SizedBox(
         width: 360,
         child: SingleChildScrollView(
@@ -7305,9 +7419,9 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
                     child: DropdownButtonFormField<int>(
                       key: const ValueKey('todo-due-hour'),
                       initialValue: _hour,
-                      decoration: const InputDecoration(
-                        labelText: 'Hour',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: strings.get(PaperTodoStringKeys.hour),
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                       items: [
@@ -7329,9 +7443,9 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
                     child: DropdownButtonFormField<int>(
                       key: const ValueKey('todo-due-minute'),
                       initialValue: _minute,
-                      decoration: const InputDecoration(
-                        labelText: 'Minute',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: strings.get(PaperTodoStringKeys.minute),
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                       items: [
@@ -7358,11 +7472,11 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
         TextButton(
           onPressed: () =>
               Navigator.of(context).pop(const _TodoDueSelection.clear()),
-          child: const Text('Clear'),
+          child: Text(strings.get(PaperTodoStringKeys.actionClear)),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
         ),
         FilledButton(
           onPressed: () {
@@ -7378,7 +7492,7 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
               ),
             );
           },
-          child: const Text('Save'),
+          child: Text(strings.get(PaperTodoStringKeys.actionSave)),
         ),
       ],
     );
