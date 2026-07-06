@@ -114,6 +114,8 @@ void main() {
     expect(todo.items.single.todoExtraColumns, ['source']);
     expect(todo.items.single.linkedNoteId, 'note-paper');
     expect(note.type, PaperTypes.note);
+    expect(note.width, PaperLayoutDefaults.noteDefaultWidth);
+    expect(note.height, PaperLayoutDefaults.noteDefaultHeight);
     expect(note.content, '# Migrated');
     expect(note.noteCanvasElements.single.id, 'canvas-code');
     expect(note.noteCanvasElements.single.text, 'Console.WriteLine();');
@@ -886,6 +888,8 @@ Plain item
       state.papers.last.noteCanvasElements.map((element) => element.id).toSet(),
       hasLength(2),
     );
+    expect(state.papers.last.width, PaperLayoutDefaults.noteDefaultWidth);
+    expect(state.papers.last.height, PaperLayoutDefaults.noteDefaultHeight);
   });
 
   test('expands hidden linked note capsules like PaperTodo', () {

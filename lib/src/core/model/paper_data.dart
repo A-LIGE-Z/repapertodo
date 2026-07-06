@@ -11,8 +11,8 @@ class PaperData {
     this.title = '',
     this.x = 120,
     this.y = 120,
-    this.width = PaperLayoutDefaults.todoDefaultWidth,
-    this.height = PaperLayoutDefaults.todoDefaultHeight,
+    double? width,
+    double? height,
     this.isVisible = true,
     this.alwaysOnTop = false,
     this.isCollapsed = false,
@@ -24,7 +24,9 @@ class PaperData {
     this.content = '',
     List<NoteCanvasElement>? noteCanvasElements,
     JsonMap? extra,
-  })  : items = items ?? <PaperItem>[],
+  })  : width = width ?? _defaultWidthForType(type),
+        height = height ?? _defaultHeightForType(type),
+        items = items ?? <PaperItem>[],
         noteCanvasElements = noteCanvasElements ?? <NoteCanvasElement>[],
         extra = extra ?? <String, Object?>{};
 
@@ -71,15 +73,16 @@ class PaperData {
   bool get isNote => type == PaperTypes.note;
 
   factory PaperData.fromJson(JsonMap json) {
+    final type =
+        PaperTypes.normalize(stringValue(json['type'], PaperTypes.todo));
     return PaperData(
       id: stringValue(json['id'], ''),
-      type: stringValue(json['type'], PaperTypes.todo),
+      type: type,
       title: stringValue(json['title'], ''),
       x: doubleValue(json['x'], 120),
       y: doubleValue(json['y'], 120),
-      width: doubleValue(json['width'], PaperLayoutDefaults.todoDefaultWidth),
-      height:
-          doubleValue(json['height'], PaperLayoutDefaults.todoDefaultHeight),
+      width: doubleValue(json['width'], _defaultWidthForType(type)),
+      height: doubleValue(json['height'], _defaultHeightForType(type)),
       isVisible: boolValue(json['isVisible'], true),
       alwaysOnTop: boolValue(json['alwaysOnTop'], false),
       isCollapsed: boolValue(json['isCollapsed'], false),
@@ -187,6 +190,18 @@ class PaperData {
 
 double _normalizeCoordinate(double value, double fallback) {
   return value.isFinite ? value : fallback;
+}
+
+double _defaultWidthForType(String? type) {
+  return PaperTypes.normalize(type) == PaperTypes.note
+      ? PaperLayoutDefaults.noteDefaultWidth
+      : PaperLayoutDefaults.todoDefaultWidth;
+}
+
+double _defaultHeightForType(String? type) {
+  return PaperTypes.normalize(type) == PaperTypes.note
+      ? PaperLayoutDefaults.noteDefaultHeight
+      : PaperLayoutDefaults.todoDefaultHeight;
 }
 
 double _normalizePaperDimension(double value, double fallback, double min) {
