@@ -5334,6 +5334,8 @@ class _TodoEditorState extends State<_TodoEditor> {
                         size: visualSpec.chipIconSize,
                       ),
                       label: Text(reminderInterval),
+                      onPressed: () =>
+                          unawaited(_pickReminderInterval(context, item)),
                       onDeleted: () => _clearReminderInterval(item),
                       deleteIcon: Icon(
                         Icons.close_outlined,

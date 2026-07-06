@@ -6439,6 +6439,52 @@ void main() {
     expect(item.reminderIntervalUnit, TodoReminderIntervalUnits.minutes);
   });
 
+  testWidgets('opens todo reminder editor from reminder chip', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'reminder-chip-paper',
+            type: PaperTypes.todo,
+            title: 'Reminder chip',
+            items: [
+              PaperItem(
+                id: 'reminder-chip-item',
+                text: 'Tune reminders',
+                reminderIntervalValue: 2,
+                reminderIntervalUnit: TodoReminderIntervalUnits.hours,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(InputChip, 'Every 2 hr'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Interval'), '15');
+    await tester.tap(find.text('Minutes'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final item = controller.state.papers.single.items.single;
+    expect(item.reminderIntervalValue, 15);
+    expect(item.reminderIntervalUnit, TodoReminderIntervalUnits.minutes);
+    expect(find.text('Every 15 min'), findsOneWidget);
+  });
+
   testWidgets('renders relative todo due dates', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -731,6 +731,7 @@ void main() {
     expect(design, contains('Todo due editing should preserve PaperTodo'));
     expect(design, contains('existing Todo due chip'));
     expect(design, contains("PaperTodo's due badge"));
+    expect(design, contains('existing Todo reminder chip'));
     expect(design, contains('Todo overflow actions should mirror PaperTodo'));
     expect(design, contains('change plus clear actions'));
     expect(design, contains('global reminder interval value and unit'));
@@ -750,6 +751,7 @@ void main() {
       app,
       contains('onPressed: () => unawaited(_pickDueDate(context, item))'),
     );
+    expect(app, contains('_pickReminderInterval(context, item)'));
     expect(app, contains("ValueKey('todo-due-hour')"));
     expect(app, contains("ValueKey('todo-due-minute')"));
     expect(app, contains('_formatDueAtLocalValue'));

@@ -299,6 +299,8 @@ new due time to roughly one hour from now, and save local values as
 `yyyy-MM-ddTHH:mm:ss` without milliseconds.
 Clicking an existing Todo due chip should reopen the due editor just like
 PaperTodo's due badge.
+Clicking an existing Todo reminder chip should reopen the reminder interval
+editor so chip affordances stay consistent with Todo item menus.
 Todo overflow actions should mirror PaperTodo item menus for due and reminder
 state: existing due dates show change plus clear actions, existing reminder
 intervals show change plus clear actions, and clear actions no-op when the
