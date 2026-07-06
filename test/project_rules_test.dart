@@ -1154,7 +1154,10 @@ void main() {
     expect(script, contains(r'[switch]$AllowDirty'));
     expect(script, contains('function Invoke-Native'));
     expect(script, contains('function Assert-CleanGitTree'));
+    expect(script, contains('function Assert-GitDiffCheck'));
     expect(script, contains('git status --porcelain'));
+    expect(script, contains('git diff --check'));
+    expect(script, contains('git diff --cached --check'));
     expect(script, contains('Working tree has uncommitted changes'));
     expect(script, contains('local-only test package'));
     expect(script, contains(r'failed with exit code $LASTEXITCODE'));
@@ -1189,6 +1192,7 @@ void main() {
     expect(readme, contains('-AllowDirty'));
     expect(readme, contains('dirty git working tree'));
     expect(readme, contains('-OfflinePubGet'));
+    expect(readme, contains('Validation includes `git diff --check`'));
     expect(readme, contains('SHA-256 checksum file'));
     expect(readme, contains('release metadata JSON file'));
   });

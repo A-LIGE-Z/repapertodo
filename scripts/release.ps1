@@ -85,6 +85,17 @@ function Assert-CleanGitTree {
   }
 }
 
+function Assert-GitDiffCheck {
+  Invoke-Step "Check git diff whitespace" {
+    Invoke-Native "git diff --check" {
+      & git diff --check
+    }
+    Invoke-Native "git diff --cached --check" {
+      & git diff --cached --check
+    }
+  }
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
 
@@ -120,6 +131,7 @@ Invoke-Native "git rev-parse HEAD" {
   $script:gitCommit = (& git rev-parse HEAD).Trim()
 }
 Assert-CleanGitTree
+Assert-GitDiffCheck
 
 if (-not $SkipTests -or -not $SkipBuild) {
   Invoke-Step "Resolve Flutter packages" {
@@ -216,6 +228,8 @@ Invoke-Step "Package release artifacts" {
       signing = $androidSigningMode
     }
     validation = @(
+      "git diff --check",
+      "git diff --cached --check",
       "flutter test --no-pub",
       "flutter analyze --no-pub",
       "flutter build windows --release --no-pub",
@@ -247,7 +261,7 @@ if ($PublishGitHubRelease) {
         & gh release create $TagName $windowsZip $androidApk $checksumsFile $metadataFile `
           --target main `
           --title $ReleaseTitle `
-          --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n- Release metadata JSON with version, commit, Android SDK/signing, validation, and artifact hashes.`n`nAndroid signing: $androidSigningMode.`n`nValidation:`n- flutter test --no-pub`n- flutter analyze --no-pub`n- flutter build windows --release --no-pub`n- flutter build apk --release --no-pub"
+          --notes "Release build for RePaperTodo $version.`n`nArtifacts:`n- Windows x64 release zip containing repapertodo.exe and runtime files.`n- Android release APK for Android 14+ target SDK 37.`n- SHA-256 checksums for release artifacts.`n- Release metadata JSON with version, commit, Android SDK/signing, validation, and artifact hashes.`n`nAndroid signing: $androidSigningMode.`n`nValidation:`n- git diff --check`n- git diff --cached --check`n- flutter test --no-pub`n- flutter analyze --no-pub`n- flutter build windows --release --no-pub`n- flutter build apk --release --no-pub"
       }
     }
   }
