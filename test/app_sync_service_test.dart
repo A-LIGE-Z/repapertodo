@@ -3382,6 +3382,86 @@ void main() {
     expect(await File(store.filePath).exists(), isFalse);
   });
 
+  test('merge saves normalized local sync metadata without new operations',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_save_normalized_metadata_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final paperDeletedAt = DateTime.utc(2026, 7, 1, 10);
+    final coveredItemDeletedAt = DateTime.utc(2026, 7, 1, 9);
+    final newerItemDeletedAt = DateTime.utc(2026, 7, 1, 11);
+    final localState = AppState(
+      papers: [
+        PaperData(id: 'local', type: PaperTypes.todo, title: 'Local'),
+      ],
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {
+          ' Device A ': 1,
+          'bad': 9,
+          'too-high': maxSyncDeviceSequence + 1,
+        }
+        ..deletedPaperTombstones = {
+          ' paper-a ': paperDeletedAt.toIso8601String(),
+          'bad-paper': '2026-13-01T10:00:00Z',
+        }
+        ..deletedTodoItemTombstones = {
+          ' paper-a ': {
+            'covered-item': coveredItemDeletedAt.toIso8601String(),
+            'newer-item': newerItemDeletedAt.toIso8601String(),
+          },
+          'todo-a': {
+            ' item-a ': coveredItemDeletedAt.toIso8601String(),
+            'bad-item': '2026-07-01T24:00:00Z',
+          },
+        },
+    );
+    final originalLocalStateJson = localState.toJson();
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          throw StateError('Covered operation logs should not be downloaded.');
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: localState,
+      store: store,
+    );
+
+    expect(result.appliedCount, 0);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.sync.operationDeviceSequences, {'device-a': 1});
+    expect(result.state.sync.deletedPaperTombstones, {
+      'paper-a': paperDeletedAt.toIso8601String(),
+    });
+    expect(result.state.sync.deletedTodoItemTombstones, {
+      'paper-a': {'newer-item': newerItemDeletedAt.toIso8601String()},
+      'todo-a': {'item-a': coveredItemDeletedAt.toIso8601String()},
+    });
+    expect(localState.toJson(), originalLocalStateJson);
+
+    final stored = await store.load();
+    expect(stored.sync.operationDeviceSequences, {'device-a': 1});
+    expect(stored.sync.deletedPaperTombstones, {
+      'paper-a': paperDeletedAt.toIso8601String(),
+    });
+    expect(stored.sync.deletedTodoItemTombstones, {
+      'paper-a': {'newer-item': newerItemDeletedAt.toIso8601String()},
+      'todo-a': {'item-a': coveredItemDeletedAt.toIso8601String()},
+    });
+  });
+
   test('merge normalizes explicit device sequences before selecting logs',
       () async {
     final directory = await Directory.systemTemp

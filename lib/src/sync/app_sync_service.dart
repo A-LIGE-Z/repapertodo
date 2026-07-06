@@ -1,3 +1,5 @@
+import 'package:collection/collection.dart';
+
 import '../core/model/app_state.dart';
 import '../core/model/sync_settings.dart';
 import '../core/model/sync_wire_datetime.dart';
@@ -394,7 +396,10 @@ class AppSyncService {
       );
       result.state.sync.operationDeviceSequences = result.deviceSequences;
       result.state.normalize();
-      if (result.appliedCount > 0) {
+      final shouldSaveMergeResult = result.appliedCount > 0 ||
+          (deviceSequences == null &&
+              _syncMergeMetadataChanged(result.state.sync, localState.sync));
+      if (shouldSaveMergeResult) {
         await store.save(result.state);
       }
       return AppSyncOperationMergeResult(
@@ -820,6 +825,22 @@ bool _deviceSequencesEqual(Map<String, int> left, Map<String, int> right) {
     }
   }
   return true;
+}
+
+bool _jsonEquals(Object? left, Object? right) {
+  return const DeepCollectionEquality().equals(left, right);
+}
+
+bool _syncMergeMetadataChanged(SyncSettings left, SyncSettings right) {
+  return !_jsonEquals(
+        left.operationDeviceSequences,
+        right.operationDeviceSequences,
+      ) ||
+      !_jsonEquals(left.deletedPaperTombstones, right.deletedPaperTombstones) ||
+      !_jsonEquals(
+        left.deletedTodoItemTombstones,
+        right.deletedTodoItemTombstones,
+      );
 }
 
 Map<String, int> _mergeDeviceSequences(
