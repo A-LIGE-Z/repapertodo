@@ -178,6 +178,57 @@ void main() {
     expect(platform.systemIntegration.registeredTodoHotkeys, ['Ctrl+Alt+L']);
   });
 
+  test('skips startup WebDAV sync until settings are complete', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'repapertodo_bootstrap_incomplete_sync_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await store.save(
+      AppState(
+        papers: [
+          PaperData(
+            id: 'paper-local',
+            type: PaperTypes.todo,
+            title: 'Local',
+          ),
+        ],
+        pinnedTodoHotKey: 'Ctrl+Alt+L',
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            rootPath: 'repapertodo',
+            autoSyncOnStart: true,
+          ),
+        ),
+      ),
+    );
+    final platform = _RecordingBootstrapPlatformServices();
+    final syncService = _CountingStartupSyncService();
+
+    final bootstrap = await AppBootstrap.load(
+      const [],
+      store: store,
+      platform: platform,
+      syncService: syncService,
+    );
+
+    expect(bootstrap, isNotNull);
+    expect(syncService.calls, 0);
+    expect(bootstrap!.controller.state.papers.single.title, 'Local');
+    final stored = await store.load();
+    expect(stored.papers.single.title, 'Local');
+    expect(platform.paperWindows.restoredTitles, ['Local']);
+    expect(platform.tray.rebuiltTitles, [
+      ['Local'],
+    ]);
+    expect(platform.systemIntegration.registeredTodoHotkeys, ['Ctrl+Alt+L']);
+  });
+
   test('boots from legacy PaperTodo data and rewrites the migrated state',
       () async {
     final directory = await Directory.systemTemp.createTemp(
@@ -313,6 +364,20 @@ class _FailingStartupSyncService extends AppSyncService {
     DateTime? localUpdatedAtUtc,
   }) async {
     throw StateError('Temporary startup sync failure');
+  }
+}
+
+class _CountingStartupSyncService extends AppSyncService {
+  var calls = 0;
+
+  @override
+  Future<AppSyncRunResult> syncAndMergeNow({
+    required AppState localState,
+    required StateStore store,
+    DateTime? localUpdatedAtUtc,
+  }) async {
+    calls += 1;
+    throw StateError('Unexpected startup sync call');
   }
 }
 

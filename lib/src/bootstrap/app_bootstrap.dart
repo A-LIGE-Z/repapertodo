@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../app_controller.dart';
+import '../core/model/sync_settings.dart';
 import '../core/storage/state_store.dart';
 import '../core/startup/startup_command.dart';
 import '../platform/android_platform_services.dart';
@@ -53,8 +54,7 @@ class AppBootstrap {
       await resolvedStore.save(controller.state);
       return null;
     }
-    if (controller.state.sync.enabled &&
-        controller.state.sync.webDav.autoSyncOnStart) {
+    if (_shouldAutoSyncOnStart(controller.state.sync)) {
       try {
         final result = await (syncService ?? AppSyncService()).syncAndMergeNow(
           localState: controller.state,
@@ -71,6 +71,13 @@ class AppBootstrap {
       controller: controller,
       store: resolvedStore,
     );
+  }
+
+  static bool _shouldAutoSyncOnStart(SyncSettings sync) {
+    return sync.enabled &&
+        sync.provider == SyncProviderIds.webDav &&
+        sync.webDav.autoSyncOnStart &&
+        sync.webDav.isSecurelyConfigured;
   }
 
   static Future<String> defaultStateFilePath({
