@@ -116,4 +116,15 @@ keytool -genkeypair -v -keystore android\repapertodo-release.jks -storetype JKS 
 ```
 
 The release script prints whether the APK used `android/key.properties` or the
-debug fallback and records that mode in GitHub Release notes.
+debug fallback and records that mode in GitHub Release notes. Local smoke
+packages may use the debug fallback, but `-PublishGitHubRelease` refuses to
+publish unless Android release signing comes from `android/key.properties`.
+
+GitHub Actions can create `android/key.properties` during a manual publish run
+when these repository secrets are configured:
+
+- `ANDROID_KEYSTORE_BASE64`: base64-encoded contents of
+  `android/repapertodo-release.jks`
+- `ANDROID_STORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`

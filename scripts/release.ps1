@@ -217,7 +217,8 @@ function Assert-PublishableReleaseOptions {
     [bool]$PublishGitHubRelease,
     [bool]$SkipTests,
     [bool]$SkipBuild,
-    [bool]$AllowDirty
+    [bool]$AllowDirty,
+    [string]$AndroidSigningMode
   )
 
   if (-not $PublishGitHubRelease) {
@@ -237,6 +238,9 @@ function Assert-PublishableReleaseOptions {
 
   if ($blockedOptions.Count -gt 0) {
     throw "GitHub Release publishing requires a clean, fully validated build. Remove $($blockedOptions -join ', ') before publishing."
+  }
+  if ($AndroidSigningMode -ne "release keystore from android/key.properties") {
+    throw "GitHub Release publishing requires Android release signing from android/key.properties. Configure android/key.properties locally or provide Android signing secrets in GitHub Actions before publishing."
   }
 }
 
@@ -361,11 +365,15 @@ if (-not (Test-Path -LiteralPath $flutter)) {
 }
 
 Assert-Command "git"
+$androidSigningMode = Get-AndroidSigningMode -RepoRoot $repoRoot
+$androidSdkConfig = Get-AndroidSdkConfig -RepoRoot $repoRoot
+Assert-AndroidSdkCompatibility -SdkConfig $androidSdkConfig
 Assert-PublishableReleaseOptions `
   -PublishGitHubRelease $PublishGitHubRelease `
   -SkipTests $SkipTests `
   -SkipBuild $SkipBuild `
-  -AllowDirty $AllowDirty
+  -AllowDirty $AllowDirty `
+  -AndroidSigningMode $androidSigningMode
 if ($PublishGitHubRelease) {
   Assert-Command "gh"
   Assert-GitHubAuthentication
@@ -379,9 +387,6 @@ if ([string]::IsNullOrWhiteSpace($TagName)) {
 if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) {
   $ReleaseTitle = "RePaperTodo $version"
 }
-$androidSigningMode = Get-AndroidSigningMode -RepoRoot $repoRoot
-$androidSdkConfig = Get-AndroidSdkConfig -RepoRoot $repoRoot
-Assert-AndroidSdkCompatibility -SdkConfig $androidSdkConfig
 $releaseNotes = New-ReleaseNotes -Version $version -AndroidSigningMode $androidSigningMode
 Write-Host "Android signing mode: $androidSigningMode"
 Write-Host "Android SDK config: compileSdk=$($androidSdkConfig["compileSdk"]), minSdk=$($androidSdkConfig["minSdk"]), targetSdk=$($androidSdkConfig["targetSdk"])"

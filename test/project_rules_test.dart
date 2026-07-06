@@ -1565,6 +1565,13 @@ void main() {
     expect(script, contains('function Get-AndroidSdkConfig'));
     expect(script, contains('function Assert-AndroidSdkCompatibility'));
     expect(script, contains('function Assert-PublishableReleaseOptions'));
+    expect(
+      script,
+      contains(
+        'GitHub Release publishing requires Android release signing from android/key.properties',
+      ),
+    );
+    expect(script, contains(r'-AndroidSigningMode $androidSigningMode'));
     expect(script, contains('function Assert-GitHubAuthentication'));
     expect(script, contains('function Assert-GitHubReleaseGitState'));
     expect(script, contains('function Assert-GitHubReleaseTagState'));
@@ -1672,6 +1679,21 @@ void main() {
     expect(workflow, contains('platforms;android-37.0'));
     expect(workflow, isNot(contains('"platforms;android-37"')));
     expect(workflow, contains('build-tools;37.0.0'));
+    expect(workflow, contains('Configure Android release signing'));
+    expect(workflow, contains('ANDROID_KEYSTORE_BASE64'));
+    expect(workflow, contains('ANDROID_STORE_PASSWORD'));
+    expect(workflow, contains('ANDROID_KEY_ALIAS'));
+    expect(workflow, contains('ANDROID_KEY_PASSWORD'));
+    expect(workflow, contains('repapertodo-release.jks'));
+    expect(workflow, contains('android\\key.properties'));
+    expect(
+      workflow,
+      contains('Android release signing secrets are not configured'),
+    );
+    expect(
+      workflow,
+      contains('Android release signing secrets are incomplete'),
+    );
     expect(workflow, contains(r'Remove-Item -LiteralPath "Env:\$name"'));
     expect(workflow, isNot(contains('HTTP_PROXY: ""')));
     expect(workflow, isNot(contains('HTTPS_PROXY: ""')));
@@ -1712,6 +1734,11 @@ void main() {
     expect(readme, contains('Validation includes `git diff --check`'));
     expect(readme, contains('SHA-256 checksum file'));
     expect(readme, contains('release metadata JSON file'));
+    expect(readme, contains('refuses to'));
+    expect(readme, contains('ANDROID_KEYSTORE_BASE64'));
+    expect(readme, contains('ANDROID_STORE_PASSWORD'));
+    expect(readme, contains('ANDROID_KEY_ALIAS'));
+    expect(readme, contains('ANDROID_KEY_PASSWORD'));
     expect(readme, contains('Android 14-17/API 34-37 compatibility'));
     expect(readme, contains('reads the Android Gradle SDK settings'));
     expect(readme, contains('stops if they drift'));
