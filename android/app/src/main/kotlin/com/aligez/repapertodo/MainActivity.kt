@@ -43,6 +43,10 @@ class MainActivity : FlutterActivity() {
                         result.error("invalid_uri", "The URI contains unsupported characters.", null)
                         return@setMethodCallHandler
                     }
+                    if (hasMalformedExternalUriPercentEscape(trimmedUri)) {
+                        result.error("invalid_uri", "The URI contains malformed escapes.", null)
+                        return@setMethodCallHandler
+                    }
                     if (hasEncodedUnsafeExternalUriCharacter(trimmedUri)) {
                         result.error("invalid_uri", "The URI contains encoded unsupported characters.", null)
                         return@setMethodCallHandler
@@ -178,6 +182,24 @@ class MainActivity : FlutterActivity() {
         return path.any { character ->
             isControlCharacter(character)
         }
+    }
+
+    private fun hasMalformedExternalUriPercentEscape(uri: String): Boolean {
+        var index = 0
+        while (index < uri.length) {
+            if (uri[index] == '%') {
+                if (
+                    index + 2 >= uri.length ||
+                    Character.digit(uri[index + 1], 16) < 0 ||
+                    Character.digit(uri[index + 2], 16) < 0
+                ) {
+                    return true
+                }
+                index += 2
+            }
+            index += 1
+        }
+        return false
     }
 
     private fun hasEncodedUnsafeExternalUriCharacter(uri: String): Boolean {

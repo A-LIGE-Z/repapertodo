@@ -61,6 +61,8 @@ void main() {
     expect(mainActivity, contains('uri.encodedAuthority'));
     expect(mainActivity, contains('hasEncodedExternalUriAuthoritySeparator'));
     expect(mainActivity, contains('hasUnsafeExternalUriCharacter'));
+    expect(mainActivity, contains('hasMalformedExternalUriPercentEscape'));
+    expect(mainActivity, contains('The URI contains malformed escapes.'));
     expect(mainActivity, contains('hasEncodedUnsafeExternalUriCharacter'));
     expect(mainActivity, contains('hasUnsafeExternalFilePathCharacter'));
     expect(mainActivity, contains('isAllowedExternalUri'));
@@ -87,6 +89,7 @@ void main() {
 
     expect(design, contains('reject blank launch\narguments'));
     expect(design, contains('percent-encoded control characters'));
+    expect(design, contains('malformed percent escapes'));
     expect(design, contains('encoded authority separators'));
     expect(design, contains('external-file paths must reject raw control'));
     expect(design, contains('Generated external Markdown export filenames'));
@@ -97,12 +100,16 @@ void main() {
     expect(
         externalUriTargets, contains('hasEncodedUnsafeExternalUriCharacter'));
     expect(
+        externalUriTargets, contains('hasMalformedExternalUriPercentEscape'));
+    expect(
       externalUriTargets,
       contains('hasEncodedExternalUriAuthoritySeparator'),
     );
     expect(android, contains('Android URI must not be blank.'));
     expect(
         android, contains('Android URI must not contain control characters.'));
+    expect(android,
+        contains('Android URI must not contain malformed percent escapes.'));
     expect(android,
         contains('Android URI must not contain encoded control characters.'));
     expect(android,
@@ -117,6 +124,8 @@ void main() {
     expect(windows, contains('Windows URI must not be blank.'));
     expect(
         windows, contains('Windows URI must not contain control characters.'));
+    expect(windows,
+        contains('Windows URI must not contain malformed percent escapes.'));
     expect(windows,
         contains('Windows URI must not contain encoded control characters.'));
     expect(windows,
@@ -1153,6 +1162,8 @@ void main() {
     expect(externalUriTargets, contains('hasUnsafeExternalUriCharacter'));
     expect(
         externalUriTargets, contains('hasEncodedUnsafeExternalUriCharacter'));
+    expect(
+        externalUriTargets, contains('hasMalformedExternalUriPercentEscape'));
     expect(externalUriTargets, contains('uri.userInfo.isEmpty'));
     expect(
       externalUriTargets,
@@ -1160,6 +1171,7 @@ void main() {
     );
     expect(runner, contains('IsAllowedExternalUri'));
     expect(runner, contains('HasEncodedUnsafeExternalUriCharacter'));
+    expect(runner, contains('HasMalformedExternalUriPercentEscape'));
     expect(runner, contains('HasEncodedExternalUriAuthoritySeparator'));
     expect(runner, contains('ascii <= 0x20'));
     expect(runner, contains("authority.find('@')"));

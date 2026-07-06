@@ -59,6 +59,13 @@ class AndroidUriOpenHost implements UriOpenHost {
         'Android URI must not contain control characters.',
       );
     }
+    if (hasMalformedExternalUriPercentEscape(trimmedUri)) {
+      throw ArgumentError.value(
+        uri,
+        'uri',
+        'Android URI must not contain malformed percent escapes.',
+      );
+    }
     if (hasEncodedUnsafeExternalUriCharacter(trimmedUri)) {
       throw ArgumentError.value(
         uri,

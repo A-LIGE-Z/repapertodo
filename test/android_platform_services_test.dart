@@ -148,6 +148,50 @@ void main() {
     ]);
   });
 
+  test('platform services reject malformed percent escapes locally', () async {
+    const androidChannel = MethodChannel('repapertodo/android_bad_escape_test');
+    const windowsChannel = MethodChannel('repapertodo/windows_bad_escape_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(androidChannel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(windowsChannel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(androidChannel, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(windowsChannel, null);
+    });
+
+    final openers = [
+      AndroidPlatformServices(channel: androidChannel).uriOpener,
+      WindowsPlatformServices(channel: windowsChannel).uriOpener,
+    ];
+
+    for (final opener in openers) {
+      for (final uri in const [
+        'https://example.com/%',
+        'https://example.com/%A',
+        'https://example.com/%ZZ',
+        'mailto:paper%ZZ@example.com',
+      ]) {
+        await expectLater(
+          opener.openUri(uri),
+          throwsA(isA<ArgumentError>()),
+          reason: uri,
+        );
+      }
+    }
+
+    expect(calls, isEmpty);
+  });
+
   test('platform services reject unsupported URI schemes locally', () async {
     const androidChannel = MethodChannel('repapertodo/android_scheme_test');
     const windowsChannel = MethodChannel('repapertodo/windows_scheme_test');

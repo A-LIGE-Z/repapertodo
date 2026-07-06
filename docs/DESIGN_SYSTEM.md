@@ -199,12 +199,12 @@ removed from the script body, and the platform line terminator is used before
 the normalized script body is handed to the host.
 Platform URI and external-file hosts must trim and reject blank launch
 arguments before invoking native method channels. Platform URI hosts must also
-reject raw or percent-encoded control characters.
+reject raw or percent-encoded control characters and malformed percent escapes.
 Platform external-file paths must reject raw control characters while preserving
 ordinary spaces in local filenames.
 Markdown links must reject raw or percent-encoded control characters and
-encoded authority separators before native URI launch while preserving ordinary
-encoded path characters.
+malformed percent escapes or encoded authority separators before native URI
+launch while preserving ordinary encoded path characters.
 Markdown note link interaction should preserve PaperTodo edit/preview
 semantics: preview-mode links open directly, while edit-mode source links open
 only on Ctrl+click and otherwise keep normal text editing behavior. This applies

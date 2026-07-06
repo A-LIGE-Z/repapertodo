@@ -228,6 +228,20 @@ bool HasEncodedUnsafeExternalUriCharacter(const std::string& uri) {
   return !decoded_wide && HasEncodedControlByte(uri);
 }
 
+bool HasMalformedExternalUriPercentEscape(const std::string& uri) {
+  for (size_t index = 0; index < uri.size(); ++index) {
+    if (uri[index] != '%') {
+      continue;
+    }
+    if (index + 2 >= uri.size() || HexDigitValue(uri[index + 1]) < 0 ||
+        HexDigitValue(uri[index + 2]) < 0) {
+      return true;
+    }
+    index += 2;
+  }
+  return false;
+}
+
 bool HasEncodedExternalUriAuthoritySeparator(const std::string& authority) {
   const std::string normalized_authority = LowerAscii(authority);
   for (const std::string& separator :
@@ -261,6 +275,9 @@ bool IsAllowedExternalUri(const std::string& value) {
     }
   }
   if (HasWhitespaceOrControlCodePoint(uri)) {
+    return false;
+  }
+  if (HasMalformedExternalUriPercentEscape(uri)) {
     return false;
   }
   if (HasEncodedUnsafeExternalUriCharacter(uri)) {

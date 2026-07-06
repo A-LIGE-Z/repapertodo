@@ -18,6 +18,10 @@ void main() {
       normalizeExternalUriTarget('mailto:paper@example.com'),
       'mailto:paper@example.com',
     );
+    expect(
+      normalizeExternalUriTarget('https://example.com/%E2%82%ACpath'),
+      'https://example.com/%E2%82%ACpath',
+    );
   });
 
   test('rejects unsafe external URI targets', () {
@@ -29,10 +33,14 @@ void main() {
       'https:///missing-host',
       'https://user@example.com/paper',
       'https://example.com%3A443/paper',
+      'https://example.com/%',
+      'https://example.com/%A',
+      'https://example.com/%ZZ',
       'https://example.com/%0Apaper',
       'https://example.com/%C2%85paper',
       'https://example.com/\u0085paper',
       'mailto:',
+      'mailto:paper%ZZ@example.com',
       'mailto:?subject=paper',
       'mailto://paper@example.com',
       'mailto://example.com/paper@example.com',

@@ -10,6 +10,7 @@ String? normalizeExternalUriTarget(
     trimmed = 'https://$trimmed';
   }
   if (hasUnsafeExternalUriCharacter(trimmed) ||
+      hasMalformedExternalUriPercentEscape(trimmed) ||
       hasEncodedUnsafeExternalUriCharacter(trimmed) ||
       !isAllowedExternalUriTarget(trimmed)) {
     return null;
@@ -58,6 +59,21 @@ bool hasEncodedExternalUriAuthoritySeparator(String value) {
   return false;
 }
 
+bool hasMalformedExternalUriPercentEscape(String value) {
+  for (var index = 0; index < value.length; index += 1) {
+    if (value.codeUnitAt(index) != 0x25) {
+      continue;
+    }
+    if (index + 2 >= value.length ||
+        !_isHexDigit(value.codeUnitAt(index + 1)) ||
+        !_isHexDigit(value.codeUnitAt(index + 2))) {
+      return true;
+    }
+    index += 2;
+  }
+  return false;
+}
+
 bool hasUnsafeExternalUriCharacter(String value) {
   return value.runes.any(
     (rune) => rune <= 0x20 || (rune >= 0x7F && rune <= 0x9F),
@@ -81,4 +97,10 @@ bool hasEncodedUnsafeExternalUriCharacter(String value) {
 
 bool _isControlRune(int rune) {
   return rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
+}
+
+bool _isHexDigit(int codeUnit) {
+  return (codeUnit >= 0x30 && codeUnit <= 0x39) ||
+      (codeUnit >= 0x41 && codeUnit <= 0x46) ||
+      (codeUnit >= 0x61 && codeUnit <= 0x66);
 }
