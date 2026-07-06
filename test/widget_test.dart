@@ -6757,6 +6757,51 @@ void main() {
     expect(platform.paperWindows.updatedTitles, contains('Zoom paper'));
   });
 
+  testWidgets('ctrl mouse wheel adjusts note text zoom like PaperTodo',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'wheel-zoom-note',
+            type: PaperTypes.note,
+            title: 'Wheel zoom note',
+            content: 'Zoom with the mouse wheel.',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final paper = controller.state.papers.single;
+    final position = tester.getCenter(find.byType(PaperPreview));
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: position,
+        scrollDelta: const Offset(0, -120),
+      ),
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(paper.textZoom, 1.1);
+    expect(platform.paperWindows.updatedTitles, contains('Wheel zoom note'));
+  });
+
   testWidgets('edits todo extra columns', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -2688,88 +2689,91 @@ class PaperPreview extends StatelessWidget {
         paper.isPinnedToDesktop && !paper.isCollapsed;
     return Semantics(
       label: '$titleText ${paper.type} paper',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerLowest,
-          border: Border.all(color: colorScheme.outlineVariant),
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: colorScheme.shadow.withValues(alpha: 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    paper.isTodo
-                        ? Icons.check_box_outlined
-                        : scriptCapsuleSpec != null
-                            ? Icons.bolt_outlined
-                            : Icons.notes_outlined,
-                    size: 18,
-                    color: colorScheme.primary,
-                  ),
-                  if (paper.isNote && enableTodoNoteLinks) ...[
-                    const SizedBox(width: 4),
-                    _noteLinkDragHandle(context),
-                  ],
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      key: ValueKey('${paper.id}-title'),
-                      initialValue:
-                          PaperTitles.cleanCustomTitle(paper.title).isEmpty
-                              ? titleText
-                              : paper.title,
-                      inputFormatters: const [
-                        _PaperTitleTextInputFormatter(
-                          maxLength: PaperTitles.maxTitleLength,
-                        ),
-                      ],
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        hintText: 'Untitled',
-                        isDense: true,
-                      ),
-                      enabled: !desktopInteractionLocked,
-                      style: theme.textTheme.titleMedium?.apply(
-                        fontSizeFactor: textZoom,
-                      ),
-                      onChanged: (value) {
-                        paper.title = PaperTitles.cleanCustomTitle(value);
-                        unawaited(onTitleChanged(paper));
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: _paperHeaderActions(
-                    context: context,
-                    isCollapsed: isCollapsed,
-                    desktopInteractionLocked: desktopInteractionLocked,
-                    textZoom: textZoom,
-                  ),
-                ),
-              ),
-              AbsorbPointer(
-                absorbing: desktopInteractionLocked,
-                child: _animatedPaperBody(isCollapsed, scriptCapsuleSpec),
+      child: Listener(
+        onPointerSignal: _handlePointerSignal,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLowest,
+            border: Border.all(color: colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(alpha: 0.08),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
               ),
             ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      paper.isTodo
+                          ? Icons.check_box_outlined
+                          : scriptCapsuleSpec != null
+                              ? Icons.bolt_outlined
+                              : Icons.notes_outlined,
+                      size: 18,
+                      color: colorScheme.primary,
+                    ),
+                    if (paper.isNote && enableTodoNoteLinks) ...[
+                      const SizedBox(width: 4),
+                      _noteLinkDragHandle(context),
+                    ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        key: ValueKey('${paper.id}-title'),
+                        initialValue:
+                            PaperTitles.cleanCustomTitle(paper.title).isEmpty
+                                ? titleText
+                                : paper.title,
+                        inputFormatters: const [
+                          _PaperTitleTextInputFormatter(
+                            maxLength: PaperTitles.maxTitleLength,
+                          ),
+                        ],
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          hintText: 'Untitled',
+                          isDense: true,
+                        ),
+                        enabled: !desktopInteractionLocked,
+                        style: theme.textTheme.titleMedium?.apply(
+                          fontSizeFactor: textZoom,
+                        ),
+                        onChanged: (value) {
+                          paper.title = PaperTitles.cleanCustomTitle(value);
+                          unawaited(onTitleChanged(paper));
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: _paperHeaderActions(
+                      context: context,
+                      isCollapsed: isCollapsed,
+                      desktopInteractionLocked: desktopInteractionLocked,
+                      textZoom: textZoom,
+                    ),
+                  ),
+                ),
+                AbsorbPointer(
+                  absorbing: desktopInteractionLocked,
+                  child: _animatedPaperBody(isCollapsed, scriptCapsuleSpec),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -3202,6 +3206,27 @@ class PaperPreview extends StatelessWidget {
 
   void _togglePinnedToDesktop() {
     unawaited(onSetPinnedToDesktop(paper, !paper.isPinnedToDesktop));
+  }
+
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent ||
+        !paper.isNote ||
+        !HardwareKeyboard.instance.isControlPressed ||
+        _desktopInteractionLocked) {
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver.register(
+      event,
+      (event) => _setTextZoom(_textZoomAfterWheel(event as PointerScrollEvent)),
+    );
+  }
+
+  bool get _desktopInteractionLocked =>
+      paper.isPinnedToDesktop && !paper.isCollapsed;
+
+  double _textZoomAfterWheel(PointerScrollEvent event) {
+    final step = event.scrollDelta.dy < 0 ? 0.1 : -0.1;
+    return ((paper.textZoom + step).clamp(0.5, 1.5) * 10).round() / 10;
   }
 
   void _setTextZoom(double value) {

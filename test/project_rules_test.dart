@@ -877,12 +877,17 @@ void main() {
     expect(design, contains('losing editor focus returns'));
     expect(design, contains('Markdown editors should accept Tab'));
     expect(design, contains('Shift+Tab outdents'));
+    expect(design, contains('Ctrl+mouse-wheel'));
+    expect(design, contains('0.1 steps between 0.5 and 1.5'));
     expect(app, contains('_handleEditorTap'));
     expect(app, contains('_enterEditorFromPreview'));
     expect(app, contains('_handleEditorFocusChange'));
     expect(app, contains('HardwareKeyboard.instance.isControlPressed'));
     expect(app, contains('LogicalKeyboardKey.tab'));
     expect(app, contains('MarkdownFormatting.handleTab'));
+    expect(app, contains('PointerScrollEvent'));
+    expect(app, contains('pointerSignalResolver'));
+    expect(app, contains('_textZoomAfterWheel'));
     expect(app, contains("startsWith('www.')"));
     expect(app, contains('_normalizeMarkdownLocalPath'));
     expect(app, contains('controller.openExternalFile(localPath)'));

@@ -225,6 +225,10 @@ Markdown editors should accept Tab as content like PaperTodo's AvalonEdit
 notes: Tab inserts or indents with literal tab characters, Shift+Tab outdents
 one leading tab or up to four leading spaces, and focus should not leave the
 note editor because of these keys.
+Note paper text zoom should preserve PaperTodo's mouse path: Ctrl+mouse-wheel
+adjusts the note `TextZoom` in 0.1 steps between 0.5 and 1.5, updates the
+surface immediately, and consumes the wheel signal instead of scrolling the
+paper body.
 Settings saves should keep ordinary app preferences while surfacing native
 integration failures such as hotkey, startup, or script-process errors.
 On narrow screens, keep one primary sync action directly reachable and move
