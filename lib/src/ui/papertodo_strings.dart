@@ -11,6 +11,7 @@ abstract final class PaperTodoStringKeys {
   static const actionChangeDueDate = 'actionChangeDueDate';
   static const actionChangeReminder = 'actionChangeReminder';
   static const actionClear = 'actionClear';
+  static const actionClose = 'actionClose';
   static const actionClearCompleted = 'actionClearCompleted';
   static const actionClearCompletedItems = 'actionClearCompletedItems';
   static const actionClearDueDate = 'actionClearDueDate';
@@ -57,6 +58,7 @@ abstract final class PaperTodoStringKeys {
   static const actionRedoTodoChange = 'actionRedoTodoChange';
   static const actionRemoveLastColumn = 'actionRemoveLastColumn';
   static const actionRetry = 'actionRetry';
+  static const actionRestore = 'actionRestore';
   static const actionRunPaper = 'actionRunPaper';
   static const actionRunLinkedScriptCapsule = 'actionRunLinkedScriptCapsule';
   static const actionRunScriptCapsule = 'actionRunScriptCapsule';
@@ -128,6 +130,7 @@ abstract final class PaperTodoStringKeys {
   static const dengXian = 'dengXian';
   static const dialogDeletePaper = 'dialogDeletePaper';
   static const dialogDueDate = 'dialogDueDate';
+  static const dialogRestoreSnapshot = 'dialogRestoreSnapshot';
   static const dialogSyncSettings = 'dialogSyncSettings';
   static const dueLabel = 'dueLabel';
   static const dueTomorrow = 'dueTomorrow';
@@ -194,6 +197,10 @@ abstract final class PaperTodoStringKeys {
   static const relativeDueDates = 'relativeDueDates';
   static const relativeDueFuture = 'relativeDueFuture';
   static const relativeDueOverdue = 'relativeDueOverdue';
+  static const recoverySnapshotFallback = 'recoverySnapshotFallback';
+  static const recoverySnapshotLoadFailed = 'recoverySnapshotLoadFailed';
+  static const recoverySnapshotModified = 'recoverySnapshotModified';
+  static const recoverySnapshotsEmpty = 'recoverySnapshotsEmpty';
   static const reminderDisplaySeconds = 'reminderDisplaySeconds';
   static const reminderEveryHours = 'reminderEveryHours';
   static const reminderEveryMinutes = 'reminderEveryMinutes';
@@ -223,6 +230,7 @@ abstract final class PaperTodoStringKeys {
   static const syncMergedRemoteChanges = 'syncMergedRemoteChanges';
   static const syncOnStart = 'syncOnStart';
   static const syncPayloadUnreadable = 'syncPayloadUnreadable';
+  static const syncRestoreSnapshotFailed = 'syncRestoreSnapshotFailed';
   static const syncUploaded = 'syncUploaded';
   static const theme = 'theme';
   static const themeDark = 'themeDark';
@@ -363,6 +371,7 @@ const _enStrings = {
   PaperTodoStringKeys.actionChangeDueDate: 'Change due date',
   PaperTodoStringKeys.actionChangeReminder: 'Change reminder',
   PaperTodoStringKeys.actionClear: 'Clear',
+  PaperTodoStringKeys.actionClose: 'Close',
   PaperTodoStringKeys.actionClearCompleted: 'Clear completed',
   PaperTodoStringKeys.actionClearCompletedItems: 'Clear completed items',
   PaperTodoStringKeys.actionClearDueDate: 'Clear due date',
@@ -410,6 +419,7 @@ const _enStrings = {
   PaperTodoStringKeys.actionRedoTodoChange: 'Redo todo change',
   PaperTodoStringKeys.actionRemoveLastColumn: 'Remove last column',
   PaperTodoStringKeys.actionRetry: 'Retry',
+  PaperTodoStringKeys.actionRestore: 'Restore',
   PaperTodoStringKeys.actionRunPaper: 'Run {0}',
   PaperTodoStringKeys.actionRunLinkedScriptCapsule: 'Run linked script capsule',
   PaperTodoStringKeys.actionRunScriptCapsule: 'Run script capsule',
@@ -483,6 +493,7 @@ const _enStrings = {
   PaperTodoStringKeys.dengXian: 'DengXian',
   PaperTodoStringKeys.dialogDeletePaper: 'Delete paper?',
   PaperTodoStringKeys.dialogDueDate: 'Due date',
+  PaperTodoStringKeys.dialogRestoreSnapshot: 'Restore snapshot?',
   PaperTodoStringKeys.dialogSyncSettings: 'Sync settings',
   PaperTodoStringKeys.dueLabel: 'Due {0}',
   PaperTodoStringKeys.dueTomorrow: 'Tomorrow {0}',
@@ -553,6 +564,11 @@ const _enStrings = {
   PaperTodoStringKeys.relativeDueDates: 'Relative due dates',
   PaperTodoStringKeys.relativeDueFuture: 'in {0}',
   PaperTodoStringKeys.relativeDueOverdue: '{0} overdue',
+  PaperTodoStringKeys.recoverySnapshotFallback: 'Snapshot',
+  PaperTodoStringKeys.recoverySnapshotLoadFailed:
+      'Unable to load snapshots: {0}',
+  PaperTodoStringKeys.recoverySnapshotModified: 'Modified {0}',
+  PaperTodoStringKeys.recoverySnapshotsEmpty: 'No recovery snapshots found.',
   PaperTodoStringKeys.reminderDisplaySeconds: 'Reminder display seconds',
   PaperTodoStringKeys.reminderEveryHours: 'Every {0} hr',
   PaperTodoStringKeys.reminderEveryMinutes: 'Every {0} min',
@@ -586,6 +602,7 @@ const _enStrings = {
   PaperTodoStringKeys.syncOnStart: 'Sync on start',
   PaperTodoStringKeys.syncPayloadUnreadable:
       'Unable to decrypt remote sync data. Check the sync encryption passphrase.',
+  PaperTodoStringKeys.syncRestoreSnapshotFailed: 'Restore failed: {0}',
   PaperTodoStringKeys.syncUploaded: 'Local data uploaded.',
   PaperTodoStringKeys.theme: 'Theme',
   PaperTodoStringKeys.themeDark: 'Dark',
@@ -643,6 +660,7 @@ const _zhStrings = {
   PaperTodoStringKeys.actionChangeDueDate: '更改到期时间',
   PaperTodoStringKeys.actionChangeReminder: '更改提醒',
   PaperTodoStringKeys.actionClear: '清除',
+  PaperTodoStringKeys.actionClose: '关闭',
   PaperTodoStringKeys.actionClearCompleted: '清除已完成',
   PaperTodoStringKeys.actionClearCompletedItems: '清除已完成事项',
   PaperTodoStringKeys.actionClearDueDate: '清除到期时间',
@@ -689,6 +707,7 @@ const _zhStrings = {
   PaperTodoStringKeys.actionRedoTodoChange: '重做待办更改',
   PaperTodoStringKeys.actionRemoveLastColumn: '移除最后一列',
   PaperTodoStringKeys.actionRetry: '重试',
+  PaperTodoStringKeys.actionRestore: '恢复',
   PaperTodoStringKeys.actionRunPaper: '运行 {0}',
   PaperTodoStringKeys.actionRunLinkedScriptCapsule: '运行关联脚本胶囊',
   PaperTodoStringKeys.actionRunScriptCapsule: '运行脚本胶囊',
@@ -759,6 +778,7 @@ const _zhStrings = {
   PaperTodoStringKeys.dengXian: '等线',
   PaperTodoStringKeys.dialogDeletePaper: '删除纸片？',
   PaperTodoStringKeys.dialogDueDate: '到期时间',
+  PaperTodoStringKeys.dialogRestoreSnapshot: '恢复快照？',
   PaperTodoStringKeys.dialogSyncSettings: '同步设置',
   PaperTodoStringKeys.dueLabel: '到期 {0}',
   PaperTodoStringKeys.dueTomorrow: '明天 {0}',
@@ -824,6 +844,10 @@ const _zhStrings = {
   PaperTodoStringKeys.relativeDueDates: '相对到期时间',
   PaperTodoStringKeys.relativeDueFuture: '{0} 后',
   PaperTodoStringKeys.relativeDueOverdue: '已逾期 {0}',
+  PaperTodoStringKeys.recoverySnapshotFallback: '快照',
+  PaperTodoStringKeys.recoverySnapshotLoadFailed: '无法加载快照：{0}',
+  PaperTodoStringKeys.recoverySnapshotModified: '修改于 {0}',
+  PaperTodoStringKeys.recoverySnapshotsEmpty: '未找到恢复快照。',
   PaperTodoStringKeys.reminderDisplaySeconds: '提醒显示秒数',
   PaperTodoStringKeys.reminderEveryHours: '每 {0} 小时',
   PaperTodoStringKeys.reminderEveryMinutes: '每 {0} 分钟',
@@ -852,6 +876,7 @@ const _zhStrings = {
   PaperTodoStringKeys.syncMergedRemoteChanges: '已合并 {0} 个远端{1}。',
   PaperTodoStringKeys.syncOnStart: '启动时同步',
   PaperTodoStringKeys.syncPayloadUnreadable: '无法解密远端同步数据，请检查同步加密密钥短语。',
+  PaperTodoStringKeys.syncRestoreSnapshotFailed: '恢复失败：{0}',
   PaperTodoStringKeys.syncUploaded: '已上传本地数据。',
   PaperTodoStringKeys.theme: '主题',
   PaperTodoStringKeys.themeDark: '深色',
@@ -905,6 +930,7 @@ const _jaStrings = {
   PaperTodoStringKeys.actionChangeDueDate: '期限を変更',
   PaperTodoStringKeys.actionChangeReminder: 'リマインダーを変更',
   PaperTodoStringKeys.actionClear: 'クリア',
+  PaperTodoStringKeys.actionClose: '閉じる',
   PaperTodoStringKeys.actionClearCompleted: '完了をクリア',
   PaperTodoStringKeys.actionClearCompletedItems: '完了項目をクリア',
   PaperTodoStringKeys.actionClearDueDate: '期限をクリア',
@@ -951,6 +977,7 @@ const _jaStrings = {
   PaperTodoStringKeys.actionRedoTodoChange: 'ToDo 変更をやり直す',
   PaperTodoStringKeys.actionRemoveLastColumn: '最後の列を削除',
   PaperTodoStringKeys.actionRetry: '再試行',
+  PaperTodoStringKeys.actionRestore: '復元',
   PaperTodoStringKeys.actionRunPaper: '{0} を実行',
   PaperTodoStringKeys.actionRunLinkedScriptCapsule: 'リンク済みスクリプトカプセルを実行',
   PaperTodoStringKeys.actionRunScriptCapsule: 'スクリプトカプセルを実行',
@@ -1022,6 +1049,7 @@ const _jaStrings = {
   PaperTodoStringKeys.dengXian: 'DengXian',
   PaperTodoStringKeys.dialogDeletePaper: '紙片を削除しますか？',
   PaperTodoStringKeys.dialogDueDate: '期限',
+  PaperTodoStringKeys.dialogRestoreSnapshot: 'スナップショットを復元しますか？',
   PaperTodoStringKeys.dialogSyncSettings: '同期設定',
   PaperTodoStringKeys.dueLabel: '期限 {0}',
   PaperTodoStringKeys.dueTomorrow: '明日 {0}',
@@ -1087,6 +1115,10 @@ const _jaStrings = {
   PaperTodoStringKeys.relativeDueDates: '相対期限',
   PaperTodoStringKeys.relativeDueFuture: '{0} 後',
   PaperTodoStringKeys.relativeDueOverdue: '{0} 超過',
+  PaperTodoStringKeys.recoverySnapshotFallback: 'スナップショット',
+  PaperTodoStringKeys.recoverySnapshotLoadFailed: 'スナップショットを読み込めません: {0}',
+  PaperTodoStringKeys.recoverySnapshotModified: '変更日時 {0}',
+  PaperTodoStringKeys.recoverySnapshotsEmpty: '復元スナップショットが見つかりません。',
   PaperTodoStringKeys.reminderDisplaySeconds: 'リマインダー表示秒数',
   PaperTodoStringKeys.reminderEveryHours: '{0} 時間ごと',
   PaperTodoStringKeys.reminderEveryMinutes: '{0} 分ごと',
@@ -1117,6 +1149,7 @@ const _jaStrings = {
   PaperTodoStringKeys.syncOnStart: '起動時に同期',
   PaperTodoStringKeys.syncPayloadUnreadable:
       'リモート同期データを復号できません。同期暗号化パスフレーズを確認してください。',
+  PaperTodoStringKeys.syncRestoreSnapshotFailed: '復元に失敗しました: {0}',
   PaperTodoStringKeys.syncUploaded: 'ローカルデータをアップロードしました。',
   PaperTodoStringKeys.theme: 'テーマ',
   PaperTodoStringKeys.themeDark: 'ダーク',
@@ -1171,6 +1204,7 @@ const _koStrings = {
   PaperTodoStringKeys.actionChangeDueDate: '마감 시간 변경',
   PaperTodoStringKeys.actionChangeReminder: '알림 변경',
   PaperTodoStringKeys.actionClear: '지우기',
+  PaperTodoStringKeys.actionClose: '닫기',
   PaperTodoStringKeys.actionClearCompleted: '완료 항목 지우기',
   PaperTodoStringKeys.actionClearCompletedItems: '완료된 항목 지우기',
   PaperTodoStringKeys.actionClearDueDate: '마감 시간 지우기',
@@ -1217,6 +1251,7 @@ const _koStrings = {
   PaperTodoStringKeys.actionRedoTodoChange: '할 일 변경 다시 실행',
   PaperTodoStringKeys.actionRemoveLastColumn: '마지막 열 제거',
   PaperTodoStringKeys.actionRetry: '다시 시도',
+  PaperTodoStringKeys.actionRestore: '복구',
   PaperTodoStringKeys.actionRunPaper: '{0} 실행',
   PaperTodoStringKeys.actionRunLinkedScriptCapsule: '연결된 스크립트 캡슐 실행',
   PaperTodoStringKeys.actionRunScriptCapsule: '스크립트 캡슐 실행',
@@ -1288,6 +1323,7 @@ const _koStrings = {
   PaperTodoStringKeys.dengXian: 'DengXian',
   PaperTodoStringKeys.dialogDeletePaper: '종이를 삭제할까요?',
   PaperTodoStringKeys.dialogDueDate: '마감 시간',
+  PaperTodoStringKeys.dialogRestoreSnapshot: '스냅샷을 복구할까요?',
   PaperTodoStringKeys.dialogSyncSettings: '동기화 설정',
   PaperTodoStringKeys.dueLabel: '마감 {0}',
   PaperTodoStringKeys.dueTomorrow: '내일 {0}',
@@ -1354,6 +1390,10 @@ const _koStrings = {
   PaperTodoStringKeys.relativeDueDates: '상대 마감 시간',
   PaperTodoStringKeys.relativeDueFuture: '{0} 후',
   PaperTodoStringKeys.relativeDueOverdue: '{0} 지남',
+  PaperTodoStringKeys.recoverySnapshotFallback: '스냅샷',
+  PaperTodoStringKeys.recoverySnapshotLoadFailed: '스냅샷을 불러올 수 없습니다: {0}',
+  PaperTodoStringKeys.recoverySnapshotModified: '수정됨 {0}',
+  PaperTodoStringKeys.recoverySnapshotsEmpty: '복구 스냅샷을 찾을 수 없습니다.',
   PaperTodoStringKeys.reminderDisplaySeconds: '알림 표시 초',
   PaperTodoStringKeys.reminderEveryHours: '{0}시간마다',
   PaperTodoStringKeys.reminderEveryMinutes: '{0}분마다',
@@ -1384,6 +1424,7 @@ const _koStrings = {
   PaperTodoStringKeys.syncOnStart: '시작 시 동기화',
   PaperTodoStringKeys.syncPayloadUnreadable:
       '원격 동기화 데이터를 복호화할 수 없습니다. 동기화 암호화 암호 구문을 확인하세요.',
+  PaperTodoStringKeys.syncRestoreSnapshotFailed: '복구 실패: {0}',
   PaperTodoStringKeys.syncUploaded: '로컬 데이터를 업로드했습니다.',
   PaperTodoStringKeys.theme: '테마',
   PaperTodoStringKeys.themeDark: '어둡게',

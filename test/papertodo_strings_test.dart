@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/src/app.dart';
@@ -7,8 +9,11 @@ import 'package:repapertodo/src/core/model/note_canvas_element.dart';
 import 'package:repapertodo/src/core/model/paper_constants.dart';
 import 'package:repapertodo/src/core/model/paper_data.dart';
 import 'package:repapertodo/src/core/model/paper_item.dart';
+import 'package:repapertodo/src/core/model/sync_settings.dart';
 import 'package:repapertodo/src/core/storage/state_store.dart';
 import 'package:repapertodo/src/platform/noop_platform_services.dart';
+import 'package:repapertodo/src/sync/app_sync_service.dart';
+import 'package:repapertodo/src/sync/webdav/webdav_state_sync_service.dart';
 import 'package:repapertodo/src/ui/papertodo_strings.dart';
 
 void main() {
@@ -312,4 +317,147 @@ void main() {
     expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
     expect(find.text('Canvas block geometry'), findsNothing);
   });
+
+  testWidgets('uses Chinese system locale for recovery snapshots',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    tester.binding.platformDispatcher.localeTestValue =
+        const Locale('zh', 'CN');
+    tester.binding.platformDispatcher.localesTestValue = [
+      const Locale('zh', 'CN'),
+    ];
+    addTearDown(() {
+      tester.binding.platformDispatcher.clearLocaleTestValue();
+      tester.binding.platformDispatcher.clearLocalesTestValue();
+      tester.binding.setSurfaceSize(null);
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        theme: 'light',
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings(
+            endpoint: 'https://dav.example.test/',
+            username: 'user',
+            password: 'pass',
+            encryptionPassphrase: 'shared sync secret',
+            rootPath: 'repapertodo',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'localized-recovery-paper',
+            type: PaperTypes.todo,
+            title: '本地待办',
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+    final syncService = _LocalizedRecoverySnapshotSyncService(
+      firstRestoreError: TimeoutException('Snapshot restore timed out.'),
+      snapshots: [
+        WebDavSnapshotRecord(
+          path: 'repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json',
+          deviceId: 'phone',
+          updatedAtUtc: DateTime.utc(2026, 7, 1, 9),
+          contentLength: 2048,
+          lastModifiedUtc: DateTime.utc(2026, 7, 1, 9, 1),
+        ),
+      ],
+      restoredState: AppState(
+        papers: [
+          PaperData(
+            id: 'localized-restored-paper',
+            type: PaperTypes.note,
+            title: '远端快照',
+            content: '恢复后的内容',
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: StateStore(filePath: 'build/test-localized-recovery.json'),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('恢复快照'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('恢复快照'), findsOneWidget);
+    expect(find.textContaining('phone'), findsWidgets);
+    expect(find.textContaining('2.0 KiB'), findsOneWidget);
+    expect(find.textContaining('修改于'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '恢复'), findsOneWidget);
+    expect(find.text('Recovery snapshots'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey(
+      'restore-snapshot-repapertodo/snapshots/snapshot-20260701T090000000Z-phone.json',
+    )));
+    await tester.pumpAndSettle();
+
+    expect(find.text('恢复快照？'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '取消'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '恢复'), findsOneWidget);
+    expect(find.text('Restore snapshot?'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('confirm-restore-snapshot')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('恢复失败：Snapshot restore timed out.'),
+        findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+    expect(syncService.restoreCalls, 1);
+
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.title, '远端快照');
+    expect(syncService.restoreCalls, 2);
+  });
+}
+
+class _LocalizedRecoverySnapshotSyncService extends AppSyncService {
+  _LocalizedRecoverySnapshotSyncService({
+    required this.snapshots,
+    required this.restoredState,
+    this.firstRestoreError,
+  });
+
+  final List<WebDavSnapshotRecord> snapshots;
+  final AppState restoredState;
+  final Object? firstRestoreError;
+  var restoreCalls = 0;
+
+  @override
+  Future<List<WebDavSnapshotRecord>> listRecoverySnapshots({
+    required AppState localState,
+    required StateStore store,
+  }) async {
+    return snapshots;
+  }
+
+  @override
+  Future<AppSyncResult> restoreRecoverySnapshot({
+    required AppState localState,
+    required StateStore store,
+    required String snapshotPath,
+  }) async {
+    restoreCalls += 1;
+    final error = firstRestoreError;
+    if (restoreCalls == 1 && error != null) {
+      throw error;
+    }
+    return AppSyncResult(
+      status: AppSyncStatus.downloaded,
+      state: restoredState,
+      snapshotPath: snapshotPath,
+    );
+  }
 }

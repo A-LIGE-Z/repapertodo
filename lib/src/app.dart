@@ -1412,19 +1412,22 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return await showDialog<bool>(
           context: context,
           builder: (context) {
+            final strings = PaperTodoStringsScope.of(context);
             return AlertDialog(
-              title: const Text('Restore snapshot?'),
+              title: Text(
+                strings.get(PaperTodoStringKeys.dialogRestoreSnapshot),
+              ),
               content: Text(_snapshotSummary(snapshot)),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
                 ),
                 FilledButton.icon(
                   key: const ValueKey('confirm-restore-snapshot'),
                   onPressed: () => Navigator.of(context).pop(true),
                   icon: const Icon(Icons.restore_outlined),
-                  label: const Text('Restore'),
+                  label: Text(strings.get(PaperTodoStringKeys.actionRestore)),
                 ),
               ],
             );
@@ -1819,9 +1822,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     WebDavSnapshotRecord snapshot,
     Object error,
   ) {
+    final strings = this.strings;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Restore failed: ${_readableFailureMessage(error)}'),
+        content: Text(
+          strings.format(
+            PaperTodoStringKeys.syncRestoreSnapshotFailed,
+            [_readableFailureMessage(error)],
+          ),
+        ),
         action: SnackBarAction(
           label: strings.get(PaperTodoStringKeys.actionRetry),
           onPressed: () {
@@ -2428,8 +2437,9 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = PaperTodoStringsScope.of(context);
     return AlertDialog(
-      title: const Text('Recovery snapshots'),
+      title: Text(strings.get(PaperTodoStringKeys.actionRecoverySnapshots)),
       content: SizedBox(
         width: 520,
         child: FutureBuilder<List<WebDavSnapshotRecord>>(
@@ -2453,8 +2463,10 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
                     Expanded(
                       child: SingleChildScrollView(
                         child: Text(
-                          'Unable to load snapshots: '
-                          '${_readableFailureMessage(snapshot.error!)}',
+                          strings.format(
+                            PaperTodoStringKeys.recoverySnapshotLoadFailed,
+                            [_readableFailureMessage(snapshot.error!)],
+                          ),
                         ),
                       ),
                     ),
@@ -2465,7 +2477,8 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
                         key: const ValueKey('retry-recovery-snapshots'),
                         onPressed: _retry,
                         icon: const Icon(Icons.refresh_outlined),
-                        label: const Text('Retry'),
+                        label:
+                            Text(strings.get(PaperTodoStringKeys.actionRetry)),
                       ),
                     ),
                   ],
@@ -2474,9 +2487,13 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
             }
             final snapshots = snapshot.data ?? const <WebDavSnapshotRecord>[];
             if (snapshots.isEmpty) {
-              return const SizedBox(
+              return SizedBox(
                 height: 96,
-                child: Center(child: Text('No recovery snapshots found.')),
+                child: Center(
+                  child: Text(
+                    strings.get(PaperTodoStringKeys.recoverySnapshotsEmpty),
+                  ),
+                ),
               );
             }
             return ConstrainedBox(
@@ -2490,6 +2507,7 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
                   return _RecoverySnapshotListItem(
                     record: record,
                     onRestore: () => Navigator.of(context).pop(record),
+                    strings: strings,
                   );
                 },
               ),
@@ -2500,7 +2518,7 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(strings.get(PaperTodoStringKeys.actionClose)),
         ),
       ],
     );
@@ -2511,10 +2529,12 @@ class _RecoverySnapshotListItem extends StatelessWidget {
   const _RecoverySnapshotListItem({
     required this.record,
     required this.onRestore,
+    required this.strings,
   });
 
   final WebDavSnapshotRecord record;
   final VoidCallback onRestore;
+  final PaperTodoStrings strings;
 
   @override
   Widget build(BuildContext context) {
@@ -2548,7 +2568,7 @@ class _RecoverySnapshotListItem extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _snapshotSizeLabel(record),
+                        _snapshotSizeLabel(strings, record),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -2561,7 +2581,7 @@ class _RecoverySnapshotListItem extends StatelessWidget {
               key: ValueKey('restore-snapshot-${record.path}'),
               onPressed: onRestore,
               icon: const Icon(Icons.restore_outlined),
-              label: const Text('Restore'),
+              label: Text(strings.get(PaperTodoStringKeys.actionRestore)),
             ),
           ],
         ),
@@ -2572,14 +2592,14 @@ class _RecoverySnapshotListItem extends StatelessWidget {
       leading: const Icon(Icons.history_outlined),
       title: Text(_snapshotSummary(record)),
       subtitle: Text(
-        '${record.path}\n${_snapshotSizeLabel(record)}',
+        '${record.path}\n${_snapshotSizeLabel(strings, record)}',
       ),
       isThreeLine: true,
       trailing: FilledButton.icon(
         key: ValueKey('restore-snapshot-${record.path}'),
         onPressed: onRestore,
         icon: const Icon(Icons.restore_outlined),
-        label: const Text('Restore'),
+        label: Text(strings.get(PaperTodoStringKeys.actionRestore)),
       ),
     );
   }
@@ -2589,7 +2609,10 @@ String _snapshotSummary(WebDavSnapshotRecord snapshot) {
   return '${_formatSnapshotTime(snapshot.updatedAtUtc)} - ${snapshot.deviceId}';
 }
 
-String _snapshotSizeLabel(WebDavSnapshotRecord snapshot) {
+String _snapshotSizeLabel(
+  PaperTodoStrings strings,
+  WebDavSnapshotRecord snapshot,
+) {
   final parts = <String>[];
   final contentLength = snapshot.contentLength;
   if (contentLength != null) {
@@ -2597,9 +2620,16 @@ String _snapshotSizeLabel(WebDavSnapshotRecord snapshot) {
   }
   final lastModified = snapshot.lastModifiedUtc;
   if (lastModified != null) {
-    parts.add('Modified ${_formatSnapshotTime(lastModified)}');
+    parts.add(
+      strings.format(
+        PaperTodoStringKeys.recoverySnapshotModified,
+        [_formatSnapshotTime(lastModified)],
+      ),
+    );
   }
-  return parts.isEmpty ? 'Snapshot' : parts.join(' - ');
+  return parts.isEmpty
+      ? strings.get(PaperTodoStringKeys.recoverySnapshotFallback)
+      : parts.join(' - ');
 }
 
 String _formatSnapshotTime(DateTime value) {
