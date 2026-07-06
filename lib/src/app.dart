@@ -3532,44 +3532,49 @@ class _NoteEditorState extends State<_NoteEditor> {
         runSpacing: 4,
         children: [
           _formatButton(
-            tooltip: 'Bold (Ctrl+B)',
+            tooltip:
+                strings.get(PaperTodoStringKeys.markdownActionBoldShortcut),
             icon: Icons.format_bold,
             onPressed: _formatBold,
           ),
           _formatButton(
-            tooltip: 'Italic (Ctrl+I)',
+            tooltip:
+                strings.get(PaperTodoStringKeys.markdownActionItalicShortcut),
             icon: Icons.format_italic,
             onPressed: _formatItalic,
           ),
           if (!compact) ...[
             _formatButton(
-              tooltip: 'Strikethrough',
+              tooltip:
+                  strings.get(PaperTodoStringKeys.markdownActionStrikethrough),
               icon: Icons.strikethrough_s,
               onPressed: _formatStrikethrough,
             ),
             _formatButton(
-              tooltip: 'Heading',
+              tooltip: strings.get(PaperTodoStringKeys.markdownActionHeading),
               icon: Icons.title,
               onPressed: _formatHeading,
             ),
             _formatButton(
-              tooltip: 'Quote',
+              tooltip: strings.get(PaperTodoStringKeys.markdownActionQuote),
               icon: Icons.format_quote,
               onPressed: _formatQuote,
             ),
             _formatButton(
-              tooltip: 'List',
+              tooltip: strings.get(PaperTodoStringKeys.markdownActionList),
               icon: Icons.format_list_bulleted,
               onPressed: _formatList,
             ),
             _formatButton(
-              tooltip: 'Code block',
+              tooltip: strings.get(PaperTodoStringKeys.markdownActionCodeBlock),
               icon: Icons.code,
               onPressed: _formatCodeBlock,
             ),
           ],
           _formatButton(
-            tooltip: 'Insert link (Ctrl+K)',
+            tooltip: strings.get(
+              PaperTodoStringKeys.markdownActionInsertLinkShortcut,
+            ),
             icon: Icons.link,
             onPressed: _insertMarkdownLink,
           ),
@@ -3594,7 +3599,7 @@ class _NoteEditorState extends State<_NoteEditor> {
   Widget _compactMarkdownActions() {
     return PopupMenuButton<String>(
       key: const ValueKey('compact-markdown-toolbar-actions'),
-      tooltip: 'More markdown actions',
+      tooltip: strings.get(PaperTodoStringKeys.markdownActionMore),
       icon: const Icon(Icons.more_vert),
       onOpened: _beginToolbarInteraction,
       onCanceled: _endToolbarInteraction,
@@ -3606,27 +3611,27 @@ class _NoteEditorState extends State<_NoteEditor> {
         _markdownMenuItem(
           value: _markdownActionStrikethrough,
           icon: Icons.strikethrough_s,
-          label: 'Strikethrough',
+          label: strings.get(PaperTodoStringKeys.markdownActionStrikethrough),
         ),
         _markdownMenuItem(
           value: _markdownActionHeading,
           icon: Icons.title,
-          label: 'Heading',
+          label: strings.get(PaperTodoStringKeys.markdownActionHeading),
         ),
         _markdownMenuItem(
           value: _markdownActionQuote,
           icon: Icons.format_quote,
-          label: 'Quote',
+          label: strings.get(PaperTodoStringKeys.markdownActionQuote),
         ),
         _markdownMenuItem(
           value: _markdownActionList,
           icon: Icons.format_list_bulleted,
-          label: 'List',
+          label: strings.get(PaperTodoStringKeys.markdownActionList),
         ),
         _markdownMenuItem(
           value: _markdownActionCodeBlock,
           icon: Icons.code,
-          label: 'Code block',
+          label: strings.get(PaperTodoStringKeys.markdownActionCodeBlock),
         ),
       ],
     );
@@ -4058,14 +4063,14 @@ class _NoteEditorState extends State<_NoteEditor> {
               ? null
               : () => _addCanvasElement(NoteCanvasElementTypes.code),
           icon: const Icon(Icons.add_box_outlined),
-          label: const Text('Add canvas block'),
+          label: Text(strings.get(PaperTodoStringKeys.actionAddCanvasBlock)),
         ),
         TextButton.icon(
           onPressed: widget.paper.isPinnedToDesktop
               ? null
               : () => _addCanvasElement(NoteCanvasElementTypes.text),
           icon: const Icon(Icons.note_add_outlined),
-          label: const Text('Add text block'),
+          label: Text(strings.get(PaperTodoStringKeys.actionAddTextBlock)),
         ),
       ],
     );
@@ -4293,7 +4298,7 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   String _defaultNoteCanvasElementText(String type, int index) {
     if (type == NoteCanvasElementTypes.text) {
-      return 'Canvas text $index';
+      return strings.format(PaperTodoStringKeys.canvasDefaultText, [index]);
     }
     return 'Console.WriteLine("PaperTodo");';
   }
@@ -4329,6 +4334,7 @@ class _NoteCanvasPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = PaperTodoStringsScope.of(context);
     final sortedElements = [...elements]..sort((a, b) {
         final byLayer = a.zIndex.compareTo(b.zIndex);
         return byLayer != 0 ? byLayer : a.id.compareTo(b.id);
@@ -4377,6 +4383,7 @@ class _NoteCanvasPreview extends StatelessWidget {
                       layerCount: sortedElements.length,
                       isSelected: sortedElements[index].id == selectedElementId,
                       geometryGesturesEnabled: geometryGesturesEnabled,
+                      strings: strings,
                       scale: scale,
                       canvasWidth: canvasWidth,
                       canvasHeight: canvasHeight,
@@ -4418,6 +4425,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
     required this.layerCount,
     required this.isSelected,
     required this.geometryGesturesEnabled,
+    required this.strings,
     required this.scale,
     required this.canvasWidth,
     required this.canvasHeight,
@@ -4437,6 +4445,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
   final int layerCount;
   final bool isSelected;
   final bool geometryGesturesEnabled;
+  final PaperTodoStrings strings;
   final double scale;
   final double canvasWidth;
   final double canvasHeight;
@@ -4506,8 +4515,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
         .bodySmall
         ?.apply(fontSizeFactor: widget.textZoom)
         .copyWith(fontFamily: isCode ? 'monospace' : null);
-    final typeLabel = _noteCanvasElementTypeLabel(element.type);
+    final typeLabel = _noteCanvasElementTypeLabel(widget.strings, element.type);
     final layerLabel = _noteCanvasLayerLabel(
+      widget.strings,
       widget.layerRank,
       widget.layerCount,
     );
@@ -4547,7 +4557,8 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                   children: [
                     Expanded(
                       child: Tooltip(
-                        message: 'Drag canvas block',
+                        message: widget.strings
+                            .get(PaperTodoStringKeys.canvasDragBlock),
                         child: MouseRegion(
                           cursor: widget.geometryGesturesEnabled
                               ? SystemMouseCursors.move
@@ -4607,7 +4618,8 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                       SizedBox.square(
                         dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
                         child: IconButton(
-                          tooltip: 'Edit canvas geometry',
+                          tooltip: widget.strings
+                              .get(PaperTodoStringKeys.canvasEditGeometry),
                           style: IconButton.styleFrom(
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             minimumSize: Size.zero,
@@ -4625,7 +4637,8 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                       SizedBox.square(
                         dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
                         child: IconButton(
-                          tooltip: 'Duplicate canvas block',
+                          tooltip: widget.strings
+                              .get(PaperTodoStringKeys.canvasDuplicateBlock),
                           style: IconButton.styleFrom(
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             minimumSize: Size.zero,
@@ -4646,7 +4659,8 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                           key: ValueKey(
                             'note-canvas-layer-actions-${element.id}',
                           ),
-                          tooltip: 'Canvas layer actions',
+                          tooltip: widget.strings
+                              .get(PaperTodoStringKeys.canvasLayerActions),
                           child: Center(
                             child: Icon(
                               Icons.layers_outlined,
@@ -4658,22 +4672,38 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                             widget.onSelect(element);
                             widget.onLayerAction(element, action);
                           },
-                          itemBuilder: (context) => const [
+                          itemBuilder: (context) => [
                             PopupMenuItem(
                               value: _CanvasLayerAction.bringToFront,
-                              child: Text('Bring to front'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasBringToFront,
+                                ),
+                              ),
                             ),
                             PopupMenuItem(
                               value: _CanvasLayerAction.bringForward,
-                              child: Text('Bring forward'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasBringForward,
+                                ),
+                              ),
                             ),
                             PopupMenuItem(
                               value: _CanvasLayerAction.sendBackward,
-                              child: Text('Send backward'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasSendBackward,
+                                ),
+                              ),
                             ),
                             PopupMenuItem(
                               value: _CanvasLayerAction.sendToBack,
-                              child: Text('Send to back'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasSendToBack,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -4681,7 +4711,8 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                       SizedBox.square(
                         dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
                         child: IconButton(
-                          tooltip: 'Delete canvas block',
+                          tooltip: widget.strings
+                              .get(PaperTodoStringKeys.canvasDeleteBlock),
                           style: IconButton.styleFrom(
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             minimumSize: Size.zero,
@@ -4703,7 +4734,8 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                           key: ValueKey(
                             'note-canvas-compact-actions-${element.id}',
                           ),
-                          tooltip: 'Canvas block actions',
+                          tooltip: widget.strings
+                              .get(PaperTodoStringKeys.canvasBlockActions),
                           child: Center(
                             child: Icon(
                               Icons.more_vert,
@@ -4712,36 +4744,64 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                             ),
                           ),
                           onSelected: _handleCompactCanvasAction,
-                          itemBuilder: (context) => const [
+                          itemBuilder: (context) => [
                             PopupMenuItem(
                               value: _compactCanvasActionEdit,
-                              child: Text('Edit geometry'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasEditGeometry,
+                                ),
+                              ),
                             ),
                             PopupMenuItem(
                               value: _compactCanvasActionDuplicate,
-                              child: Text('Duplicate'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasDuplicateBlock,
+                                ),
+                              ),
                             ),
-                            PopupMenuDivider(),
+                            const PopupMenuDivider(),
                             PopupMenuItem(
                               value: _compactCanvasActionBringToFront,
-                              child: Text('Bring to front'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasBringToFront,
+                                ),
+                              ),
                             ),
                             PopupMenuItem(
                               value: _compactCanvasActionBringForward,
-                              child: Text('Bring forward'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasBringForward,
+                                ),
+                              ),
                             ),
                             PopupMenuItem(
                               value: _compactCanvasActionSendBackward,
-                              child: Text('Send backward'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasSendBackward,
+                                ),
+                              ),
                             ),
                             PopupMenuItem(
                               value: _compactCanvasActionSendToBack,
-                              child: Text('Send to back'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.canvasSendToBack,
+                                ),
+                              ),
                             ),
-                            PopupMenuDivider(),
+                            const PopupMenuDivider(),
                             PopupMenuItem(
                               value: _compactCanvasActionDelete,
-                              child: Text('Delete'),
+                              child: Text(
+                                widget.strings.get(
+                                  PaperTodoStringKeys.actionDelete,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -4802,7 +4862,8 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
             right: 3,
             bottom: 3,
             child: Tooltip(
-              message: 'Resize canvas block',
+              message:
+                  widget.strings.get(PaperTodoStringKeys.canvasResizeBlock),
               child: MouseRegion(
                 cursor: widget.geometryGesturesEnabled
                     ? SystemMouseCursors.resizeDownRight
@@ -5009,19 +5070,27 @@ class _NoteCanvasElementBadge extends StatelessWidget {
   }
 }
 
-String _noteCanvasElementTypeLabel(String type) {
+String _noteCanvasElementTypeLabel(PaperTodoStrings strings, String type) {
   return switch (type) {
-    NoteCanvasElementTypes.text => 'TEXT',
-    NoteCanvasElementTypes.code => 'CODE',
-    _ => type.trim().isEmpty ? 'BLOCK' : type.trim().toUpperCase(),
+    NoteCanvasElementTypes.text =>
+      strings.get(PaperTodoStringKeys.canvasBlockTypeText),
+    NoteCanvasElementTypes.code =>
+      strings.get(PaperTodoStringKeys.canvasBlockTypeCode),
+    _ => type.trim().isEmpty
+        ? strings.get(PaperTodoStringKeys.canvasBlockTypeBlock)
+        : type.trim().toUpperCase(),
   };
 }
 
-String _noteCanvasLayerLabel(int layerRank, int layerCount) {
+String _noteCanvasLayerLabel(
+  PaperTodoStrings strings,
+  int layerRank,
+  int layerCount,
+) {
   if (layerCount > 1 && layerRank == layerCount) {
-    return 'Top $layerRank';
+    return strings.format(PaperTodoStringKeys.canvasTopLayer, [layerRank]);
   }
-  return 'Layer $layerRank';
+  return strings.format(PaperTodoStringKeys.canvasLayer, [layerRank]);
 }
 
 enum _CanvasLayerAction {
@@ -5095,8 +5164,9 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = PaperTodoStringsScope.of(context);
     return AlertDialog(
-      title: const Text('Canvas block geometry'),
+      title: Text(strings.get(PaperTodoStringKeys.canvasBlockGeometry)),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -5115,16 +5185,20 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
             Align(
               alignment: Alignment.centerLeft,
               child: SegmentedButton<String>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: NoteCanvasElementTypes.code,
-                    icon: Icon(Icons.code_outlined),
-                    label: Text('Code'),
+                    icon: const Icon(Icons.code_outlined),
+                    label: Text(
+                      strings.get(PaperTodoStringKeys.canvasBlockTypeCodeLabel),
+                    ),
                   ),
                   ButtonSegment(
                     value: NoteCanvasElementTypes.text,
-                    icon: Icon(Icons.notes_outlined),
-                    label: Text('Text'),
+                    icon: const Icon(Icons.notes_outlined),
+                    label: Text(
+                      strings.get(PaperTodoStringKeys.canvasBlockTypeTextLabel),
+                    ),
                   ),
                 ],
                 selected: {_type},
@@ -5143,25 +5217,38 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(child: _numberField(_widthController, 'Width')),
+                Expanded(
+                  child: _numberField(
+                    _widthController,
+                    strings.get(PaperTodoStringKeys.canvasFieldWidth),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _numberField(_heightController, 'Height')),
+                Expanded(
+                  child: _numberField(
+                    _heightController,
+                    strings.get(PaperTodoStringKeys.canvasFieldHeight),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            _numberField(_layerController, 'Layer'),
+            _numberField(
+              _layerController,
+              strings.get(PaperTodoStringKeys.canvasFieldLayer),
+            ),
           ],
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
         ),
         FilledButton.icon(
           onPressed: _save,
           icon: const Icon(Icons.check),
-          label: const Text('Save'),
+          label: Text(strings.get(PaperTodoStringKeys.actionSave)),
         ),
       ],
     );
@@ -5199,7 +5286,12 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
         !height.isFinite ||
         width <= 0 ||
         height <= 0) {
-      setState(() => _errorText = 'Enter valid numbers for every field.');
+      final strings = PaperTodoStringsScope.of(context);
+      setState(
+        () => _errorText = strings.get(
+          PaperTodoStringKeys.canvasEnterValidNumbers,
+        ),
+      );
       return;
     }
     Navigator.of(context).pop(

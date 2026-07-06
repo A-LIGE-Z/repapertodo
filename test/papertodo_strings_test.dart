@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/src/app.dart';
 import 'package:repapertodo/src/app_controller.dart';
 import 'package:repapertodo/src/core/model/app_state.dart';
+import 'package:repapertodo/src/core/model/note_canvas_element.dart';
 import 'package:repapertodo/src/core/model/paper_constants.dart';
 import 'package:repapertodo/src/core/model/paper_data.dart';
 import 'package:repapertodo/src/core/model/paper_item.dart';
@@ -221,5 +222,94 @@ void main() {
         findsOneWidget);
     expect(find.text('写点笔记...'), findsOneWidget);
     expect(find.text('Write a note...'), findsNothing);
+  });
+
+  testWidgets('uses Chinese system locale for markdown and canvas tools',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    tester.binding.platformDispatcher.localeTestValue =
+        const Locale('zh', 'CN');
+    tester.binding.platformDispatcher.localesTestValue = [
+      const Locale('zh', 'CN'),
+    ];
+    addTearDown(() {
+      tester.binding.platformDispatcher.clearLocaleTestValue();
+      tester.binding.platformDispatcher.clearLocalesTestValue();
+      tester.binding.setSurfaceSize(null);
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.off,
+        theme: 'light',
+        papers: [
+          PaperData(
+            id: 'localized-canvas-note-paper',
+            type: PaperTypes.note,
+            title: '中文画布',
+            content: '画布正文',
+            noteCanvasElements: [
+              NoteCanvasElement(
+                id: 'localized-canvas-code',
+                type: NoteCanvasElementTypes.code,
+                text: 'Console.WriteLine("PaperTodo");',
+                x: 24,
+                y: 24,
+                width: 220,
+                height: 120,
+                zIndex: 1,
+              ),
+              NoteCanvasElement(
+                id: 'localized-canvas-text',
+                type: NoteCanvasElementTypes.text,
+                text: '画布想法',
+                x: 280,
+                y: 24,
+                width: 220,
+                height: 120,
+                zIndex: 2,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: StateStore(filePath: 'build/test-localized-canvas.json'),
+      ),
+    );
+
+    expect(find.byTooltip('加粗 (Ctrl+B)'), findsOneWidget);
+    expect(find.byTooltip('斜体 (Ctrl+I)'), findsOneWidget);
+    expect(find.byTooltip('插入链接 (Ctrl+K)'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '添加画布块'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '添加文本块'), findsOneWidget);
+    expect(find.text('代码'), findsOneWidget);
+    expect(find.text('文本'), findsOneWidget);
+    expect(find.text('层级 1'), findsOneWidget);
+    expect(find.text('顶层 2'), findsOneWidget);
+    expect(find.byTooltip('拖动画布块'), findsWidgets);
+    expect(find.byTooltip('编辑画布几何参数'), findsWidgets);
+    expect(find.byTooltip('复制画布块'), findsWidgets);
+    expect(find.byTooltip('画布层级操作'), findsWidgets);
+    expect(find.byTooltip('删除画布块'), findsWidgets);
+    expect(find.byTooltip('调整画布块大小'), findsWidgets);
+    expect(find.byTooltip('Bold (Ctrl+B)'), findsNothing);
+    expect(find.widgetWithText(TextButton, 'Add canvas block'), findsNothing);
+
+    await tester.tap(find.byTooltip('编辑画布几何参数').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('画布块几何参数'), findsOneWidget);
+    expect(find.text('宽度'), findsOneWidget);
+    expect(find.text('高度'), findsOneWidget);
+    expect(find.text('层级'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '取消'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
+    expect(find.text('Canvas block geometry'), findsNothing);
   });
 }

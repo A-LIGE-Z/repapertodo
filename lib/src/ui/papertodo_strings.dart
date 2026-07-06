@@ -3,7 +3,9 @@ import 'package:flutter/widgets.dart';
 abstract final class PaperTodoStringKeys {
   static const appTitle = 'appTitle';
   static const actionAddColumn = 'actionAddColumn';
+  static const actionAddCanvasBlock = 'actionAddCanvasBlock';
   static const actionAddItem = 'actionAddItem';
+  static const actionAddTextBlock = 'actionAddTextBlock';
   static const actionBackToBoard = 'actionBackToBoard';
   static const actionCancel = 'actionCancel';
   static const actionChangeDueDate = 'actionChangeDueDate';
@@ -81,6 +83,30 @@ abstract final class PaperTodoStringKeys {
   static const avoidFullscreen = 'avoidFullscreen';
   static const basic = 'basic';
   static const capsuleMode = 'capsuleMode';
+  static const canvasBlockActions = 'canvasBlockActions';
+  static const canvasBlockGeometry = 'canvasBlockGeometry';
+  static const canvasBlockTypeBlock = 'canvasBlockTypeBlock';
+  static const canvasBlockTypeCode = 'canvasBlockTypeCode';
+  static const canvasBlockTypeCodeLabel = 'canvasBlockTypeCodeLabel';
+  static const canvasBlockTypeText = 'canvasBlockTypeText';
+  static const canvasBlockTypeTextLabel = 'canvasBlockTypeTextLabel';
+  static const canvasBringForward = 'canvasBringForward';
+  static const canvasBringToFront = 'canvasBringToFront';
+  static const canvasDefaultText = 'canvasDefaultText';
+  static const canvasDeleteBlock = 'canvasDeleteBlock';
+  static const canvasDragBlock = 'canvasDragBlock';
+  static const canvasDuplicateBlock = 'canvasDuplicateBlock';
+  static const canvasEditGeometry = 'canvasEditGeometry';
+  static const canvasEnterValidNumbers = 'canvasEnterValidNumbers';
+  static const canvasFieldHeight = 'canvasFieldHeight';
+  static const canvasFieldLayer = 'canvasFieldLayer';
+  static const canvasFieldWidth = 'canvasFieldWidth';
+  static const canvasLayer = 'canvasLayer';
+  static const canvasLayerActions = 'canvasLayerActions';
+  static const canvasResizeBlock = 'canvasResizeBlock';
+  static const canvasSendBackward = 'canvasSendBackward';
+  static const canvasSendToBack = 'canvasSendToBack';
+  static const canvasTopLayer = 'canvasTopLayer';
   static const collapseAllActive = 'collapseAllActive';
   static const collapseAllControl = 'collapseAllControl';
   static const collapseExpandedDeepCapsuleOnClick =
@@ -127,6 +153,18 @@ abstract final class PaperTodoStringKeys {
   static const labelNote = 'labelNote';
   static const labelNoteTitle = 'labelNoteTitle';
   static const labelScript = 'labelScript';
+  static const markdownActionBold = 'markdownActionBold';
+  static const markdownActionBoldShortcut = 'markdownActionBoldShortcut';
+  static const markdownActionCodeBlock = 'markdownActionCodeBlock';
+  static const markdownActionHeading = 'markdownActionHeading';
+  static const markdownActionInsertLinkShortcut =
+      'markdownActionInsertLinkShortcut';
+  static const markdownActionItalic = 'markdownActionItalic';
+  static const markdownActionItalicShortcut = 'markdownActionItalicShortcut';
+  static const markdownActionList = 'markdownActionList';
+  static const markdownActionMore = 'markdownActionMore';
+  static const markdownActionQuote = 'markdownActionQuote';
+  static const markdownActionStrikethrough = 'markdownActionStrikethrough';
   static const markdownMode = 'markdownMode';
   static const markdownOff = 'markdownOff';
   static const maxTitleLength = 'maxTitleLength';
@@ -317,7 +355,9 @@ final class PaperTodoStringsScope extends InheritedWidget {
 const _enStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
   PaperTodoStringKeys.actionAddColumn: 'Add column',
+  PaperTodoStringKeys.actionAddCanvasBlock: 'Add canvas block',
   PaperTodoStringKeys.actionAddItem: 'Add item',
+  PaperTodoStringKeys.actionAddTextBlock: 'Add text block',
   PaperTodoStringKeys.actionBackToBoard: 'Back to board',
   PaperTodoStringKeys.actionCancel: 'Cancel',
   PaperTodoStringKeys.actionChangeDueDate: 'Change due date',
@@ -397,6 +437,31 @@ const _enStrings = {
   PaperTodoStringKeys.avoidFullscreen: 'Avoid fullscreen',
   PaperTodoStringKeys.basic: 'Basic',
   PaperTodoStringKeys.capsuleMode: 'Capsule mode',
+  PaperTodoStringKeys.canvasBlockActions: 'Canvas block actions',
+  PaperTodoStringKeys.canvasBlockGeometry: 'Canvas block geometry',
+  PaperTodoStringKeys.canvasBlockTypeBlock: 'BLOCK',
+  PaperTodoStringKeys.canvasBlockTypeCode: 'CODE',
+  PaperTodoStringKeys.canvasBlockTypeCodeLabel: 'Code',
+  PaperTodoStringKeys.canvasBlockTypeText: 'TEXT',
+  PaperTodoStringKeys.canvasBlockTypeTextLabel: 'Text',
+  PaperTodoStringKeys.canvasBringForward: 'Bring forward',
+  PaperTodoStringKeys.canvasBringToFront: 'Bring to front',
+  PaperTodoStringKeys.canvasDefaultText: 'Canvas text {0}',
+  PaperTodoStringKeys.canvasDeleteBlock: 'Delete canvas block',
+  PaperTodoStringKeys.canvasDragBlock: 'Drag canvas block',
+  PaperTodoStringKeys.canvasDuplicateBlock: 'Duplicate canvas block',
+  PaperTodoStringKeys.canvasEditGeometry: 'Edit canvas geometry',
+  PaperTodoStringKeys.canvasEnterValidNumbers:
+      'Enter valid numbers for every field.',
+  PaperTodoStringKeys.canvasFieldHeight: 'Height',
+  PaperTodoStringKeys.canvasFieldLayer: 'Layer',
+  PaperTodoStringKeys.canvasFieldWidth: 'Width',
+  PaperTodoStringKeys.canvasLayer: 'Layer {0}',
+  PaperTodoStringKeys.canvasLayerActions: 'Canvas layer actions',
+  PaperTodoStringKeys.canvasResizeBlock: 'Resize canvas block',
+  PaperTodoStringKeys.canvasSendBackward: 'Send backward',
+  PaperTodoStringKeys.canvasSendToBack: 'Send to back',
+  PaperTodoStringKeys.canvasTopLayer: 'Top {0}',
   PaperTodoStringKeys.collapseAllActive: 'Collapse all active',
   PaperTodoStringKeys.collapseAllControl: 'Collapse all control',
   PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick:
@@ -444,6 +509,17 @@ const _enStrings = {
   PaperTodoStringKeys.labelNote: 'Note',
   PaperTodoStringKeys.labelNoteTitle: 'Note {0}',
   PaperTodoStringKeys.labelScript: 'Script',
+  PaperTodoStringKeys.markdownActionBold: 'Bold',
+  PaperTodoStringKeys.markdownActionBoldShortcut: 'Bold (Ctrl+B)',
+  PaperTodoStringKeys.markdownActionCodeBlock: 'Code block',
+  PaperTodoStringKeys.markdownActionHeading: 'Heading',
+  PaperTodoStringKeys.markdownActionInsertLinkShortcut: 'Insert link (Ctrl+K)',
+  PaperTodoStringKeys.markdownActionItalic: 'Italic',
+  PaperTodoStringKeys.markdownActionItalicShortcut: 'Italic (Ctrl+I)',
+  PaperTodoStringKeys.markdownActionList: 'List',
+  PaperTodoStringKeys.markdownActionMore: 'More markdown actions',
+  PaperTodoStringKeys.markdownActionQuote: 'Quote',
+  PaperTodoStringKeys.markdownActionStrikethrough: 'Strikethrough',
   PaperTodoStringKeys.markdownMode: 'Markdown mode',
   PaperTodoStringKeys.markdownOff: 'Markdown off',
   PaperTodoStringKeys.maxTitleLength: 'Max title length',
@@ -559,7 +635,9 @@ const _enStrings = {
 const _zhStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
   PaperTodoStringKeys.actionAddColumn: '添加列',
+  PaperTodoStringKeys.actionAddCanvasBlock: '添加画布块',
   PaperTodoStringKeys.actionAddItem: '添加事项',
+  PaperTodoStringKeys.actionAddTextBlock: '添加文本块',
   PaperTodoStringKeys.actionBackToBoard: '返回面板',
   PaperTodoStringKeys.actionCancel: '取消',
   PaperTodoStringKeys.actionChangeDueDate: '更改到期时间',
@@ -637,6 +715,30 @@ const _zhStrings = {
   PaperTodoStringKeys.avoidFullscreen: '避让全屏',
   PaperTodoStringKeys.basic: '基础',
   PaperTodoStringKeys.capsuleMode: '胶囊模式',
+  PaperTodoStringKeys.canvasBlockActions: '画布块操作',
+  PaperTodoStringKeys.canvasBlockGeometry: '画布块几何参数',
+  PaperTodoStringKeys.canvasBlockTypeBlock: '块',
+  PaperTodoStringKeys.canvasBlockTypeCode: '代码',
+  PaperTodoStringKeys.canvasBlockTypeCodeLabel: '代码',
+  PaperTodoStringKeys.canvasBlockTypeText: '文本',
+  PaperTodoStringKeys.canvasBlockTypeTextLabel: '文本',
+  PaperTodoStringKeys.canvasBringForward: '上移一层',
+  PaperTodoStringKeys.canvasBringToFront: '置于顶层',
+  PaperTodoStringKeys.canvasDefaultText: '画布文本 {0}',
+  PaperTodoStringKeys.canvasDeleteBlock: '删除画布块',
+  PaperTodoStringKeys.canvasDragBlock: '拖动画布块',
+  PaperTodoStringKeys.canvasDuplicateBlock: '复制画布块',
+  PaperTodoStringKeys.canvasEditGeometry: '编辑画布几何参数',
+  PaperTodoStringKeys.canvasEnterValidNumbers: '请为每个字段输入有效数字。',
+  PaperTodoStringKeys.canvasFieldHeight: '高度',
+  PaperTodoStringKeys.canvasFieldLayer: '层级',
+  PaperTodoStringKeys.canvasFieldWidth: '宽度',
+  PaperTodoStringKeys.canvasLayer: '层级 {0}',
+  PaperTodoStringKeys.canvasLayerActions: '画布层级操作',
+  PaperTodoStringKeys.canvasResizeBlock: '调整画布块大小',
+  PaperTodoStringKeys.canvasSendBackward: '下移一层',
+  PaperTodoStringKeys.canvasSendToBack: '置于底层',
+  PaperTodoStringKeys.canvasTopLayer: '顶层 {0}',
   PaperTodoStringKeys.collapseAllActive: '默认收起全部',
   PaperTodoStringKeys.collapseAllControl: '收起全部控件',
   PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick: '点击已展开边缘胶囊时收回纸片',
@@ -682,6 +784,17 @@ const _zhStrings = {
   PaperTodoStringKeys.labelNote: '笔记',
   PaperTodoStringKeys.labelNoteTitle: '笔记 {0}',
   PaperTodoStringKeys.labelScript: '脚本',
+  PaperTodoStringKeys.markdownActionBold: '加粗',
+  PaperTodoStringKeys.markdownActionBoldShortcut: '加粗 (Ctrl+B)',
+  PaperTodoStringKeys.markdownActionCodeBlock: '代码块',
+  PaperTodoStringKeys.markdownActionHeading: '标题',
+  PaperTodoStringKeys.markdownActionInsertLinkShortcut: '插入链接 (Ctrl+K)',
+  PaperTodoStringKeys.markdownActionItalic: '斜体',
+  PaperTodoStringKeys.markdownActionItalicShortcut: '斜体 (Ctrl+I)',
+  PaperTodoStringKeys.markdownActionList: '列表',
+  PaperTodoStringKeys.markdownActionMore: '更多 Markdown 操作',
+  PaperTodoStringKeys.markdownActionQuote: '引用',
+  PaperTodoStringKeys.markdownActionStrikethrough: '删除线',
   PaperTodoStringKeys.markdownMode: 'Markdown 模式',
   PaperTodoStringKeys.markdownOff: '关闭 Markdown',
   PaperTodoStringKeys.maxTitleLength: '标题最大长度',
@@ -784,7 +897,9 @@ const _zhStrings = {
 const _jaStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
   PaperTodoStringKeys.actionAddColumn: '列を追加',
+  PaperTodoStringKeys.actionAddCanvasBlock: 'キャンバスブロックを追加',
   PaperTodoStringKeys.actionAddItem: '項目を追加',
+  PaperTodoStringKeys.actionAddTextBlock: 'テキストブロックを追加',
   PaperTodoStringKeys.actionBackToBoard: 'ボードに戻る',
   PaperTodoStringKeys.actionCancel: 'キャンセル',
   PaperTodoStringKeys.actionChangeDueDate: '期限を変更',
@@ -862,6 +977,30 @@ const _jaStrings = {
   PaperTodoStringKeys.avoidFullscreen: '全画面を避ける',
   PaperTodoStringKeys.basic: '基本',
   PaperTodoStringKeys.capsuleMode: 'カプセルモード',
+  PaperTodoStringKeys.canvasBlockActions: 'キャンバスブロック操作',
+  PaperTodoStringKeys.canvasBlockGeometry: 'キャンバスブロックの配置',
+  PaperTodoStringKeys.canvasBlockTypeBlock: 'ブロック',
+  PaperTodoStringKeys.canvasBlockTypeCode: 'コード',
+  PaperTodoStringKeys.canvasBlockTypeCodeLabel: 'コード',
+  PaperTodoStringKeys.canvasBlockTypeText: 'テキスト',
+  PaperTodoStringKeys.canvasBlockTypeTextLabel: 'テキスト',
+  PaperTodoStringKeys.canvasBringForward: '前面へ移動',
+  PaperTodoStringKeys.canvasBringToFront: '最前面へ移動',
+  PaperTodoStringKeys.canvasDefaultText: 'キャンバステキスト {0}',
+  PaperTodoStringKeys.canvasDeleteBlock: 'キャンバスブロックを削除',
+  PaperTodoStringKeys.canvasDragBlock: 'キャンバスブロックをドラッグ',
+  PaperTodoStringKeys.canvasDuplicateBlock: 'キャンバスブロックを複製',
+  PaperTodoStringKeys.canvasEditGeometry: 'キャンバス配置を編集',
+  PaperTodoStringKeys.canvasEnterValidNumbers: 'すべての項目に有効な数値を入力してください。',
+  PaperTodoStringKeys.canvasFieldHeight: '高さ',
+  PaperTodoStringKeys.canvasFieldLayer: 'レイヤー',
+  PaperTodoStringKeys.canvasFieldWidth: '幅',
+  PaperTodoStringKeys.canvasLayer: 'レイヤー {0}',
+  PaperTodoStringKeys.canvasLayerActions: 'キャンバスレイヤー操作',
+  PaperTodoStringKeys.canvasResizeBlock: 'キャンバスブロックのサイズを変更',
+  PaperTodoStringKeys.canvasSendBackward: '背面へ移動',
+  PaperTodoStringKeys.canvasSendToBack: '最背面へ移動',
+  PaperTodoStringKeys.canvasTopLayer: '最前面 {0}',
   PaperTodoStringKeys.collapseAllActive: 'すべて折りたたみ有効',
   PaperTodoStringKeys.collapseAllControl: '一括折りたたみ操作',
   PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick:
@@ -908,6 +1047,17 @@ const _jaStrings = {
   PaperTodoStringKeys.labelNote: 'ノート',
   PaperTodoStringKeys.labelNoteTitle: 'ノート {0}',
   PaperTodoStringKeys.labelScript: 'スクリプト',
+  PaperTodoStringKeys.markdownActionBold: '太字',
+  PaperTodoStringKeys.markdownActionBoldShortcut: '太字 (Ctrl+B)',
+  PaperTodoStringKeys.markdownActionCodeBlock: 'コードブロック',
+  PaperTodoStringKeys.markdownActionHeading: '見出し',
+  PaperTodoStringKeys.markdownActionInsertLinkShortcut: 'リンクを挿入 (Ctrl+K)',
+  PaperTodoStringKeys.markdownActionItalic: '斜体',
+  PaperTodoStringKeys.markdownActionItalicShortcut: '斜体 (Ctrl+I)',
+  PaperTodoStringKeys.markdownActionList: 'リスト',
+  PaperTodoStringKeys.markdownActionMore: 'その他の Markdown 操作',
+  PaperTodoStringKeys.markdownActionQuote: '引用',
+  PaperTodoStringKeys.markdownActionStrikethrough: '取り消し線',
   PaperTodoStringKeys.markdownMode: 'Markdown モード',
   PaperTodoStringKeys.markdownOff: 'Markdown オフ',
   PaperTodoStringKeys.maxTitleLength: 'タイトル最大長',
@@ -1013,7 +1163,9 @@ const _jaStrings = {
 const _koStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
   PaperTodoStringKeys.actionAddColumn: '열 추가',
+  PaperTodoStringKeys.actionAddCanvasBlock: '캔버스 블록 추가',
   PaperTodoStringKeys.actionAddItem: '항목 추가',
+  PaperTodoStringKeys.actionAddTextBlock: '텍스트 블록 추가',
   PaperTodoStringKeys.actionBackToBoard: '보드로 돌아가기',
   PaperTodoStringKeys.actionCancel: '취소',
   PaperTodoStringKeys.actionChangeDueDate: '마감 시간 변경',
@@ -1091,6 +1243,30 @@ const _koStrings = {
   PaperTodoStringKeys.avoidFullscreen: '전체 화면 피하기',
   PaperTodoStringKeys.basic: '기본',
   PaperTodoStringKeys.capsuleMode: '캡슐 모드',
+  PaperTodoStringKeys.canvasBlockActions: '캔버스 블록 작업',
+  PaperTodoStringKeys.canvasBlockGeometry: '캔버스 블록 위치',
+  PaperTodoStringKeys.canvasBlockTypeBlock: '블록',
+  PaperTodoStringKeys.canvasBlockTypeCode: '코드',
+  PaperTodoStringKeys.canvasBlockTypeCodeLabel: '코드',
+  PaperTodoStringKeys.canvasBlockTypeText: '텍스트',
+  PaperTodoStringKeys.canvasBlockTypeTextLabel: '텍스트',
+  PaperTodoStringKeys.canvasBringForward: '앞으로 가져오기',
+  PaperTodoStringKeys.canvasBringToFront: '맨 앞으로 가져오기',
+  PaperTodoStringKeys.canvasDefaultText: '캔버스 텍스트 {0}',
+  PaperTodoStringKeys.canvasDeleteBlock: '캔버스 블록 삭제',
+  PaperTodoStringKeys.canvasDragBlock: '캔버스 블록 끌기',
+  PaperTodoStringKeys.canvasDuplicateBlock: '캔버스 블록 복제',
+  PaperTodoStringKeys.canvasEditGeometry: '캔버스 위치 편집',
+  PaperTodoStringKeys.canvasEnterValidNumbers: '모든 필드에 올바른 숫자를 입력하세요.',
+  PaperTodoStringKeys.canvasFieldHeight: '높이',
+  PaperTodoStringKeys.canvasFieldLayer: '레이어',
+  PaperTodoStringKeys.canvasFieldWidth: '너비',
+  PaperTodoStringKeys.canvasLayer: '레이어 {0}',
+  PaperTodoStringKeys.canvasLayerActions: '캔버스 레이어 작업',
+  PaperTodoStringKeys.canvasResizeBlock: '캔버스 블록 크기 조절',
+  PaperTodoStringKeys.canvasSendBackward: '뒤로 보내기',
+  PaperTodoStringKeys.canvasSendToBack: '맨 뒤로 보내기',
+  PaperTodoStringKeys.canvasTopLayer: '맨 위 {0}',
   PaperTodoStringKeys.collapseAllActive: '모두 접기 활성',
   PaperTodoStringKeys.collapseAllControl: '모두 접기 컨트롤',
   PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick:
@@ -1137,6 +1313,17 @@ const _koStrings = {
   PaperTodoStringKeys.labelNote: '노트',
   PaperTodoStringKeys.labelNoteTitle: '노트 {0}',
   PaperTodoStringKeys.labelScript: '스크립트',
+  PaperTodoStringKeys.markdownActionBold: '굵게',
+  PaperTodoStringKeys.markdownActionBoldShortcut: '굵게 (Ctrl+B)',
+  PaperTodoStringKeys.markdownActionCodeBlock: '코드 블록',
+  PaperTodoStringKeys.markdownActionHeading: '제목',
+  PaperTodoStringKeys.markdownActionInsertLinkShortcut: '링크 삽입 (Ctrl+K)',
+  PaperTodoStringKeys.markdownActionItalic: '기울임',
+  PaperTodoStringKeys.markdownActionItalicShortcut: '기울임 (Ctrl+I)',
+  PaperTodoStringKeys.markdownActionList: '목록',
+  PaperTodoStringKeys.markdownActionMore: '더 많은 Markdown 작업',
+  PaperTodoStringKeys.markdownActionQuote: '인용',
+  PaperTodoStringKeys.markdownActionStrikethrough: '취소선',
   PaperTodoStringKeys.markdownMode: 'Markdown 모드',
   PaperTodoStringKeys.markdownOff: 'Markdown 끄기',
   PaperTodoStringKeys.maxTitleLength: '최대 제목 길이',
