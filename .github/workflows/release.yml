@@ -1,0 +1,91 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      publishRelease:
+        description: Publish or update the GitHub Release after validation.
+        required: true
+        default: false
+        type: boolean
+      offlinePubGet:
+        description: Resolve Flutter packages from the pub cache only.
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: repapertodo-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Validate and package
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      ALL_PROXY: ""
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Android API 37
+        shell: pwsh
+        run: |
+          $sdkManager = Get-ChildItem -LiteralPath $env:ANDROID_HOME -Recurse -Filter sdkmanager.bat |
+            Select-Object -First 1
+          if (-not $sdkManager) {
+            throw "Android sdkmanager.bat was not found under ANDROID_HOME."
+          }
+          $licenses = ("y`n" * 200)
+          $licenses | & $sdkManager.FullName --licenses
+          & $sdkManager.FullName "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+
+      - name: Verify Flutter toolchain
+        shell: pwsh
+        run: flutter doctor -v
+
+      - name: Validate, build, and package
+        shell: pwsh
+        run: |
+          $releaseArgs = @()
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.offlinePubGet }}" -eq "true") {
+            $releaseArgs += "-OfflinePubGet"
+          }
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.publishRelease }}" -eq "true") {
+            $releaseArgs += "-PublishGitHubRelease"
+          }
+          .\scripts\release.ps1 @releaseArgs
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: repapertodo-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error

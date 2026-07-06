@@ -1375,6 +1375,7 @@ void main() {
 
   test('release script packages Windows and Android artifacts', () {
     final script = File('scripts/release.ps1').readAsStringSync();
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
     final readme = File('README.md').readAsStringSync();
 
     expect(script, contains(r'$env:HTTPS_PROXY = ""'));
@@ -1393,6 +1394,12 @@ void main() {
     expect(script, contains('function Assert-GitHubReleaseGitState'));
     expect(script, contains('function Assert-GitHubReleaseTagState'));
     expect(script, contains('function Invoke-NativeText'));
+    expect(script, contains(r'$env:GITHUB_ACTIONS -eq "true"'));
+    expect(script, contains(r'$env:GITHUB_REF_NAME -eq "main"'));
+    expect(
+      script,
+      contains('GitHub Release publishing from GitHub Actions must run'),
+    );
     expect(script, contains('git status --porcelain'));
     expect(script, contains('Verify release inputs stayed clean'));
     expect(script, contains('git diff --check'));
@@ -1463,6 +1470,27 @@ void main() {
       script,
       contains('Android release APK targeting Android 14-17 / API 34-37.'),
     );
+    expect(workflow, contains('name: Build and Release'));
+    expect(workflow, contains('workflow_dispatch'));
+    expect(workflow, contains('publishRelease'));
+    expect(workflow, contains('windows-latest'));
+    expect(workflow, contains('permissions:'));
+    expect(workflow, contains('contents: write'));
+    expect(workflow, contains('actions/checkout@v4'));
+    expect(workflow, contains('fetch-depth: 0'));
+    expect(workflow, contains('actions/setup-java@v4'));
+    expect(workflow, contains('subosito/flutter-action@v2'));
+    expect(workflow, contains('channel: stable'));
+    expect(workflow, contains('platforms;android-37'));
+    expect(workflow, contains('build-tools;37.0.0'));
+    expect(workflow, contains(r'.\scripts\release.ps1 @releaseArgs'));
+    expect(workflow, contains('-PublishGitHubRelease'));
+    expect(workflow, contains('actions/upload-artifact@v4'));
+    expect(workflow, contains('path: dist/*'));
+    expect(readme, contains('wired into GitHub Actions'));
+    expect(readme, contains('Pushes and pull requests'));
+    expect(readme, contains('workflow_dispatch'));
+    expect(readme, contains('publishRelease'));
     expect(readme, contains(r'.\scripts\release.ps1'));
     expect(readme, contains('-PublishGitHubRelease'));
     expect(readme, contains('Publishing checks `gh auth status`'));

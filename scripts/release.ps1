@@ -212,7 +212,15 @@ function Assert-GitHubReleaseGitState {
   $branch = Invoke-NativeText "git rev-parse --abbrev-ref HEAD" {
     & git rev-parse --abbrev-ref HEAD
   }
-  if ($branch -ne "main") {
+  $isGitHubActionsDetachedMain = (
+    $env:GITHUB_ACTIONS -eq "true" -and
+    $branch -eq "HEAD" -and
+    $env:GITHUB_REF_NAME -eq "main"
+  )
+  if ($branch -ne "main" -and -not $isGitHubActionsDetachedMain) {
+    if ($env:GITHUB_ACTIONS -eq "true" -and $branch -eq "HEAD") {
+      throw "GitHub Release publishing from GitHub Actions must run from the main ref."
+    }
     throw "GitHub Release publishing must run from the main branch."
   }
 

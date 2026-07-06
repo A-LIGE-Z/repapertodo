@@ -35,6 +35,12 @@ Validation includes `git diff --check`, tests, analysis, and Windows/APK
 release builds. Release packaging reads the Android Gradle SDK settings and
 stops if they drift from Android 14-17/API 34-37.
 
+The same release script is wired into GitHub Actions. Pushes and pull requests
+to `main` run the full validation, build, and package flow, then upload the
+packaged `dist/` files as workflow artifacts. Manual `workflow_dispatch` runs
+can also publish or update the GitHub Release when `publishRelease` is set to
+`true`.
+
 ```powershell
 .\scripts\release.ps1
 ```
