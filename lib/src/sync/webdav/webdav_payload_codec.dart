@@ -304,7 +304,9 @@ bool _looksLikePlainJsonPayload(List<int> bytes) {
 }
 
 bool _hasControlCharacter(String value) {
-  return value.codeUnits.any((unit) => unit <= 0x1F || unit == 0x7F);
+  return value.runes.any(
+    (rune) => rune <= 0x1F || (rune >= 0x7F && rune <= 0x9F),
+  );
 }
 
 String _stringField(Map<Object?, Object?> map, String key) {

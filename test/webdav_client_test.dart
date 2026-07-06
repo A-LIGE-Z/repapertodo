@@ -37,6 +37,26 @@ void main() {
     expect(requests.single.headers['user-agent'], 'RePaperTodo/1 WebDAV');
   });
 
+  test('allows UTF-8 escaped WebDAV request paths', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response('', 204);
+      }),
+    );
+
+    await client.metadata('repapertodo/%E2%82%AC.json');
+
+    expect(requests, hasLength(1));
+    expect(
+      requests.single.url.toString(),
+      'https://dav.example.test/remote.php/dav/files/user/repapertodo/%E2%82%AC.json',
+    );
+  });
+
   test('ignores invalid WebDAV content lengths', () async {
     final client = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
@@ -973,6 +993,8 @@ void main() {
       'repapertodo/manifest.json%20',
       'repapertodo/\nmanifest.json',
       'repapertodo/%0Amanifest.json',
+      'repapertodo/\u0085manifest.json',
+      'repapertodo/%C2%85manifest.json',
     ]) {
       await expectLater(
         client.getBytes(path),
@@ -1718,6 +1740,7 @@ void main() {
       'user:name',
       'user\nname',
       'user\u007Fname',
+      'user\u0085name',
     ]) {
       var requestCount = 0;
       final client = WebDavClient(
@@ -1751,6 +1774,7 @@ void main() {
       '   ',
       'app\npassword',
       'app\u007Fpassword',
+      'app\u0085password',
     ]) {
       var requestCount = 0;
       final client = WebDavClient(
@@ -1838,6 +1862,8 @@ void main() {
       Uri.parse('https://dav.example.test/dav/#sync-root'),
       Uri.parse('https://dav.example.test/dav/%5C..%5Cfiles/'),
       Uri.parse('https://dav.example.test/dav/%0Afiles/'),
+      Uri.parse('https://dav.example.test/dav/\u0085files/'),
+      Uri.parse('https://dav.example.test/dav/%C2%85files/'),
       Uri.parse('https://dav.example.test/dav%2Ffiles/'),
       Uri.parse('https://dav.example.test/dav/%20/files/'),
       Uri.parse('https://dav.example.test/dav//files/'),

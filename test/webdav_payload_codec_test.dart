@@ -63,6 +63,7 @@ void main() {
       '   ',
       'shared\nsecret',
       'shared\u007Fsecret',
+      'shared\u0085secret',
     ]) {
       expect(
         () => EncryptedWebDavPayloadCodec(passphrase: passphrase),

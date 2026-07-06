@@ -233,6 +233,7 @@ void main() {
     for (final passphrase in const [
       'shared\nsecret',
       'shared\u007Fsecret',
+      'shared\u0085secret',
     ]) {
       final settings = WebDavSyncSettings(
         endpoint: 'https://dav.example.test/dav/',
@@ -314,11 +315,15 @@ void main() {
     final encodedSeparators = WebDavSyncSettings(
       rootPath: 'Team%20Space%2FRePaperTodo',
     )..normalize();
+    final utf8 = WebDavSyncSettings(
+      rootPath: 'Team%20%E2%82%AC/RePaperTodo',
+    )..normalize();
     final blank = WebDavSyncSettings(rootPath: '   ')..normalize();
     final empty = WebDavSyncSettings(rootPath: '')..normalize();
 
     expect(windowsSeparators.rootPath, 'Team Space/RePaperTodo');
     expect(encodedSeparators.rootPath, 'Team Space/RePaperTodo');
+    expect(utf8.rootPath, 'Team €/RePaperTodo');
     expect(blank.rootPath, 'repapertodo');
     expect(empty.rootPath, isEmpty);
     expect(
@@ -335,6 +340,8 @@ void main() {
       'RePaperTodo/bad%',
       'RePaperTodo/%0AOther',
       'RePaperTodo/%7FOther',
+      'RePaperTodo/\u0085Other',
+      'RePaperTodo/%C2%85Other',
       'RePaperTodo/%20/Other',
       'RePaperTodo/ /Other',
       'RePaperTodo//Other',
@@ -381,6 +388,11 @@ void main() {
       username: 'user',
       password: 'pass',
     )..normalize();
+    final utf8Path = WebDavSyncSettings(
+      endpoint: 'https://dav.example.test/dav/Team%20%E2%82%AC',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
     final rootEndpoint = WebDavSyncSettings(
       endpoint: 'https://dav.example.test',
       username: 'user',
@@ -398,6 +410,16 @@ void main() {
     )..normalize();
     final delCharacterPath = WebDavSyncSettings(
       endpoint: ' https://dav.example.test/dav/%7Ffiles ',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
+    final rawC1CharacterPath = WebDavSyncSettings(
+      endpoint: ' https://dav.example.test/dav/\u0085files ',
+      username: 'user',
+      password: 'pass',
+    )..normalize();
+    final c1CharacterPath = WebDavSyncSettings(
+      endpoint: ' https://dav.example.test/dav/%C2%85files ',
       username: 'user',
       password: 'pass',
     )..normalize();
@@ -436,6 +458,8 @@ void main() {
     expect(mixedCase.isConfigured, true);
     expect(spacedPath.endpoint, 'https://dav.example.test/dav/Team%20Space/');
     expect(spacedPath.isConfigured, true);
+    expect(utf8Path.endpoint, 'https://dav.example.test/dav/Team%20%E2%82%AC/');
+    expect(utf8Path.isConfigured, true);
     expect(rootEndpoint.endpoint, 'https://dav.example.test/');
     expect(rootEndpoint.isConfigured, true);
     expect(invalid.endpoint, 'https://dav.example.test/dav/%2e%2e/files');
@@ -445,6 +469,12 @@ void main() {
     expect(controlCharacterPath.isConfigured, false);
     expect(delCharacterPath.endpoint, 'https://dav.example.test/dav/%7Ffiles');
     expect(delCharacterPath.isConfigured, false);
+    expect(rawC1CharacterPath.endpoint,
+        'https://dav.example.test/dav/\u0085files');
+    expect(rawC1CharacterPath.isConfigured, false);
+    expect(
+        c1CharacterPath.endpoint, 'https://dav.example.test/dav/%C2%85files');
+    expect(c1CharacterPath.isConfigured, false);
     expect(
         encodedSeparatorPath.endpoint, 'https://dav.example.test/dav%2Ffiles');
     expect(encodedSeparatorPath.isConfigured, false);

@@ -5471,6 +5471,8 @@ void main() {
     for (final endpoint in const [
       'https://dav.example.test/remote.php/dav/%0Afiles/user/',
       'https://dav.example.test/remote.php/dav/%7Ffiles/user/',
+      'https://dav.example.test/remote.php/dav/\u0085files/user/',
+      'https://dav.example.test/remote.php/dav/%C2%85files/user/',
     ]) {
       var requestCount = 0;
 
@@ -5512,6 +5514,20 @@ void main() {
         encryptionPassphrase: 'shared sync secret',
         rootPath: 'repapertodo',
       ),
+      WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/remote.php/dav/files/user/',
+        username: 'user\u0085name',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+      ),
+      WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/remote.php/dav/files/user/',
+        username: 'user',
+        password: 'bad\u0085pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+      ),
     ]) {
       expect(
         () => WebDavStateSyncService.fromSettings(
@@ -5531,6 +5547,8 @@ void main() {
     for (final rootPath in const [
       'repapertodo/%0Aother',
       'repapertodo/%7Fother',
+      'repapertodo/\u0085other',
+      'repapertodo/%C2%85other',
     ]) {
       var requestCount = 0;
 

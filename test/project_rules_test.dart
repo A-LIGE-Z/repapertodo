@@ -324,11 +324,19 @@ void main() {
         File('lib/src/sync/webdav/webdav_client.dart').readAsStringSync();
     expect(syncSettings, contains('_hasUnsafeEndpointAuthority'));
     expect(syncSettings, contains('value.trim().isNotEmpty'));
+    expect(
+      syncSettings,
+      contains('rune <= 0x1F || (rune >= 0x7F && rune <= 0x9F)'),
+    );
     expect(syncSettings, contains("'%40'"));
     expect(webDavClient, contains('_hasUnsafeBaseUriAuthority'));
     expect(webDavClient, contains('_hrefRawPathHasDotSegments'));
     expect(webDavClient, contains('_rawHrefPath'));
     expect(webDavClient, contains('value.trim().isNotEmpty'));
+    expect(
+      webDavClient,
+      contains('rune <= 0x1F || (rune >= 0x7F && rune <= 0x9F)'),
+    );
     expect(webDavClient, contains("'%40'"));
     expect(webDavClient, contains('segment != trimmed'));
     expect(
