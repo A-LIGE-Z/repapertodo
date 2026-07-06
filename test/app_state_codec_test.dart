@@ -800,6 +800,75 @@ Plain item
     expect(state.isCapsuleCollapseAllActiveFor(rightPaper), false);
   });
 
+  test('capsule collapse all queues track live PaperTodo deep capsule queues',
+      () {
+    final state = AppState(
+      useCapsuleMode: true,
+      useDeepCapsuleMode: true,
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      capsuleCollapseAllActiveQueues: {
+        'Primary|left': true,
+        'Missing|right': true,
+      },
+      papers: [
+        PaperData(
+          id: 'left-paper',
+          type: PaperTypes.todo,
+          title: 'Left',
+          isCollapsed: true,
+          capsuleMonitorDeviceName: 'Primary',
+          capsuleSide: DeepCapsuleSides.left,
+        ),
+        PaperData(
+          id: 'hidden-paper',
+          type: PaperTypes.todo,
+          title: 'Hidden',
+          isVisible: false,
+          isCollapsed: true,
+          capsuleMonitorDeviceName: 'Missing',
+          capsuleSide: DeepCapsuleSides.right,
+        ),
+      ],
+    )..normalize();
+
+    expect(state.capsuleCollapseAllActive, true);
+    expect(state.capsuleCollapseAllActiveQueues, {'Primary|left': true});
+  });
+
+  test('legacy global collapse all active migrates to live queues', () {
+    final state = AppState(
+      useCapsuleMode: true,
+      useDeepCapsuleMode: true,
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      papers: [
+        PaperData(
+          id: 'left-paper',
+          type: PaperTypes.todo,
+          title: 'Left',
+          isCollapsed: true,
+          capsuleMonitorDeviceName: 'Primary',
+          capsuleSide: DeepCapsuleSides.left,
+        ),
+        PaperData(
+          id: 'right-paper',
+          type: PaperTypes.note,
+          title: 'Right',
+          isPinnedToDesktop: true,
+          capsuleMonitorDeviceName: 'Secondary',
+          capsuleSide: DeepCapsuleSides.right,
+        ),
+      ],
+    )..normalize();
+
+    expect(state.capsuleCollapseAllActive, true);
+    expect(state.capsuleCollapseAllActiveQueues, {
+      'Primary|left': true,
+      'Secondary|right': true,
+    });
+  });
+
   test('normalizes custom theme color hex values', () {
     expect(
       AppState.fromJson({'customThemeColorHex': '336699'}).customThemeColorHex,

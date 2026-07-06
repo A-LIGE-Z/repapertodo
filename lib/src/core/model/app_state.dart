@@ -378,10 +378,69 @@ class AppState {
         }
       }
     }
+    _syncCapsuleCollapseAllQueuesWithPapers();
   }
 
   String capsuleQueueKeyFor(PaperData paper) {
     return _queueKey(paper.capsuleMonitorDeviceName, paper.capsuleSide);
+  }
+
+  void _syncCapsuleCollapseAllQueuesWithPapers() {
+    if (!useCapsuleMode || !useDeepCapsuleMode || !useCapsuleCollapseAll) {
+      return;
+    }
+    if (papers.isEmpty) {
+      return;
+    }
+
+    final liveQueueKeys = <String>{};
+    for (final paper in papers) {
+      if (_paperCanOccupyDeepCapsuleQueue(paper)) {
+        liveQueueKeys.add(capsuleQueueKeyFor(paper));
+      }
+    }
+
+    final wasActive = capsuleCollapseAllActive;
+    if (capsuleCollapseAllActiveQueues.isNotEmpty) {
+      capsuleCollapseAllActiveQueues = {
+        for (final entry in capsuleCollapseAllActiveQueues.entries)
+          if (liveQueueKeys.contains(entry.key)) entry.key: true,
+      };
+      capsuleCollapseAllActive = capsuleCollapseAllActiveQueues.isNotEmpty;
+    }
+
+    if (wasActive &&
+        capsuleCollapseAllActiveQueues.isEmpty &&
+        liveQueueKeys.isNotEmpty) {
+      capsuleCollapseAllActiveQueues = {
+        for (final queueKey in liveQueueKeys) queueKey: true,
+      };
+      capsuleCollapseAllActive = true;
+    } else if (capsuleCollapseAllActiveQueues.isEmpty) {
+      capsuleCollapseAllActive = false;
+    }
+  }
+
+  bool _paperCanOccupyDeepCapsuleQueue(PaperData paper) {
+    if (!paper.isVisible || !_canPaperDisplayAsCapsule(paper)) {
+      return false;
+    }
+    return paper.isCollapsed ||
+        paper.isPinnedToDesktop ||
+        showDeepCapsuleWhileExpanded;
+  }
+
+  bool _canPaperDisplayAsCapsule(PaperData paper) {
+    if (!useCapsuleMode) {
+      return false;
+    }
+    if (!enableTodoNoteLinks || !hideLinkedNotesFromCapsules || !paper.isNote) {
+      return true;
+    }
+    return !papers
+        .where((sourcePaper) => sourcePaper.isTodo)
+        .expand((sourcePaper) => sourcePaper.items)
+        .any((item) => item.linkedNoteId == paper.id);
   }
 
   bool isCapsuleCollapseAllActiveFor(PaperData paper) {
