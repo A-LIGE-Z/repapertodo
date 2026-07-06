@@ -309,6 +309,10 @@ void main() {
     expect(syncDesign, contains('Downloaded, decoded, or restored tombstone'));
     expect(syncDesign, contains('are discarded instead of'));
     expect(syncDesign, contains('normalized to a different instant'));
+    expect(syncDesign, contains('Foreground/background transitions'));
+    expect(syncDesign, contains('flush any pending local-edit operation'));
+    expect(syncDesign, contains('before running the snapshot sync'));
+    expect(syncDesign, contains('instead of waiting for the debounce timer'));
     expect(syncDesign, contains('Opening settings must pause pending'));
     expect(syncDesign, contains('canceling settings or saving settings'));
     expect(

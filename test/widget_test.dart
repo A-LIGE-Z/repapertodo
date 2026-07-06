@@ -5602,6 +5602,111 @@ void main() {
     expect(find.text('Remote data downloaded.'), findsNothing);
   });
 
+  testWidgets('lifecycle sync flushes pending local edits before debounce',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'lifecycle-pending-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final uploadedState = AppState(
+      sync: syncSettings.copy()
+        ..operationDeviceSequences = const {'device-a': 1},
+      papers: [
+        PaperData(
+          id: 'lifecycle-pending-note',
+          type: PaperTypes.note,
+          title: 'Draft',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncedState = AppState(
+      sync: syncSettings.copy()
+        ..operationDeviceSequences = const {'device-a': 2},
+      papers: [
+        PaperData(
+          id: 'lifecycle-pending-note',
+          type: PaperTypes.note,
+          title: 'Synced after lifecycle',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: syncedState,
+          message: 'Remote data downloaded.',
+        ),
+        state: syncedState,
+      ),
+      localUploadState: uploadedState,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('lifecycle-pending-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(syncService.events, isEmpty);
+    expect(syncService.localUploadCalls, 0);
+    expect(syncService.calls, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.events, ['upload', 'sync']);
+    expect(syncService.localUploadBeforeTitles, ['Local']);
+    expect(syncService.localUploadAfterTitles, ['Draft']);
+    expect(syncService.localUploadCalls, 1);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced after lifecycle');
+    expect(find.text('Remote data downloaded.'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(syncService.events, ['upload', 'sync']);
+  });
+
   testWidgets('local edits schedule one debounced silent sync', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
