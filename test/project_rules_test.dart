@@ -1118,9 +1118,10 @@ void main() {
     expect(design, contains('30000 characters'));
     expect(design, contains('CR/LF line endings are preserved'));
     expect(design, contains('longer than 6000 characters'));
-    expect(app, contains('MarkdownPasteText.maxTextLength'));
-    expect(app, contains('_TextEditDiff.between'));
+    expect(app, contains('MarkdownPasteText.formatEditUpdate'));
     expect(markdownPaste, contains('maxTextLength = 100000'));
+    expect(markdownPaste, contains('formatEditUpdate'));
+    expect(markdownPaste, contains('_TextEditDiff.between'));
     expect(markdownPaste, contains('_clipPasteText'));
     expect(markdownPaste, contains('_containsLineLongerThan'));
   });

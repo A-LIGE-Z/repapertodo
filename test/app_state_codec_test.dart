@@ -531,6 +531,46 @@ Plain item
     );
   });
 
+  test('formats markdown paste edits against the PaperTodo note limit', () {
+    final oldText = List.filled(99995, 'a').join();
+    final result = MarkdownPasteText.formatEditUpdate(
+      TextEditingValue(
+        text: oldText,
+        selection: TextSelection.collapsed(offset: oldText.length),
+      ),
+      TextEditingValue(
+        text: '$oldText${List.filled(10, 'b').join()}',
+        selection: TextSelection.collapsed(offset: oldText.length + 10),
+      ),
+    );
+
+    expect(result.text, '$oldText${List.filled(5, 'b').join()}');
+    expect(result.text, hasLength(MarkdownPasteText.maxTextLength));
+    expect(result.selection, const TextSelection.collapsed(offset: 100000));
+  });
+
+  test('formats markdown paste edits after accounting for replaced text', () {
+    final prefix = List.filled(99980, 'a').join();
+    final oldText = '${prefix}replace-me';
+    final result = MarkdownPasteText.formatEditUpdate(
+      TextEditingValue(
+        text: oldText,
+        selection: TextSelection(
+          baseOffset: prefix.length,
+          extentOffset: oldText.length,
+        ),
+      ),
+      TextEditingValue(
+        text: '$prefix${List.filled(40, 'b').join()}',
+        selection: TextSelection.collapsed(offset: prefix.length + 40),
+      ),
+    );
+
+    expect(result.text, '$prefix${List.filled(20, 'b').join()}');
+    expect(result.text, hasLength(MarkdownPasteText.maxTextLength));
+    expect(result.selection, const TextSelection.collapsed(offset: 100000));
+  });
+
   test('continues markdown lists on enter like PaperTodo', () {
     expect(_markdownEnter('- Read').text, '- Read\n- ');
     expect(_markdownEnter('  * Read').text, '  * Read\n  * ');
