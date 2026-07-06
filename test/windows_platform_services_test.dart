@@ -678,6 +678,87 @@ void main() {
     expect(activePaper.isVisible, false);
   });
 
+  test('paper host ignores blank explicit paper-id surface events', () async {
+    const channel = MethodChannel('repapertodo/window_blank_event_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final activePaper = PaperData(
+      id: 'active-paper',
+      type: PaperTypes.todo,
+      title: 'Active',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+    );
+
+    await services.paperWindows.showPaper(activePaper);
+    var updateEmitted = false;
+    final subscription = services.paperWindows.surfaceUpdates.listen((_) {
+      updateEmitted = true;
+    });
+    addTearDown(subscription.cancel);
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('boundsChanged', {
+          'paperId': '   ',
+          'bounds': {
+            'x': 700,
+            'y': 800,
+            'width': 900,
+            'height': 1000,
+          },
+        }),
+      ),
+      (_) {},
+    );
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('closeRequested', {'paperId': ''}),
+      ),
+      (_) {},
+    );
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('hideRequested', {'paperId': null}),
+      ),
+      (_) {},
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(updateEmitted, false);
+    expect(activePaper.x, 10);
+    expect(activePaper.y, 20);
+    expect(activePaper.width, 320);
+    expect(activePaper.height, 260);
+    expect(activePaper.isVisible, true);
+
+    final legacyCloseUpdate = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('closeRequested'),
+      ),
+      (_) {},
+    );
+
+    expect((await legacyCloseUpdate).id, 'active-paper');
+    expect(activePaper.isVisible, false);
+  });
+
   test('tray rebuild prunes stale paper-id event targets', () async {
     const channel = MethodChannel('repapertodo/window_pruned_event_test');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

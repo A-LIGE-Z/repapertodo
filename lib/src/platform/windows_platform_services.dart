@@ -338,10 +338,13 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   PaperData? _paperFromEventArguments(Object? arguments) {
     final paperId = _paperIdFromArguments(arguments);
-    if (paperId == null) {
-      return _activePaper;
+    if (paperId != null) {
+      return _knownPapers[paperId];
     }
-    return _knownPapers[paperId];
+    if (_hasExplicitPaperIdArgument(arguments)) {
+      return null;
+    }
+    return _activePaper;
   }
 
   String? _paperIdFromArguments(Object? arguments) {
@@ -356,6 +359,14 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       return trimmed.isEmpty ? null : trimmed;
     }
     return null;
+  }
+
+  bool _hasExplicitPaperIdArgument(Object? arguments) {
+    if (arguments is String) {
+      return true;
+    }
+    final map = _argumentMap(arguments);
+    return map?.containsKey('paperId') ?? false;
   }
 
   Map<Object?, Object?>? _boundsFromArguments(Object? arguments) {
