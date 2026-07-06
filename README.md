@@ -68,6 +68,10 @@ use offline package resolution:
 .\scripts\release.ps1 -OfflinePubGet
 ```
 
+When using `-SkipBuild`, existing Windows and Android release artifacts must
+already be present under `build/`; otherwise the script stops with a direct
+message telling you to rerun without `-SkipBuild`.
+
 ### Android release signing
 
 Android APK builds keep working without secrets by falling back to the debug

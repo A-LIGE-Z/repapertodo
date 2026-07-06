@@ -96,6 +96,17 @@ function Assert-GitDiffCheck {
   }
 }
 
+function Assert-PathExists {
+  param(
+    [string]$Path,
+    [string]$Message
+  )
+
+  if (-not (Test-Path -LiteralPath $Path)) {
+    throw $Message
+  }
+}
+
 function Assert-PublishableReleaseOptions {
   param(
     [bool]$PublishGitHubRelease,
@@ -260,6 +271,8 @@ if (-not $SkipBuild) {
 $dist = Join-Path $repoRoot "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
+$windowsReleaseDir = Join-Path $repoRoot "build\windows\x64\runner\Release"
+$androidReleaseApkSource = Join-Path $repoRoot "build\app\outputs\flutter-apk\app-release.apk"
 $windowsZip = Join-Path $dist "repapertodo-windows-x64-$artifactVersion.zip"
 $androidApk = Join-Path $dist "repapertodo-android-$artifactVersion.apk"
 $checksumsFile = Join-Path $dist "repapertodo-$artifactVersion-sha256.txt"
@@ -278,12 +291,18 @@ Invoke-Step "Package release artifacts" {
   if (Test-Path -LiteralPath $metadataFile) {
     Remove-Item -LiteralPath $metadataFile -Force
   }
+  Assert-PathExists `
+    -Path $windowsReleaseDir `
+    -Message "Windows release build output was not found. Run without -SkipBuild to create it."
+  Assert-PathExists `
+    -Path $androidReleaseApkSource `
+    -Message "Android release APK was not found. Run without -SkipBuild to create it."
   Compress-Archive `
-    -Path "build\windows\x64\runner\Release\*" `
+    -Path (Join-Path $windowsReleaseDir "*") `
     -DestinationPath $windowsZip `
     -CompressionLevel Optimal
   Copy-Item `
-    -LiteralPath "build\app\outputs\flutter-apk\app-release.apk" `
+    -LiteralPath $androidReleaseApkSource `
     -Destination $androidApk
 
   $artifactRecords = @($windowsZip, $androidApk) |

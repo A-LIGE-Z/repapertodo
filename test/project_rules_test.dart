@@ -1331,6 +1331,7 @@ void main() {
     expect(script, contains('function Invoke-Native'));
     expect(script, contains('function Assert-CleanGitTree'));
     expect(script, contains('function Assert-GitDiffCheck'));
+    expect(script, contains('function Assert-PathExists'));
     expect(script, contains('function Assert-PublishableReleaseOptions'));
     expect(script, contains('function Assert-GitHubAuthentication'));
     expect(script, contains('git status --porcelain'));
@@ -1359,6 +1360,8 @@ void main() {
     expect(script, contains(r'repapertodo-android-$artifactVersion.apk'));
     expect(script, contains(r'repapertodo-$artifactVersion-sha256.txt'));
     expect(script, contains(r'repapertodo-$artifactVersion-release.json'));
+    expect(script, contains('Windows release build output was not found'));
+    expect(script, contains('Android release APK was not found'));
     expect(script, contains('ConvertTo-Json -Depth 5'));
     expect(script, contains('git rev-parse HEAD'));
     expect(script, contains('builtAtUtc'));
@@ -1391,6 +1394,8 @@ void main() {
     expect(readme, contains('combined with `-SkipTests`'));
     expect(readme, contains('`-SkipBuild`, or `-AllowDirty`'));
     expect(readme, contains('-OfflinePubGet'));
+    expect(readme, contains('When using `-SkipBuild`'));
+    expect(readme, contains('rerun without `-SkipBuild`'));
     expect(readme, contains('Validation includes `git diff --check`'));
     expect(readme, contains('SHA-256 checksum file'));
     expect(readme, contains('release metadata JSON file'));
