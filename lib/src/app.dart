@@ -1042,7 +1042,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Opened markdown file: ${file.path}')),
+        SnackBar(
+          content: Text(
+            strings.format(PaperTodoStringKeys.openedMarkdownFile, [file.path]),
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) {
@@ -1051,7 +1055,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'External markdown open failed: ${_readableFailureMessage(error)}',
+            strings.format(
+              PaperTodoStringKeys.externalMarkdownOpenFailed,
+              [_readableFailureMessage(error)],
+            ),
           ),
         ),
       );
@@ -1068,7 +1075,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Script capsule failed: ${_readableFailureMessage(error)}',
+            strings.format(
+              PaperTodoStringKeys.scriptCapsuleFailed,
+              [_readableFailureMessage(error)],
+            ),
           ),
         ),
       );
@@ -1087,7 +1097,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Open link failed: ${_readableFailureMessage(error)}',
+              strings.format(
+                PaperTodoStringKeys.openLinkFailed,
+                [_readableFailureMessage(error)],
+              ),
             ),
           ),
         );
@@ -1101,8 +1114,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Open link failed: unsupported link target.'),
+        SnackBar(
+          content: Text(
+            strings.get(PaperTodoStringKeys.openLinkUnsupported),
+          ),
         ),
       );
       return;
@@ -1115,7 +1130,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Open link failed: ${_readableFailureMessage(error)}'),
+          content: Text(
+            strings.format(
+              PaperTodoStringKeys.openLinkFailed,
+              [_readableFailureMessage(error)],
+            ),
+          ),
         ),
       );
     }
@@ -2181,8 +2201,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       ..addAll(reminderItemIds);
     final first = candidates.first;
     final message = candidates.length == 1
-        ? 'Reminder: ${_displayTitle(first.paper)} - ${_displayItemText(first.item)}'
-        : 'Reminder: ${candidates.length} todo items are due.';
+        ? strings.format(
+            PaperTodoStringKeys.todoReminderSingle,
+            [_displayTitle(first.paper), _displayItemText(first.item)],
+          )
+        : strings.format(
+            PaperTodoStringKeys.todoReminderMultiple,
+            [candidates.length],
+          );
     final snackBarController = messenger.showSnackBar(
       SnackBar(
         content: Text(message),
@@ -2190,7 +2216,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           seconds: controller.state.todoReminderBubbleDurationSeconds,
         ),
         action: SnackBarAction(
-          label: 'Open',
+          label: strings.get(PaperTodoStringKeys.actionOpen),
           onPressed: () => unawaited(_openPaper(first.paper)),
         ),
       ),
@@ -2227,7 +2253,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   String _displayItemText(PaperItem item) {
     final text = item.text.trim();
-    return text.isEmpty ? 'Todo item' : text;
+    return text.isEmpty
+        ? strings.get(PaperTodoStringKeys.todoItemFallback)
+        : text;
   }
 }
 
@@ -2681,6 +2709,7 @@ class PaperPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final strings = PaperTodoStringsScope.of(context);
     final isCollapsed = collapseAllActive || paper.isCollapsed;
     final scriptCapsuleSpec =
         paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
@@ -2737,9 +2766,10 @@ class PaperPreview extends StatelessWidget {
                             maxLength: PaperTitles.maxTitleLength,
                           ),
                         ],
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           border: InputBorder.none,
-                          hintText: 'Untitled',
+                          hintText:
+                              strings.get(PaperTodoStringKeys.untitledPaper),
                           isDense: true,
                         ),
                         enabled: !desktopInteractionLocked,
@@ -3332,6 +3362,8 @@ class _NoteEditorState extends State<_NoteEditor> {
   bool _toolbarInteractionActive = false;
   String? _selectedCanvasElementId;
 
+  PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
+
   @override
   void initState() {
     super.initState();
@@ -3394,21 +3426,21 @@ class _NoteEditorState extends State<_NoteEditor> {
           alignment: Alignment.centerLeft,
           child: SegmentedButton<String>(
             segments: [
-              const ButtonSegment(
+              ButtonSegment(
                 value: _viewEdit,
-                icon: Icon(Icons.edit_outlined),
-                label: Text('Edit'),
+                icon: const Icon(Icons.edit_outlined),
+                label: Text(strings.get(PaperTodoStringKeys.noteViewEdit)),
               ),
-              const ButtonSegment(
+              ButtonSegment(
                 value: _viewPreview,
-                icon: Icon(Icons.visibility_outlined),
-                label: Text('Preview'),
+                icon: const Icon(Icons.visibility_outlined),
+                label: Text(strings.get(PaperTodoStringKeys.noteViewPreview)),
               ),
               if (mode == MarkdownRenderModes.enhanced)
-                const ButtonSegment(
+                ButtonSegment(
                   value: _viewSplit,
-                  icon: Icon(Icons.vertical_split_outlined),
-                  label: Text('Split'),
+                  icon: const Icon(Icons.vertical_split_outlined),
+                  label: Text(strings.get(PaperTodoStringKeys.noteViewSplit)),
                 ),
             ],
             selected: {_safeView(mode)},
@@ -3469,9 +3501,9 @@ class _NoteEditorState extends State<_NoteEditor> {
             onTap: () => _handleEditorTap(context),
             minLines: minLines,
             maxLines: maxLines,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              hintText: 'Write a note...',
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              hintText: strings.get(PaperTodoStringKeys.noteEditorHint),
             ),
             style: Theme.of(context)
                 .textTheme
@@ -3862,9 +3894,9 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   String _noteViewLabel(String view) {
     return switch (view) {
-      _viewPreview => 'Preview',
-      _viewSplit => 'Split',
-      _ => 'Edit',
+      _viewPreview => strings.get(PaperTodoStringKeys.noteViewPreview),
+      _viewSplit => strings.get(PaperTodoStringKeys.noteViewSplit),
+      _ => strings.get(PaperTodoStringKeys.noteViewEdit),
     };
   }
 
@@ -3885,7 +3917,7 @@ class _NoteEditorState extends State<_NoteEditor> {
             padding: const EdgeInsets.all(12),
             child: MarkdownBody(
               data: widget.paper.content.trim().isEmpty
-                  ? '_No note content._'
+                  ? strings.get(PaperTodoStringKeys.noteEmptyPreview)
                   : widget.paper.content,
               inlineSyntaxes: paperTodoMarkdownInlineHtmlSyntaxes(),
               extensionSet: _paperTodoMarkdownExtensionSet,
@@ -3946,10 +3978,14 @@ class _NoteEditorState extends State<_NoteEditor> {
         if (!context.mounted) {
           return;
         }
+        final strings = PaperTodoStringsScope.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Open link failed: ${_readableFailureMessage(error)}',
+              strings.format(
+                PaperTodoStringKeys.openLinkFailed,
+                [_readableFailureMessage(error)],
+              ),
             ),
           ),
         );
@@ -6516,8 +6552,10 @@ class _TodoEditorState extends State<_TodoEditor> {
             border: item.todoColumnCount > 1
                 ? const OutlineInputBorder()
                 : InputBorder.none,
-            labelText: item.todoColumnCount > 1 ? 'Column 1' : null,
-            hintText: 'New item',
+            labelText: item.todoColumnCount > 1
+                ? strings.format(PaperTodoStringKeys.columnLabel, [1])
+                : null,
+            hintText: strings.get(PaperTodoStringKeys.todoNewItemHint),
             isDense: true,
           ),
           style: itemTextStyle?.copyWith(
@@ -6638,7 +6676,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         textInputAction: TextInputAction.next,
         decoration: InputDecoration(
           border: const OutlineInputBorder(),
-          labelText: 'Column ${index + 2}',
+          labelText: strings.format(
+            PaperTodoStringKeys.columnLabel,
+            [index + 2],
+          ),
           isDense: true,
         ),
         style: itemTextStyle?.copyWith(
@@ -7017,9 +7058,14 @@ class _TodoEditorState extends State<_TodoEditor> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${_displayItemText(item)} deleted.'),
+        content: Text(
+          strings.format(
+            PaperTodoStringKeys.todoItemDeleted,
+            [_displayItemText(item)],
+          ),
+        ),
         action: SnackBarAction(
-          label: 'Undo',
+          label: strings.get(PaperTodoStringKeys.actionUndo),
           onPressed: () {
             setState(() {
               final targetIndex = removedIndex
@@ -7209,22 +7255,22 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   String _noteChipLabel(PaperData note) {
     if (!widget.showLinkedNoteName) {
-      return 'Note';
+      return strings.get(PaperTodoStringKeys.labelNote);
     }
     final title = widget.allowLongLinkedNoteTitles
         ? _displayPaperTitle(note)
         : _shortenTitle(_displayPaperTitle(note), widget.maxTitleLength);
-    return 'Note $title';
+    return strings.format(PaperTodoStringKeys.labelNoteTitle, [title]);
   }
 
   String _scriptChipLabel(PaperData note) {
     if (!widget.showLinkedNoteName) {
-      return 'Script';
+      return strings.get(PaperTodoStringKeys.labelScript);
     }
     final title = widget.allowLongLinkedNoteTitles
         ? _displayPaperTitle(note)
         : _shortenTitle(_displayPaperTitle(note), widget.maxTitleLength);
-    return 'Run $title';
+    return strings.format(PaperTodoStringKeys.actionRunPaper, [title]);
   }
 
   String _displayPaperTitle(PaperData paper) {

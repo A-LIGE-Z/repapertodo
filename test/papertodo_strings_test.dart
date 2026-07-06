@@ -5,6 +5,7 @@ import 'package:repapertodo/src/app_controller.dart';
 import 'package:repapertodo/src/core/model/app_state.dart';
 import 'package:repapertodo/src/core/model/paper_constants.dart';
 import 'package:repapertodo/src/core/model/paper_data.dart';
+import 'package:repapertodo/src/core/model/paper_item.dart';
 import 'package:repapertodo/src/core/storage/state_store.dart';
 import 'package:repapertodo/src/platform/noop_platform_services.dart';
 import 'package:repapertodo/src/ui/papertodo_strings.dart';
@@ -150,5 +151,75 @@ void main() {
     expect(find.widgetWithText(TextButton, '取消'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '删除'), findsOneWidget);
     expect(find.text('Delete paper?'), findsNothing);
+  });
+
+  testWidgets('uses Chinese system locale for editor feedback', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 800));
+    tester.binding.platformDispatcher.localeTestValue =
+        const Locale('zh', 'CN');
+    tester.binding.platformDispatcher.localesTestValue = [
+      const Locale('zh', 'CN'),
+    ];
+    addTearDown(() {
+      tester.binding.platformDispatcher.clearLocaleTestValue();
+      tester.binding.platformDispatcher.clearLocalesTestValue();
+      tester.binding.setSurfaceSize(null);
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.enhanced,
+        theme: 'light',
+        papers: [
+          PaperData(
+            id: 'localized-editor-todo-paper',
+            type: PaperTypes.todo,
+            title: '中文编辑',
+            items: [
+              PaperItem(
+                id: 'localized-editor-todo-item',
+                todoColumnCount: 2,
+                todoExtraColumns: [''],
+                todoColumnWidths: [1, 1],
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'localized-editor-note-paper',
+            type: PaperTypes.note,
+            title: '中文笔记',
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: StateStore(filePath: 'build/test-localized-editor.json'),
+      ),
+    );
+
+    expect(find.text('第 1 列'), findsOneWidget);
+    expect(find.text('第 2 列'), findsOneWidget);
+    expect(find.text('新事项'), findsOneWidget);
+    expect(find.text('编辑'), findsWidgets);
+    expect(find.text('预览'), findsWidgets);
+    expect(find.text('分栏'), findsOneWidget);
+    expect(find.textContaining('暂无笔记内容'), findsOneWidget);
+    expect(find.text('Column 1'), findsNothing);
+    expect(find.text('New item'), findsNothing);
+    expect(find.text('Edit'), findsNothing);
+
+    await tester
+        .tap(find.byKey(const ValueKey('localized-editor-note-paper-preview')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('localized-editor-note-paper-content')),
+        findsOneWidget);
+    expect(find.text('写点笔记...'), findsOneWidget);
+    expect(find.text('Write a note...'), findsNothing);
   });
 }
