@@ -1335,6 +1335,9 @@ void main() {
     expect(script, contains('function Assert-CleanGitTree'));
     expect(script, contains('function Assert-GitDiffCheck'));
     expect(script, contains('function Assert-PathExists'));
+    expect(script, contains('function Get-GradleIntegerAssignment'));
+    expect(script, contains('function Get-AndroidSdkConfig'));
+    expect(script, contains('function Assert-AndroidSdkCompatibility'));
     expect(script, contains('function Assert-PublishableReleaseOptions'));
     expect(script, contains('function Assert-GitHubAuthentication'));
     expect(script, contains('git status --porcelain'));
@@ -1354,7 +1357,15 @@ void main() {
     expect(script, contains('Get-AndroidSigningMode'));
     expect(script, contains(r'Android signing mode: $androidSigningMode'));
     expect(script, contains(r'Android signing: $androidSigningMode.'));
+    expect(script, contains('Android SDK config: compileSdk='));
     expect(script, contains('Android 14-17 / API 34-37'));
+    expect(
+      script,
+      contains(
+        'Android SDK compatibility must remain Android 14-17 / API 34-37',
+      ),
+    );
+    expect(script, contains('compileSdk = Get-GradleIntegerAssignment'));
     expect(script, contains('compatibility = "Android 14-17 / API 34-37"'));
     expect(script, contains('Compress-Archive'));
     expect(script, contains('Get-FileHash -Algorithm SHA256'));
@@ -1368,7 +1379,8 @@ void main() {
     expect(script, contains('ConvertTo-Json -Depth 5'));
     expect(script, contains('git rev-parse HEAD'));
     expect(script, contains('builtAtUtc'));
-    expect(script, contains('targetSdk = 37'));
+    expect(script, contains(r'compileSdk = $androidSdkConfig["compileSdk"]'));
+    expect(script, contains(r'targetSdk = $androidSdkConfig["targetSdk"]'));
     expect(script, contains(r'$validationExecuted'));
     expect(script, contains(r'$validationSkipped'));
     expect(script, contains('skippedValidation'));

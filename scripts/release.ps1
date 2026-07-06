@@ -107,6 +107,56 @@ function Assert-PathExists {
   }
 }
 
+function Get-GradleIntegerAssignment {
+  param(
+    [string]$Content,
+    [string]$Name,
+    [string]$SourcePath
+  )
+
+  $pattern = "(?m)^\s*$([regex]::Escape($Name))\s*=\s*(\d+)\s*$"
+  $match = [regex]::Match($Content, $pattern)
+  if (-not $match.Success) {
+    throw "$SourcePath does not declare $Name as an integer assignment."
+  }
+  return [int]$match.Groups[1].Value
+}
+
+function Get-AndroidSdkConfig {
+  param([string]$RepoRoot)
+
+  $gradleFile = Join-Path $RepoRoot "android\app\build.gradle.kts"
+  Assert-PathExists `
+    -Path $gradleFile `
+    -Message "Android Gradle build file was not found."
+  $content = Get-Content -Raw -LiteralPath $gradleFile
+  return [ordered]@{
+    compileSdk = Get-GradleIntegerAssignment `
+      -Content $content `
+      -Name "compileSdk" `
+      -SourcePath $gradleFile
+    minSdk = Get-GradleIntegerAssignment `
+      -Content $content `
+      -Name "minSdk" `
+      -SourcePath $gradleFile
+    targetSdk = Get-GradleIntegerAssignment `
+      -Content $content `
+      -Name "targetSdk" `
+      -SourcePath $gradleFile
+    compatibility = "Android 14-17 / API 34-37"
+  }
+}
+
+function Assert-AndroidSdkCompatibility {
+  param($SdkConfig)
+
+  if ($SdkConfig["compileSdk"] -ne 37 -or
+      $SdkConfig["minSdk"] -ne 34 -or
+      $SdkConfig["targetSdk"] -ne 37) {
+    throw "Android SDK compatibility must remain Android 14-17 / API 34-37 (compileSdk 37, minSdk 34, targetSdk 37)."
+  }
+}
+
 function Assert-PublishableReleaseOptions {
   param(
     [bool]$PublishGitHubRelease,
@@ -202,8 +252,11 @@ if ([string]::IsNullOrWhiteSpace($ReleaseTitle)) {
   $ReleaseTitle = "RePaperTodo $version"
 }
 $androidSigningMode = Get-AndroidSigningMode -RepoRoot $repoRoot
+$androidSdkConfig = Get-AndroidSdkConfig -RepoRoot $repoRoot
+Assert-AndroidSdkCompatibility -SdkConfig $androidSdkConfig
 $releaseNotes = New-ReleaseNotes -Version $version -AndroidSigningMode $androidSigningMode
 Write-Host "Android signing mode: $androidSigningMode"
+Write-Host "Android SDK config: compileSdk=$($androidSdkConfig["compileSdk"]), minSdk=$($androidSdkConfig["minSdk"]), targetSdk=$($androidSdkConfig["targetSdk"])"
 
 $gitCommit = ""
 Invoke-Native "git rev-parse HEAD" {
@@ -326,9 +379,10 @@ Invoke-Step "Package release artifacts" {
     gitCommit = $gitCommit
     builtAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     android = [ordered]@{
-      minSdk = 34
-      targetSdk = 37
-      compatibility = "Android 14-17 / API 34-37"
+      compileSdk = $androidSdkConfig["compileSdk"]
+      minSdk = $androidSdkConfig["minSdk"]
+      targetSdk = $androidSdkConfig["targetSdk"]
+      compatibility = $androidSdkConfig["compatibility"]
       signing = $androidSigningMode
     }
     validation = $validationExecuted
