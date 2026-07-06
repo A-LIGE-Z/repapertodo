@@ -1363,6 +1363,9 @@ void main() {
     expect(script, contains('git rev-parse HEAD'));
     expect(script, contains('builtAtUtc'));
     expect(script, contains('targetSdk = 37'));
+    expect(script, contains(r'$validationExecuted'));
+    expect(script, contains(r'$validationSkipped'));
+    expect(script, contains('skippedValidation'));
     expect(script, contains('function New-ReleaseNotes'));
     expect(script, contains('gh release create'));
     expect(script, contains('gh release edit'));
@@ -1373,6 +1376,8 @@ void main() {
     expect(script, contains(r'$checksumsFile $metadataFile --clobber'));
     expect(script, contains('SHA-256 checksums for release artifacts.'));
     expect(script, contains('Release metadata JSON with version'));
+    expect(readme, contains('skipped validation commands'));
+    expect(readme, contains('record those skipped validation'));
     expect(
       script,
       contains('Android release APK targeting Android 14-17 / API 34-37.'),

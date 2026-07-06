@@ -201,6 +201,12 @@ Invoke-Native "git rev-parse HEAD" {
 Assert-CleanGitTree
 Assert-GitDiffCheck
 
+$validationExecuted = @(
+  "git diff --check",
+  "git diff --cached --check"
+)
+$validationSkipped = @()
+
 if (-not $SkipTests -or -not $SkipBuild) {
   Invoke-Step "Resolve Flutter packages" {
     if ($OfflinePubGet) {
@@ -216,6 +222,8 @@ if (-not $SkipTests -or -not $SkipBuild) {
 }
 
 if (-not $SkipTests) {
+  $validationExecuted += "flutter test --no-pub"
+  $validationExecuted += "flutter analyze --no-pub"
   Invoke-Step "Run Flutter tests" {
     Invoke-Native "flutter test" {
       & $flutter test --no-pub
@@ -226,9 +234,14 @@ if (-not $SkipTests) {
       & $flutter analyze --no-pub
     }
   }
+} else {
+  $validationSkipped += "flutter test --no-pub"
+  $validationSkipped += "flutter analyze --no-pub"
 }
 
 if (-not $SkipBuild) {
+  $validationExecuted += "flutter build windows --release --no-pub"
+  $validationExecuted += "flutter build apk --release --no-pub"
   Invoke-Step "Build Windows release" {
     Invoke-Native "flutter build windows" {
       & $flutter build windows --release --no-pub
@@ -239,6 +252,9 @@ if (-not $SkipBuild) {
       & $flutter build apk --release --no-pub
     }
   }
+} else {
+  $validationSkipped += "flutter build windows --release --no-pub"
+  $validationSkipped += "flutter build apk --release --no-pub"
 }
 
 $dist = Join-Path $repoRoot "dist"
@@ -296,14 +312,8 @@ Invoke-Step "Package release artifacts" {
       compatibility = "Android 14-17 / API 34-37"
       signing = $androidSigningMode
     }
-    validation = @(
-      "git diff --check",
-      "git diff --cached --check",
-      "flutter test --no-pub",
-      "flutter analyze --no-pub",
-      "flutter build windows --release --no-pub",
-      "flutter build apk --release --no-pub"
-    )
+    validation = $validationExecuted
+    skippedValidation = $validationSkipped
     artifacts = $artifactRecords
   } |
     ConvertTo-Json -Depth 5 |

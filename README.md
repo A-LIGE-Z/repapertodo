@@ -29,7 +29,8 @@ Use the local release script to verify, build, and package the Windows and
 Android artifacts. The script also writes a SHA-256 checksum file beside the
 artifacts in `dist/`, plus a release metadata JSON file with the version,
 commit, Android 14-17/API 34-37 compatibility, signing mode, validation
-commands, and artifact hashes.
+commands, skipped validation commands for local smoke packages, and artifact
+hashes.
 Validation includes `git diff --check`, tests, analysis, and Windows/APK
 release builds.
 
@@ -52,7 +53,9 @@ artifacts.
 
 By default the release script refuses to package a dirty git working tree so
 the artifact metadata commit matches the files being shipped. For a local-only
-smoke package from uncommitted changes, pass `-AllowDirty`.
+smoke package from uncommitted changes, pass `-AllowDirty`. Local smoke
+packages made with `-SkipTests` or `-SkipBuild` record those skipped validation
+steps in the release metadata JSON.
 
 GitHub Release publishing always requires the full validation path. The script
 will refuse `-PublishGitHubRelease` when it is combined with `-SkipTests`,
