@@ -59,7 +59,11 @@ paper's saved position.
 Normal startup should restore every non-deleted paper as visible for the
 current session, matching PaperTodo's model where closing or hiding a paper
 does not make it feel lost on the next launch. Explicit startup exit commands
-must not perform this visibility restore.
+must not perform this visibility restore. When no primary instance is running,
+an explicit `exit` or `quit` startup command should return before creating the
+Flutter window, matching PaperTodo's lightweight self-check path; when a
+primary instance is running, the secondary process should still forward the
+exit command so Dart can save, sync, and clean up normally.
 The Windows tray paper list should expose useful paper state at a glance:
 visible papers are checked, while hidden, collapsed, desktop-pinned, and
 topmost states are shown in the menu label. Platform close/show/hide events

@@ -482,9 +482,17 @@ void main() {
     final runner = _readProjectText('windows/runner/main.cpp');
     final dartParser =
         _readProjectText('lib/src/core/startup/startup_command.dart');
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
 
     expect(runner, contains('find_first_of("=:", segment_start)'));
     expect(runner, contains('CreatedPaperStartupCommand'));
+    expect(runner, contains('IsExplicitExitStartupCommand'));
+    expect(runner, contains('OpenMutexW(SYNCHRONIZE'));
+    expect(design, contains('return before creating the'));
+    expect(
+      runner.indexOf('if (IsExplicitExitStartupCommand'),
+      lessThan(runner.indexOf('flutter::DartProject project')),
+    );
     expect(dartParser, contains("RegExp(r'[=:]+')"));
     expect(dartParser, contains('_createdPaperKind'));
   });

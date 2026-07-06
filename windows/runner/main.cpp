@@ -142,6 +142,10 @@ std::string StartupCommandFromArgs(const std::vector<std::string>& args) {
   return "show";
 }
 
+bool IsExplicitExitStartupCommand(const std::vector<std::string>& args) {
+  return StartupCommandFromArgs(args) == "exit";
+}
+
 void SignalPrimaryInstance(const std::vector<std::string>& args) {
   const std::string command = StartupCommandFromArgs(args);
   for (int attempt = 0; attempt < 6; attempt++) {
@@ -175,10 +179,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-  flutter::DartProject project(L"data");
-
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
+  if (IsExplicitExitStartupCommand(command_line_arguments)) {
+    HANDLE existing_instance =
+        OpenMutexW(SYNCHRONIZE, FALSE, kSingleInstanceMutexName);
+    if (!existing_instance) {
+      ::CoUninitialize();
+      return EXIT_SUCCESS;
+    }
+    CloseHandle(existing_instance);
+  }
 
   HANDLE single_instance_mutex =
       CreateMutexW(nullptr, TRUE, kSingleInstanceMutexName);
@@ -192,6 +203,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     return EXIT_SUCCESS;
   }
 
+  flutter::DartProject project(L"data");
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
