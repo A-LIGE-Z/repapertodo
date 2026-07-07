@@ -925,10 +925,22 @@ void main() {
             'WebDAV provider rate limit reached. Try again later. Retry after 120 seconds.',
       ),
       (
+        statusCode: 429,
+        retryAfter: '0',
+        expectedMessage:
+            'WebDAV provider rate limit reached. Try again later. Retry after 0 seconds.',
+      ),
+      (
         statusCode: 503,
         retryAfter: 'Wed, 01 Jul 2026 09:01:00 GMT',
         expectedMessage:
             'WebDAV provider is temporarily unavailable. Try again later. Retry after 2026-07-01T09:01:00.000Z.',
+      ),
+      (
+        statusCode: 503,
+        retryAfter: '-1',
+        expectedMessage:
+            'WebDAV provider is temporarily unavailable. Try again later.',
       ),
       (
         statusCode: 429,

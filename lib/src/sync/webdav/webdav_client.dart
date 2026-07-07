@@ -589,7 +589,7 @@ String _retryAfterSuffix(String? retryAfter) {
     return '';
   }
   final seconds = int.tryParse(value);
-  if (seconds != null && seconds > 0) {
+  if (seconds != null && seconds >= 0) {
     return ' Retry after $seconds ${seconds == 1 ? 'second' : 'seconds'}.';
   }
   try {

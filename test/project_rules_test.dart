@@ -383,6 +383,8 @@ void main() {
     expect(syncDesign, contains('stable `User-Agent`'));
     expect(syncDesign, contains('`PROPFIND` prefers XML responses'));
     expect(syncDesign, contains('Provider `Retry-After` hints'));
+    expect(syncDesign, contains('zero-second retry hint is valid'));
+    expect(syncDesign, contains('negative or malformed values are ignored'));
     expect(syncDesign, contains('Missing or weak ETags must not be used for'));
     expect(syncDesign, contains('Provider `409` or `412` create-only'));
     expect(syncDesign, contains('original create-only conflict is preserved'));

@@ -243,7 +243,8 @@ HTTP client and socket transport failures should be surfaced through the same
 retryable WebDAV error path.
 Provider `Retry-After` hints on throttling or temporary-unavailable responses
 should be preserved in retryable WebDAV error messages so users can wait the
-right amount of time before trying again.
+right amount of time before trying again. A zero-second retry hint is valid and
+means the user can retry immediately; negative or malformed values are ignored.
 Missing or weak ETags must not be used for manifest overwrite conditions:
 manifest writes for an existing remote manifest require a strong ETag and are
 treated as conflicts instead of unsafe unconditional overwrites when that ETag
