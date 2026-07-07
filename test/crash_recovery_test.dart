@@ -54,6 +54,26 @@ void main() {
     expect(logText, contains('stack line'));
   });
 
+  test('creates the state directory before crash recovery writes', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'repapertodo_crash_recovery_missing_directory_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    final missingDirectory = Directory(p.join(directory.path, 'nested'));
+    final store = StateStore(
+      filePath: p.join(missingDirectory.path, 'data.json'),
+    );
+    const writer = CrashRecoveryWriter();
+
+    expect(await missingDirectory.exists(), false);
+
+    writer.saveSync(store: store, state: AppState(theme: 'dark'));
+
+    expect(await missingDirectory.exists(), true);
+    expect(await File(writer.recoveryPathFor(store)).exists(), true);
+  });
+
   test('crash recovery snapshots do not mutate live state', () async {
     final directory = await Directory.systemTemp.createTemp(
       'repapertodo_crash_recovery_snapshot_test_',
