@@ -8388,6 +8388,77 @@ void main() {
     expect(platform.paperWindows.updatedTitles, contains('Wheel zoom note'));
   });
 
+  testWidgets('ctrl mouse wheel note zoom respects PaperTodo bounds',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'wheel-zoom-bounds-note',
+            type: PaperTypes.note,
+            title: 'Wheel zoom bounds',
+            content: 'Keep wheel zoom inside the supported range.',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final paper = controller.state.papers.single;
+    final position = tester.getCenter(find.byType(PaperPreview));
+
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: position,
+        scrollDelta: const Offset(0, -120),
+      ),
+    );
+    await tester.pump();
+    expect(paper.textZoom, 1.0);
+    expect(platform.paperWindows.updatedTitles, isEmpty);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    for (var i = 0; i < 8; i += 1) {
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: position,
+          scrollDelta: const Offset(0, -120),
+        ),
+      );
+    }
+    await tester.pump();
+    expect(paper.textZoom, 1.5);
+
+    for (var i = 0; i < 12; i += 1) {
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: position,
+          scrollDelta: const Offset(0, 120),
+        ),
+      );
+    }
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(paper.textZoom, 0.5);
+    expect(
+      platform.paperWindows.updatedTitles,
+      everyElement(equals('Wheel zoom bounds')),
+    );
+  });
+
   testWidgets('edits todo extra columns', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
