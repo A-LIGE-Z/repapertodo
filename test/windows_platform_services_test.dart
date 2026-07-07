@@ -264,6 +264,56 @@ void main() {
     expect(calls.last.arguments, isNull);
   });
 
+  test('paper host reveals pinned papers without ordinary show', () async {
+    const channel = MethodChannel('repapertodo/window_reveal_pinned_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final paper = PaperData(
+      id: 'pinned-paper',
+      type: PaperTypes.todo,
+      title: 'Pinned',
+      x: 12,
+      y: 24,
+      width: 320,
+      height: 240,
+      isVisible: true,
+      isPinnedToDesktop: true,
+    );
+
+    await services.paperWindows.revealPinnedPaper(paper);
+
+    expect(
+      calls.map((call) => call.method),
+      ['setBounds', 'revealPinnedPaper', 'setTitle'],
+    );
+    expect(calls[0].arguments, {
+      'paperId': 'pinned-paper',
+      'x': 12.0,
+      'y': 24.0,
+      'width': 320.0,
+      'height': 240.0,
+    });
+    expect(calls[1].arguments, {
+      'paperId': 'pinned-paper',
+      'isPinnedToDesktop': true,
+      'alwaysOnTop': false,
+    });
+    expect(calls[2].arguments, {
+      'paperId': 'pinned-paper',
+      'title': 'RePaperTodo - Pinned',
+    });
+    expect(calls.map((call) => call.method), isNot(contains('show')));
+  });
+
   test('Windows platform services reject blank channel arguments locally',
       () async {
     const channel = MethodChannel('repapertodo/window_blank_test');

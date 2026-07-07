@@ -66,6 +66,9 @@ class NoopPaperWindowHost implements PaperWindowHost {
   Future<void> hidePaper(PaperData paper) async {}
 
   @override
+  Future<void> revealPinnedPaper(PaperData paper) async {}
+
+  @override
   Future<bool> hasVisibleSurfaces(AppState state) async {
     return state.papers.any((paper) => paper.isVisible);
   }

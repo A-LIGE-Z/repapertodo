@@ -163,7 +163,10 @@ claimed by another app, the Windows runner should report a platform setting
 failure and undo any partial hotkey registration from the same request.
 Pinned paper hotkeys should follow PaperTodo's reveal model: the Todo and Note
 hotkeys reveal the first visible desktop-pinned paper of the matching type and
-do not create new papers when no matching pinned surface exists.
+do not create new papers when no matching pinned surface exists. Revealing a
+desktop-pinned paper must use a dedicated platform path instead of ordinary
+show, so Windows can temporarily move the pinned surface to the top without
+clearing desktop pinning or immediately returning it to the desktop bottom.
 Hotkey settings should strip control characters before saving or platform
 registration while preserving ordinary spaces used by aliases.
 For PaperTodo font parity, when no explicit system font family is configured,

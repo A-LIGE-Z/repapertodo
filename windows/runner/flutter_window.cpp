@@ -1626,6 +1626,32 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (method == "revealPinnedPaper") {
+          RememberActivePaperId(call.arguments());
+          RememberPaperVisibility(active_paper_id_, true);
+          if (!active_paper_id_.empty()) {
+            pinned_to_desktop_ = GetBoolArgumentValue(
+                call.arguments(), "isPinnedToDesktop", true);
+            RememberPaperPinnedToDesktop(active_paper_id_, pinned_to_desktop_);
+            RememberPaperAlwaysOnTop(
+                active_paper_id_,
+                GetBoolArgumentValue(call.arguments(), "alwaysOnTop",
+                                     paper_surfaces_[active_paper_id_]
+                                         .always_on_top));
+          }
+          ApplyActivePaperBounds(window);
+          ShowWindow(window, SW_SHOWNOACTIVATE);
+          SetWindowPos(window, HWND_TOP, 0, 0, 0, 0,
+                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                           SWP_NOOWNERZORDER);
+          z_order_state_initialized_ = true;
+          z_order_pinned_to_desktop_ = pinned_to_desktop_;
+          z_order_topmost_applied_ = false;
+          z_order_fullscreen_blocked_ =
+              avoid_fullscreen_topmost_ && IsForegroundFullscreen(window);
+          result->Success();
+          return;
+        }
         if (method == "hide") {
           const std::string requested_paper_id =
               GetPaperIdArgument(call.arguments());

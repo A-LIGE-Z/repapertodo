@@ -559,6 +559,11 @@ void main() {
 
   test('hotkey settings keep forgiving aliases without control characters', () {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final controller = _readProjectText('lib/src/app_controller.dart');
+    final platform =
+        _readProjectText('lib/src/platform/platform_services.dart');
+    final windowsPlatform =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
     final appState = _readProjectText('lib/src/core/model/app_state.dart');
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
@@ -569,7 +574,11 @@ void main() {
     expect(design, contains('undo any partial hotkey registration'));
     expect(design, contains("PaperTodo's reveal model"));
     expect(design, contains('do not create new papers'));
+    expect(design, contains('dedicated platform path'));
     expect(appState, contains('_normalizeHotKeyForSettings'));
+    expect(platform, contains('revealPinnedPaper'));
+    expect(windowsPlatform, contains("'revealPinnedPaper'"));
+    expect(controller, contains('_platform.paperWindows.revealPinnedPaper'));
     expect(
       appState,
       contains('unit <= 0x1F || (unit >= 0x7F && unit <= 0x9F)'),
@@ -582,6 +591,9 @@ void main() {
         runner, contains('todo_hotkey_requested && !todo_hotkey_registered_'));
     expect(runner, contains('reveal-pinned-todo'));
     expect(runner, contains('reveal-pinned-note'));
+    expect(runner, contains('method == "revealPinnedPaper"'));
+    expect(runner, contains('HWND_TOP'));
+    expect(runner, contains('z_order_state_initialized_ = true'));
   });
 
   test('Windows fullscreen avoidance uses PaperTodo defensive detection', () {

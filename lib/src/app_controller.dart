@@ -558,7 +558,7 @@ class RePaperTodoController {
       if (PaperTypes.normalize(paper.type) == normalizedType &&
           paper.isPinnedToDesktop &&
           paper.isVisible) {
-        await showPaper(paper);
+        await _platform.paperWindows.revealPinnedPaper(paper);
         return;
       }
     }

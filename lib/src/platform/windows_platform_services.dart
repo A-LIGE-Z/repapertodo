@@ -259,6 +259,19 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   }
 
   @override
+  Future<void> revealPinnedPaper(PaperData paper) async {
+    paper.isVisible = true;
+    _rememberPaper(paper);
+    _activePaper = paper;
+    await _applyBounds(paper);
+    await _channel.invokeMethod<void>(
+      'revealPinnedPaper',
+      _paperSurfaceArguments(paper),
+    );
+    await _channel.invokeMethod<void>('setTitle', _paperTitleArguments(paper));
+  }
+
+  @override
   Future<void> updatePaperSurface(PaperData paper) async {
     _rememberPaper(paper);
     if (!paper.isVisible) {

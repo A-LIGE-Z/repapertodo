@@ -347,7 +347,8 @@ void main() {
       const StartupCommand(StartupCommandKind.revealPinnedNote),
     );
 
-    expect(platform.paperWindows.shownIds, ['pinned-todo']);
+    expect(platform.paperWindows.revealedPinnedIds, ['pinned-todo']);
+    expect(platform.paperWindows.shownIds, isEmpty);
     expect(controller.state.papers.map((paper) => paper.id), [
       'pinned-todo',
       'plain-todo',
@@ -880,6 +881,7 @@ class _RecordingTrayHost extends NoopTrayHost {
 
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final shownIds = <String>[];
+  final revealedPinnedIds = <String>[];
   final hiddenIds = <String>[];
   final workAreaRequestIds = <String>[];
   final restoredVisibilitySnapshots = <List<bool>>[];
@@ -921,6 +923,11 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   @override
   Future<void> showPaper(PaperData paper) async {
     shownIds.add(paper.id);
+  }
+
+  @override
+  Future<void> revealPinnedPaper(PaperData paper) async {
+    revealedPinnedIds.add(paper.id);
   }
 
   @override
