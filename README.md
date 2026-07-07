@@ -27,8 +27,9 @@ See [AGENTS.md](AGENTS.md) for project rules and [docs/ROADMAP.md](docs/ROADMAP.
 
 Use the local release script to verify, build, and package the Windows and
 Android artifacts. The script also writes a SHA-256 checksum file beside the
-artifacts in `dist/` that covers the Windows zip, Android APK, and release
-metadata JSON, plus a release metadata JSON file with the version,
+artifacts in `dist/` that covers the Windows zip, Android APK, and release metadata JSON file.
+The script verifies that checksum file before upload and also writes release
+metadata JSON with the version,
 commit, Android 14-17/API 34-37 compatibility, signing mode, validation
 commands, skipped validation commands for local smoke packages, and artifact
 hashes.

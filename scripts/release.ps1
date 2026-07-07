@@ -200,6 +200,28 @@ function Assert-PathExists {
   }
 }
 
+function Assert-ReleaseChecksumFile {
+  param(
+    [string]$ChecksumsFile,
+    [object[]]$Records
+  )
+
+  $expectedLines = @(
+    $Records | ForEach-Object { "$($_.sha256)  $($_.fileName)" }
+  )
+  $actualLines = @(Get-Content -LiteralPath $ChecksumsFile)
+
+  if ($actualLines.Count -ne $expectedLines.Count) {
+    throw "Release checksum file '$ChecksumsFile' contains $($actualLines.Count) line(s), expected $($expectedLines.Count)."
+  }
+
+  for ($index = 0; $index -lt $expectedLines.Count; $index++) {
+    if ($actualLines[$index] -ne $expectedLines[$index]) {
+      throw "Release checksum file '$ChecksumsFile' line $($index + 1) does not match the packaged artifact hash."
+    }
+  }
+}
+
 function Get-GradleIntegerAssignment {
   param(
     [string]$Content,
@@ -578,6 +600,9 @@ Invoke-Step "Package release artifacts" {
   $releasePackageRecords |
     ForEach-Object { "$($_.sha256)  $($_.fileName)" } |
     Set-Content -LiteralPath $checksumsFile -Encoding ascii
+  Assert-ReleaseChecksumFile `
+    -ChecksumsFile $checksumsFile `
+    -Records $releasePackageRecords
 }
 
 Get-Item -LiteralPath $windowsZip, $androidApk, $checksumsFile, $metadataFile |

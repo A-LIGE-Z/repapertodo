@@ -1592,6 +1592,7 @@ void main() {
     expect(script, contains('function Assert-CleanGitTree'));
     expect(script, contains('function Assert-GitDiffCheck'));
     expect(script, contains('function Assert-PathExists'));
+    expect(script, contains('function Assert-ReleaseChecksumFile'));
     expect(script, contains('function Get-AndroidKeyProperty'));
     expect(script, contains('function Resolve-AndroidKeystorePath'));
     expect(script, contains('function Get-GradleIntegerAssignment'));
@@ -1682,6 +1683,8 @@ void main() {
     expect(script, contains(r'$metadataHash = Get-FileHash'));
     expect(script, contains(r'$releasePackageRecords = $artifactRecords'));
     expect(script, contains(r'$releasePackageRecords |'));
+    expect(script, contains('Assert-ReleaseChecksumFile'));
+    expect(script, contains('does not match the packaged artifact hash'));
     expect(script, contains(r'compileSdk = $androidSdkConfig["compileSdk"]'));
     expect(script, contains(r'targetSdk = $androidSdkConfig["targetSdk"]'));
     expect(script, contains(r'$validationExecuted'));
@@ -1780,6 +1783,7 @@ void main() {
     expect(readme, contains('Validation includes `git diff --check`'));
     expect(readme, contains('SHA-256 checksum file'));
     expect(readme, contains('covers the Windows zip, Android APK'));
+    expect(readme, contains('verifies that checksum file before upload'));
     expect(readme, contains('release metadata JSON file'));
     expect(readme, contains('refuses to'));
     expect(readme, contains('storeFile` points to an existing keystore file'));
