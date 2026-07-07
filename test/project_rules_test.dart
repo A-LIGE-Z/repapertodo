@@ -37,6 +37,7 @@ void main() {
 
   test('Android build targets Android 14 through 17', () {
     final gradle = _readProjectText('android/app/build.gradle.kts');
+    final gradleProperties = _readProjectText('android/gradle.properties');
     final manifest =
         _readProjectText('android/app/src/main/AndroidManifest.xml');
     final filePaths =
@@ -59,6 +60,12 @@ void main() {
     expect(gradle, contains('signingConfigs.getByName("debug")'));
     expect(gradle, contains('enableV2Signing = true'));
     expect(gradle, contains('enableV3Signing = true'));
+    expect(gradleProperties, contains('android.newDsl=false'));
+    expect(gradleProperties, contains('android.builtInKotlin=false'));
+    expect(
+      gradleProperties,
+      contains('Flutter\n# Gradle plugin configures cleanly'),
+    );
     expect(gitignore, contains('android/key.properties'));
     expect(gitignore, contains('*.jks'));
     expect(readme, contains('Android release signing'));

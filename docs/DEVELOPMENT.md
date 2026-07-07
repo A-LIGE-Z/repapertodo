@@ -29,6 +29,13 @@ puro flutter build windows
 puro flutter build apk --debug
 ```
 
+## Android Gradle Compatibility
+
+`android/gradle.properties` intentionally keeps `android.newDsl=false` and
+`android.builtInKotlin=false` while the current Flutter Gradle plugin is used
+with Android Gradle Plugin 9. Removing those compatibility switches makes the
+Android project fail during Gradle configuration before APK packaging starts.
+
 ## Local State Safety
 
 `StateStore` writes `data.json.tmp` before replacing `data.json`, rotates the
