@@ -74,6 +74,15 @@ void main() {
     expect(manifest, contains('android:usesCleartextTraffic="true"'));
     expect(manifest, contains('androidx.core.content.FileProvider'));
     expect(manifest, contains('android:grantUriPermissions="true"'));
+    expect(manifest, contains('android.intent.action.VIEW'));
+    expect(manifest, contains('android:scheme="http"'));
+    expect(manifest, contains('android:scheme="https"'));
+    expect(manifest, contains('android:scheme="mailto"'));
+    expect(manifest, contains('android:mimeType="text/markdown"'));
+    expect(manifest, contains('android:mimeType="text/plain"'));
+    expect(manifest, contains('android:mimeType="*/*"'));
+    expect(design, contains('Android package visibility queries'));
+    expect(design, contains('generic file fallback'));
     expect(filePaths, contains('<files-path'));
     expect(filePaths, contains('<cache-path'));
     expect(filePaths, contains('<external-files-path'));

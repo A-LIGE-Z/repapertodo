@@ -194,6 +194,9 @@ so Windows keeps portable files near the executable and Android FileProvider can
 grant temporary read access to other apps. Android FileProvider paths should
 also include accessible external storage so validated `/storage/...` Markdown
 links can be handed to the user's preferred editor or viewer.
+Android package visibility queries must cover the same external launch families
+the app exposes: `http`, `https`, `mailto`, Markdown/text files, and the
+generic file fallback used when a more specific viewer is unavailable.
 Generated external Markdown export filenames must replace platform-reserved
 characters and raw control characters, including DEL and C1 controls, before
 file creation. External Markdown extension settings must reject
