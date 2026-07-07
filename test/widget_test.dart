@@ -2137,6 +2137,59 @@ void main() {
     );
   });
 
+  testWidgets('rejects invalid external markdown extensions in settings',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        externalMarkdownExtension: '.md',
+        papers: [
+          PaperData(
+            id: 'extension-paper',
+            type: PaperTypes.todo,
+            title: 'Extension settings',
+            items: [
+              PaperItem(id: 'extension-item', text: 'Tune export extension'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    final extensionField =
+        find.widgetWithText(TextField, 'External markdown extension');
+    await tester.enterText(extensionField, 'md?bad');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsOneWidget);
+    expect(
+      find.textContaining('Use an extension such as .md or .txt'),
+      findsOneWidget,
+    );
+    expect(controller.state.externalMarkdownExtension, '.md');
+
+    await tester.enterText(extensionField, '.txt');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync settings'), findsNothing);
+    expect(controller.state.externalMarkdownExtension, '.txt');
+  });
+
   testWidgets('saves WebDAV sync encryption passphrase', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -5686,7 +5739,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(syncService.calls, 1);
-    expect(controller.state.papers.single.title, 'Synced after settings closes');
+    expect(
+        controller.state.papers.single.title, 'Synced after settings closes');
     expect(find.text('Remote data downloaded.'), findsNothing);
   });
 

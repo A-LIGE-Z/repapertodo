@@ -399,6 +399,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   final FocusNode _usernameFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
   final FocusNode _encryptionPassphraseFocusNode = FocusNode();
+  final FocusNode _externalMarkdownExtensionFocusNode = FocusNode();
   late final TextEditingController _intervalController;
   late final TextEditingController _requestTimeoutController;
   late final TextEditingController _fontFamilyController;
@@ -416,6 +417,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   String? _usernameErrorText;
   String? _passwordErrorText;
   String? _encryptionPassphraseErrorText;
+  String? _externalMarkdownExtensionErrorText;
 
   PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
 
@@ -536,6 +538,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _usernameFocusNode.dispose();
     _passwordFocusNode.dispose();
     _encryptionPassphraseFocusNode.dispose();
+    _externalMarkdownExtensionFocusNode.dispose();
     _intervalController.dispose();
     _requestTimeoutController.dispose();
     _fontFamilyController.dispose();
@@ -743,11 +746,19 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               const SizedBox(height: 12),
               TextField(
                 controller: _externalMarkdownExtensionController,
+                focusNode: _externalMarkdownExtensionFocusNode,
+                onChanged: (_) {
+                  if (_externalMarkdownExtensionErrorText == null) {
+                    return;
+                  }
+                  setState(() => _externalMarkdownExtensionErrorText = null);
+                },
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
                   labelText: strings.get(
                     PaperTodoStringKeys.externalMarkdownExtension,
                   ),
+                  errorText: _externalMarkdownExtensionErrorText,
                   prefixIcon: const Icon(Icons.file_open_outlined),
                 ),
               ),
@@ -1656,6 +1667,21 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         int.tryParse(_reminderDurationController.text.trim()) ?? 5;
     final deepCapsuleTopMargin =
         double.tryParse(_deepCapsuleTopMarginController.text.trim()) ?? 48;
+    final externalMarkdownExtension =
+        _tryNormalizeExtension(_externalMarkdownExtensionController.text);
+    if (externalMarkdownExtension == null) {
+      setState(() {
+        _externalMarkdownExtensionErrorText = strings.get(
+          PaperTodoStringKeys.externalMarkdownExtensionInvalid,
+        );
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _externalMarkdownExtensionFocusNode.requestFocus();
+        }
+      });
+      return;
+    }
     final settings = SyncSettings(
       enabled: _enabled,
       provider: _enabled ? SyncProviderIds.webDav : SyncProviderIds.none,
@@ -1729,8 +1755,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         systemFontFamilyName: normalizeSystemFontFamilyName(
           _fontFamilyController.text,
         ),
-        externalMarkdownExtension:
-            _normalizeExtension(_externalMarkdownExtensionController.text),
+        externalMarkdownExtension: externalMarkdownExtension,
         zoom: _zoom,
         maxTitleLength: _maxTitleLength.round().clamp(2, 20).toInt(),
         enableToolTips: _enableToolTips,
@@ -1797,7 +1822,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     };
   }
 
-  String _normalizeExtension(String extension) {
+  String? _tryNormalizeExtension(String extension) {
     var value = extension.trim();
     if (value.isEmpty) {
       return '.md';
@@ -1812,7 +1837,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         value.length > 32 ||
         value.contains('..') ||
         _hasInvalidFileNameCharacter(value)) {
-      return '.md';
+      return null;
     }
     return value.toLowerCase();
   }

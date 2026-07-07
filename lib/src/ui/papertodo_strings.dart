@@ -138,6 +138,8 @@ abstract final class PaperTodoStringKeys {
   static const enhanced = 'enhanced';
   static const externalMarkdownOpenFailed = 'externalMarkdownOpenFailed';
   static const externalMarkdownExtension = 'externalMarkdownExtension';
+  static const externalMarkdownExtensionInvalid =
+      'externalMarkdownExtensionInvalid';
   static const fontPreset = 'fontPreset';
   static const fullscreenTopmostMode = 'fullscreenTopmostMode';
   static const generic = 'generic';
@@ -551,6 +553,8 @@ const _enStrings = {
   PaperTodoStringKeys.externalMarkdownOpenFailed:
       'External markdown open failed: {0}',
   PaperTodoStringKeys.externalMarkdownExtension: 'External markdown extension',
+  PaperTodoStringKeys.externalMarkdownExtensionInvalid:
+      'Use an extension such as .md or .txt without reserved filename characters, control characters, repeated dots, or more than 32 characters.',
   PaperTodoStringKeys.fontPreset: 'Font preset',
   PaperTodoStringKeys.fullscreenTopmostMode: 'Fullscreen/topmost mode',
   PaperTodoStringKeys.generic: 'Generic',
