@@ -34,7 +34,9 @@ puro flutter build apk --debug
 `StateStore` writes `data.json.tmp` before replacing `data.json`, rotates the
 previous primary file to `data.backup.json`, and loads a valid temp file if an
 interrupted save leaves the primary missing. A corrupt temp file must not block
-fallback to the stable backup.
+fallback to the stable backup. Save calls are serialized inside `StateStore`
+itself, and each call encodes its JSON snapshot before entering the write queue
+so an older asynchronous save cannot overwrite a newer state.
 
 `AppStateCodec` treats PaperTodo `data.json` as a compatibility boundary. Before
 decoding, it migrates known legacy PaperTodo model keys to the current camelCase

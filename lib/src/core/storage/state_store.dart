@@ -9,14 +9,18 @@ class StateStore {
   StateStore({
     required this.filePath,
     AppStateCodec codec = const AppStateCodec(),
+    Future<void> Function(String encodedState)? beforeWrite,
   })  : backupPath = p.join(p.dirname(filePath), 'data.backup.json'),
         tempPath = '$filePath.tmp',
-        _codec = codec;
+        _codec = codec,
+        _beforeWrite = beforeWrite;
 
   final String filePath;
   final String backupPath;
   final String tempPath;
   final AppStateCodec _codec;
+  final Future<void> Function(String encodedState)? _beforeWrite;
+  Future<void> _saveQueue = Future<void>.value();
 
   Future<DateTime?> lastModifiedUtc() async {
     final primary = File(filePath);
@@ -84,13 +88,24 @@ class StateStore {
 
   Future<void> save(AppState state) async {
     state.normalize();
+    final encodedState = _codec.encode(state);
+    final previousSave = _saveQueue;
+    final save = previousSave.catchError((_) {}).then((_) {
+      return _writeEncodedState(encodedState);
+    });
+    _saveQueue = save;
+    await save;
+  }
+
+  Future<void> _writeEncodedState(String encodedState) async {
     final directory = Directory(p.dirname(filePath));
     await directory.create(recursive: true);
 
     final primary = File(filePath);
     final backup = File(backupPath);
     final temp = File(tempPath);
-    await temp.writeAsString(_codec.encode(state));
+    await _beforeWrite?.call(encodedState);
+    await temp.writeAsString(encodedState);
 
     if (await primary.exists()) {
       try {

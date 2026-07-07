@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +18,42 @@ void main() {
     final primary = await File(store.filePath).readAsString();
     final backup = await File(store.backupPath).readAsString();
 
+    expect(primary, contains('"theme": "dark"'));
+    expect(backup, contains('"theme": "light"'));
+  });
+
+  test('serializes concurrent saves so older snapshots cannot win', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'repapertodo_store_concurrent_save_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    final firstWriteStarted = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    final store = StateStore(
+      filePath: p.join(directory.path, 'data.json'),
+      beforeWrite: (encodedState) async {
+        if (encodedState.contains('"theme": "light"')) {
+          if (!firstWriteStarted.isCompleted) {
+            firstWriteStarted.complete();
+          }
+          await releaseFirstWrite.future;
+        }
+      },
+    );
+
+    final firstSave = store.save(AppState(theme: 'light'));
+    await firstWriteStarted.future;
+    final secondSave = store.save(AppState(theme: 'dark'));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(await File(store.filePath).exists(), false);
+
+    releaseFirstWrite.complete();
+    await Future.wait([firstSave, secondSave]);
+
+    final primary = await File(store.filePath).readAsString();
+    final backup = await File(store.backupPath).readAsString();
     expect(primary, contains('"theme": "dark"'));
     expect(backup, contains('"theme": "light"'));
   });
