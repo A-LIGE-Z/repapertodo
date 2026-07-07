@@ -37,6 +37,9 @@ interrupted save leaves the primary missing. A corrupt temp file must not block
 fallback to the stable backup. Save calls are serialized inside `StateStore`
 itself, and each call encodes its JSON snapshot before entering the write queue
 so an older asynchronous save cannot overwrite a newer state.
+Unhandled Flutter, platform-dispatcher, or zone errors synchronously write the
+current in-memory state to `data.crash_recovery.json` beside the primary data
+file, with a short `RePaperTodo.crash.log`, without mutating the live state.
 
 `AppStateCodec` treats PaperTodo `data.json` as a compatibility boundary. Before
 decoding, it migrates known legacy PaperTodo model keys to the current camelCase
