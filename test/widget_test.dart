@@ -3043,6 +3043,56 @@ void main() {
     expect(genericRootField.controller?.text, 'RePaperTodo');
   });
 
+  testWidgets('system back returns from paper surface to board',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'system-back-note',
+            type: PaperTypes.note,
+            title: 'System back note',
+            content: 'Return through Android back.',
+          ),
+          PaperData(
+            id: 'system-back-todo',
+            type: PaperTypes.todo,
+            title: 'Board still visible',
+            items: [
+              PaperItem(id: 'system-back-item', text: 'Stay on board'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Open paper surface').first);
+    await tester.pump();
+
+    expect(find.byTooltip('Back to board'), findsOneWidget);
+    expect(find.text('Board still visible'), findsNothing);
+
+    final handled = await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(handled, true);
+    expect(find.byTooltip('Back to board'), findsNothing);
+    expect(find.text('System back note'), findsOneWidget);
+    expect(find.text('Board still visible'), findsOneWidget);
+    expect(controller.state.papers.every((paper) => paper.isVisible), true);
+  });
+
   testWidgets('uses compact settings choice controls on narrow screens',
       (tester) async {
     tester.view

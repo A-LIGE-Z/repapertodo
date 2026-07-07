@@ -183,6 +183,8 @@ surface and tray titles use the same cleaned value.
 ## Android Priority
 
 Android may use a mobile-native navigation model, but the data concepts must remain identical: papers, todo items, notes, linked notes, settings, sync, and conflict recovery.
+System back from an opened paper surface should return to the board before the
+app route is allowed to pop, matching the visible Back to board control.
 Desktop-only settings such as start-at-login, task-switcher visibility,
 fullscreen/topmost policy, global hotkeys, and PowerShell script capsules
 should be hidden on Android unless the platform layer exposes a real

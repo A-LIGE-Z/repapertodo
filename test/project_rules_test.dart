@@ -43,6 +43,8 @@ void main() {
         _readProjectText('android/app/src/main/res/xml/file_paths.xml');
     final gitignore = _readProjectText('.gitignore');
     final readme = _readProjectText('README.md');
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
     final mainActivity = _readProjectText(
         'android/app/src/main/kotlin/com/aligez/repapertodo/MainActivity.kt');
 
@@ -63,6 +65,11 @@ void main() {
     expect(readme, contains('debug fallback'));
     expect(readme, contains('android/key.properties'));
     expect(readme, contains('storeFile` points to an existing keystore file'));
+    expect(design, contains('System back from an opened paper surface'));
+    expect(design, contains('return to the board'));
+    expect(app, contains('PopScope<Object?>'));
+    expect(app, contains('canPop: surfacePaper == null'));
+    expect(app, contains('onPopInvokedWithResult'));
     expect(manifest, contains('android.permission.INTERNET'));
     expect(manifest, contains('android:usesCleartextTraffic="true"'));
     expect(manifest, contains('androidx.core.content.FileProvider'));

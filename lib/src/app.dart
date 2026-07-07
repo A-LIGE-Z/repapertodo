@@ -497,48 +497,57 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         controller.state.papers.where((paper) => paper.isNote).toList();
     final surfacePaper = _surfacePaper();
     final useCompactAppBar = MediaQuery.sizeOf(context).width < 600;
-    return Scaffold(
-      appBar: AppBar(
-        leading: surfacePaper == null
-            ? null
-            : IconButton(
-                tooltip: _tooltipLabel(
-                  enableToolTips,
-                  strings.get(PaperTodoStringKeys.actionBackToBoard),
+    return PopScope<Object?>(
+      canPop: surfacePaper == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop || surfacePaper == null) {
+          return;
+        }
+        setState(() => _surfacePaperId = null);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: surfacePaper == null
+              ? null
+              : IconButton(
+                  tooltip: _tooltipLabel(
+                    enableToolTips,
+                    strings.get(PaperTodoStringKeys.actionBackToBoard),
+                  ),
+                  onPressed: () => setState(() => _surfacePaperId = null),
+                  icon: const Icon(Icons.arrow_back),
                 ),
-                onPressed: () => setState(() => _surfacePaperId = null),
-                icon: const Icon(Icons.arrow_back),
-              ),
-        title: Text(
-          surfacePaper == null
-              ? strings.get(PaperTodoStringKeys.appTitle)
-              : _displayTitle(surfacePaper),
+          title: Text(
+            surfacePaper == null
+                ? strings.get(PaperTodoStringKeys.appTitle)
+                : _displayTitle(surfacePaper),
+          ),
+          actions: _appBarActions(
+            surfacePaper: surfacePaper,
+            hiddenPapers: hiddenPapers,
+            enableToolTips: enableToolTips,
+            compact: useCompactAppBar,
+          ),
         ),
-        actions: _appBarActions(
-          surfacePaper: surfacePaper,
-          hiddenPapers: hiddenPapers,
-          enableToolTips: enableToolTips,
-          compact: useCompactAppBar,
+        body: ColoredBox(
+          color: colorScheme.surface,
+          child: surfacePaper == null
+              ? ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: visiblePapers.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    return _paperPreview(visiblePapers[index], notePapers);
+                  },
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _paperPreview(surfacePaper, notePapers),
+                  ],
+                ),
         ),
-      ),
-      body: ColoredBox(
-        color: colorScheme.surface,
-        child: surfacePaper == null
-            ? ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: visiblePapers.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  return _paperPreview(visiblePapers[index], notePapers);
-                },
-              )
-            : ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _paperPreview(surfacePaper, notePapers),
-                ],
-              ),
       ),
     );
   }
