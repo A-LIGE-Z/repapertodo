@@ -1693,6 +1693,10 @@ void main() {
     expect(script, contains(r'$releasePackageRecords = $artifactRecords'));
     expect(script, contains(r'$releasePackageRecords |'));
     expect(script, contains('Assert-ReleaseChecksumFile'));
+    expect(script, contains(r'-ArtifactDirectory $dist'));
+    expect(script, contains("references missing artifact"));
+    expect(script, contains('size changed after checksum generation'));
+    expect(script, contains('hash changed after checksum generation'));
     expect(script, contains('does not match the packaged artifact hash'));
     expect(script, contains(r'compileSdk = $androidSdkConfig["compileSdk"]'));
     expect(script, contains(r'targetSdk = $androidSdkConfig["targetSdk"]'));
@@ -1792,7 +1796,10 @@ void main() {
     expect(readme, contains('Validation includes `git diff --check`'));
     expect(readme, contains('SHA-256 checksum file'));
     expect(readme, contains('covers the Windows zip, Android APK'));
-    expect(readme, contains('verifies that checksum file before upload'));
+    expect(
+      readme,
+      contains('verifies that checksum file against the packaged files'),
+    );
     expect(readme, contains('release metadata JSON file'));
     expect(readme, contains('refuses to'));
     expect(readme, contains('storeFile` points to an existing keystore file'));

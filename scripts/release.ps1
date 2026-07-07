@@ -203,6 +203,7 @@ function Assert-PathExists {
 function Assert-ReleaseChecksumFile {
   param(
     [string]$ChecksumsFile,
+    [string]$ArtifactDirectory,
     [object[]]$Records
   )
 
@@ -218,6 +219,21 @@ function Assert-ReleaseChecksumFile {
   for ($index = 0; $index -lt $expectedLines.Count; $index++) {
     if ($actualLines[$index] -ne $expectedLines[$index]) {
       throw "Release checksum file '$ChecksumsFile' line $($index + 1) does not match the packaged artifact hash."
+    }
+  }
+
+  foreach ($record in $Records) {
+    $artifactPath = Join-Path $ArtifactDirectory $record.fileName
+    if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+      throw "Release checksum file '$ChecksumsFile' references missing artifact '$($record.fileName)'."
+    }
+    $artifactItem = Get-Item -LiteralPath $artifactPath
+    if ($artifactItem.Length -ne $record.bytes) {
+      throw "Release artifact '$($record.fileName)' size changed after checksum generation."
+    }
+    $artifactHash = Get-FileHash -Algorithm SHA256 -LiteralPath $artifactPath
+    if ($artifactHash.Hash.ToLowerInvariant() -ne $record.sha256) {
+      throw "Release artifact '$($record.fileName)' hash changed after checksum generation."
     }
   }
 }
@@ -602,6 +618,7 @@ Invoke-Step "Package release artifacts" {
     Set-Content -LiteralPath $checksumsFile -Encoding ascii
   Assert-ReleaseChecksumFile `
     -ChecksumsFile $checksumsFile `
+    -ArtifactDirectory $dist `
     -Records $releasePackageRecords
 }
 
