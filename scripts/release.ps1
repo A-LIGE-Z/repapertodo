@@ -76,6 +76,36 @@ function Get-FlutterVersion {
   return ($versionLine -replace "^version:\s*", "").Trim()
 }
 
+function Get-AndroidKeyProperty {
+  param(
+    [string[]]$Content,
+    [string]$Key
+  )
+
+  foreach ($line in $Content) {
+    $match = [regex]::Match(
+      $line,
+      "^\s*$([regex]::Escape($Key))\s*=\s*(.+?)\s*$"
+    )
+    if ($match.Success) {
+      return $match.Groups[1].Value.Trim()
+    }
+  }
+  return ""
+}
+
+function Resolve-AndroidKeystorePath {
+  param(
+    [string]$RepoRoot,
+    [string]$StoreFile
+  )
+
+  if ([IO.Path]::IsPathRooted($StoreFile)) {
+    return $StoreFile
+  }
+  return Join-Path (Join-Path $RepoRoot "android") $StoreFile
+}
+
 function Get-AndroidSigningMode {
   param([string]$RepoRoot)
 
@@ -86,11 +116,19 @@ function Get-AndroidSigningMode {
 
   $requiredKeys = @("storeFile", "storePassword", "keyAlias", "keyPassword")
   $content = Get-Content -LiteralPath $keyProperties
+  $values = @{}
   foreach ($key in $requiredKeys) {
-    $match = $content | Where-Object { $_ -match "^\s*$([regex]::Escape($key))\s*=\s*\S+" } | Select-Object -First 1
-    if (-not $match) {
+    $values[$key] = Get-AndroidKeyProperty -Content $content -Key $key
+    if ([string]::IsNullOrWhiteSpace($values[$key])) {
       return "debug fallback (android/key.properties is incomplete)"
     }
+  }
+
+  $keystorePath = Resolve-AndroidKeystorePath `
+    -RepoRoot $RepoRoot `
+    -StoreFile $values["storeFile"]
+  if (-not (Test-Path -LiteralPath $keystorePath -PathType Leaf)) {
+    return "debug fallback (android/key.properties storeFile not found)"
   }
 
   return "release keystore from android/key.properties"

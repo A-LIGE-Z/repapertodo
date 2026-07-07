@@ -116,9 +116,11 @@ keytool -genkeypair -v -keystore android\repapertodo-release.jks -storetype JKS 
 ```
 
 The release script prints whether the APK used `android/key.properties` or the
-debug fallback and records that mode in GitHub Release notes. Local smoke
-packages may use the debug fallback, but `-PublishGitHubRelease` refuses to
-publish unless Android release signing comes from `android/key.properties`.
+debug fallback and records that mode in GitHub Release notes. It treats the
+release signing config as present only when all four properties are filled and
+`storeFile` points to an existing keystore file. Local smoke packages may use
+the debug fallback, but `-PublishGitHubRelease` refuses to publish unless
+Android release signing comes from `android/key.properties`.
 
 GitHub Actions can create `android/key.properties` during a manual publish run
 when these repository secrets are configured:

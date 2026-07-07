@@ -50,7 +50,9 @@ void main() {
     expect(gradle, contains('minSdk = 34'));
     expect(gradle, contains('targetSdk = 37'));
     expect(gradle, contains('rootProject.file("key.properties")'));
+    expect(gradle, contains('val releaseStoreFile'));
     expect(gradle, contains('hasReleaseSigningConfig'));
+    expect(gradle, contains('releaseStoreFile?.isFile == true'));
     expect(gradle, contains('signingConfigs.getByName("release")'));
     expect(gradle, contains('signingConfigs.getByName("debug")'));
     expect(gradle, contains('enableV2Signing = true'));
@@ -60,6 +62,7 @@ void main() {
     expect(readme, contains('Android release signing'));
     expect(readme, contains('debug fallback'));
     expect(readme, contains('android/key.properties'));
+    expect(readme, contains('storeFile` points to an existing keystore file'));
     expect(manifest, contains('android.permission.INTERNET'));
     expect(manifest, contains('android:usesCleartextTraffic="true"'));
     expect(manifest, contains('androidx.core.content.FileProvider'));
@@ -1573,6 +1576,8 @@ void main() {
     expect(script, contains('function Assert-CleanGitTree'));
     expect(script, contains('function Assert-GitDiffCheck'));
     expect(script, contains('function Assert-PathExists'));
+    expect(script, contains('function Get-AndroidKeyProperty'));
+    expect(script, contains('function Resolve-AndroidKeystorePath'));
     expect(script, contains('function Get-GradleIntegerAssignment'));
     expect(script, contains('function Get-AndroidSdkConfig'));
     expect(script, contains('function Assert-AndroidSdkCompatibility'));
@@ -1624,6 +1629,16 @@ void main() {
     expect(script, contains(r'& $flutter build windows --release --no-pub'));
     expect(script, contains(r'& $flutter build apk --release --no-pub'));
     expect(script, contains('Get-AndroidSigningMode'));
+    expect(
+      script,
+      contains(
+        'debug fallback (android/key.properties storeFile not found)',
+      ),
+    );
+    expect(
+      script,
+      contains(r'Test-Path -LiteralPath $keystorePath -PathType Leaf'),
+    );
     expect(script, contains(r'Android signing mode: $androidSigningMode'));
     expect(script, contains(r'Android signing: $androidSigningMode.'));
     expect(script, contains('Android SDK config: compileSdk='));
@@ -1747,6 +1762,7 @@ void main() {
     expect(readme, contains('SHA-256 checksum file'));
     expect(readme, contains('release metadata JSON file'));
     expect(readme, contains('refuses to'));
+    expect(readme, contains('storeFile` points to an existing keystore file'));
     expect(readme, contains('ANDROID_KEYSTORE_BASE64'));
     expect(readme, contains('ANDROID_STORE_PASSWORD'));
     expect(readme, contains('ANDROID_KEY_ALIAS'));

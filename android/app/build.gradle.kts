@@ -12,12 +12,17 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
+val releaseStoreFile = keystoreProperties.getProperty("storeFile")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.let { rootProject.file(it) }
 val hasReleaseSigningConfig = listOf(
     "storeFile",
     "storePassword",
     "keyAlias",
     "keyPassword",
-).all { key -> keystoreProperties.getProperty(key)?.isNotBlank() == true }
+).all { key -> keystoreProperties.getProperty(key)?.isNotBlank() == true } &&
+    releaseStoreFile?.isFile == true
 
 android {
     namespace = "com.aligez.repapertodo"
@@ -40,7 +45,7 @@ android {
     signingConfigs {
         if (hasReleaseSigningConfig) {
             create("release") {
-                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storeFile = releaseStoreFile
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
