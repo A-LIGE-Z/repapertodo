@@ -1679,6 +1679,9 @@ void main() {
     expect(script, contains('ConvertTo-Json -Depth 5'));
     expect(script, contains('git rev-parse HEAD'));
     expect(script, contains('builtAtUtc'));
+    expect(script, contains(r'$metadataHash = Get-FileHash'));
+    expect(script, contains(r'$releasePackageRecords = $artifactRecords'));
+    expect(script, contains(r'$releasePackageRecords |'));
     expect(script, contains(r'compileSdk = $androidSdkConfig["compileSdk"]'));
     expect(script, contains(r'targetSdk = $androidSdkConfig["targetSdk"]'));
     expect(script, contains(r'$validationExecuted'));
@@ -1776,6 +1779,7 @@ void main() {
     expect(readme, contains('rerun without `-SkipBuild`'));
     expect(readme, contains('Validation includes `git diff --check`'));
     expect(readme, contains('SHA-256 checksum file'));
+    expect(readme, contains('covers the Windows zip, Android APK'));
     expect(readme, contains('release metadata JSON file'));
     expect(readme, contains('refuses to'));
     expect(readme, contains('storeFile` points to an existing keystore file'));

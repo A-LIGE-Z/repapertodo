@@ -548,10 +548,6 @@ Invoke-Step "Package release artifacts" {
       }
     }
 
-  $artifactRecords |
-    ForEach-Object { "$($_.sha256)  $($_.fileName)" } |
-    Set-Content -LiteralPath $checksumsFile -Encoding ascii
-
   [ordered]@{
     version = $version
     tagName = $TagName
@@ -570,6 +566,18 @@ Invoke-Step "Package release artifacts" {
   } |
     ConvertTo-Json -Depth 5 |
     Set-Content -LiteralPath $metadataFile -Encoding ascii
+
+  $metadataItem = Get-Item -LiteralPath $metadataFile
+  $metadataHash = Get-FileHash -Algorithm SHA256 -LiteralPath $metadataFile
+  $releasePackageRecords = $artifactRecords + [ordered]@{
+    fileName = $metadataItem.Name
+    bytes = $metadataItem.Length
+    sha256 = $metadataHash.Hash.ToLowerInvariant()
+  }
+
+  $releasePackageRecords |
+    ForEach-Object { "$($_.sha256)  $($_.fileName)" } |
+    Set-Content -LiteralPath $checksumsFile -Encoding ascii
 }
 
 Get-Item -LiteralPath $windowsZip, $androidApk, $checksumsFile, $metadataFile |
