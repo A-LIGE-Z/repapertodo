@@ -2180,6 +2180,10 @@ void main() {
       find.textContaining('Use an extension such as .md or .txt'),
       findsOneWidget,
     );
+    expect(
+      tester.widget<TextField>(extensionField).focusNode?.hasFocus,
+      true,
+    );
     expect(controller.state.externalMarkdownExtension, '.md');
 
     await tester.enterText(extensionField, '.txt');
