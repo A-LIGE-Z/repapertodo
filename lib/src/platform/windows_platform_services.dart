@@ -94,7 +94,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async {
-    await _normalizePaperQueueMonitorDeviceName(paper);
+    await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     final workArea = await _channel.invokeMapMethod<String, Object?>(
       'getWorkArea',
@@ -174,7 +174,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {
-    await _normalizePaperQueueMonitorDeviceName(paper);
+    await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     final bounds = await _channel.invokeMapMethod<String, Object?>(
       'getBounds',
@@ -189,7 +189,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> closePaperSurface(PaperData paper) async {
     paper.isVisible = false;
-    await _normalizePaperQueueMonitorDeviceName(paper);
+    await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     _retargetActivePaperAfterLocalHide(paper);
     await _channel.invokeMethod<void>('hide', _paperSurfaceArguments(paper));
@@ -198,7 +198,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> hidePaper(PaperData paper) async {
     paper.isVisible = false;
-    await _normalizePaperQueueMonitorDeviceName(paper);
+    await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     _retargetActivePaperAfterLocalHide(paper);
     await _channel.invokeMethod<void>('hide', _paperSurfaceArguments(paper));
@@ -206,6 +206,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<bool> hasVisibleSurfaces(AppState state) async {
+    await _normalizeStateForPlatform(state);
     _syncKnownPapers(state);
     final hasNativeVisibleSurface =
         await _channel.invokeMethod<bool>('hasVisibleSurfaces');
@@ -228,7 +229,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<bool> hasVisibleSurface(PaperData paper) async {
-    await _normalizePaperQueueMonitorDeviceName(paper);
+    await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     return await _channel.invokeMethod<bool>(
           'hasVisibleSurface',
@@ -239,7 +240,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<void> restoreAll(AppState state) async {
-    await _normalizeStateQueueMonitorDeviceNames(state);
+    await _normalizeStateForPlatform(state);
     _syncKnownPapers(state);
     await _syncPaperSurfaceRegistry(state);
     final visiblePapers =
@@ -278,7 +279,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> showPaper(PaperData paper) async {
     paper.isVisible = true;
-    await _normalizePaperQueueMonitorDeviceName(paper);
+    await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     _activePaper = paper;
     await _applyBounds(paper);
@@ -297,7 +298,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> revealPinnedPaper(PaperData paper) async {
     paper.isVisible = true;
-    await _normalizePaperQueueMonitorDeviceName(paper);
+    await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     _activePaper = paper;
     await _applyBounds(paper);
@@ -318,7 +319,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<void> updatePaperSurface(PaperData paper) async {
-    await _normalizePaperQueueMonitorDeviceName(paper);
+    await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     if (!paper.isVisible) {
       _retargetActivePaperAfterLocalHide(paper);
@@ -378,10 +379,21 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     );
   }
 
-  Future<void> _normalizeStateQueueMonitorDeviceNames(AppState state) async {
+  Future<void> _normalizeStateForPlatform(AppState state) async {
     for (final paper in state.papers) {
-      await _normalizePaperQueueMonitorDeviceName(paper);
+      await _normalizePaperForPlatform(paper);
     }
+  }
+
+  Future<void> _normalizePaperForPlatform(PaperData paper) async {
+    paper.id = normalizeLocalModelId(paper.id);
+    if (paper.id.isEmpty) {
+      paper.normalize();
+    } else {
+      paper.capsuleMonitorDeviceName =
+          normalizeCapsuleMonitorDeviceName(paper.capsuleMonitorDeviceName);
+    }
+    await _normalizePaperQueueMonitorDeviceName(paper);
   }
 
   Future<void> _normalizePaperQueueMonitorDeviceName(PaperData paper) async {
@@ -404,10 +416,11 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   }
 
   void _rememberPaper(PaperData paper) {
-    final paperId = paper.id.trim();
+    final paperId = normalizeLocalModelId(paper.id);
     if (paperId.isEmpty) {
       return;
     }
+    paper.id = paperId;
     _knownPapers[paperId] = paper;
   }
 
@@ -416,7 +429,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     for (final paper in state.papers) {
       _rememberPaper(paper);
     }
-    final activePaperId = _activePaper?.id.trim() ?? '';
+    final activePaperId = normalizeLocalModelId(_activePaper?.id);
     if (activePaperId.isNotEmpty && _knownPapers.containsKey(activePaperId)) {
       final activePaper = _knownPapers[activePaperId]!;
       if (activePaper.isVisible) {
@@ -426,7 +439,8 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     }
     _activePaper = null;
     for (final paper in state.papers) {
-      if (paper.isVisible && _knownPapers.containsKey(paper.id.trim())) {
+      final paperId = normalizeLocalModelId(paper.id);
+      if (paper.isVisible && _knownPapers.containsKey(paperId)) {
         _activePaper = paper;
         return;
       }
@@ -452,21 +466,23 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       _activePaper = paper;
       return;
     }
-    if (_activePaper?.id.trim() == paper.id.trim()) {
+    if (normalizeLocalModelId(_activePaper?.id) ==
+        normalizeLocalModelId(paper.id)) {
       _activePaper = _nextVisibleKnownPaperAfter(paper);
     }
   }
 
   void _retargetActivePaperAfterLocalHide(PaperData paper) {
-    if (_activePaper?.id.trim() == paper.id.trim()) {
+    if (normalizeLocalModelId(_activePaper?.id) ==
+        normalizeLocalModelId(paper.id)) {
       _activePaper = _nextVisibleKnownPaperAfter(paper);
     }
   }
 
   PaperData? _nextVisibleKnownPaperAfter(PaperData hiddenPaper) {
-    final hiddenPaperId = hiddenPaper.id.trim();
+    final hiddenPaperId = normalizeLocalModelId(hiddenPaper.id);
     for (final candidate in _knownPapers.values) {
-      final candidateId = candidate.id.trim();
+      final candidateId = normalizeLocalModelId(candidate.id);
       if (candidateId.isEmpty || candidateId == hiddenPaperId) {
         continue;
       }
@@ -633,7 +649,7 @@ class WindowsTrayHost implements TrayHost {
 
   @override
   Future<void> rebuildMenu(AppState state, {TrayMenuLabels? labels}) async {
-    await _paperWindows._normalizeStateQueueMonitorDeviceNames(state);
+    await _paperWindows._normalizeStateForPlatform(state);
     _paperWindows._syncKnownPapers(state);
     await _channel.invokeMethod<void>(
       'setTrayMenu',

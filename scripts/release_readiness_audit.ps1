@@ -909,6 +909,15 @@ function Test-ReleaseMetadataRecord {
       [string]$Record.windows.smoke.exeFileName -ne "repapertodo.exe") {
     return "Release metadata must include passed Windows smoke evidence for repapertodo.exe."
   }
+  if (-not (Test-StringSequence `
+        -Actual $Record.windows.smoke.hiddenStartupCommands `
+        -Expected @("--hide")) -or
+      -not (Test-StringSequence `
+        -Actual $Record.windows.smoke.ignoredSecondaryStartupCommands `
+        -Expected @("--unknown-startup-command")) -or
+      [int]$Record.windows.smoke.visiblePaperCountAfterIgnoredCommand -ne 0) {
+    return "Release metadata Windows smoke must prove unknown secondary startup commands do not restore hidden papers."
+  }
   if ($null -eq $Record.webDav -or
       $null -eq $Record.webDav.staticSmoke -or
       [string]$Record.webDav.staticSmoke.status -ne "passed") {

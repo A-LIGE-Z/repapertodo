@@ -17,6 +17,7 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+#include "utils.h"
 
 namespace {
 
@@ -386,7 +387,7 @@ struct PaperIdArgument {
 
 PaperIdArgument ValidatePaperIdArgumentValue(const std::string& value) {
   if (value.empty() || TrimAscii(value) != value ||
-      HasAsciiControlCharacter(value)) {
+      HasAsciiControlCharacter(value) || HasControlCodePoint(value)) {
     return PaperIdArgument{true, false, std::string()};
   }
   return PaperIdArgument{true, true, value};
@@ -441,6 +442,25 @@ std::string GetStringArgumentValue(const flutter::EncodableValue* arguments,
     return GetStringArgument(*map, key, fallback);
   }
   return fallback;
+}
+
+std::vector<std::string> GetStringListArgumentValue(
+    const flutter::EncodableValue* arguments) {
+  if (!arguments) {
+    return {};
+  }
+  if (const auto* value = std::get_if<std::string>(arguments)) {
+    return {*value};
+  }
+  std::vector<std::string> values;
+  if (const auto* list = std::get_if<flutter::EncodableList>(arguments)) {
+    for (const auto& item : *list) {
+      if (const auto* value = std::get_if<std::string>(&item)) {
+        values.push_back(*value);
+      }
+    }
+  }
+  return values;
 }
 
 std::wstring Utf8ToWide(const std::string& value) {
@@ -1959,6 +1979,35 @@ constexpr UINT kFullscreenTopmostRefreshIntervalMs = 1000;
 constexpr wchar_t kSingleInstancePipeName[] =
     L"\\\\.\\pipe\\RePaperTodo-SingleInstance-Activate";
 
+namespace {
+
+bool SignalPrimaryInstanceFromChannel(const std::vector<std::string>& args) {
+  const std::string command = StartupCommandFromArgs(args);
+  if (command.empty()) {
+    return true;
+  }
+  for (int attempt = 0; attempt < 6; attempt++) {
+    HANDLE pipe = CreateFileW(kSingleInstancePipeName, GENERIC_WRITE, 0,
+                              nullptr, OPEN_EXISTING, 0, nullptr);
+    if (pipe != INVALID_HANDLE_VALUE) {
+      DWORD bytes_written = 0;
+      const BOOL command_written =
+          WriteFile(pipe, command.data(), static_cast<DWORD>(command.size()),
+                    &bytes_written, nullptr);
+      const char newline = '\n';
+      const BOOL newline_written =
+          WriteFile(pipe, &newline, 1, &bytes_written, nullptr);
+      CloseHandle(pipe);
+      return command_written == TRUE && newline_written == TRUE;
+    }
+    WaitNamedPipeW(kSingleInstancePipeName, 180);
+    Sleep(70);
+  }
+  return false;
+}
+
+}  // namespace
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -2255,6 +2304,13 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "forwardToPrimary") {
+          if (!SignalPrimaryInstanceFromChannel(
+                  GetStringListArgumentValue(call.arguments()))) {
+            result->Error("forward_to_primary_failed",
+                          "Unable to forward startup command to the primary "
+                          "RePaperTodo instance.");
+            return;
+          }
           result->Success();
           return;
         }
@@ -3137,8 +3193,10 @@ void FlutterWindow::ApplyPaperSurfaceRegistry(
   }
   for (const auto& paper : papers) {
     if (const auto* paper_map = std::get_if<flutter::EncodableMap>(&paper)) {
-      const std::string id = GetStringArgument(*paper_map, "id", "");
-      if (!id.empty()) {
+      const PaperIdArgument paper_id_argument =
+          ValidatePaperIdArgumentValue(GetStringArgument(*paper_map, "id", ""));
+      if (paper_id_argument.valid) {
+        const std::string id = paper_id_argument.value;
         current_paper_ids.push_back(id);
         RememberPaperTitle(
             id, AppWindowTitleForPaper(

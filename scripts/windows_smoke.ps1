@@ -63,6 +63,26 @@ function Get-PaperCount {
   return [int]$counts.total
 }
 
+function Get-VisiblePaperCount {
+  param([string]$StateFile)
+
+  if (-not (Test-Path -LiteralPath $StateFile -PathType Leaf)) {
+    return 0
+  }
+  try {
+    $state = Get-Content -Raw -LiteralPath $StateFile | ConvertFrom-Json
+    $visibleCount = 0
+    foreach ($paper in @($state.papers)) {
+      if ([bool]$paper.isVisible) {
+        $visibleCount += 1
+      }
+    }
+    return $visibleCount
+  } catch {
+    return 0
+  }
+}
+
 function Get-PaperTypeCounts {
   param([string]$StateFile)
 
@@ -203,8 +223,11 @@ $smokeExe = Join-Path $smokeReleaseDirectory "repapertodo.exe"
 $smokeStateFile = Join-Path $smokeReleaseDirectory "data.json"
 $primaryProcess = $null
 $smokeFailure = $null
+$hiddenStartupCommands = @("--hide")
+$ignoredSecondaryStartupCommands = @("--unknown-startup-command")
 $secondaryStartupCommands = @("--new-note", "--new-todo", "--exit")
 $initialPaperCount = 0
+$visiblePaperCountAfterIgnoredCommand = 0
 $initialPaperTypeCounts = [ordered]@{
   total = 0
   todo = 0
@@ -237,6 +260,31 @@ try {
 
   $initialPaperTypeCounts = Get-PaperTypeCounts -StateFile $smokeStateFile
   $initialPaperCount = [int]$initialPaperTypeCounts.total
+
+  Invoke-SecondaryStartupCommand `
+    -Executable $smokeExe `
+    -WorkingDirectory $smokeReleaseDirectory `
+    -Command $hiddenStartupCommands[0]
+
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke app did not persist secondary --hide command in time." `
+    -Condition {
+      -not $primaryProcess.HasExited -and
+        (Get-VisiblePaperCount -StateFile $smokeStateFile) -eq 0
+    }
+
+  Invoke-SecondaryStartupCommand `
+    -Executable $smokeExe `
+    -WorkingDirectory $smokeReleaseDirectory `
+    -Command $ignoredSecondaryStartupCommands[0]
+
+  Start-Sleep -Milliseconds 750
+  $visiblePaperCountAfterIgnoredCommand =
+    Get-VisiblePaperCount -StateFile $smokeStateFile
+  if ($visiblePaperCountAfterIgnoredCommand -ne 0) {
+    throw "Windows release smoke unknown secondary startup command unexpectedly changed paper visibility."
+  }
 
   Invoke-SecondaryStartupCommand `
     -Executable $smokeExe `
@@ -291,6 +339,9 @@ try {
       finalTodoPaperCount = [int]$finalPaperTypeCounts.todo
       initialNotePaperCount = [int]$initialPaperTypeCounts.note
       finalNotePaperCount = [int]$finalPaperTypeCounts.note
+      hiddenStartupCommands = $hiddenStartupCommands
+      ignoredSecondaryStartupCommands = $ignoredSecondaryStartupCommands
+      visiblePaperCountAfterIgnoredCommand = $visiblePaperCountAfterIgnoredCommand
       secondaryStartupCommands = $secondaryStartupCommands
       startupTimeoutSeconds = $StartupTimeoutSeconds
       exitTimeoutSeconds = $ExitTimeoutSeconds

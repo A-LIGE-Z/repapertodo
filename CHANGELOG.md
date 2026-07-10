@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Normalized local paper IDs at the Windows platform boundary before sending
+  surface, tray, bounds, visibility, and work-area channel payloads.
+- Rejected unsafe paper IDs inside the Windows native surface registry so
+  malformed registry refreshes cannot create stale native paper targets.
+- Wired the Windows `forwardToPrimary` platform channel to the single-instance
+  named pipe and shared the startup-command canonicalizer with the process
+  entrypoint.
+- Extended Windows release smoke evidence to verify that an unknown secondary
+  startup command does not restore papers after a forwarded `--hide`.
 - Added a Dart controller one-shot exit guard so repeated tray, forwarded, or
   session-ending exit requests cannot duplicate platform cleanup.
 - Shared duplicate UI exit requests through one save/sync-before-exit future so

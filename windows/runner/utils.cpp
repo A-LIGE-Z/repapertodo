@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <windows.h>
 
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 
 void CreateAndAttachConsole() {
@@ -66,4 +68,136 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string) {
     return std::string();
   }
   return utf8_string;
+}
+
+namespace {
+
+std::string NormalizeStartupArgument(std::string arg) {
+  const auto begin = std::find_if_not(
+      arg.begin(), arg.end(),
+      [](unsigned char character) { return std::isspace(character); });
+  const auto end = std::find_if_not(
+                       arg.rbegin(), arg.rend(),
+                       [](unsigned char character) {
+                         return std::isspace(character);
+                       })
+                       .base();
+  if (begin >= end) {
+    return std::string();
+  }
+  arg = std::string(begin, end);
+  while (!arg.empty() && (arg.front() == '-' || arg.front() == '/')) {
+    arg.erase(arg.begin());
+  }
+
+  std::string normalized;
+  bool previous_separator = false;
+  for (const char character : arg) {
+    const unsigned char ascii = static_cast<unsigned char>(character);
+    if (std::isspace(ascii) || character == '_' || character == '-') {
+      if (!normalized.empty() && !previous_separator) {
+        normalized.push_back('-');
+        previous_separator = true;
+      }
+      continue;
+    }
+    normalized.push_back(static_cast<char>(std::tolower(ascii)));
+    previous_separator = false;
+  }
+  if (!normalized.empty() && normalized.back() == '-') {
+    normalized.pop_back();
+  }
+  return normalized;
+}
+
+std::string CanonicalStartupCommand(const std::string& normalized) {
+  if (normalized == "show" || normalized == "open") {
+    return "show";
+  }
+  if (normalized == "hide" || normalized == "close") {
+    return "hide";
+  }
+  if (normalized == "toggle") {
+    return "toggle";
+  }
+  if (normalized == "new-todo" || normalized == "newtodo" ||
+      normalized == "add-todo" || normalized == "addtodo" ||
+      normalized == "todo") {
+    return "new-todo";
+  }
+  if (normalized == "new-note" || normalized == "newnote" ||
+      normalized == "add-note" || normalized == "addnote" ||
+      normalized == "note" || normalized == "paper") {
+    return "new-note";
+  }
+  if (normalized == "reveal-pinned-todo" ||
+      normalized == "reveal-pinnedtodo" ||
+      normalized == "show-pinned-todo" || normalized == "pinned-todo") {
+    return "reveal-pinned-todo";
+  }
+  if (normalized == "reveal-pinned-note" ||
+      normalized == "reveal-pinnednote" ||
+      normalized == "show-pinned-note" || normalized == "pinned-note") {
+    return "reveal-pinned-note";
+  }
+  if (normalized == "settings" || normalized == "setting" ||
+      normalized == "preferences" || normalized == "preference" ||
+      normalized == "prefs") {
+    return "settings";
+  }
+  if (normalized == "exit" || normalized == "quit") {
+    return "exit";
+  }
+  return std::string();
+}
+
+std::string CreatedPaperStartupCommand(const std::string& normalized) {
+  if (normalized == "todo" || normalized == "task") {
+    return "new-todo";
+  }
+  if (normalized == "note" || normalized == "paper") {
+    return "new-note";
+  }
+  return std::string();
+}
+
+}  // namespace
+
+std::string StartupCommandFromArgs(const std::vector<std::string>& args) {
+  std::vector<std::string> normalized_args;
+  for (const std::string& raw_arg : args) {
+    size_t segment_start = 0;
+    while (segment_start <= raw_arg.size()) {
+      const size_t segment_end = raw_arg.find_first_of("=:", segment_start);
+      const std::string segment = raw_arg.substr(
+          segment_start,
+          segment_end == std::string::npos ? std::string::npos
+                                           : segment_end - segment_start);
+      const std::string normalized = NormalizeStartupArgument(segment);
+      if (!normalized.empty()) {
+        normalized_args.push_back(normalized);
+      }
+      if (segment_end == std::string::npos) {
+        break;
+      }
+      segment_start = segment_end + 1;
+    }
+  }
+  for (size_t index = 0; index < normalized_args.size(); index++) {
+    if (normalized_args[index] == "new" && index + 1 < normalized_args.size()) {
+      const std::string created_command =
+          CreatedPaperStartupCommand(normalized_args[index + 1]);
+      if (!created_command.empty()) {
+        return created_command;
+      }
+    }
+    const std::string command = CanonicalStartupCommand(normalized_args[index]);
+    if (!command.empty()) {
+      return command;
+    }
+  }
+  if (normalized_args.empty()) {
+    return "show";
+  }
+  return std::string();
 }

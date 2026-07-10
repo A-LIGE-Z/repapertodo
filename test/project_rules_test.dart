@@ -1504,17 +1504,22 @@ void main() {
 
   test('Windows runner preserves startup command parsing parity', () {
     final runner = _readProjectText('windows/runner/main.cpp');
+    final utils = _readProjectText('windows/runner/utils.cpp');
+    final utilsHeader = _readProjectText('windows/runner/utils.h');
     final dartParser =
         _readProjectText('lib/src/core/startup/startup_command.dart');
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
 
-    expect(runner, contains('find_first_of("=:", segment_start)'));
-    expect(runner, contains('CreatedPaperStartupCommand'));
+    expect(utils, contains('find_first_of("=:", segment_start)'));
+    expect(utils, contains('CreatedPaperStartupCommand'));
+    expect(utilsHeader, contains('StartupCommandFromArgs'));
     expect(runner, contains('IsExplicitExitStartupCommand'));
     expect(runner, contains('OpenMutexW(SYNCHRONIZE'));
-    expect(runner, contains('if (normalized_args.empty())'));
-    expect(runner, contains('return "show";'));
-    expect(runner, contains('return std::string();'));
+    expect(utils, contains('if (normalized_args.empty())'));
+    expect(utils, contains('return "show";'));
+    expect(utils, contains('return std::string();'));
+    expect(runner, contains('if (command.empty())'));
+    expect(runner, isNot(contains('CreatedPaperStartupCommand')));
     expect(design, contains('return before creating the'));
     expect(design, contains('only unknown arguments'));
     expect(
@@ -1528,6 +1533,7 @@ void main() {
   test('Windows runner forwards secondary instance startup commands', () {
     final entrypoint = _readProjectText('windows/runner/main.cpp');
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final utils = _readProjectText('windows/runner/utils.cpp');
     final windowsPlatform =
         _readProjectText('lib/src/platform/windows_platform_services.dart');
     final dartParser =
@@ -1539,14 +1545,25 @@ void main() {
     expect(entrypoint, contains('CreateMutexW'));
     expect(entrypoint, contains('ERROR_ALREADY_EXISTS'));
     expect(entrypoint, contains('StartupCommandFromArgs'));
-    expect(entrypoint, contains('reveal-pinned-todo'));
-    expect(entrypoint, contains('reveal-pinned-note'));
+    expect(utils, contains('reveal-pinned-todo'));
+    expect(utils, contains('reveal-pinned-note'));
     expect(dartParser, contains('reveal-pinned-todo'));
     expect(dartParser, contains('reveal-pinned-note'));
     expect(
         entrypoint, contains('SignalPrimaryInstance(command_line_arguments)'));
     expect(entrypoint, contains('CreateFileW(kSingleInstancePipeName'));
     expect(entrypoint, contains('WriteFile(pipe, command.data()'));
+    expect(runner, contains('SignalPrimaryInstanceFromChannel'));
+    expect(runner, contains('GetStringListArgumentValue(call.arguments())'));
+    expect(runner, contains('StartupCommandFromArgs(args)'));
+    expect(runner, contains('CreateFileW(kSingleInstancePipeName'));
+    expect(runner, contains('WriteFile(pipe, command.data()'));
+    expect(runner, contains('forward_to_primary_failed'));
+    expect(
+      runner,
+      isNot(contains(
+          'if (method == "forwardToPrimary") {\n          result->Success();')),
+    );
     expect(entrypoint, contains('WaitNamedPipeW(kSingleInstancePipeName'));
     expect(runner, contains('StartSingleInstanceListener();'));
     expect(runner, contains('CreateNamedPipeW'));
@@ -2891,7 +2908,10 @@ void main() {
       surfaceArgsBlock,
       contains("'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName"),
     );
-    expect(platform, contains('_normalizeStateQueueMonitorDeviceNames'));
+    expect(platform, contains('_normalizeStateForPlatform'));
+    expect(platform, contains('_normalizePaperForPlatform'));
+    expect(platform, contains('paper.id = normalizeLocalModelId(paper.id);'));
+    expect(platform, contains('normalizeLocalModelId(_activePaper?.id)'));
     expect(platform, contains('_normalizePaperQueueMonitorDeviceName'));
     expect(platform, contains("'setPaperSurfaces'"));
     expect(platform, contains("'normalizeQueueMonitorDeviceName'"));
@@ -2903,6 +2923,7 @@ void main() {
     expect(runner, contains('ValidatePaperIdArgumentValue'));
     expect(runner, contains('TrimAscii(value) != value'));
     expect(runner, contains('HasAsciiControlCharacter(value)'));
+    expect(runner, contains('HasControlCodePoint(value)'));
     expect(
       runner,
       contains('paper_id_argument.provided && !paper_id_argument.valid'),
@@ -2960,6 +2981,10 @@ void main() {
     expect(registryEnd, greaterThan(registryStart));
     final registryBlock = runner.substring(registryStart, registryEnd);
     expect(registryBlock, contains('current_paper_ids'));
+    expect(registryBlock, contains('ValidatePaperIdArgumentValue'));
+    expect(registryBlock, contains('if (paper_id_argument.valid)'));
+    expect(registryBlock,
+        contains('const std::string id = paper_id_argument.value'));
     expect(registryBlock, contains('paper_surface_order_ = current_paper_ids'));
     expect(registryBlock, contains('paper_surfaces_.erase(iterator)'));
     expect(registryBlock, contains('active_paper_id_.clear()'));
@@ -3949,6 +3974,13 @@ void main() {
     expect(
       script,
       contains('windows.smoke.secondaryStartupCommands'),
+    );
+    expect(script, contains('windows.smoke.hiddenStartupCommands'));
+    expect(script, contains('windows.smoke.ignoredSecondaryStartupCommands'));
+    expect(
+      script,
+      contains(
+          'Windows smoke record visiblePaperCountAfterIgnoredCommand must remain 0 after an unknown secondary startup command.'),
     );
     expect(
       script,
@@ -5304,6 +5336,14 @@ void main() {
     expect(windowsSmokeScript, contains('finalTodoPaperCount'));
     expect(windowsSmokeScript, contains('initialNotePaperCount'));
     expect(windowsSmokeScript, contains('finalNotePaperCount'));
+    expect(windowsSmokeScript, contains('Get-VisiblePaperCount'));
+    expect(windowsSmokeScript, contains('hiddenStartupCommands'));
+    expect(windowsSmokeScript, contains('ignoredSecondaryStartupCommands'));
+    expect(
+      windowsSmokeScript,
+      contains(
+          'unknown secondary startup command unexpectedly changed paper visibility'),
+    );
     expect(
       windowsSmokeScript,
       contains('--new-note did not increase the persisted note paper count'),
@@ -5322,6 +5362,8 @@ void main() {
     expect(windowsSmokeScript, contains('Start-Process'));
     expect(windowsSmokeScript, contains('data.json'));
     expect(windowsSmokeScript, contains('ConvertFrom-Json'));
+    expect(windowsSmokeScript, contains('--hide'));
+    expect(windowsSmokeScript, contains('--unknown-startup-command'));
     expect(windowsSmokeScript, contains('--new-note'));
     expect(windowsSmokeScript, contains('--new-todo'));
     expect(windowsSmokeScript, contains('--exit'));
@@ -5334,6 +5376,7 @@ void main() {
     );
     expect(development, contains(r'.\scripts\windows_smoke.ps1'));
     expect(development, contains('isolated `repapertodo.exe`'));
+    expect(development, contains('unknown-only arguments do not restore'));
     expect(development, contains('secondary `--new-note` and'));
     expect(development, contains('state out of the build output'));
     expect(windowsManualQaScript, contains('TransparentBorderlessFeel'));
@@ -6198,6 +6241,12 @@ try {
     expect(
       script,
       contains(r'Release metadata $Context SHA-256 must match the file.'),
+    );
+    expect(
+      script,
+      contains(
+        'Release metadata Windows smoke must prove unknown secondary startup commands do not restore hidden papers.',
+      ),
     );
     expect(
       script,

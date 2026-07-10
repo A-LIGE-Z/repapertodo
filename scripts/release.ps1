@@ -1538,6 +1538,17 @@ function Assert-WindowsSmokeRecord {
     throw "Windows smoke record finalTodoPaperCount must be greater than initialTodoPaperCount after --new-todo."
   }
   Assert-ReleaseMetadataStringSequence `
+    -Name "windows.smoke.hiddenStartupCommands" `
+    -Actual (Get-RecordPropertyValue -Record $Record -Name "hiddenStartupCommands") `
+    -Expected @("--hide")
+  Assert-ReleaseMetadataStringSequence `
+    -Name "windows.smoke.ignoredSecondaryStartupCommands" `
+    -Actual (Get-RecordPropertyValue -Record $Record -Name "ignoredSecondaryStartupCommands") `
+    -Expected @("--unknown-startup-command")
+  if ([int](Get-RecordPropertyValue -Record $Record -Name "visiblePaperCountAfterIgnoredCommand") -ne 0) {
+    throw "Windows smoke record visiblePaperCountAfterIgnoredCommand must remain 0 after an unknown secondary startup command."
+  }
+  Assert-ReleaseMetadataStringSequence `
     -Name "windows.smoke.secondaryStartupCommands" `
     -Actual (Get-RecordPropertyValue -Record $Record -Name "secondaryStartupCommands") `
     -Expected @("--new-note", "--new-todo", "--exit")

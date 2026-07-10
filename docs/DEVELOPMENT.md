@@ -173,13 +173,15 @@ use:
 
 The smoke script copies `build/windows/x64/runner/Release` to a system temp
 directory, starts that isolated `repapertodo.exe`, verifies a primary instance
-can create its initial `data.json`, forwards secondary `--new-note` and
-`--new-todo` startup commands to the primary instance, waits for those papers to
-persist, then forwards `--exit` and removes the temp copy. This keeps smoke-test
-state out of the build output while still exercising the real packaged Windows
-runner. When run with `-ResultJson`, it writes a structured smoke result with
-the checked EXE file name, source release directory, initial/final persisted
-paper counts, note/todo type count increases from forwarded startup commands,
+can create its initial `data.json`, forwards secondary `--hide` and an unknown
+startup command to confirm unknown-only arguments do not restore hidden papers,
+forwards secondary `--new-note` and `--new-todo` startup commands to the primary
+instance, waits for those papers to persist, then forwards `--exit` and removes
+the temp copy. This keeps smoke-test state out of the build output while still
+exercising the real packaged Windows runner. When run with `-ResultJson`, it
+writes a structured smoke result with the checked EXE file name, source release
+directory, initial/final persisted paper counts, note/todo type count increases
+from forwarded startup commands, the ignored unknown startup command evidence,
 timeout settings, and UTC check time. Release packaging records this Windows smoke result in metadata by
 default and revalidates that the recorded source release directory is the current
 Windows build output with `repapertodo.exe`, `flutter_windows.dll`, and `data`.

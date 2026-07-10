@@ -339,6 +339,91 @@ void main() {
     expect(calls.map((call) => call.method), isNot(contains('show')));
   });
 
+  test('paper host normalizes local paper ids before Windows surface calls',
+      () async {
+    const channel = MethodChannel('repapertodo/window_local_id_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final paper = PaperData(
+      id: ' paper-1\u0000 ',
+      type: PaperTypes.todo,
+      title: 'Normalized',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+      capsuleMonitorDeviceName: ' \u0007 ',
+    );
+
+    await services.paperWindows.showPaper(paper);
+
+    expect(paper.id, 'paper-1');
+    expect(paper.capsuleMonitorDeviceName, '');
+    expect(
+      calls.where((call) => call.method == 'setBounds').single.arguments,
+      {
+        'paperId': 'paper-1',
+        'x': 10.0,
+        'y': 20.0,
+        'width': 320.0,
+        'height': 260.0,
+      },
+    );
+    expect(
+      calls.where((call) => call.method == 'show').single.arguments,
+      {
+        'paperId': 'paper-1',
+        'isPinnedToDesktop': false,
+        'alwaysOnTop': false,
+        'capsuleSide': '',
+        'capsuleMonitorDeviceName': '',
+      },
+    );
+
+    final update = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('boundsChanged', {
+          'paperId': 'paper-1',
+          'bounds': {
+            'x': 70,
+            'y': 80,
+            'width': 420,
+            'height': 360,
+          },
+        }),
+      ),
+      (_) {},
+    );
+    expect((await update).id, 'paper-1');
+    expect(paper.x, 70);
+    expect(paper.y, 80);
+
+    final trayPaper = PaperData(
+      id: ' tray-paper\u0007 ',
+      type: PaperTypes.note,
+      title: 'Tray',
+    );
+    await services.tray.rebuildMenu(AppState(papers: [trayPaper]));
+
+    expect(trayPaper.id, 'tray-paper');
+    final trayMenuCall =
+        calls.lastWhere((call) => call.method == 'setTrayMenu');
+    final papers = trayMenuCall.arguments as List<Object?>;
+    expect((papers.single as Map<Object?, Object?>)['id'], 'tray-paper');
+  });
+
   test('Windows global hotkeys are normalized before channel registration',
       () async {
     const channel = MethodChannel('repapertodo/window_hotkey_boundary_test');
