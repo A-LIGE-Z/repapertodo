@@ -8,6 +8,10 @@
   repeated exit commands cannot upload or final-sync twice before cleanup.
 - Ignored late startup, tray open/delete, and native hidden-surface events while
   exit save/sync is active so shutdown retries cannot mutate papers.
+- Restricted Android background WebDAV sync registration and execution to
+  absolute `data.json` state paths.
+- Clarified GitHub Release publishing authentication so `GH_TOKEN`/
+  `GITHUB_TOKEN` failures are reported separately from missing CLI login.
 - Allowed release packaging to consume a previously recorded Android device
   smoke JSON result while still rejecting mixed live/result smoke sources.
 - Required passed Windows manual QA, live WebDAV smoke, and Android device

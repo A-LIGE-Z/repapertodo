@@ -308,6 +308,7 @@ Map<String, dynamic> _releaseMetadataRecord({
         'androidBackgroundSyncSharedDartPath': true,
         'androidBackgroundSyncRegistrationCovered': true,
         'androidBackgroundSyncAbsoluteStatePathCovered': true,
+        'androidBackgroundSyncDataJsonStatePathCovered': true,
         'evidenceFiles': [
           'lib/src/sync/webdav/webdav_client.dart',
           'lib/src/sync/android_background_sync.dart',

@@ -21,6 +21,308 @@ String? _findPowerShellExecutable() {
 }
 
 void main() {
+  test('GitHub Release authentication reports token-specific failures',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for release auth testing.');
+      return;
+    }
+
+    final result = await Process.run(
+      powerShell,
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        r'''
+$ErrorActionPreference = 'Stop'
+$content = Get-Content -Raw -LiteralPath 'scripts/release.ps1'
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseInput(
+  $content,
+  [ref]$tokens,
+  [ref]$errors
+)
+if ($errors.Count -gt 0) {
+  throw "scripts/release.ps1 could not be parsed."
+}
+$function = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-GitHubAuthentication'
+}, $true)
+if ($null -eq $function) {
+  throw "Assert-GitHubAuthentication was not found."
+}
+Invoke-Expression $function.Extent.Text
+function gh {
+  param([Parameter(ValueFromRemainingArguments = $true)] [string[]]$Args)
+  $script:lastGhArgs = $Args
+  $global:LASTEXITCODE = 1
+}
+
+$oldGhToken = $env:GH_TOKEN
+$oldGitHubToken = $env:GITHUB_TOKEN
+try {
+  $env:GH_TOKEN = $null
+  $env:GITHUB_TOKEN = $null
+  try {
+    Assert-GitHubAuthentication
+    throw 'Expected missing GitHub CLI authentication to fail.'
+  } catch {
+    if ($_.Exception.Message -notlike '*authenticated GitHub CLI session*') {
+      throw
+    }
+    if ($_.Exception.Message -like '*valid GH_TOKEN or GITHUB_TOKEN*') {
+      throw 'Missing CLI login should not report an environment token failure.'
+    }
+  }
+
+  $env:GH_TOKEN = 'expired-token'
+  $env:GITHUB_TOKEN = $null
+  try {
+    Assert-GitHubAuthentication
+    throw 'Expected invalid GH_TOKEN authentication to fail.'
+  } catch {
+    if ($_.Exception.Message -notlike '*valid GH_TOKEN or GITHUB_TOKEN*') {
+      throw
+    }
+  }
+
+  if (($script:lastGhArgs -join ' ') -ne 'auth status') {
+    throw "Assert-GitHubAuthentication must call 'gh auth status'."
+  }
+} finally {
+  $env:GH_TOKEN = $oldGhToken
+  $env:GITHUB_TOKEN = $oldGitHubToken
+}
+''',
+      ],
+      workingDirectory: Directory.current.path,
+    );
+
+    expect(
+      result.exitCode,
+      0,
+      reason: [
+        'Release publishing auth must distinguish invalid environment tokens from missing GitHub CLI login.',
+        if (result.stdout.toString().trim().isNotEmpty)
+          'stdout: ${result.stdout}',
+        if (result.stderr.toString().trim().isNotEmpty)
+          'stderr: ${result.stderr}',
+      ].join('\n'),
+    );
+  });
+
+  test('GitHub Release git state gate rejects stale or wrong branches',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for release git testing.');
+      return;
+    }
+
+    final result = await Process.run(
+      powerShell,
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        r'''
+$ErrorActionPreference = 'Stop'
+$content = Get-Content -Raw -LiteralPath 'scripts/release.ps1'
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseInput(
+  $content,
+  [ref]$tokens,
+  [ref]$errors
+)
+if ($errors.Count -gt 0) {
+  throw "scripts/release.ps1 could not be parsed."
+}
+$function = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-GitHubReleaseGitState'
+}, $true)
+if ($null -eq $function) {
+  throw "Assert-GitHubReleaseGitState was not found."
+}
+Invoke-Expression $function.Extent.Text
+function Invoke-Native {
+  param([string]$Name, [scriptblock]$Action)
+  $script:fetchCalled = $true
+}
+function Invoke-NativeText {
+  param([string]$Name, [scriptblock]$Action)
+  if ($Name -eq 'git rev-parse --abbrev-ref HEAD') {
+    return $script:branch
+  }
+  if ($Name -eq 'git rev-parse HEAD') {
+    return $script:headCommit
+  }
+  if ($Name -eq 'git rev-parse --verify origin/main') {
+    return $script:originMainCommit
+  }
+  throw "Unexpected native text command: $Name"
+}
+
+$script:fetchCalled = $false
+$script:branch = 'feature'
+$script:headCommit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+$script:originMainCommit = $script:headCommit
+try {
+  Assert-GitHubReleaseGitState
+  throw 'Expected non-main branch to fail.'
+} catch {
+  if ($_.Exception.Message -notlike '*main branch*') {
+    throw
+  }
+}
+if (-not $script:fetchCalled) {
+  throw 'GitHub Release git state gate must fetch origin/main before checking refs.'
+}
+
+$script:branch = 'main'
+$script:headCommit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+$script:originMainCommit = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+try {
+  Assert-GitHubReleaseGitState
+  throw 'Expected stale origin/main to fail.'
+} catch {
+  if ($_.Exception.Message -notlike '*local HEAD to match origin/main*') {
+    throw
+  }
+}
+
+$oldGitHubActions = $env:GITHUB_ACTIONS
+$oldGitHubRefName = $env:GITHUB_REF_NAME
+try {
+  $env:GITHUB_ACTIONS = 'true'
+  $env:GITHUB_REF_NAME = 'main'
+  $script:branch = 'HEAD'
+  $script:headCommit = 'cccccccccccccccccccccccccccccccccccccccc'
+  $script:originMainCommit = $script:headCommit
+  Assert-GitHubReleaseGitState
+
+  $env:GITHUB_REF_NAME = 'feature'
+  try {
+    Assert-GitHubReleaseGitState
+    throw 'Expected detached non-main GitHub Actions ref to fail.'
+  } catch {
+    if ($_.Exception.Message -notlike '*main ref*') {
+      throw
+    }
+  }
+} finally {
+  $env:GITHUB_ACTIONS = $oldGitHubActions
+  $env:GITHUB_REF_NAME = $oldGitHubRefName
+}
+''',
+      ],
+      workingDirectory: Directory.current.path,
+    );
+
+    expect(
+      result.exitCode,
+      0,
+      reason: [
+        'Release publishing must reject non-main branches and commits that differ from origin/main.',
+        if (result.stdout.toString().trim().isNotEmpty)
+          'stdout: ${result.stdout}',
+        if (result.stderr.toString().trim().isNotEmpty)
+          'stderr: ${result.stderr}',
+      ].join('\n'),
+    );
+  });
+
+  test('GitHub Release tag gate rejects mismatched remote tags', () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for release tag testing.');
+      return;
+    }
+
+    final result = await Process.run(
+      powerShell,
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        r'''
+$ErrorActionPreference = 'Stop'
+$content = Get-Content -Raw -LiteralPath 'scripts/release.ps1'
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseInput(
+  $content,
+  [ref]$tokens,
+  [ref]$errors
+)
+if ($errors.Count -gt 0) {
+  throw "scripts/release.ps1 could not be parsed."
+}
+$function = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-GitHubReleaseTagState'
+}, $true)
+if ($null -eq $function) {
+  throw "Assert-GitHubReleaseTagState was not found."
+}
+Invoke-Expression $function.Extent.Text
+function git {
+  param([Parameter(ValueFromRemainingArguments = $true)] [string[]]$Args)
+  $script:lastGitArgs = $Args
+  $global:LASTEXITCODE = 0
+  return $script:tagLines
+}
+
+$matchingCommit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+$differentCommit = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+$script:tagLines = @()
+Assert-GitHubReleaseTagState -TagName 'v1.0.0' -GitCommit $matchingCommit
+
+$script:tagLines = @(
+  "$matchingCommit`trefs/tags/v1.0.0",
+  "$differentCommit`trefs/tags/v1.0.0^{}"
+)
+try {
+  Assert-GitHubReleaseTagState -TagName 'v1.0.0' -GitCommit $matchingCommit
+  throw 'Expected annotated tag peeled commit mismatch to fail.'
+} catch {
+  if ($_.Exception.Message -notlike '*already points to*') {
+    throw
+  }
+}
+
+$script:tagLines = @("$matchingCommit`trefs/tags/v1.0.0^{}")
+Assert-GitHubReleaseTagState -TagName 'v1.0.0' -GitCommit $matchingCommit
+
+if (($script:lastGitArgs -join ' ') -ne 'ls-remote --tags origin refs/tags/v1.0.0 refs/tags/v1.0.0^{}') {
+  throw "Assert-GitHubReleaseTagState must query the exact remote tag and peeled tag refs."
+}
+''',
+      ],
+      workingDirectory: Directory.current.path,
+    );
+
+    expect(
+      result.exitCode,
+      0,
+      reason: [
+        'Release publishing must reject existing GitHub tags that point to another commit.',
+        if (result.stdout.toString().trim().isNotEmpty)
+          'stdout: ${result.stdout}',
+        if (result.stderr.toString().trim().isNotEmpty)
+          'stderr: ${result.stderr}',
+      ].join('\n'),
+    );
+  });
+
   test('GitHub Release asset verification rejects duplicate asset names',
       () async {
     final powerShell = _findPowerShellExecutable();

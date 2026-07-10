@@ -199,6 +199,14 @@ Assert-TextContains `
   -Text $androidBackgroundSyncSource `
   -Expected "_isAbsoluteBackgroundStateFilePath" `
   -Message "Android WebDAV background sync does not reject relative state paths before scheduling or running."
+Assert-TextContains `
+  -Text $androidBackgroundSyncSource `
+  -Expected "_backgroundStateFileName" `
+  -Message "Android WebDAV background sync does not verify the state file name before scheduling or running."
+Assert-TextContains `
+  -Text $androidBackgroundSyncSource `
+  -Expected "!= 'data.json'" `
+  -Message "Android WebDAV background sync does not reject non-data.json state paths before scheduling or running."
 
 Assert-TextContains `
   -Text $webDavStateSyncTest `
@@ -238,6 +246,10 @@ Assert-TextContains `
   -Message "Android WebDAV background registration does not cover relative state-path rejection."
 Assert-TextContains `
   -Text $androidBackgroundSyncTest `
+  -Expected "state.json" `
+  -Message "Android WebDAV background registration does not cover non-data.json state-path rejection."
+Assert-TextContains `
+  -Text $androidBackgroundSyncTest `
   -Expected "Android background sync reports conflicts as retryable" `
   -Message "Android WebDAV background retry test coverage is missing."
 Assert-TextContains `
@@ -266,6 +278,7 @@ $result = [ordered]@{
   androidBackgroundSyncSharedDartPath = $true
   androidBackgroundSyncRegistrationCovered = $true
   androidBackgroundSyncAbsoluteStatePathCovered = $true
+  androidBackgroundSyncDataJsonStatePathCovered = $true
   evidenceFiles = $evidenceFiles
 }
 

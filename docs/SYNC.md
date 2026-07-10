@@ -734,9 +734,9 @@ Snapshot and operation-log file contents are encrypted for user-facing sync;
   reuses the shared `AppSyncService.syncAndMergeNow` path instead of
   reimplementing WebDAV merge logic in Kotlin. Incomplete or disabled WebDAV
   settings should cancel the periodic task. Registration and task execution
-  must both reject unsafe or relative state-file paths instead of scheduling
-  doomed background work. The task must require network connectivity, use
-  bounded backoff, and report failure to WorkManager only when it should be
+  must both reject unsafe, relative, or non-`data.json` state-file paths
+  instead of scheduling doomed background work. The task must require network connectivity,
+  use bounded backoff, and report failure to WorkManager only when it should be
   retried.
   Disabled sync,
   incomplete configuration, and unreadable remote payloads are user-recoverable

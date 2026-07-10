@@ -862,7 +862,8 @@ function Test-ReleaseMetadataRecord {
     "sharedWindowsAndroidSettings",
     "androidBackgroundSyncSharedDartPath",
     "androidBackgroundSyncRegistrationCovered",
-    "androidBackgroundSyncAbsoluteStatePathCovered"
+    "androidBackgroundSyncAbsoluteStatePathCovered",
+    "androidBackgroundSyncDataJsonStatePathCovered"
   )) {
     if ([bool](Get-RecordPropertyValue -Record $Record.webDav.staticSmoke -Name $property) -ne $true) {
       return "Release metadata WebDAV static smoke must confirm $property."

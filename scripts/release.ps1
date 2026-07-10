@@ -1597,7 +1597,8 @@ function Assert-WebDavSmokeRecord {
     "sharedWindowsAndroidSettings",
     "androidBackgroundSyncSharedDartPath",
     "androidBackgroundSyncRegistrationCovered",
-    "androidBackgroundSyncAbsoluteStatePathCovered"
+    "androidBackgroundSyncAbsoluteStatePathCovered",
+    "androidBackgroundSyncDataJsonStatePathCovered"
   )) {
     if ([bool](Get-RecordPropertyValue -Record $Record -Name $property) -ne
         $true) {
@@ -2012,12 +2013,17 @@ function Assert-PublishableReleaseQaRecords {
 }
 
 function Assert-GitHubAuthentication {
+  $hasEnvironmentToken = -not [string]::IsNullOrWhiteSpace($env:GH_TOKEN) -or
+    -not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)
   $previousErrorActionPreference = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   & gh auth status
   $authExitCode = $LASTEXITCODE
   $ErrorActionPreference = $previousErrorActionPreference
   if ($authExitCode -ne 0) {
+    if ($hasEnvironmentToken) {
+      throw 'GitHub Release publishing requires a valid GH_TOKEN or GITHUB_TOKEN for GitHub CLI. Refresh the token secret or unset it and run `gh auth refresh -h github.com` or `gh auth login -h github.com`, then rerun the release script.'
+    }
     throw 'GitHub Release publishing requires an authenticated GitHub CLI session. Run `gh auth refresh -h github.com` or `gh auth login -h github.com`, then rerun the release script.'
   }
 }
@@ -2331,7 +2337,7 @@ Flutter toolchain: Flutter $flutterFrameworkVersion ($flutterChannel), Dart $dar
 Verification summary:
 - Windows smoke: $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "status")); exe $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "exeFileName")); persisted papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalPaperCount")); todo papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialTodoPaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalTodoPaperCount")); note papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialNotePaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalNotePaperCount")).
 - Windows manual QA: $windowsManualQaSummary.
-- WebDAV static smoke: $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "status")); generic WebDAV $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "genericWebDavSupported")); Jianguoyun preset $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "jianguoyunPresetSupported")); operation logs $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "operationLogsSupported")); Windows/Android round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "crossDeviceOperationRoundTripCovered")); local HTTP WebDAV protocol round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "localHttpWebDavRoundTripCovered")); Android background shared Dart sync path $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncSharedDartPath")); Android background absolute state path gate $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncAbsoluteStatePathCovered")).
+- WebDAV static smoke: $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "status")); generic WebDAV $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "genericWebDavSupported")); Jianguoyun preset $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "jianguoyunPresetSupported")); operation logs $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "operationLogsSupported")); Windows/Android round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "crossDeviceOperationRoundTripCovered")); local HTTP WebDAV protocol round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "localHttpWebDavRoundTripCovered")); Android background shared Dart sync path $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncSharedDartPath")); Android background absolute state path gate $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncAbsoluteStatePathCovered")); Android background data.json state path gate $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncDataJsonStatePathCovered")).
 - WebDAV generic live smoke: $webDavLiveSmokeSummary.
 - WebDAV domestic live smoke: $webDavDomesticLiveSmokeSummary.
 - Android static smoke: $([string](Get-RecordPropertyValue -Record $androidStaticSmokeRecord -Name "status")); APK application ID $([string](Get-RecordPropertyValue -Record $androidStaticSmokeRecord -Name "apkApplicationId")); minSdk $([string](Get-RecordPropertyValue -Record $androidStaticSmokeRecord -Name "minSdk")); targetSdk $([string](Get-RecordPropertyValue -Record $androidStaticSmokeRecord -Name "targetSdk")); debuggable $([string](Get-RecordPropertyValue -Record $androidStaticSmokeRecord -Name "debuggable")); launcher $([string](Get-RecordPropertyValue -Record $androidStaticSmokeRecord -Name "launcherActivity")); singleTop $([string](Get-RecordPropertyValue -Record $androidStaticSmokeRecord -Name "singleTopLaunchMode")); empty task affinity $([string](Get-RecordPropertyValue -Record $androidStaticSmokeRecord -Name "emptyTaskAffinity")); WorkManager background sync $([string](Get-RecordPropertyValue -Record $androidStaticSmokeRecord -Name "backgroundWorkManagerSystemJobService")).

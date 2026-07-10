@@ -75,6 +75,8 @@ void main() {
       '   ',
       'relative/data.json',
       r'.\data.json',
+      r'C:\Users\tester\Documents\RePaperTodo\state.json',
+      '/data/user/0/com.aligez.repapertodo/files/state.json',
       'build/data.json\nbad',
       '\u0085build/data.json',
     ]) {
@@ -289,6 +291,8 @@ void main() {
       '   ',
       'relative/data.json',
       r'.\data.json',
+      r'C:\Users\tester\Documents\RePaperTodo\state.json',
+      '/data/user/0/com.aligez.repapertodo/files/state.json',
       'build/data.json\nbad',
       '\u0085build/data.json',
     ]) {

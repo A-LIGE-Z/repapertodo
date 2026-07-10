@@ -936,7 +936,7 @@ void main() {
     expect(syncDesign, contains('AppSyncService.syncAndMergeNow'));
     expect(syncDesign, contains('Incomplete or disabled WebDAV'));
     expect(syncDesign, contains('Registration and task execution'));
-    expect(syncDesign, contains('unsafe or relative state-file paths'));
+    expect(syncDesign, contains('unsafe, relative, or non-`data.json`'));
     expect(syncDesign, contains('scheduling'));
     expect(syncDesign, contains('doomed background work'));
     expect(syncDesign, contains('require network connectivity'));
@@ -991,6 +991,8 @@ void main() {
         androidBackgroundSync, contains('_normalizeBackgroundStateFilePath'));
     expect(
         androidBackgroundSync, contains('_isAbsoluteBackgroundStateFilePath'));
+    expect(androidBackgroundSync, contains('_backgroundStateFileName'));
+    expect(androidBackgroundSync, contains("!= 'data.json'"));
     expect(androidBackgroundSync, contains('_hasControlCharacter'));
     expect(syncDesign, contains('Primary startup `exit` commands'));
     expect(syncDesign, contains('startup auto-sync is disabled'));
@@ -3900,6 +3902,10 @@ void main() {
       script,
       contains('androidBackgroundSyncAbsoluteStatePathCovered'),
     );
+    expect(
+      script,
+      contains('androidBackgroundSyncDataJsonStatePathCovered'),
+    );
     expect(script, contains('webDav.staticSmoke.evidenceFiles'));
     expect(script, contains('lib/src/sync/android_background_sync.dart'));
     expect(script, contains('test/android_background_sync_test.dart'));
@@ -4199,6 +4205,7 @@ void main() {
       script,
       contains('Android background absolute state path gate'),
     );
+    expect(script, contains('Android background data.json state path gate'));
     expect(script, contains('Android static smoke:'));
     expect(script, contains('launcherActivity'));
     expect(script, contains('singleTopLaunchMode'));
@@ -4235,6 +4242,9 @@ void main() {
     expect(script, contains('gh release edit'));
     expect(script, contains('gh release upload'));
     expect(script, contains('gh auth status'));
+    expect(script, contains(r'$env:GH_TOKEN'));
+    expect(script, contains(r'$env:GITHUB_TOKEN'));
+    expect(script, contains('valid GH_TOKEN or GITHUB_TOKEN'));
     expect(script, contains('authenticated GitHub CLI session'));
     expect(script, contains('gh auth refresh -h github.com'));
     expect(script, contains('gh auth login -h github.com'));
@@ -4309,7 +4319,7 @@ void main() {
     expect(readme, contains('actual manifest\n`min-sdk` and `target-sdk`'));
     expect(readme, contains('UTC build timestamp'));
     expect(readme, contains('WebDAV static smoke pass status'));
-    expect(readme, contains('relative state-file paths'));
+    expect(readme, contains('relative or non-`data.json` state-file paths'));
     expect(readme, contains('generic WebDAV support'));
     expect(readme, contains('Jianguoyun preset support'));
     expect(readme, contains('operation-log evidence'));
@@ -4481,6 +4491,7 @@ void main() {
     expect(readme, contains(r'.\scripts\release.ps1'));
     expect(readme, contains('-PublishGitHubRelease'));
     expect(readme, contains('Publishing checks `gh auth status`'));
+    expect(readme, contains('accepts `GH_TOKEN` or `GITHUB_TOKEN`'));
     expect(readme, contains('missing or expired GitHub credentials'));
     expect(readme, contains('`gh auth refresh -h github.com`'));
     expect(readme, contains('`gh auth login -h github.com`'));
@@ -4865,7 +4876,7 @@ void main() {
     expect(development, contains('two-store operation-log round trip'));
     expect(
       development,
-      contains('Android background sync absolute state-path gate'),
+      contains('Android background sync absolute `data.json` state-path gate'),
     );
     expect(development, contains('For real-provider WebDAV QA'));
     expect(development, contains('REPAPERTODO_WEBDAV_ENDPOINT'));
@@ -4912,11 +4923,14 @@ void main() {
     expect(webDavSmokeScript, contains('ExistingPeriodicWorkPolicy.update'));
     expect(webDavSmokeScript, contains('_backgroundSyncCompletedWithoutRetry'));
     expect(webDavSmokeScript, contains('_isAbsoluteBackgroundStateFilePath'));
+    expect(webDavSmokeScript, contains('_backgroundStateFileName'));
+    expect(webDavSmokeScript, contains("!= 'data.json'"));
     expect(
       webDavSmokeScript,
       contains('Android background sync accepts POSIX absolute state paths'),
     );
     expect(webDavSmokeScript, contains('relative/data.json'));
+    expect(webDavSmokeScript, contains('state.json'));
     expect(webDavSmokeScript, contains('genericWebDavSupported'));
     expect(webDavSmokeScript, contains('jianguoyunPresetSupported'));
     expect(webDavSmokeScript, contains('encryptedPayloadsRequired'));
@@ -4932,6 +4946,10 @@ void main() {
     expect(
       webDavSmokeScript,
       contains('androidBackgroundSyncAbsoluteStatePathCovered'),
+    );
+    expect(
+      webDavSmokeScript,
+      contains('androidBackgroundSyncDataJsonStatePathCovered'),
     );
     expect(webDavSmokeScript, contains(r'$evidenceFiles = @('));
     expect(

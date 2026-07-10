@@ -221,7 +221,7 @@ The script does not need real WebDAV credentials. It audits the source and test
 suite for generic HTTP/HTTPS WebDAV support, Jianguoyun WebDAV preset support,
 encrypted payload enforcement, operation-log sync support, a Windows/Android
 two-store operation-log round trip, a local HTTP WebDAV protocol round trip,
-and the Android background sync absolute state-path gate.
+and the Android background sync absolute `data.json` state-path gate.
 When run with `-ResultJson`, it writes a structured smoke result with those
 booleans, repository-relative evidence file paths, and UTC check time. The
 evidence paths must stay inside the repository and point at real files. Release

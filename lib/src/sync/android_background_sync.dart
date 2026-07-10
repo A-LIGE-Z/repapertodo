@@ -192,6 +192,9 @@ String _normalizeBackgroundStateFilePath(String value) {
   if (!_isAbsoluteBackgroundStateFilePath(path)) {
     return '';
   }
+  if (_backgroundStateFileName(path).toLowerCase() != 'data.json') {
+    return '';
+  }
   return path;
 }
 
@@ -203,6 +206,14 @@ bool _isAbsoluteBackgroundStateFilePath(String value) {
     return true;
   }
   return value.startsWith(r'\\');
+}
+
+String _backgroundStateFileName(String path) {
+  final slashIndex = path.lastIndexOf('/');
+  final backslashIndex = path.lastIndexOf(r'\');
+  final separatorIndex =
+      slashIndex > backslashIndex ? slashIndex : backslashIndex;
+  return separatorIndex < 0 ? path : path.substring(separatorIndex + 1);
 }
 
 bool _hasControlCharacter(String value) {

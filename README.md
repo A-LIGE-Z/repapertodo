@@ -102,8 +102,8 @@ MKCOL/PUT/PROPFIND/GET traffic, a Windows/Android two-store round trip is
 covered through the shared WebDAV operation-log path, Android registers a
 WorkManager/headless Dart background sync task that reuses the shared WebDAV
 StateStore path when secure sync is configured, Android background sync rejects
-relative state-file paths before scheduling or running, and the shared settings
-UI exposes the same sync model used by Windows and Android.
+relative or non-`data.json` state-file paths before scheduling or running, and
+the shared settings UI exposes the same sync model used by Windows and Android.
 For real-provider QA, `scripts/webdav_live_smoke.ps1` reads WebDAV credentials
 from `REPAPERTODO_WEBDAV_*` environment variables and runs the same
 Windows/Android snapshot plus operation-log round trip against the configured
@@ -179,9 +179,11 @@ To also create or update the GitHub Release for the version in `pubspec.yaml`:
 ```
 
 Publishing checks `gh auth status` before running the expensive Flutter
-validation and build steps, so missing or expired GitHub credentials fail early
-with a direct `gh auth refresh -h github.com` or `gh auth login -h github.com`
-recovery command.
+validation and build steps. It accepts `GH_TOKEN` or `GITHUB_TOKEN` when the
+environment provides one, and otherwise expects an authenticated GitHub CLI
+session, so missing or expired GitHub credentials fail early with a direct
+`gh auth refresh -h github.com` or `gh auth login -h github.com` recovery
+command.
 Publishing also fetches `origin/main` and requires the local `main` HEAD to
 match it before building, so release metadata, artifacts, and the GitHub tag
 all point at the same commit.
