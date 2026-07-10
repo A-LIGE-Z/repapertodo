@@ -109,6 +109,8 @@ void main() {
         jsonDecode(resultJson.readAsStringSync()) as Map<String, Object?>;
     expect(record['status'], 'passed');
     expect(record['tester'], 'qa-tester');
+    expect(record['windowsVersion'], isA<String>());
+    expect((record['windowsVersion'] as String).trim(), isNotEmpty);
     expect(record['releaseDirectory'], exe.parent.path);
     expect(record['exeFileName'], 'repapertodo.exe');
     expect(record['exeBytes'], exe.lengthSync());

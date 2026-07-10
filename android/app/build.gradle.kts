@@ -1,3 +1,4 @@
+import java.io.File
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -14,6 +15,9 @@ fun requireAndroidSigningPropertyValue(key: String, value: String?) {
 
 fun requireAndroidStoreFileValue(storeFile: String) {
     requireAndroidSigningPropertyValue("storeFile", storeFile)
+    if (File(storeFile).isAbsolute) {
+        throw GradleException("Android signing storeFile must be relative to the Android project.")
+    }
     if (storeFile.contains('*') || storeFile.contains('?')) {
         throw GradleException("Android signing storeFile must not contain wildcard characters.")
     }

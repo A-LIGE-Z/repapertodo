@@ -7,6 +7,7 @@ param(
   [string]$ExpectedAndroidApkFileName = "",
   [string]$ExpectedAndroidApkPath = "",
   [string]$ReleaseMetadataJson = "",
+  [Alias("ReleaseChecksumsPath")]
   [string]$ReleaseChecksumsFile = "",
   [string]$ResultJson = "",
   [switch]$FailOnBlocked
@@ -212,6 +213,7 @@ function Test-AndroidStoreFileValue {
     return $false
   }
   if ($StoreFile -match "[\x00-\x1F\x7F-\x9F]" -or
+      [IO.Path]::IsPathRooted($StoreFile) -or
       $StoreFile.Contains("*") -or
       $StoreFile.Contains("?")) {
     return $false
@@ -246,11 +248,9 @@ function Get-AndroidSigningMode {
     return "debug fallback (android/key.properties storeFile is invalid)"
   }
   $storeFile = $values["storeFile"]
-  $keystorePath = if ([IO.Path]::IsPathRooted($storeFile)) {
-    [IO.Path]::GetFullPath($storeFile)
-  } else {
-    [IO.Path]::GetFullPath((Join-Path (Join-Path $RepoRoot "android") $storeFile))
-  }
+  $keystorePath = [IO.Path]::GetFullPath(
+    (Join-Path (Join-Path $RepoRoot "android") $storeFile)
+  )
   if (-not (Test-Path -LiteralPath $keystorePath -PathType Leaf)) {
     return "debug fallback (android/key.properties storeFile not found)"
   }
@@ -292,6 +292,10 @@ function Test-WindowsManualQaRecord {
   if ([string]::IsNullOrWhiteSpace(
       [string](Get-RecordPropertyValue -Record $Record -Name "tester"))) {
     return "Windows manual QA evidence must include a tester."
+  }
+  if ([string]::IsNullOrWhiteSpace(
+      [string](Get-RecordPropertyValue -Record $Record -Name "windowsVersion"))) {
+    return "Windows manual QA evidence must include windowsVersion."
   }
   if ([string](Get-RecordPropertyValue -Record $Record -Name "exeFileName") -ne
       "repapertodo.exe") {
@@ -376,6 +380,9 @@ function Test-WindowsManualQaRecord {
     "longRunningScriptCapsule",
     "independentPaperSurfaces"
   )
+  if ($items.Count -ne $expectedIds.Count) {
+    return "Windows manual QA evidence must include exactly $($expectedIds.Count) checked items."
+  }
   foreach ($id in $expectedIds) {
     $matches = @($items | Where-Object { [string]$_.id -eq $id })
     if ($matches.Count -ne 1 -or [string]$matches[0].status -ne "pass") {

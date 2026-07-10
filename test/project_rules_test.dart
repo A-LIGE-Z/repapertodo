@@ -3136,6 +3136,9 @@ void main() {
 
   test('release script packages Windows and Android artifacts', () {
     final script = _readProjectText('scripts/release.ps1');
+    final gradle = _readProjectText('android/app/build.gradle.kts');
+    final releaseReadinessAudit =
+        _readProjectText('scripts/release_readiness_audit.ps1');
     final signingScript =
         _readProjectText('scripts/configure_android_signing.ps1');
     final signingScriptTest =
@@ -3863,6 +3866,10 @@ void main() {
     );
     expect(
       script,
+      contains('Windows manual QA record windowsVersion must not be blank.'),
+    );
+    expect(
+      script,
       contains('Windows manual QA record exeFileName must be repapertodo.exe.'),
     );
     expect(script, contains('function Assert-WebDavSmokeRecord'));
@@ -4397,6 +4404,19 @@ void main() {
       signingScript,
       contains('Android signing storeFile must not contain dot-segments'),
     );
+    expect(
+      signingScript,
+      contains('Android signing storeFile must be relative'),
+    );
+    expect(signingScript, contains(r'[IO.Path]::IsPathRooted($Value)'));
+    expect(script, contains('Android signing storeFile must be relative'));
+    expect(script, contains(r'[IO.Path]::IsPathRooted($StoreFile)'));
+    expect(
+      releaseReadinessAudit,
+      contains(r'[IO.Path]::IsPathRooted($StoreFile)'),
+    );
+    expect(gradle, contains('File(storeFile).isAbsolute'));
+    expect(gradle, contains('Android signing storeFile must be relative'));
     expect(signingScript, contains('must be valid base64'));
     expect(
       signingScript,
@@ -4456,12 +4476,17 @@ void main() {
       signingScriptTest,
       contains('Android signing script rejects unsafe storeFile values'),
     );
+    expect(
+      signingScriptTest,
+      contains('Android signing script rejects absolute storeFile values'),
+    );
     expect(signingScript, contains('} finally {'));
     expect(
       readme,
       contains('clears those signing secret environment variables'),
     );
     expect(readme, contains('unsafe `storeFile` override'));
+    expect(readme, contains('absolute paths'));
     expect(readme, contains('`finally` block'));
     expect(
       signingScript,
@@ -5129,6 +5154,8 @@ void main() {
     expect(readme, contains('skipped items fail'));
     expect(readme, contains('byte counts and SHA-256 hashes'));
     expect(readme, contains('a non-empty tester name'));
+    expect(readme, contains('Windows version string'));
+    expect(readme, contains('exactly the expected seven checked parity items'));
     expect(readme, contains('current Windows release build'));
     expect(development, contains(r'.\scripts\windows_manual_qa.ps1'));
     expect(development, contains('-TransparentBorderlessFeel pass'));
@@ -5755,6 +5782,7 @@ try {
     expect(script, contains('ExpectedAndroidApkPath'));
     expect(script, contains('ReleaseMetadataJson'));
     expect(script, contains('ReleaseChecksumsFile'));
+    expect(script, contains('ReleaseChecksumsPath'));
     expect(script, contains('releaseMetadata'));
     expect(script, contains('releaseChecksums'));
     expect(script, contains('FailOnBlocked'));
@@ -5780,6 +5808,10 @@ try {
     );
     expect(
       script,
+      contains('Windows manual QA evidence must include windowsVersion.'),
+    );
+    expect(
+      script,
       contains(r'Windows manual QA evidence must include positive $property.'),
     );
     expect(
@@ -5802,6 +5834,12 @@ try {
       script,
       contains(
         'Windows manual QA evidence data/app.so SHA-256 must match the expected release build.',
+      ),
+    );
+    expect(
+      script,
+      contains(
+        r'Windows manual QA evidence must include exactly $($expectedIds.Count) checked items.',
       ),
     );
     expect(
@@ -6096,6 +6134,10 @@ try {
     );
     expect(
       auditTest,
+      contains('readiness audit accepts ReleaseChecksumsPath alias'),
+    );
+    expect(
+      auditTest,
       contains(
         'readiness audit rejects release checksum file with wrong file name',
       ),
@@ -6113,6 +6155,14 @@ try {
       contains(
         'readiness audit rejects unattributed Windows manual QA evidence',
       ),
+    );
+    expect(
+      auditTest,
+      contains('readiness audit rejects Windows manual QA without OS evidence'),
+    );
+    expect(
+      auditTest,
+      contains('readiness audit rejects Windows manual QA with extra items'),
     );
     expect(
       auditTest,

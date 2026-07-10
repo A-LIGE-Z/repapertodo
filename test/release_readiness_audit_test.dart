@@ -162,18 +162,30 @@ Map<String, dynamic> _windowsManualQaRecord({
   String? exeSha256Override,
   String? releaseDirectoryOverride,
   String tester = 'readiness-audit-test',
+  String windowsVersion = 'Windows readiness audit test',
+  bool includeExtraItem = false,
 }) {
   Map<String, String> item(String id) => {
         'id': id,
         'title': id,
         'status': 'pass',
       };
+  final items = [
+    item('transparentBorderlessFeel'),
+    item('taskSwitcherVisibility'),
+    item('multiMonitorEdgeDocking'),
+    item('fullscreenAvoidance'),
+    item('trayAfterExplorerRestart'),
+    item('longRunningScriptCapsule'),
+    item('independentPaperSurfaces'),
+    if (includeExtraItem) item('unreviewedExtraWindowsBehavior'),
+  ];
   return {
     'status': 'passed',
     'checkedAtUtc': DateTime.now().toUtc().toIso8601String(),
     'reason': '',
     'tester': tester,
-    'windowsVersion': 'Windows readiness audit test',
+    'windowsVersion': windowsVersion,
     'exePath': exe.path,
     'releaseDirectory': releaseDirectoryOverride ?? exe.parent.path,
     'exeFileName': 'repapertodo.exe',
@@ -184,15 +196,7 @@ Map<String, dynamic> _windowsManualQaRecord({
     'appSoSha256': _sha256File(appSo),
     'allowSkipped': false,
     'notes': 'Synthetic readiness audit test record.',
-    'items': [
-      item('transparentBorderlessFeel'),
-      item('taskSwitcherVisibility'),
-      item('multiMonitorEdgeDocking'),
-      item('fullscreenAvoidance'),
-      item('trayAfterExplorerRestart'),
-      item('longRunningScriptCapsule'),
-      item('independentPaperSurfaces'),
-    ],
+    'items': items,
   };
 }
 
@@ -995,6 +999,69 @@ void main() {
     expect(_checkById(audit, 'releaseChecksums')['status'], 'passed');
   });
 
+  test('readiness audit accepts ReleaseChecksumsPath alias', () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for readiness audit tests.');
+      return;
+    }
+
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_readiness_checksum_alias_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final windowsZip =
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-2.zip'))
+          ..writeAsStringSync('windows package');
+    final androidApk =
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-2.apk'))
+          ..writeAsStringSync('android package');
+    final releaseNotes =
+        File(p.join(temp.path, 'repapertodo-0.1.1-2-release-notes.md'))
+          ..writeAsStringSync('Release notes');
+    final releaseMetadataJson =
+        File(p.join(temp.path, 'repapertodo-0.1.1-2-release.json'));
+    final releaseChecksumsFile =
+        File(p.join(temp.path, 'repapertodo-0.1.1-2-sha256.txt'));
+    _writeJson(
+      releaseMetadataJson,
+      _releaseMetadataRecord(
+        windowsZip: windowsZip,
+        androidApk: androidApk,
+        releaseNotes: releaseNotes,
+      ),
+    );
+    _writeReleaseChecksums(
+      file: releaseChecksumsFile,
+      windowsZip: windowsZip,
+      androidApk: androidApk,
+      releaseMetadata: releaseMetadataJson,
+      releaseNotes: releaseNotes,
+    );
+
+    final audit = _decodeAudit(
+      await Process.run(
+        powerShell,
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          'scripts/release_readiness_audit.ps1',
+          '-ReleaseMetadataJson',
+          releaseMetadataJson.path,
+          '-ReleaseChecksumsPath',
+          releaseChecksumsFile.path,
+        ],
+        workingDirectory: Directory.current.path,
+      ),
+    );
+
+    expect(_checkById(audit, 'releaseMetadata')['status'], 'passed');
+    expect(_checkById(audit, 'releaseChecksums')['status'], 'passed');
+  });
+
   test('readiness audit rejects release checksum file with wrong file name',
       () async {
     final powerShell = _findPowerShellExecutable();
@@ -1291,6 +1358,112 @@ void main() {
     expect(
       windowsCheck['summary'],
       contains('Windows manual QA evidence must include a tester.'),
+    );
+  });
+
+  test('readiness audit rejects Windows manual QA without OS evidence',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for readiness audit tests.');
+      return;
+    }
+    final windowsRelease = Directory(
+      p.join('build', 'windows', 'x64', 'runner', 'Release'),
+    );
+    final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
+    final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-2.apk'));
+    if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
+      markTestSkipped('Release artifacts are unavailable for hash matching.');
+      return;
+    }
+
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_readiness_windows_os_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final windowsQaJson = File(p.join(temp.path, 'windows-manual-qa.json'));
+    final androidSmokeJson =
+        File(p.join(temp.path, 'android-device-smoke.json'));
+    _writeJson(
+      windowsQaJson,
+      _windowsManualQaRecord(
+        exe: exe,
+        appSo: appSo,
+        windowsVersion: '   ',
+      ),
+    );
+    _writeJson(androidSmokeJson, _androidDeviceSmokeRecord(apk: apk));
+
+    final audit = _decodeAudit(
+      await _runReadinessAudit(
+        powerShell: powerShell,
+        windowsManualQaJson: windowsQaJson.path,
+        androidDeviceSmokeJson: androidSmokeJson.path,
+        windowsReleaseDirectory: windowsRelease.path,
+        androidApkPath: apk.path,
+      ),
+    );
+
+    final windowsCheck = _checkById(audit, 'windowsManualQa');
+    expect(windowsCheck['status'], 'blocked');
+    expect(
+      windowsCheck['summary'],
+      contains('Windows manual QA evidence must include windowsVersion.'),
+    );
+  });
+
+  test('readiness audit rejects Windows manual QA with extra items', () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for readiness audit tests.');
+      return;
+    }
+    final windowsRelease = Directory(
+      p.join('build', 'windows', 'x64', 'runner', 'Release'),
+    );
+    final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
+    final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-2.apk'));
+    if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
+      markTestSkipped('Release artifacts are unavailable for hash matching.');
+      return;
+    }
+
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_readiness_windows_extra_item_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final windowsQaJson = File(p.join(temp.path, 'windows-manual-qa.json'));
+    final androidSmokeJson =
+        File(p.join(temp.path, 'android-device-smoke.json'));
+    _writeJson(
+      windowsQaJson,
+      _windowsManualQaRecord(
+        exe: exe,
+        appSo: appSo,
+        includeExtraItem: true,
+      ),
+    );
+    _writeJson(androidSmokeJson, _androidDeviceSmokeRecord(apk: apk));
+
+    final audit = _decodeAudit(
+      await _runReadinessAudit(
+        powerShell: powerShell,
+        windowsManualQaJson: windowsQaJson.path,
+        androidDeviceSmokeJson: androidSmokeJson.path,
+        windowsReleaseDirectory: windowsRelease.path,
+        androidApkPath: apk.path,
+      ),
+    );
+
+    final windowsCheck = _checkById(audit, 'windowsManualQa');
+    expect(windowsCheck['status'], 'blocked');
+    expect(
+      windowsCheck['summary'],
+      contains(
+          'Windows manual QA evidence must include exactly 7 checked items.'),
     );
   });
 

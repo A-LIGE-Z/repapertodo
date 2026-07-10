@@ -205,4 +205,44 @@ void main() {
       expect(File(keystore).existsSync(), false);
     }
   });
+
+  test('Android signing script rejects absolute storeFile values', () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for signing script tests.');
+      return;
+    }
+
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_signing_absolute_storefile_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+
+    final keyProperties = '${temp.path}${Platform.pathSeparator}key.properties';
+    final keystore = '${temp.path}${Platform.pathSeparator}release.jks';
+    final absoluteStoreFile =
+        '${temp.path}${Platform.pathSeparator}absolute-release.jks';
+    final result = await _runSigningScript(
+      powerShell: powerShell,
+      keyPropertiesPath: keyProperties,
+      keystorePath: keystore,
+      storeFile: absoluteStoreFile,
+      secrets: {
+        'ANDROID_KEYSTORE_BASE64': base64Encode([0x52, 0x50, 0x54, 0x44]),
+        'ANDROID_STORE_PASSWORD': 'store-password',
+        'ANDROID_KEY_ALIAS': 'repapertodo',
+        'ANDROID_KEY_PASSWORD': 'key-password',
+      },
+    );
+
+    expect(result.exitCode, isNot(0));
+    expect(
+      '${result.stdout}\n${result.stderr}',
+      contains(
+        'Android signing storeFile must be relative to the Android project',
+      ),
+    );
+    expect(File(keyProperties).existsSync(), false);
+    expect(File(keystore).existsSync(), false);
+  });
 }

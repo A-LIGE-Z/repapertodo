@@ -271,6 +271,9 @@ function Assert-AndroidStoreFileValue {
   param([string]$StoreFile)
 
   Assert-AndroidKeyPropertyValue -Key "storeFile" -Value $StoreFile
+  if ([IO.Path]::IsPathRooted($StoreFile)) {
+    throw "Android signing storeFile must be relative to the Android project."
+  }
   if ($StoreFile -match "[*?]") {
     throw "Android signing storeFile must not contain wildcard characters."
   }
@@ -291,9 +294,6 @@ function Resolve-AndroidKeystorePath {
 
   Assert-AndroidStoreFileValue -StoreFile $StoreFile
   try {
-    if ([IO.Path]::IsPathRooted($StoreFile)) {
-      return [IO.Path]::GetFullPath($StoreFile)
-    }
     return [IO.Path]::GetFullPath(
       (Join-Path (Join-Path $RepoRoot "android") $StoreFile)
     )
@@ -1241,6 +1241,10 @@ function Assert-WindowsManualQaRecord {
   if ([string]::IsNullOrWhiteSpace(
       [string](Get-RecordPropertyValue -Record $Record -Name "tester"))) {
     throw "Windows manual QA record tester must not be blank."
+  }
+  if ([string]::IsNullOrWhiteSpace(
+      [string](Get-RecordPropertyValue -Record $Record -Name "windowsVersion"))) {
+    throw "Windows manual QA record windowsVersion must not be blank."
   }
   if ([string](Get-RecordPropertyValue -Record $Record -Name "exeFileName") -ne
       "repapertodo.exe") {

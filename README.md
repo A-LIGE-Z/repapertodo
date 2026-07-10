@@ -318,13 +318,14 @@ after Explorer restarts, long-running script capsules, and independent paper
 surfaces; skipped items fail unless `-AllowSkipped` is used for exploratory
 records. Passed records also include the byte counts and SHA-256 hashes for
 `repapertodo.exe` and `data/app.so`, the source release directory, plus a non-empty tester name,
-and release packaging verifies those values against the
-current Windows release build before using the manual QA evidence.
+the Windows version string, and exactly the expected seven checked parity items;
+release packaging verifies those values against the current Windows release build
+before using the manual QA evidence.
 The script treats
 the release signing config as present only when all four properties are filled
 and `storeFile` points to an existing keystore file. Signing property values
 must not contain control characters, and `storeFile` must not contain wildcard
-characters or dot-segments such as `.` or `..`. The same validation also runs
+characters, absolute paths, or dot-segments such as `.` or `..`. The same validation also runs
 inside the Android Gradle build, and Gradle uses the same trimmed signing
 values that the release script validates, so direct APK builds cannot use
 weaker signing rules than the release script. Local smoke packages may use the
@@ -343,8 +344,8 @@ environment. If any Android signing secret is present, all four secrets must be
 present; otherwise the signing configuration step fails instead of silently
 falling back to debug signing.
 The signing configuration script also rejects unsafe `storeFile` override
-values with control characters, wildcard characters, or dot-segments before it
-writes `android/key.properties` or the keystore.
+values with control characters, wildcard characters, absolute paths, or
+dot-segments before it writes `android/key.properties` or the keystore.
 
 The required secrets are:
 

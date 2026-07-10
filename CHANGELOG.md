@@ -14,6 +14,10 @@
   `GITHUB_TOKEN` failures are reported separately from missing CLI login.
 - Gave release packaging a longer Windows smoke startup/exit window so slower
   hosts can still verify secondary startup command persistence.
+- Rejected absolute Android signing `storeFile` values across the signing
+  setup script, Gradle build, release packaging, and readiness audit.
+- Required Windows manual QA release evidence to include a Windows version
+  string and exactly the expected desktop parity checklist.
 - Allowed release packaging to consume a previously recorded Android device
   smoke JSON result while still rejecting mixed live/result smoke sources.
 - Required passed Windows manual QA, live WebDAV smoke, and Android device

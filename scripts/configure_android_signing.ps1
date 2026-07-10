@@ -41,6 +41,9 @@ function Assert-AndroidStoreFile {
   if ([string]::IsNullOrWhiteSpace($Value)) {
     throw "Android signing storeFile must not be blank."
   }
+  if ([IO.Path]::IsPathRooted($Value)) {
+    throw "Android signing storeFile must be relative to the Android project."
+  }
   if ($Value.Contains("*") -or $Value.Contains("?")) {
     throw "Android signing storeFile must not contain wildcard characters."
   }
