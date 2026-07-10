@@ -2608,6 +2608,8 @@ $webDavSmokeRecord = [ordered]@{}
 Invoke-Step "Run Windows release smoke" {
   & (Join-Path $PSScriptRoot "windows_smoke.ps1") `
     -ReleaseDirectory (Join-Path $repoRoot "build\windows\x64\runner\Release") `
+    -StartupTimeoutSeconds 120 `
+    -ExitTimeoutSeconds 60 `
     -ResultJson $windowsSmokeResultFile
 }
 
