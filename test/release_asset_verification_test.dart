@@ -562,6 +562,7 @@ try {
     checkedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     allowSkipped = $false
     tester = 'release-test'
+    windowsVersion = 'Microsoft Windows test'
     exeFileName = 'repapertodo.exe'
     releaseDirectory = $tempRoot
     exeBytes = $exeItem.Length
