@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/repapertodo.dart';
 
@@ -220,6 +222,7 @@ void main() {
       showDeepCapsuleWhileExpanded: true,
       collapseExpandedDeepCapsuleOnClick: true,
       hideDeepCapsulesWhenCovered: true,
+      hideDeepCapsulesWhenFullscreen: true,
     );
 
     expect(controller.state.useCapsuleMode, false);
@@ -227,6 +230,8 @@ void main() {
     expect(controller.state.useCapsuleCollapseAll, false);
     expect(controller.state.capsuleCollapseAllActive, false);
     expect(controller.state.capsuleCollapseAllActiveQueues, isEmpty);
+    expect(controller.state.hideDeepCapsulesWhenCovered, false);
+    expect(controller.state.hideDeepCapsulesWhenFullscreen, false);
     expect(controller.state.deepCapsuleStartTopMargin,
         PaperLayoutDefaults.deepCapsuleStartTopMargin);
     expect(controller.state.deepCapsuleQueueStartTopMargins, isEmpty);
@@ -266,6 +271,7 @@ void main() {
       showDeepCapsuleWhileExpanded: true,
       collapseExpandedDeepCapsuleOnClick: true,
       hideDeepCapsulesWhenCovered: true,
+      hideDeepCapsulesWhenFullscreen: true,
     );
 
     expect(controller.state.useCapsuleMode, true);
@@ -273,6 +279,8 @@ void main() {
     expect(controller.state.useCapsuleCollapseAll, false);
     expect(controller.state.capsuleCollapseAllActive, false);
     expect(controller.state.capsuleCollapseAllActiveQueues, isEmpty);
+    expect(controller.state.hideDeepCapsulesWhenCovered, false);
+    expect(controller.state.hideDeepCapsulesWhenFullscreen, false);
     expect(controller.state.deepCapsuleStartTopMargin,
         PaperLayoutDefaults.deepCapsuleStartTopMargin);
     expect(controller.state.papers.single.isCollapsed, true);
@@ -404,6 +412,93 @@ void main() {
     expect(paper.isVisible, false);
     expect(paper.isCollapsed, false);
     expect(platform.paperWindows.hiddenIds, ['hide-paper']);
+    expect(platform.tray.rebuildMenuCount, 1);
+  });
+
+  test('showing a hidden paper refreshes the Windows tray menu', () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'show-paper',
+            type: PaperTypes.note,
+            title: 'Show me',
+            isVisible: false,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final paper = controller.state.papers.single;
+
+    await controller.showPaper(paper);
+
+    expect(paper.isVisible, true);
+    expect(platform.paperWindows.shownIds, ['show-paper']);
+    expect(platform.tray.rebuildMenuCount, 1);
+  });
+
+  test('startup show and hide commands batch tray menu refreshes', () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'paper-a',
+            type: PaperTypes.todo,
+            title: 'A',
+            isVisible: false,
+          ),
+          PaperData(
+            id: 'paper-b',
+            type: PaperTypes.note,
+            title: 'B',
+            isVisible: false,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.show),
+    );
+
+    expect(platform.paperWindows.shownIds, ['paper-a', 'paper-b']);
+    expect(platform.tray.rebuildMenuCount, 1);
+
+    await controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.hide),
+    );
+
+    expect(platform.paperWindows.hiddenIds, ['paper-a', 'paper-b']);
+    expect(platform.tray.rebuildMenuCount, 2);
+  });
+
+  test('surface updates and bounds capture do not rebuild the tray menu',
+      () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'paper-surface',
+            type: PaperTypes.todo,
+            title: 'Surface',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final paper = controller.state.papers.single;
+
+    await controller.updatePaperSurface(paper);
+    await controller.capturePaperSurfaceBounds(paper);
+
+    expect(platform.paperWindows.updatedSurfaceIds, ['paper-surface']);
+    expect(platform.paperWindows.capturedBoundsIds, ['paper-surface']);
+    expect(platform.tray.rebuildMenuCount, 0);
   });
 
   test('new papers are rescued into the Windows work area before showing',
@@ -619,6 +714,127 @@ void main() {
     expect(platform.paperWindows.shownIds, ['todo-paper', 'linked-note']);
   });
 
+  test('opening linked notes places them beside the source paper', () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workArea =
+        const PaperWorkArea(x: 0, y: 0, width: 1000, height: 800);
+    final source = PaperData(
+      id: 'todo-source',
+      type: PaperTypes.todo,
+      title: 'Source',
+      x: 100,
+      y: 120,
+      width: 280,
+      height: 340,
+    );
+    final note = PaperData(
+      id: 'linked-note',
+      type: PaperTypes.note,
+      title: 'Linked',
+      isVisible: false,
+      isCollapsed: true,
+      width: 320,
+      height: 360,
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(papers: [source, note]),
+      platform: platform,
+    );
+
+    await controller.openLinkedNote(note, anchorPaper: source);
+
+    expect(platform.paperWindows.workAreaRequestIds, ['todo-source']);
+    expect(note.isVisible, true);
+    expect(note.isCollapsed, false);
+    expect(note.x, 390);
+    expect(note.y, 120);
+    expect(platform.paperWindows.shownIds, ['linked-note']);
+  });
+
+  test('opening linked notes falls back to the left side near screen edge',
+      () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workArea =
+        const PaperWorkArea(x: 0, y: 0, width: 1000, height: 800);
+    final source = PaperData(
+      id: 'right-edge-source',
+      type: PaperTypes.todo,
+      title: 'Right edge source',
+      x: 760,
+      y: 700,
+      width: 220,
+      height: 340,
+    );
+    final note = PaperData(
+      id: 'left-note',
+      type: PaperTypes.note,
+      title: 'Left note',
+      width: 320,
+      height: 360,
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(papers: [source, note]),
+      platform: platform,
+    );
+
+    await controller.openLinkedNote(note, anchorPaper: source);
+
+    expect(note.x, 430);
+    expect(note.y, 432);
+    expect(platform.paperWindows.shownIds, ['left-note']);
+  });
+
+  test('opening reminder papers expands collapsed todo papers', () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Reminder',
+            isCollapsed: true,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final paper = controller.state.papers.single;
+
+    await controller.openReminderPaper(paper);
+
+    expect(paper.isVisible, true);
+    expect(paper.isCollapsed, false);
+    expect(platform.paperWindows.shownIds, ['reminder-paper']);
+    expect(platform.paperWindows.revealedPinnedIds, isEmpty);
+  });
+
+  test('opening pinned reminder papers reveals the desktop surface', () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'pinned-reminder-paper',
+            type: PaperTypes.todo,
+            title: 'Pinned reminder',
+            isCollapsed: true,
+            isPinnedToDesktop: true,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final paper = controller.state.papers.single;
+
+    await controller.openReminderPaper(paper);
+
+    expect(paper.isVisible, true);
+    expect(paper.isCollapsed, false);
+    expect(platform.paperWindows.shownIds, isEmpty);
+    expect(platform.paperWindows.revealedPinnedIds, ['pinned-reminder-paper']);
+  });
+
   test('startup show and hide commands apply every paper', () async {
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
@@ -740,6 +956,83 @@ void main() {
     expect(platform.paperWindows.restoreAllCount, 1);
   });
 
+  test('platform apply restores visible papers whose native surface is missing',
+      () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.visibleSurfaceByPaper.addAll({
+      'surface-ok': true,
+      'surface-missing': false,
+    });
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'surface-ok',
+            type: PaperTypes.todo,
+            title: 'Still visible',
+          ),
+          PaperData(
+            id: 'surface-hidden',
+            type: PaperTypes.note,
+            title: 'Hidden',
+            isVisible: false,
+          ),
+          PaperData(
+            id: 'surface-missing',
+            type: PaperTypes.todo,
+            title: 'Missing surface',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.applyCurrentStateToPlatform();
+
+    expect(platform.paperWindows.restoreAllCount, 1);
+    expect(platform.paperWindows.visibleSurfacePaperIds, [
+      'surface-ok',
+      'surface-missing',
+    ]);
+    expect(platform.paperWindows.shownIds, ['surface-missing']);
+  });
+
+  test('startup restores visible papers whose native surface is missing',
+      () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.visibleSurfaceByPaper.addAll({
+      'surface-ok': true,
+      'surface-missing': false,
+    });
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'surface-ok',
+            type: PaperTypes.todo,
+            title: 'Still visible',
+          ),
+          PaperData(
+            id: 'surface-missing',
+            type: PaperTypes.note,
+            title: 'Missing surface',
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.start();
+
+    expect(platform.paperWindows.restoreAllCount, 1);
+    expect(platform.paperWindows.visibleSurfacePaperIds, [
+      'surface-ok',
+      'surface-missing',
+    ]);
+    expect(platform.paperWindows.shownIds, ['surface-missing']);
+    expect(platform.tray.rebuildMenuCount, 1);
+  });
+
   test('startup restores hidden papers for the current session', () async {
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
@@ -779,6 +1072,42 @@ void main() {
     await controller.executeStartupCommand(
       const StartupCommand(StartupCommandKind.exit),
     );
+
+    expect(platform.systemIntegration.unregisterGlobalHotkeysCount, 1);
+    expect(platform.tray.disposeCount, 1);
+    expect(platform.systemIntegration.exitApplicationCount, 1);
+  });
+
+  test('startup exit command is one-shot while cleanup is running', () async {
+    final platform = _RecordingPlatformServices();
+    final unregisterGate = Completer<void>();
+    platform.systemIntegration.unregisterGlobalHotkeysGate =
+        unregisterGate.future;
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(id: 'paper-1', type: PaperTypes.todo, title: 'First'),
+        ],
+      ),
+      platform: platform,
+    );
+
+    final firstExit = controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.exit),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    final secondExit = controller.executeStartupCommand(
+      const StartupCommand(StartupCommandKind.exit),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(platform.systemIntegration.unregisterGlobalHotkeysCount, 1);
+    expect(platform.tray.disposeCount, 0);
+    expect(platform.systemIntegration.exitApplicationCount, 0);
+
+    unregisterGate.complete();
+    await Future.wait([firstExit, secondExit]);
 
     expect(platform.systemIntegration.unregisterGlobalHotkeysCount, 1);
     expect(platform.tray.disposeCount, 1);
@@ -883,9 +1212,13 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final shownIds = <String>[];
   final revealedPinnedIds = <String>[];
   final hiddenIds = <String>[];
+  final updatedSurfaceIds = <String>[];
+  final capturedBoundsIds = <String>[];
   final workAreaRequestIds = <String>[];
   final restoredVisibilitySnapshots = <List<bool>>[];
   final visibleSurfaceSnapshots = <List<String>>[];
+  final visibleSurfacePaperIds = <String>[];
+  final visibleSurfaceByPaper = <String, bool>{};
   PaperWorkArea? workArea;
   Object? workAreaError;
   bool? visibleSurfaces;
@@ -921,6 +1254,12 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   }
 
   @override
+  Future<bool> hasVisibleSurface(PaperData paper) async {
+    visibleSurfacePaperIds.add(paper.id);
+    return visibleSurfaceByPaper[paper.id] ?? super.hasVisibleSurface(paper);
+  }
+
+  @override
   Future<void> showPaper(PaperData paper) async {
     shownIds.add(paper.id);
   }
@@ -933,6 +1272,16 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   @override
   Future<void> hidePaper(PaperData paper) async {
     hiddenIds.add(paper.id);
+  }
+
+  @override
+  Future<void> updatePaperSurface(PaperData paper) async {
+    updatedSurfaceIds.add(paper.id);
+  }
+
+  @override
+  Future<void> capturePaperSurfaceBounds(PaperData paper) async {
+    capturedBoundsIds.add(paper.id);
   }
 }
 
@@ -953,6 +1302,7 @@ class _RecordingSystemIntegrationHost extends NoopSystemIntegrationHost {
   final hideFromWindowSwitcherValues = <bool>[];
   final fullscreenTopmostModes = <String>[];
   Object? registerGlobalHotkeysError;
+  Future<void>? unregisterGlobalHotkeysGate;
   var registerGlobalHotkeysCalls = 0;
   var unregisterGlobalHotkeysCount = 0;
   var exitApplicationCount = 0;
@@ -984,6 +1334,7 @@ class _RecordingSystemIntegrationHost extends NoopSystemIntegrationHost {
   @override
   Future<void> unregisterGlobalHotkeys() async {
     unregisterGlobalHotkeysCount += 1;
+    await unregisterGlobalHotkeysGate;
   }
 
   @override

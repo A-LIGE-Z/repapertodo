@@ -62,7 +62,8 @@ DateTime? _parseStrictIsoLikeDateTime(String value) {
     return null;
   }
 
-  final parsed = DateTime.tryParse(value)?.toLocal();
+  final parsed =
+      DateTime.tryParse(_normalizeIsoFractionForDart(value))?.toLocal();
   if (parsed == null) {
     return null;
   }
@@ -140,9 +141,16 @@ DateTime? _buildDateTime({
 final _isoLikeDateTimePattern = RegExp(
   r'^(\d{4})-(\d{2})-(\d{2})[ T]'
   r'(\d{2}):(\d{2})(?::(\d{2}))?'
-  r'(?:\.\d{1,6})?'
+  r'(?:\.\d{1,7})?'
   r'(?:[zZ]|[+-]\d{2}:?\d{2})?$',
 );
+
+String _normalizeIsoFractionForDart(String value) {
+  return value.replaceFirstMapped(
+    RegExp(r'\.(\d{7})(?=[zZ]|[+-]\d{2}:?\d{2}$|$)'),
+    (match) => '.${match.group(1)!.substring(0, 6)}',
+  );
+}
 
 int? _normalizeHour(String? hourText, String? meridiemText) {
   final hour = int.tryParse(hourText ?? '0');

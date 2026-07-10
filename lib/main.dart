@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'src/app.dart';
 import 'src/bootstrap/app_bootstrap.dart';
 import 'src/bootstrap/crash_recovery.dart';
+import 'src/sync/android_background_sync.dart';
 
 Future<void> main(List<String> args) async {
   BootstrappedApp? activeBootstrap;
@@ -37,6 +38,11 @@ Future<void> main(List<String> args) async {
         return;
       }
       activeBootstrap = bootstrap;
+      await initializeRePaperTodoAndroidBackgroundSync();
+      await configureRePaperTodoAndroidBackgroundSync(
+        sync: bootstrap.controller.state.sync,
+        stateFilePath: bootstrap.store.filePath,
+      );
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);

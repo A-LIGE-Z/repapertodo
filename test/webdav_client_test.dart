@@ -37,6 +37,36 @@ void main() {
     expect(requests.single.headers['user-agent'], 'RePaperTodo/1 WebDAV');
   });
 
+  test('allows http endpoints for generic WebDAV sync', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('http://dav.example.test/webdav/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response('', 204, headers: {'etag': '"manifest-v1"'});
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(metadata?.etag, '"manifest-v1"');
+    expect(requests, hasLength(1));
+    expect(requests.single.method, 'HEAD');
+    expect(
+      requests.single.url.toString(),
+      'http://dav.example.test/webdav/repapertodo/manifest.json',
+    );
+    expect(
+      requests.single.headers['authorization'],
+      const WebDavCredentials(username: 'user', password: 'pass')
+          .authorizationHeader,
+    );
+    expect(requests.single.headers['accept'], '*/*');
+    expect(requests.single.headers['user-agent'], 'RePaperTodo/1 WebDAV');
+    expect(requests.single.followRedirects, isFalse);
+  });
+
   test('allows UTF-8 escaped WebDAV request paths', () async {
     final requests = <http.Request>[];
     final client = WebDavClient(
@@ -66,7 +96,7 @@ void main() {
           return http.Response(
             '',
             200,
-            headers: {'content-length': '-1'},
+            headers: {'content-length': ' 42 '},
           );
         }
         if (request.method == 'PROPFIND') {
@@ -84,6 +114,30 @@ void main() {
       <D:prop><D:getcontentlength>not-a-number</D:getcontentlength></D:prop>
     </D:propstat>
   </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/signed.json</D:href>
+    <D:propstat>
+      <D:prop><D:getcontentlength>+42</D:getcontentlength></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/decimal.json</D:href>
+    <D:propstat>
+      <D:prop><D:getcontentlength>1.0</D:getcontentlength></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/padded.json</D:href>
+    <D:propstat>
+      <D:prop><D:getcontentlength> 42 </D:getcontentlength></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/control.json</D:href>
+    <D:propstat>
+      <D:prop><D:getcontentlength>42&#x7F;</D:getcontentlength></D:prop>
+    </D:propstat>
+  </D:response>
 </D:multistatus>
 ''', 207);
         }
@@ -95,7 +149,14 @@ void main() {
     final entries = await client.list('repapertodo');
 
     expect(metadata?.contentLength, isNull);
-    expect(entries.map((entry) => entry.contentLength), [null, null]);
+    expect(entries.map((entry) => entry.contentLength), [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
   });
 
   test('normalizes WebDAV metadata headers', () async {
@@ -110,9 +171,37 @@ void main() {
             200,
             headers: {
               'ETag': ' "manifest-v1" ',
-              'Content-Length': ' 42 ',
-              'Last-Modified': ' Wed, 01 Jul 2026 09:01:00 GMT ',
+              'Content-Length': '42',
+              'Last-Modified': 'Wed, 01 Jul 2026 09:01:00 GMT',
             },
+          );
+        }
+        if (request.url.path.endsWith('/unquoted-etag.json')) {
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': 'manifest-v1'},
+          );
+        }
+        if (request.url.path.endsWith('/bad-quote-etag.json')) {
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': 'bad"etag'},
+          );
+        }
+        if (request.url.path.endsWith('/control-etag.json')) {
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest\u007Fv1"'},
+          );
+        }
+        if (request.url.path.endsWith('/wildcard-etag.json')) {
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '*'},
           );
         }
         return http.Response(
@@ -124,13 +213,93 @@ void main() {
     );
 
     final metadata = await client.metadata('repapertodo/with-etag.json');
+    final unquotedEtagMetadata =
+        await client.metadata('repapertodo/unquoted-etag.json');
+    final badQuoteEtagMetadata =
+        await client.metadata('repapertodo/bad-quote-etag.json');
+    final controlEtagMetadata =
+        await client.metadata('repapertodo/control-etag.json');
+    final wildcardEtagMetadata =
+        await client.metadata('repapertodo/wildcard-etag.json');
     final blankEtagMetadata =
         await client.metadata('repapertodo/blank-etag.json');
 
     expect(metadata?.etag, '"manifest-v1"');
+    expect(unquotedEtagMetadata?.etag, 'manifest-v1');
+    expect(badQuoteEtagMetadata?.etag, isNull);
+    expect(controlEtagMetadata?.etag, isNull);
+    expect(wildcardEtagMetadata?.etag, isNull);
     expect(metadata?.contentLength, 42);
     expect(metadata?.lastModified, DateTime.utc(2026, 7, 1, 9, 1));
     expect(blankEtagMetadata?.etag, isNull);
+  });
+
+  test('ignores invalid WebDAV last-modified metadata values', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD') {
+          return http.Response(
+            '',
+            200,
+            headers: {
+              'Last-Modified': ' Wed, 01 Jul 2026 09:01:00 GMT ',
+            },
+          );
+        }
+        if (request.method == 'PROPFIND') {
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/padded.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getlastmodified> Wed, 01 Jul 2026 09:01:00 GMT </D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/control.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:02:00 GMT&#x7F;</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/malformed.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getlastmodified>not a date</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/valid.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getlastmodified>Wed, 01 Jul 2026 09:03:00 GMT</D:getlastmodified>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+    final entries = await client.list('repapertodo');
+
+    expect(metadata?.lastModified, isNull);
+    expect(entries.map((entry) => entry.lastModified), [
+      null,
+      null,
+      null,
+      DateTime.utc(2026, 7, 1, 9, 3),
+    ]);
   });
 
   test('falls back to PROPFIND metadata when HEAD is unsupported', () async {
@@ -172,6 +341,81 @@ void main() {
     expect(metadata?.etag, 'manifest-v1');
     expect(metadata?.contentLength, 42);
     expect(metadata?.lastModified, DateTime.utc(2026, 7, 1, 9, 1));
+  });
+
+  test('falls back to PROPFIND metadata when HEAD is forbidden', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD') {
+          return http.Response('HEAD is disabled here', 403);
+        }
+        if (request.method == 'PROPFIND') {
+          expect(request.headers['depth'], '0');
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"manifest-from-propfind"</D:getetag>
+        <D:getcontentlength>64</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(requests.map((request) => request.method), ['HEAD', 'PROPFIND']);
+    expect(metadata?.etag, 'manifest-from-propfind');
+    expect(metadata?.contentLength, 64);
+  });
+
+  test('falls back to PROPFIND metadata when HEAD reports false missing',
+      () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD') {
+          return http.Response('HEAD metadata is unavailable', 404);
+        }
+        if (request.method == 'PROPFIND') {
+          expect(request.headers['depth'], '0');
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"manifest-v1"</D:getetag>
+        <D:getcontentlength>42</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(requests.map((request) => request.method), ['HEAD', 'PROPFIND']);
+    expect(metadata?.etag, 'manifest-v1');
+    expect(metadata?.contentLength, 42);
   });
 
   test('selects the requested resource from PROPFIND metadata entries',
@@ -220,6 +464,98 @@ void main() {
     expect(metadata?.lastModified, DateTime.utc(2026, 7, 1, 9, 1));
   });
 
+  test('matches safely encoded PROPFIND metadata href paths', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PROPFIND') {
+          expect(request.headers['depth'], '0');
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>repapertodo/%E8%AE%BA%E6%96%87.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"relative-encoded"</D:getetag>
+        <D:getcontentlength>17</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/%E8%AE%BA%E6%96%87.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"absolute-encoded"</D:getetag>
+        <D:getcontentlength>42</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata(
+      'repapertodo/%E8%AE%BA%E6%96%87.json',
+    );
+
+    expect(requests.map((request) => request.method), ['HEAD', 'PROPFIND']);
+    expect(metadata?.etag, 'relative-encoded');
+    expect(metadata?.contentLength, 17);
+  });
+
+  test('matches PROPFIND metadata hrefs relative to the requested parent',
+      () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PROPFIND') {
+          expect(request.headers['depth'], '0');
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>other/manifest.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"wrong-folder"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>manifest.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"parent-relative"</D:getetag>
+        <D:getcontentlength>42</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(requests.map((request) => request.method), ['HEAD', 'PROPFIND']);
+    expect(metadata?.etag, 'parent-relative');
+    expect(metadata?.contentLength, 42);
+  });
+
   test('ignores cross-origin PROPFIND metadata href matches', () async {
     final client = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
@@ -261,6 +597,80 @@ void main() {
 
     expect(metadata?.etag, 'manifest-v2');
     expect(metadata?.contentLength, 42);
+  });
+
+  test('matches same-origin scheme-relative PROPFIND metadata hrefs', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PROPFIND') {
+          expect(request.headers['depth'], '0');
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>//mirror.example.test/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"scheme-relative-cross-origin"</D:getetag>
+        <D:getcontentlength>7</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>//dav.example.test/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>"scheme-relative"</D:getetag>
+        <D:getcontentlength>42</D:getcontentlength>
+      </D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(metadata?.etag, 'scheme-relative');
+    expect(metadata?.contentLength, 42);
+  });
+
+  test('ignores scheme-relative PROPFIND metadata hrefs with credentials',
+      () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PROPFIND') {
+          expect(request.headers['depth'], '0');
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>//user@dav.example.test/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"userinfo"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(metadata, isNull);
   });
 
   test('returns null when PROPFIND metadata only has unsafe absolute href',
@@ -420,6 +830,48 @@ void main() {
     expect(metadata?.etag, 'manifest-v2');
   });
 
+  test('ignores PROPFIND metadata hrefs with raw edge spaces', () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        if (request.method == 'HEAD') {
+          return http.Response('', 405);
+        }
+        if (request.method == 'PROPFIND') {
+          expect(request.headers['depth'], '0');
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json </D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"trailing-space"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href> repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"leading-space"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"manifest-v2"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(metadata?.etag, 'manifest-v2');
+  });
+
   test('ignores PROPFIND metadata hrefs with dot-segments', () async {
     final client = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
@@ -557,6 +1009,52 @@ void main() {
     expect(entries, hasLength(1));
   });
 
+  test('retries collection PROPFIND with a trailing slash', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/repapertodo')) {
+          return http.Response('', 301);
+        }
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/repapertodo/')) {
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"manifest-v1"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response(
+            'unexpected ${request.method} ${request.url}', 500);
+      }),
+    );
+
+    final entries = await client.list('repapertodo');
+
+    expect(entries, hasLength(1));
+    expect(entries.single.etag, 'manifest-v1');
+    expect(
+      requests.map((request) => request.url.path),
+      [
+        '/remote.php/dav/files/user/repapertodo',
+        '/remote.php/dav/files/user/repapertodo/',
+      ],
+    );
+    expect(
+      requests.map((request) => request.headers['depth']),
+      ['1', '1'],
+    );
+  });
+
   test('returns null when PROPFIND metadata fallback is missing', () async {
     final requests = <http.Request>[];
     final client = WebDavClient(
@@ -641,12 +1139,18 @@ void main() {
       'repapertodo/manifest.json',
       ifMatch: '"manifest-v2"',
     );
+    await client.putBytes(
+      'repapertodo/manifest.json',
+      const [3],
+      ifMatch: 'manifest-v3',
+    );
 
     expect(requests.map((request) => request.method), [
       'PUT',
       'DELETE',
       'PUT',
       'DELETE',
+      'PUT',
     ]);
     expect(requests[0].headers.containsKey('if-match'), false);
     expect(requests[0].headers['accept'], '*/*');
@@ -655,6 +1159,45 @@ void main() {
     expect(requests[1].headers.containsKey('if-match'), false);
     expect(requests[2].headers['if-match'], '"manifest-v1"');
     expect(requests[3].headers['if-match'], '"manifest-v2"');
+    expect(requests[4].headers['if-match'], '"manifest-v3"');
+  });
+
+  test('rejects unsafe WebDAV condition headers before sending', () async {
+    for (final ifMatch in const [
+      'bad"etag',
+      '"bad"etag"',
+      'W/bad',
+      '"bad\u007Fetag"',
+    ]) {
+      var requestCount = 0;
+      final client = WebDavClient(
+        baseUri:
+            Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+        credentials:
+            const WebDavCredentials(username: 'user', password: 'pass'),
+        httpClient: MockClient((request) async {
+          requestCount += 1;
+          return http.Response('network should not be reached', 500);
+        }),
+      );
+
+      await expectLater(
+        client.putBytes(
+          'repapertodo/manifest.json',
+          const [1],
+          ifMatch: ifMatch,
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.name,
+            'name',
+            'ifMatch',
+          ),
+        ),
+        reason: ifMatch,
+      );
+      expect(requestCount, 0, reason: ifMatch);
+    }
   });
 
   test('treats gone WebDAV deletes as idempotent', () async {
@@ -783,7 +1326,7 @@ void main() {
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
       credentials: const WebDavCredentials(username: 'user', password: 'pass'),
       httpClient: MockClient((request) async {
-        return http.Response('parent folder is missing', 409);
+        return http.Response('parent folder does not exist', 409);
       }),
     );
 
@@ -824,6 +1367,67 @@ void main() {
               (error) => error.responseBody,
               'responseBody',
               'quota exceeded',
+            ),
+      ),
+    );
+  });
+
+  test('decodes WebDAV failure bodies with declared charsets', () async {
+    final accent = String.fromCharCode(0xE9);
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        return http.Response.bytes(
+          latin1.encode('quota d${accent}pass$accent'),
+          507,
+          headers: {'content-type': 'text/plain; charset=iso-8859-1'},
+        );
+      }),
+    );
+
+    await expectLater(
+      client.getBytes('repapertodo/manifest.json'),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.statusCode, 'statusCode', 507)
+            .having(
+              (error) => error.message,
+              'message',
+              'WebDAV storage quota is full.',
+            )
+            .having(
+              (error) => error.responseBody,
+              'responseBody',
+              'quota d${accent}pass$accent',
+            ),
+      ),
+    );
+  });
+
+  test('keeps mismatched WebDAV failure body charsets on WebDAV errors',
+      () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        return http.Response.bytes(
+          const [0xFF],
+          507,
+          headers: {'content-type': 'text/plain; charset=us-ascii'},
+        );
+      }),
+    );
+
+    await expectLater(
+      client.getBytes('repapertodo/manifest.json'),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.statusCode, 'statusCode', 507)
+            .having(
+              (error) => error.message,
+              'message',
+              'WebDAV storage quota is full.',
             ),
       ),
     );
@@ -931,6 +1535,12 @@ void main() {
             'WebDAV provider rate limit reached. Try again later. Retry after 0 seconds.',
       ),
       (
+        statusCode: 429,
+        retryAfter: ' 1 ',
+        expectedMessage:
+            'WebDAV provider rate limit reached. Try again later. Retry after 1 second.',
+      ),
+      (
         statusCode: 503,
         retryAfter: 'Wed, 01 Jul 2026 09:01:00 GMT',
         expectedMessage:
@@ -941,6 +1551,16 @@ void main() {
         retryAfter: '-1',
         expectedMessage:
             'WebDAV provider is temporarily unavailable. Try again later.',
+      ),
+      (
+        statusCode: 429,
+        retryAfter: '+1',
+        expectedMessage: 'WebDAV provider rate limit reached. Try again later.',
+      ),
+      (
+        statusCode: 429,
+        retryAfter: '1.0',
+        expectedMessage: 'WebDAV provider rate limit reached. Try again later.',
       ),
       (
         statusCode: 429,
@@ -1043,7 +1663,8 @@ void main() {
     expect(requestCount, 0);
   });
 
-  test('does not close injected HTTP clients', () async {
+  test('closes WebDAV wrappers without closing injected HTTP clients',
+      () async {
     var requestCount = 0;
     var closeCount = 0;
     final httpClient = _CloseTrackingClient(
@@ -1061,11 +1682,30 @@ void main() {
 
     client.close();
     client.close();
-    final metadata = await client.metadata('repapertodo/manifest.json');
 
-    expect(metadata?.etag, '"manifest-v1"');
-    expect(requestCount, 1);
+    await expectLater(
+      client.metadata('repapertodo/manifest.json'),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'WebDAV client is closed.',
+        ),
+      ),
+    );
+    expect(requestCount, 0);
     expect(closeCount, 0);
+
+    final response = await http.Response.fromStream(
+      await httpClient.send(
+        http.Request(
+          'HEAD',
+          Uri.parse('https://dav.example.test/repapertodo/manifest.json'),
+        ),
+      ),
+    );
+    expect(response.statusCode, 204);
+    expect(requestCount, 1);
 
     httpClient.close();
     expect(closeCount, 1);
@@ -1213,6 +1853,33 @@ void main() {
               'responseBody',
               '<D:multistatus',
             ),
+      ),
+    );
+  });
+
+  test('keeps mismatched malformed multistatus charsets on WebDAV errors',
+      () async {
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PROPFIND');
+        return http.Response.bytes(
+          const [0xFF],
+          207,
+          headers: {'content-type': 'application/xml; charset=us-ascii'},
+        );
+      }),
+    );
+
+    await expectLater(
+      client.list('repapertodo'),
+      throwsA(
+        isA<WebDavException>().having(
+          (error) => error.statusCode,
+          'statusCode',
+          207,
+        ),
       ),
     );
   });
@@ -1438,7 +2105,7 @@ void main() {
     expect(entries.single.etag, 'manifest-v1');
   });
 
-  test('normalizes WebDAV etags without deleting internal quotes', () async {
+  test('normalizes WebDAV etags and ignores malformed values', () async {
     final client = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
       credentials: const WebDavCredentials(username: 'user', password: 'pass'),
@@ -1465,6 +2132,30 @@ void main() {
     </D:propstat>
   </D:response>
   <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/quoted-internal-quote.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"bad"etag"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/control.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>"bad&#x7F;etag"</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/wildcard.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>*</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/unquoted.json</D:href>
+    <D:propstat>
+      <D:prop><D:getetag>unquoted-v1</D:getetag></D:prop>
+    </D:propstat>
+  </D:response>
+  <D:response>
     <D:href>/remote.php/dav/files/user/repapertodo/empty.json</D:href>
     <D:propstat>
       <D:prop><D:getetag>""</D:getetag></D:prop>
@@ -1480,7 +2171,11 @@ void main() {
     expect(entries.map((entry) => entry.etag), [
       'strong-v1',
       'W/"weak-v1"',
-      'bad"etag',
+      null,
+      null,
+      null,
+      null,
+      'unquoted-v1',
       null,
     ]);
   });

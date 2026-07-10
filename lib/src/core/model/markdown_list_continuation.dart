@@ -9,7 +9,8 @@ abstract final class MarkdownListContinuation {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    if (!_isPlainEnter(oldValue, newValue)) {
+    final insertedNewline = _plainEnterNewline(oldValue, newValue);
+    if (insertedNewline == null) {
       return newValue;
     }
 
@@ -25,6 +26,7 @@ abstract final class MarkdownListContinuation {
       return newValue;
     }
 
+    final newline = _newlineFor(oldValue.text, line, insertedNewline);
     final continuation = _continuationFor(style, line.text);
     if (continuation == null) {
       return newValue;
@@ -50,39 +52,67 @@ abstract final class MarkdownListContinuation {
       );
     }
 
-    final text = oldValue.text.replaceRange(caret, caret, '\n$continuation');
+    final text =
+        oldValue.text.replaceRange(caret, caret, '$newline$continuation');
     return TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(
-        offset: caret + 1 + continuation.length,
+        offset: caret + newline.length + continuation.length,
       ),
     );
   }
 
-  static bool _isPlainEnter(
+  static String? _plainEnterNewline(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
     final selection = oldValue.selection;
     if (!selection.isCollapsed || !newValue.selection.isCollapsed) {
-      return false;
+      return null;
     }
     final caret = selection.baseOffset;
     if (caret < 0 || caret > oldValue.text.length) {
-      return false;
+      return null;
     }
-    final expected = oldValue.text.replaceRange(caret, caret, '\n');
-    return newValue.text == expected &&
-        newValue.selection.baseOffset == caret + 1;
+    for (final newline in const ['\r\n', '\n', '\r']) {
+      final expected = oldValue.text.replaceRange(caret, caret, newline);
+      if (newValue.text == expected &&
+          newValue.selection.baseOffset == caret + newline.length) {
+        return newline;
+      }
+    }
+    return null;
   }
 
   static _MarkdownLine _lineAt(String text, int caret) {
     final safeCaret = caret.clamp(0, text.length).toInt();
-    final before = text.lastIndexOf('\n', safeCaret - 1);
-    final after = text.indexOf('\n', safeCaret);
-    final start = before < 0 ? 0 : before + 1;
-    final end = after < 0 ? text.length : after;
-    return _MarkdownLine(start: start, text: text.substring(start, end));
+    var start = 0;
+    for (var index = safeCaret - 1; index >= 0; index--) {
+      if (text[index] == '\n' || text[index] == '\r') {
+        start = index + 1;
+        break;
+      }
+    }
+
+    var end = safeCaret;
+    while (end < text.length && text[end] != '\n' && text[end] != '\r') {
+      end++;
+    }
+
+    var delimiter = '';
+    if (end < text.length) {
+      if (text[end] == '\r' && end + 1 < text.length && text[end + 1] == '\n') {
+        delimiter = '\r\n';
+      } else {
+        delimiter = text[end];
+      }
+    }
+
+    return _MarkdownLine(
+      start: start,
+      text: text.substring(start, end),
+      delimiter: delimiter,
+    );
   }
 
   static String? _continuationFor(MarkdownLineStyle style, String text) {
@@ -128,12 +158,44 @@ abstract final class MarkdownListContinuation {
     return true;
   }
 
+  static String _newlineFor(
+    String text,
+    _MarkdownLine line,
+    String insertedNewline,
+  ) {
+    if (line.delimiter.isNotEmpty) {
+      return line.delimiter;
+    }
+    return _firstLineDelimiter(text) ?? insertedNewline;
+  }
+
+  static String? _firstLineDelimiter(String text) {
+    for (var index = 0; index < text.length; index++) {
+      final char = text[index];
+      if (char == '\r') {
+        if (index + 1 < text.length && text[index + 1] == '\n') {
+          return '\r\n';
+        }
+        return '\r';
+      }
+      if (char == '\n') {
+        return '\n';
+      }
+    }
+    return null;
+  }
+
   static bool _isWhitespace(String value) => value.trim().isEmpty;
 }
 
 class _MarkdownLine {
-  const _MarkdownLine({required this.start, required this.text});
+  const _MarkdownLine({
+    required this.start,
+    required this.text,
+    required this.delimiter,
+  });
 
   final int start;
   final String text;
+  final String delimiter;
 }

@@ -74,6 +74,9 @@ class NoopPaperWindowHost implements PaperWindowHost {
   }
 
   @override
+  Future<bool> hasVisibleSurface(PaperData paper) async => paper.isVisible;
+
+  @override
   Future<void> restoreAll(AppState state) async {}
 
   @override
@@ -120,6 +123,9 @@ class NoopSystemIntegrationHost implements SystemIntegrationHost {
 
   @override
   Future<bool> isForegroundFullscreen() async => false;
+
+  @override
+  Future<List<String>> installedFontFamilies() async => const [];
 
   @override
   Future<void> registerGlobalHotkeys(AppState state) async {}

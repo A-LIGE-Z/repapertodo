@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import java.io.File
@@ -26,6 +27,14 @@ class MainActivity : FlutterActivity() {
                     val uri = call.arguments as? String
                     if (uri.isNullOrBlank()) {
                         result.error("invalid_uri", "The URI is empty.", null)
+                        return@setMethodCallHandler
+                    }
+                    if (hasRawExternalUriControlCharacter(uri)) {
+                        result.error(
+                            "invalid_uri",
+                            "The URI contains unsupported characters.",
+                            null
+                        )
                         return@setMethodCallHandler
                     }
                     val trimmedUri = uri.trim()
@@ -84,8 +93,26 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
                     val file = File(trimmedPath)
-                    if (!file.isFile) {
+                    if (!file.isAbsolute) {
+                        result.error("invalid_path", "The file path must be absolute.", null)
+                        return@setMethodCallHandler
+                    }
+                    val canonicalFile = try {
+                        file.canonicalFile
+                    } catch (error: Exception) {
+                        result.error("invalid_path", "The file path is not valid.", null)
+                        return@setMethodCallHandler
+                    }
+                    if (!canonicalFile.isFile) {
                         result.error("file_not_found", "The file does not exist.", null)
+                        return@setMethodCallHandler
+                    }
+                    if (!isAllowedExternalFile(canonicalFile)) {
+                        result.error(
+                            "invalid_path",
+                            "The file is outside the configured RePaperTodo share directories.",
+                            null
+                        )
                         return@setMethodCallHandler
                     }
 
@@ -93,7 +120,7 @@ class MainActivity : FlutterActivity() {
                         FileProvider.getUriForFile(
                             this,
                             "$packageName.fileprovider",
-                            file
+                            canonicalFile
                         )
                     } catch (error: IllegalArgumentException) {
                         result.error(
@@ -103,10 +130,10 @@ class MainActivity : FlutterActivity() {
                         )
                         return@setMethodCallHandler
                     }
-                    for (mimeType in mimeTypesFor(file)) {
+                    for (mimeType in mimeTypesFor(canonicalFile)) {
                         val intent = Intent(Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, mimeType)
-                            clipData = ClipData.newUri(contentResolver, file.name, uri)
+                            clipData = ClipData.newUri(contentResolver, canonicalFile.name, uri)
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
                         try {
@@ -150,6 +177,41 @@ class MainActivity : FlutterActivity() {
             .distinct()
     }
 
+    private fun isAllowedExternalFile(file: File): Boolean {
+        val canonicalFile = try {
+            file.canonicalFile
+        } catch (error: Exception) {
+            return false
+        }
+        return externalFileShareRoots().any { root ->
+            canonicalFile == root || canonicalFile.path.startsWith("${root.path}${File.separator}")
+        }
+    }
+
+    private fun externalFileShareRoots(): List<File> {
+        val appRoots = listOfNotNull(
+            filesDir,
+            cacheDir,
+            externalCacheDir,
+            *getExternalFilesDirs(null),
+        )
+        val storageRoots = listOfNotNull(Environment.getExternalStorageDirectory())
+            .flatMap { storageRoot ->
+                listOf(
+                    File(storageRoot, "RePaperTodo"),
+                    File(storageRoot, "Documents/RePaperTodo"),
+                    File(storageRoot, "Download/RePaperTodo"),
+                )
+            }
+        return (appRoots + storageRoots).mapNotNull { root ->
+            try {
+                root.canonicalFile
+            } catch (error: Exception) {
+                null
+            }
+        }
+    }
+
     private fun isAllowedExternalUri(uri: Uri): Boolean {
         return when (uri.scheme?.lowercase()) {
             "http", "https" -> !uri.host.isNullOrBlank() &&
@@ -160,7 +222,9 @@ class MainActivity : FlutterActivity() {
                     ?.substringBefore("?")
                     ?.trim()
                     ?: ""
-                uri.authority.isNullOrBlank() && recipient.isNotBlank()
+                uri.authority.isNullOrBlank() && recipient.isNotBlank() &&
+                    !recipient.startsWith("?") &&
+                    !recipient.startsWith("//")
             }
             else -> false
         }
@@ -176,6 +240,10 @@ class MainActivity : FlutterActivity() {
         return uri.any { character ->
             character.code <= 0x20 || character.code in 0x7F..0x9F
         }
+    }
+
+    private fun hasRawExternalUriControlCharacter(uri: String): Boolean {
+        return uri.any { character -> isControlCharacter(character) }
     }
 
     private fun hasUnsafeExternalFilePathCharacter(path: String): Boolean {

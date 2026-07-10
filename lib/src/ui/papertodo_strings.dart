@@ -20,6 +20,8 @@ abstract final class PaperTodoStringKeys {
   static const actionCollapseAll = 'actionCollapseAll';
   static const actionCollapseAllPapers = 'actionCollapseAllPapers';
   static const actionCollapsePaper = 'actionCollapsePaper';
+  static const actionCollapseToCapsule = 'actionCollapseToCapsule';
+  static const actionCopy = 'actionCopy';
   static const actionDelete = 'actionDelete';
   static const actionDeleteColumn = 'actionDeleteColumn';
   static const actionDeleteItem = 'actionDeleteItem';
@@ -28,11 +30,13 @@ abstract final class PaperTodoStringKeys {
   static const actionDragToLinkNoteToTodo = 'actionDragToLinkNoteToTodo';
   static const actionDragToReorder = 'actionDragToReorder';
   static const actionEditLinkedScript = 'actionEditLinkedScript';
+  static const actionEditTitle = 'actionEditTitle';
   static const actionEqualWidths = 'actionEqualWidths';
   static const actionExpandAll = 'actionExpandAll';
   static const actionExpandAllPapers = 'actionExpandAllPapers';
   static const actionExpandPaper = 'actionExpandPaper';
   static const actionHidePaper = 'actionHidePaper';
+  static const actionHideThisPaper = 'actionHideThisPaper';
   static const actionInsertBeforeColumn = 'actionInsertBeforeColumn';
   static const actionKeepOnTop = 'actionKeepOnTop';
   static const actionLinkNote = 'actionLinkNote';
@@ -48,22 +52,28 @@ abstract final class PaperTodoStringKeys {
   static const actionOpenCurrentPaperSurface = 'actionOpenCurrentPaperSurface';
   static const actionOpenLinkedNote = 'actionOpenLinkedNote';
   static const actionOpenMarkdownExternally = 'actionOpenMarkdownExternally';
+  static const actionOpenMarkdownInDefaultEditor =
+      'actionOpenMarkdownInDefaultEditor';
   static const actionOpenPaperSurface = 'actionOpenPaperSurface';
   static const actionOpenSurface = 'actionOpenSurface';
   static const actionPaperActions = 'actionPaperActions';
   static const actionPaperTextZoom = 'actionPaperTextZoom';
+  static const actionPaste = 'actionPaste';
   static const actionPinToDesktop = 'actionPinToDesktop';
   static const actionRecovery = 'actionRecovery';
   static const actionRecoverySnapshots = 'actionRecoverySnapshots';
   static const actionRedoTodoChange = 'actionRedoTodoChange';
   static const actionRemoveLastColumn = 'actionRemoveLastColumn';
   static const actionRetry = 'actionRetry';
+  static const actionRestoreWindow = 'actionRestoreWindow';
   static const actionRestore = 'actionRestore';
+  static const actionResetTextZoom = 'actionResetTextZoom';
   static const actionRunPaper = 'actionRunPaper';
   static const actionRunLinkedScriptCapsule = 'actionRunLinkedScriptCapsule';
   static const actionRunScriptCapsule = 'actionRunScriptCapsule';
   static const actionSave = 'actionSave';
   static const actionSaveWindowBounds = 'actionSaveWindowBounds';
+  static const actionSelectAll = 'actionSelectAll';
   static const actionSetDueDate = 'actionSetDueDate';
   static const actionSetReminder = 'actionSetReminder';
   static const actionSetReminderInterval = 'actionSetReminderInterval';
@@ -144,6 +154,7 @@ abstract final class PaperTodoStringKeys {
   static const fullscreenTopmostMode = 'fullscreenTopmostMode';
   static const generic = 'generic';
   static const hideCoveredDeepCapsules = 'hideCoveredDeepCapsules';
+  static const hideFullscreenDeepCapsules = 'hideFullscreenDeepCapsules';
   static const hideFromTaskSwitcher = 'hideFromTaskSwitcher';
   static const hideLinkedNoteCapsules = 'hideLinkedNoteCapsules';
   static const hidePassphrase = 'hidePassphrase';
@@ -162,6 +173,7 @@ abstract final class PaperTodoStringKeys {
   static const markdownActionBoldShortcut = 'markdownActionBoldShortcut';
   static const markdownActionCodeBlock = 'markdownActionCodeBlock';
   static const markdownActionHeading = 'markdownActionHeading';
+  static const markdownActionInsertLink = 'markdownActionInsertLink';
   static const markdownActionInsertLinkShortcut =
       'markdownActionInsertLinkShortcut';
   static const markdownActionItalic = 'markdownActionItalic';
@@ -172,6 +184,13 @@ abstract final class PaperTodoStringKeys {
   static const markdownActionStrikethrough = 'markdownActionStrikethrough';
   static const markdownMode = 'markdownMode';
   static const markdownOff = 'markdownOff';
+  static const menuCanvas = 'menuCanvas';
+  static const menuDesktopPin = 'menuDesktopPin';
+  static const menuFormat = 'menuFormat';
+  static const menuNew = 'menuNew';
+  static const menuText = 'menuText';
+  static const menuTodo = 'menuTodo';
+  static const menuTodoItem = 'menuTodoItem';
   static const maxTitleLength = 'maxTitleLength';
   static const medium = 'medium';
   static const minute = 'minute';
@@ -193,6 +212,13 @@ abstract final class PaperTodoStringKeys {
   static const passphraseHelper = 'passphraseHelper';
   static const password = 'password';
   static const persistentPowerShellProcess = 'persistentPowerShellProcess';
+  static const platformFileNotFound = 'platformFileNotFound';
+  static const platformFileShareFailed = 'platformFileShareFailed';
+  static const platformInvalidPath = 'platformInvalidPath';
+  static const platformInvalidUri = 'platformInvalidUri';
+  static const platformOpenExternalFileFailed =
+      'platformOpenExternalFileFailed';
+  static const platformOpenUriFailed = 'platformOpenUriFailed';
   static const platformSettingFullscreenTopmostMode =
       'platformSettingFullscreenTopmostMode';
   static const platformSettingGlobalHotkeys = 'platformSettingGlobalHotkeys';
@@ -282,6 +308,8 @@ abstract final class PaperTodoStringKeys {
   static const syncRemoteSnapshotEmpty = 'syncRemoteSnapshotEmpty';
   static const syncRestoreSnapshotFailed = 'syncRestoreSnapshotFailed';
   static const syncSnapshotRestored = 'syncSnapshotRestored';
+  static const syncSnapshotRestoredLegacyPlainNextUpload =
+      'syncSnapshotRestoredLegacyPlainNextUpload';
   static const syncUploaded = 'syncUploaded';
   static const theme = 'theme';
   static const themeDark = 'themeDark';
@@ -297,6 +325,7 @@ abstract final class PaperTodoStringKeys {
   static const todoItemFallback = 'todoItemFallback';
   static const todoVisualSize = 'todoVisualSize';
   static const tooltips = 'tooltips';
+  static const tooltipsHelp = 'tooltipsHelp';
   static const topBarNewNote = 'topBarNewNote';
   static const topBarNewTodo = 'topBarNewTodo';
   static const topBarOpenSurface = 'topBarOpenSurface';
@@ -330,8 +359,6 @@ final class PaperTodoStrings {
   static const supportedLocales = [
     Locale('zh'),
     Locale('en'),
-    Locale('ja'),
-    Locale('ko'),
   ];
 
   final String languageCode;
@@ -341,10 +368,13 @@ final class PaperTodoStrings {
     Locale? locale,
     Iterable<Locale> supportedLocales,
   ) {
-    final languageCode = locale?.languageCode.toLowerCase();
+    final languageCode = _supportedLanguageCode(locale?.languageCode);
     for (final supportedLocale in supportedLocales) {
-      if (supportedLocale.languageCode == languageCode) {
-        return supportedLocale;
+      final supportedLanguageCode =
+          _supportedLanguageCode(supportedLocale.languageCode);
+      if (supportedLanguageCode != null &&
+          supportedLanguageCode == languageCode) {
+        return Locale(supportedLanguageCode);
       }
     }
     return const Locale('en');
@@ -355,14 +385,6 @@ final class PaperTodoStrings {
       'zh' => const PaperTodoStrings._(
           languageCode: 'zh',
           values: _zhStrings,
-        ),
-      'ja' => const PaperTodoStrings._(
-          languageCode: 'ja',
-          values: _jaStrings,
-        ),
-      'ko' => const PaperTodoStrings._(
-          languageCode: 'ko',
-          values: _koStrings,
         ),
       _ => const PaperTodoStrings._(
           languageCode: 'en',
@@ -383,6 +405,14 @@ final class PaperTodoStrings {
       index += 1;
     }
     return text;
+  }
+
+  static String? _supportedLanguageCode(String? languageCode) {
+    return switch (languageCode?.toLowerCase()) {
+      'zh' => 'zh',
+      'en' => 'en',
+      _ => null,
+    };
   }
 }
 
@@ -431,6 +461,8 @@ const _enStrings = {
   PaperTodoStringKeys.actionCollapseAll: 'Collapse all',
   PaperTodoStringKeys.actionCollapseAllPapers: 'Collapse all papers',
   PaperTodoStringKeys.actionCollapsePaper: 'Collapse paper',
+  PaperTodoStringKeys.actionCollapseToCapsule: 'Collapse to capsule',
+  PaperTodoStringKeys.actionCopy: 'Copy',
   PaperTodoStringKeys.actionDelete: 'Delete',
   PaperTodoStringKeys.actionDeleteColumn: 'Delete column {0}',
   PaperTodoStringKeys.actionDeleteItem: 'Delete item',
@@ -439,11 +471,13 @@ const _enStrings = {
   PaperTodoStringKeys.actionDragToLinkNoteToTodo: 'Drag to link note to todo',
   PaperTodoStringKeys.actionDragToReorder: 'Drag to reorder',
   PaperTodoStringKeys.actionEditLinkedScript: 'Edit linked script',
+  PaperTodoStringKeys.actionEditTitle: 'Click to edit title',
   PaperTodoStringKeys.actionEqualWidths: 'Equal widths',
   PaperTodoStringKeys.actionExpandAll: 'Expand all',
   PaperTodoStringKeys.actionExpandAllPapers: 'Expand all papers',
   PaperTodoStringKeys.actionExpandPaper: 'Expand paper',
   PaperTodoStringKeys.actionHidePaper: 'Hide paper',
+  PaperTodoStringKeys.actionHideThisPaper: 'Hide this paper',
   PaperTodoStringKeys.actionInsertBeforeColumn: 'Insert before column {0}',
   PaperTodoStringKeys.actionKeepOnTop: 'Keep on top',
   PaperTodoStringKeys.actionLinkNote: 'Link note',
@@ -460,22 +494,28 @@ const _enStrings = {
       'Open current paper surface',
   PaperTodoStringKeys.actionOpenLinkedNote: 'Open linked note',
   PaperTodoStringKeys.actionOpenMarkdownExternally: 'Open markdown externally',
+  PaperTodoStringKeys.actionOpenMarkdownInDefaultEditor:
+      'Open in default {0} editor',
   PaperTodoStringKeys.actionOpenPaperSurface: 'Open paper surface',
   PaperTodoStringKeys.actionOpenSurface: 'Open surface',
   PaperTodoStringKeys.actionPaperActions: 'Paper actions',
   PaperTodoStringKeys.actionPaperTextZoom: 'Paper text zoom',
+  PaperTodoStringKeys.actionPaste: 'Paste',
   PaperTodoStringKeys.actionPinToDesktop: 'Pin to desktop',
   PaperTodoStringKeys.actionRecovery: 'Recovery',
   PaperTodoStringKeys.actionRecoverySnapshots: 'Recovery snapshots',
   PaperTodoStringKeys.actionRedoTodoChange: 'Redo todo change',
   PaperTodoStringKeys.actionRemoveLastColumn: 'Remove last column',
   PaperTodoStringKeys.actionRetry: 'Retry',
+  PaperTodoStringKeys.actionRestoreWindow: 'Restore window',
   PaperTodoStringKeys.actionRestore: 'Restore',
+  PaperTodoStringKeys.actionResetTextZoom: 'Click to reset to 100%',
   PaperTodoStringKeys.actionRunPaper: 'Run {0}',
   PaperTodoStringKeys.actionRunLinkedScriptCapsule: 'Run linked script capsule',
   PaperTodoStringKeys.actionRunScriptCapsule: 'Run script capsule',
   PaperTodoStringKeys.actionSave: 'Save',
   PaperTodoStringKeys.actionSaveWindowBounds: 'Save window bounds',
+  PaperTodoStringKeys.actionSelectAll: 'Select all',
   PaperTodoStringKeys.actionSetDueDate: 'Set due date',
   PaperTodoStringKeys.actionSetReminder: 'Set reminder',
   PaperTodoStringKeys.actionSetReminderInterval: 'Set reminder interval',
@@ -554,11 +594,13 @@ const _enStrings = {
       'External markdown open failed: {0}',
   PaperTodoStringKeys.externalMarkdownExtension: 'External markdown extension',
   PaperTodoStringKeys.externalMarkdownExtensionInvalid:
-      'Use an extension such as .md or .txt without reserved filename characters, control characters, repeated dots, or more than 32 characters.',
+      'Use an extension such as .md, .txt, or .todo.md without reserved filename characters, control characters, or a trailing dot or space.',
   PaperTodoStringKeys.fontPreset: 'Font preset',
   PaperTodoStringKeys.fullscreenTopmostMode: 'Fullscreen/topmost mode',
   PaperTodoStringKeys.generic: 'Generic',
   PaperTodoStringKeys.hideCoveredDeepCapsules: 'Hide covered deep capsules',
+  PaperTodoStringKeys.hideFullscreenDeepCapsules:
+      'Hide edge capsules during fullscreen apps',
   PaperTodoStringKeys.hideFromTaskSwitcher: 'Hide from task switcher',
   PaperTodoStringKeys.hideLinkedNoteCapsules: 'Hide linked note capsules',
   PaperTodoStringKeys.hidePassphrase: 'Hide passphrase',
@@ -577,6 +619,7 @@ const _enStrings = {
   PaperTodoStringKeys.markdownActionBoldShortcut: 'Bold (Ctrl+B)',
   PaperTodoStringKeys.markdownActionCodeBlock: 'Code block',
   PaperTodoStringKeys.markdownActionHeading: 'Heading',
+  PaperTodoStringKeys.markdownActionInsertLink: 'Insert link',
   PaperTodoStringKeys.markdownActionInsertLinkShortcut: 'Insert link (Ctrl+K)',
   PaperTodoStringKeys.markdownActionItalic: 'Italic',
   PaperTodoStringKeys.markdownActionItalicShortcut: 'Italic (Ctrl+I)',
@@ -586,6 +629,13 @@ const _enStrings = {
   PaperTodoStringKeys.markdownActionStrikethrough: 'Strikethrough',
   PaperTodoStringKeys.markdownMode: 'Markdown mode',
   PaperTodoStringKeys.markdownOff: 'Markdown off',
+  PaperTodoStringKeys.menuCanvas: 'Canvas',
+  PaperTodoStringKeys.menuDesktopPin: 'Desktop pin',
+  PaperTodoStringKeys.menuFormat: 'Format',
+  PaperTodoStringKeys.menuNew: 'New',
+  PaperTodoStringKeys.menuText: 'Text',
+  PaperTodoStringKeys.menuTodo: 'Todo',
+  PaperTodoStringKeys.menuTodoItem: 'Item',
   PaperTodoStringKeys.maxTitleLength: 'Max title length',
   PaperTodoStringKeys.medium: 'Medium',
   PaperTodoStringKeys.minute: 'Minute',
@@ -611,6 +661,15 @@ const _enStrings = {
   PaperTodoStringKeys.password: 'Password',
   PaperTodoStringKeys.persistentPowerShellProcess:
       'Persistent PowerShell process',
+  PaperTodoStringKeys.platformFileNotFound: 'The file does not exist.',
+  PaperTodoStringKeys.platformFileShareFailed:
+      'The file cannot be shared securely.',
+  PaperTodoStringKeys.platformInvalidPath:
+      'The file path is invalid or outside the RePaperTodo share folders.',
+  PaperTodoStringKeys.platformInvalidUri: 'The URI is invalid or unsupported.',
+  PaperTodoStringKeys.platformOpenExternalFileFailed:
+      'Unable to open the external file.',
+  PaperTodoStringKeys.platformOpenUriFailed: 'Unable to open the URI.',
   PaperTodoStringKeys.platformSettingFullscreenTopmostMode:
       'Fullscreen/topmost mode',
   PaperTodoStringKeys.platformSettingGlobalHotkeys: 'Global hotkeys',
@@ -707,6 +766,8 @@ const _enStrings = {
   PaperTodoStringKeys.syncRemoteSnapshotEmpty: 'Remote snapshot is empty.',
   PaperTodoStringKeys.syncRestoreSnapshotFailed: 'Restore failed: {0}',
   PaperTodoStringKeys.syncSnapshotRestored: 'Snapshot restored.',
+  PaperTodoStringKeys.syncSnapshotRestoredLegacyPlainNextUpload:
+      'Snapshot restored from legacy plain WebDAV data. The next successful upload will write encrypted payloads.',
   PaperTodoStringKeys.syncUploaded: 'Local data uploaded.',
   PaperTodoStringKeys.theme: 'Theme',
   PaperTodoStringKeys.themeDark: 'Dark',
@@ -722,9 +783,11 @@ const _enStrings = {
   PaperTodoStringKeys.todoItemFallback: 'Todo item',
   PaperTodoStringKeys.todoVisualSize: 'Todo visual size',
   PaperTodoStringKeys.tooltips: 'Tooltips',
+  PaperTodoStringKeys.tooltipsHelp:
+      'Only hides ordinary operation hints. Settings explanations stay available.',
   PaperTodoStringKeys.topBarNewNote: 'Top bar new note',
   PaperTodoStringKeys.topBarNewTodo: 'Top bar new todo',
-  PaperTodoStringKeys.topBarOpenSurface: 'Top bar open surface',
+  PaperTodoStringKeys.topBarOpenSurface: 'Show external open button',
   PaperTodoStringKeys.untitledPaper: 'Untitled',
   PaperTodoStringKeys.username: 'Username',
   PaperTodoStringKeys.webDavIssueEndpointInvalid:
@@ -773,6 +836,8 @@ const _zhStrings = {
   PaperTodoStringKeys.actionCollapseAll: '全部收起',
   PaperTodoStringKeys.actionCollapseAllPapers: '收起全部纸片',
   PaperTodoStringKeys.actionCollapsePaper: '收起纸片',
+  PaperTodoStringKeys.actionCollapseToCapsule: '折叠为胶囊',
+  PaperTodoStringKeys.actionCopy: '复制',
   PaperTodoStringKeys.actionDelete: '删除',
   PaperTodoStringKeys.actionDeleteColumn: '删除第 {0} 列',
   PaperTodoStringKeys.actionDeleteItem: '删除事项',
@@ -781,11 +846,13 @@ const _zhStrings = {
   PaperTodoStringKeys.actionDragToLinkNoteToTodo: '拖动以关联笔记到待办',
   PaperTodoStringKeys.actionDragToReorder: '拖动以排序',
   PaperTodoStringKeys.actionEditLinkedScript: '编辑关联脚本',
+  PaperTodoStringKeys.actionEditTitle: '点击编辑标题',
   PaperTodoStringKeys.actionEqualWidths: '等宽列',
   PaperTodoStringKeys.actionExpandAll: '全部展开',
   PaperTodoStringKeys.actionExpandAllPapers: '展开全部纸片',
   PaperTodoStringKeys.actionExpandPaper: '展开纸片',
   PaperTodoStringKeys.actionHidePaper: '隐藏纸片',
+  PaperTodoStringKeys.actionHideThisPaper: '隐藏这张纸',
   PaperTodoStringKeys.actionInsertBeforeColumn: '在第 {0} 列前插入',
   PaperTodoStringKeys.actionKeepOnTop: '保持置顶',
   PaperTodoStringKeys.actionLinkNote: '关联笔记',
@@ -801,22 +868,27 @@ const _zhStrings = {
   PaperTodoStringKeys.actionOpenCurrentPaperSurface: '打开当前纸片窗口',
   PaperTodoStringKeys.actionOpenLinkedNote: '打开关联笔记',
   PaperTodoStringKeys.actionOpenMarkdownExternally: '用外部程序打开 Markdown',
+  PaperTodoStringKeys.actionOpenMarkdownInDefaultEditor: '用默认 {0} 编辑器打开',
   PaperTodoStringKeys.actionOpenPaperSurface: '打开纸片窗口',
   PaperTodoStringKeys.actionOpenSurface: '打开窗口',
   PaperTodoStringKeys.actionPaperActions: '纸片操作',
   PaperTodoStringKeys.actionPaperTextZoom: '纸片文字缩放',
+  PaperTodoStringKeys.actionPaste: '粘贴',
   PaperTodoStringKeys.actionPinToDesktop: '固定到桌面',
   PaperTodoStringKeys.actionRecovery: '恢复',
   PaperTodoStringKeys.actionRecoverySnapshots: '恢复快照',
   PaperTodoStringKeys.actionRedoTodoChange: '重做待办更改',
   PaperTodoStringKeys.actionRemoveLastColumn: '移除最后一列',
   PaperTodoStringKeys.actionRetry: '重试',
+  PaperTodoStringKeys.actionRestoreWindow: '恢复窗口',
   PaperTodoStringKeys.actionRestore: '恢复',
+  PaperTodoStringKeys.actionResetTextZoom: '点击恢复为 100%',
   PaperTodoStringKeys.actionRunPaper: '运行 {0}',
   PaperTodoStringKeys.actionRunLinkedScriptCapsule: '运行关联脚本胶囊',
   PaperTodoStringKeys.actionRunScriptCapsule: '运行脚本胶囊',
   PaperTodoStringKeys.actionSave: '保存',
   PaperTodoStringKeys.actionSaveWindowBounds: '保存窗口边界',
+  PaperTodoStringKeys.actionSelectAll: '全选',
   PaperTodoStringKeys.actionSetDueDate: '设置到期时间',
   PaperTodoStringKeys.actionSetReminder: '设置提醒',
   PaperTodoStringKeys.actionSetReminderInterval: '设置提醒间隔',
@@ -890,10 +962,13 @@ const _zhStrings = {
   PaperTodoStringKeys.enhanced: '增强',
   PaperTodoStringKeys.externalMarkdownOpenFailed: '外部 Markdown 打开失败：{0}',
   PaperTodoStringKeys.externalMarkdownExtension: '外部 Markdown 扩展名',
+  PaperTodoStringKeys.externalMarkdownExtensionInvalid:
+      '请使用 .md、.txt 或 .todo.md 这类扩展名，不要包含文件名保留字符、控制字符，也不要以点或空格结尾。',
   PaperTodoStringKeys.fontPreset: '字体预设',
   PaperTodoStringKeys.fullscreenTopmostMode: '全屏/置顶模式',
   PaperTodoStringKeys.generic: '通用',
   PaperTodoStringKeys.hideCoveredDeepCapsules: '遮挡时隐藏边缘胶囊',
+  PaperTodoStringKeys.hideFullscreenDeepCapsules: '全屏应用时隐藏边缘胶囊',
   PaperTodoStringKeys.hideFromTaskSwitcher: '从任务切换器隐藏',
   PaperTodoStringKeys.hideLinkedNoteCapsules: '隐藏关联笔记胶囊',
   PaperTodoStringKeys.hidePassphrase: '隐藏密钥短语',
@@ -912,6 +987,7 @@ const _zhStrings = {
   PaperTodoStringKeys.markdownActionBoldShortcut: '加粗 (Ctrl+B)',
   PaperTodoStringKeys.markdownActionCodeBlock: '代码块',
   PaperTodoStringKeys.markdownActionHeading: '标题',
+  PaperTodoStringKeys.markdownActionInsertLink: '插入链接',
   PaperTodoStringKeys.markdownActionInsertLinkShortcut: '插入链接 (Ctrl+K)',
   PaperTodoStringKeys.markdownActionItalic: '斜体',
   PaperTodoStringKeys.markdownActionItalicShortcut: '斜体 (Ctrl+I)',
@@ -921,6 +997,13 @@ const _zhStrings = {
   PaperTodoStringKeys.markdownActionStrikethrough: '删除线',
   PaperTodoStringKeys.markdownMode: 'Markdown 模式',
   PaperTodoStringKeys.markdownOff: '关闭 Markdown',
+  PaperTodoStringKeys.menuCanvas: '画布',
+  PaperTodoStringKeys.menuDesktopPin: '桌面钉住',
+  PaperTodoStringKeys.menuFormat: '格式',
+  PaperTodoStringKeys.menuNew: '新建',
+  PaperTodoStringKeys.menuText: '文本',
+  PaperTodoStringKeys.menuTodo: '待办',
+  PaperTodoStringKeys.menuTodoItem: '事项',
   PaperTodoStringKeys.maxTitleLength: '标题最大长度',
   PaperTodoStringKeys.medium: '中',
   PaperTodoStringKeys.minute: '分钟',
@@ -942,6 +1025,12 @@ const _zhStrings = {
   PaperTodoStringKeys.passphraseHelper: '用于 Windows 与 Android 加密同步。',
   PaperTodoStringKeys.password: '密码',
   PaperTodoStringKeys.persistentPowerShellProcess: '常驻 PowerShell 进程',
+  PaperTodoStringKeys.platformFileNotFound: '文件不存在。',
+  PaperTodoStringKeys.platformFileShareFailed: '无法安全分享该文件。',
+  PaperTodoStringKeys.platformInvalidPath: '文件路径无效，或不在 RePaperTodo 可分享目录内。',
+  PaperTodoStringKeys.platformInvalidUri: '链接无效或不受支持。',
+  PaperTodoStringKeys.platformOpenExternalFileFailed: '无法打开外部文件。',
+  PaperTodoStringKeys.platformOpenUriFailed: '无法打开链接。',
   PaperTodoStringKeys.platformSettingFullscreenTopmostMode: '全屏/置顶模式',
   PaperTodoStringKeys.platformSettingGlobalHotkeys: '全局快捷键',
   PaperTodoStringKeys.platformSettingPaperSurfaces: '纸片窗口',
@@ -1029,6 +1118,8 @@ const _zhStrings = {
   PaperTodoStringKeys.syncRemoteSnapshotEmpty: '远端快照为空。',
   PaperTodoStringKeys.syncRestoreSnapshotFailed: '恢复失败：{0}',
   PaperTodoStringKeys.syncSnapshotRestored: '快照已恢复。',
+  PaperTodoStringKeys.syncSnapshotRestoredLegacyPlainNextUpload:
+      '已从旧版明文 WebDAV 数据恢复快照。下次成功上传时会写入加密载荷。',
   PaperTodoStringKeys.syncUploaded: '已上传本地数据。',
   PaperTodoStringKeys.theme: '主题',
   PaperTodoStringKeys.themeDark: '深色',
@@ -1044,9 +1135,10 @@ const _zhStrings = {
   PaperTodoStringKeys.todoItemFallback: '待办事项',
   PaperTodoStringKeys.todoVisualSize: '待办显示大小',
   PaperTodoStringKeys.tooltips: '悬停提示',
+  PaperTodoStringKeys.tooltipsHelp: '仅隐藏普通操作提示。设置说明仍会保留。',
   PaperTodoStringKeys.topBarNewNote: '顶栏新建笔记',
   PaperTodoStringKeys.topBarNewTodo: '顶栏新建待办',
-  PaperTodoStringKeys.topBarOpenSurface: '顶栏打开窗口',
+  PaperTodoStringKeys.topBarOpenSurface: '显示外部打开按钮',
   PaperTodoStringKeys.untitledPaper: '未命名',
   PaperTodoStringKeys.username: '用户名',
   PaperTodoStringKeys.webDavIssueEndpointInvalid:
@@ -1069,650 +1161,4 @@ const _zhStrings = {
   PaperTodoStringKeys.yy: 'YY',
   PaperTodoStringKeys.yyyy: 'YYYY',
   PaperTodoStringKeys.zoom: '缩放',
-};
-
-const _jaStrings = {
-  PaperTodoStringKeys.appTitle: 'RePaperTodo',
-  PaperTodoStringKeys.actionAddColumn: '列を追加',
-  PaperTodoStringKeys.actionAddCanvasBlock: 'キャンバスブロックを追加',
-  PaperTodoStringKeys.actionAddItem: '項目を追加',
-  PaperTodoStringKeys.actionAddTextBlock: 'テキストブロックを追加',
-  PaperTodoStringKeys.actionBackToBoard: 'ボードに戻る',
-  PaperTodoStringKeys.actionCancel: 'キャンセル',
-  PaperTodoStringKeys.actionChangeDueDate: '期限を変更',
-  PaperTodoStringKeys.actionChangeReminder: 'リマインダーを変更',
-  PaperTodoStringKeys.actionClear: 'クリア',
-  PaperTodoStringKeys.actionClose: '閉じる',
-  PaperTodoStringKeys.actionClearCompleted: '完了をクリア',
-  PaperTodoStringKeys.actionClearCompletedItems: '完了項目をクリア',
-  PaperTodoStringKeys.actionClearDueDate: '期限をクリア',
-  PaperTodoStringKeys.actionClearReminder: 'リマインダーをクリア',
-  PaperTodoStringKeys.actionClearReminderInterval: 'リマインダー間隔をクリア',
-  PaperTodoStringKeys.actionCollapseAll: 'すべて折りたたむ',
-  PaperTodoStringKeys.actionCollapseAllPapers: 'すべての紙片を折りたたむ',
-  PaperTodoStringKeys.actionCollapsePaper: '紙片を折りたたむ',
-  PaperTodoStringKeys.actionDelete: '削除',
-  PaperTodoStringKeys.actionDeleteColumn: '列 {0} を削除',
-  PaperTodoStringKeys.actionDeleteItem: '項目を削除',
-  PaperTodoStringKeys.actionDeletePaper: '紙片を削除',
-  PaperTodoStringKeys.actionDisableAlwaysOnTop: '最前面を解除',
-  PaperTodoStringKeys.actionDragToLinkNoteToTodo: 'ドラッグしてノートを ToDo にリンク',
-  PaperTodoStringKeys.actionDragToReorder: 'ドラッグして並べ替え',
-  PaperTodoStringKeys.actionEditLinkedScript: 'リンク済みスクリプトを編集',
-  PaperTodoStringKeys.actionEqualWidths: '同じ幅',
-  PaperTodoStringKeys.actionExpandAll: 'すべて展開',
-  PaperTodoStringKeys.actionExpandAllPapers: 'すべての紙片を展開',
-  PaperTodoStringKeys.actionExpandPaper: '紙片を展開',
-  PaperTodoStringKeys.actionHidePaper: '紙片を隠す',
-  PaperTodoStringKeys.actionInsertBeforeColumn: '列 {0} の前に挿入',
-  PaperTodoStringKeys.actionKeepOnTop: '最前面に固定',
-  PaperTodoStringKeys.actionLinkNote: 'ノートをリンク',
-  PaperTodoStringKeys.actionLinkPaper: '{0} をリンク',
-  PaperTodoStringKeys.actionMore: 'その他の操作',
-  PaperTodoStringKeys.actionMoveItemDown: '項目を下へ移動',
-  PaperTodoStringKeys.actionMoveItemUp: '項目を上へ移動',
-  PaperTodoStringKeys.actionNewNote: '新規ノート',
-  PaperTodoStringKeys.actionNewNotePaper: '新規ノート紙片',
-  PaperTodoStringKeys.actionNewTodo: '新規 ToDo',
-  PaperTodoStringKeys.actionNewTodoPaper: '新規 ToDo 紙片',
-  PaperTodoStringKeys.actionOpen: '開く',
-  PaperTodoStringKeys.actionOpenCurrentPaperSurface: '現在の紙片ウィンドウを開く',
-  PaperTodoStringKeys.actionOpenLinkedNote: 'リンク済みノートを開く',
-  PaperTodoStringKeys.actionOpenMarkdownExternally: 'Markdown を外部で開く',
-  PaperTodoStringKeys.actionOpenPaperSurface: '紙片ウィンドウを開く',
-  PaperTodoStringKeys.actionOpenSurface: 'ウィンドウを開く',
-  PaperTodoStringKeys.actionPaperActions: '紙片の操作',
-  PaperTodoStringKeys.actionPaperTextZoom: '紙片テキストのズーム',
-  PaperTodoStringKeys.actionPinToDesktop: 'デスクトップに固定',
-  PaperTodoStringKeys.actionRecovery: '復元',
-  PaperTodoStringKeys.actionRecoverySnapshots: '復元スナップショット',
-  PaperTodoStringKeys.actionRedoTodoChange: 'ToDo 変更をやり直す',
-  PaperTodoStringKeys.actionRemoveLastColumn: '最後の列を削除',
-  PaperTodoStringKeys.actionRetry: '再試行',
-  PaperTodoStringKeys.actionRestore: '復元',
-  PaperTodoStringKeys.actionRunPaper: '{0} を実行',
-  PaperTodoStringKeys.actionRunLinkedScriptCapsule: 'リンク済みスクリプトカプセルを実行',
-  PaperTodoStringKeys.actionRunScriptCapsule: 'スクリプトカプセルを実行',
-  PaperTodoStringKeys.actionSave: '保存',
-  PaperTodoStringKeys.actionSaveWindowBounds: 'ウィンドウ位置を保存',
-  PaperTodoStringKeys.actionSetDueDate: '期限を設定',
-  PaperTodoStringKeys.actionSetReminder: 'リマインダーを設定',
-  PaperTodoStringKeys.actionSetReminderInterval: 'リマインダー間隔を設定',
-  PaperTodoStringKeys.actionSettings: '設定',
-  PaperTodoStringKeys.actionShowHidden: '非表示を表示',
-  PaperTodoStringKeys.actionShowHiddenPapers: '非表示の紙片を表示',
-  PaperTodoStringKeys.actionSyncNow: '今すぐ同期',
-  PaperTodoStringKeys.actionTodoColumns: 'ToDo の列',
-  PaperTodoStringKeys.actionTodoItemActions: 'ToDo 項目の操作',
-  PaperTodoStringKeys.actionUndo: '元に戻す',
-  PaperTodoStringKeys.actionUndoTodoChange: 'ToDo 変更を元に戻す',
-  PaperTodoStringKeys.actionUnlinkNote: 'ノートのリンクを解除',
-  PaperTodoStringKeys.actionUnpinFromDesktop: 'デスクトップ固定を解除',
-  PaperTodoStringKeys.actionWideFirstColumn: '最初の列を広く',
-  PaperTodoStringKeys.allowLongLinkedNoteTitles: '長いリンク済みノート名を許可',
-  PaperTodoStringKeys.allDue: 'すべての期限',
-  PaperTodoStringKeys.animations: 'アニメーション',
-  PaperTodoStringKeys.appearance: '外観',
-  PaperTodoStringKeys.avoidFullscreen: '全画面を避ける',
-  PaperTodoStringKeys.basic: '基本',
-  PaperTodoStringKeys.capsuleMode: 'カプセルモード',
-  PaperTodoStringKeys.canvasBlockActions: 'キャンバスブロック操作',
-  PaperTodoStringKeys.canvasBlockGeometry: 'キャンバスブロックの配置',
-  PaperTodoStringKeys.canvasBlockTypeBlock: 'ブロック',
-  PaperTodoStringKeys.canvasBlockTypeCode: 'コード',
-  PaperTodoStringKeys.canvasBlockTypeCodeLabel: 'コード',
-  PaperTodoStringKeys.canvasBlockTypeText: 'テキスト',
-  PaperTodoStringKeys.canvasBlockTypeTextLabel: 'テキスト',
-  PaperTodoStringKeys.canvasBringForward: '前面へ移動',
-  PaperTodoStringKeys.canvasBringToFront: '最前面へ移動',
-  PaperTodoStringKeys.canvasDefaultText: 'キャンバステキスト {0}',
-  PaperTodoStringKeys.canvasDeleteBlock: 'キャンバスブロックを削除',
-  PaperTodoStringKeys.canvasDragBlock: 'キャンバスブロックをドラッグ',
-  PaperTodoStringKeys.canvasDuplicateBlock: 'キャンバスブロックを複製',
-  PaperTodoStringKeys.canvasEditGeometry: 'キャンバス配置を編集',
-  PaperTodoStringKeys.canvasEnterValidNumbers: 'すべての項目に有効な数値を入力してください。',
-  PaperTodoStringKeys.canvasFieldHeight: '高さ',
-  PaperTodoStringKeys.canvasFieldLayer: 'レイヤー',
-  PaperTodoStringKeys.canvasFieldWidth: '幅',
-  PaperTodoStringKeys.canvasLayer: 'レイヤー {0}',
-  PaperTodoStringKeys.canvasLayerActions: 'キャンバスレイヤー操作',
-  PaperTodoStringKeys.canvasResizeBlock: 'キャンバスブロックのサイズを変更',
-  PaperTodoStringKeys.canvasSendBackward: '背面へ移動',
-  PaperTodoStringKeys.canvasSendToBack: '最背面へ移動',
-  PaperTodoStringKeys.canvasTopLayer: '最前面 {0}',
-  PaperTodoStringKeys.collapseAllActive: 'すべて折りたたみ有効',
-  PaperTodoStringKeys.collapseAllControl: '一括折りたたみ操作',
-  PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick:
-      '展開済み端カプセルのクリックで紙片を戻す',
-  PaperTodoStringKeys.colorForest: '森',
-  PaperTodoStringKeys.colorInk: '墨',
-  PaperTodoStringKeys.colorRose: 'ローズ',
-  PaperTodoStringKeys.colorScheme: '配色',
-  PaperTodoStringKeys.colorWarm: '暖紙',
-  PaperTodoStringKeys.columnLabel: '列 {0}',
-  PaperTodoStringKeys.custom: 'カスタム',
-  PaperTodoStringKeys.customFontFamily: 'カスタムフォントファミリー',
-  PaperTodoStringKeys.customThemeColor: 'カスタムテーマ色',
-  PaperTodoStringKeys.deepCapsuleMode: '端カプセルモード',
-  PaperTodoStringKeys.deepCapsuleMonitor: '端カプセルのモニター',
-  PaperTodoStringKeys.deepCapsuleSide: '端カプセルの側',
-  PaperTodoStringKeys.deepCapsuleTopMargin: '端カプセル上余白',
-  PaperTodoStringKeys.defaultFont: '既定',
-  PaperTodoStringKeys.dengXian: 'DengXian',
-  PaperTodoStringKeys.dialogDeletePaper: '紙片を削除しますか？',
-  PaperTodoStringKeys.dialogDueDate: '期限',
-  PaperTodoStringKeys.dialogRestoreSnapshot: 'スナップショットを復元しますか？',
-  PaperTodoStringKeys.dialogSyncSettings: '同期設定',
-  PaperTodoStringKeys.dueLabel: '期限 {0}',
-  PaperTodoStringKeys.dueTomorrow: '明日 {0}',
-  PaperTodoStringKeys.dueYearDisplay: '期限年の表示',
-  PaperTodoStringKeys.enhanced: '拡張',
-  PaperTodoStringKeys.externalMarkdownOpenFailed: '外部 Markdown を開けませんでした: {0}',
-  PaperTodoStringKeys.externalMarkdownExtension: '外部 Markdown 拡張子',
-  PaperTodoStringKeys.fontPreset: 'フォントプリセット',
-  PaperTodoStringKeys.fullscreenTopmostMode: '全画面/最前面モード',
-  PaperTodoStringKeys.generic: '汎用',
-  PaperTodoStringKeys.hideCoveredDeepCapsules: '重なった端カプセルを隠す',
-  PaperTodoStringKeys.hideFromTaskSwitcher: 'タスク切替から隠す',
-  PaperTodoStringKeys.hideLinkedNoteCapsules: 'リンク済みノートカプセルを隠す',
-  PaperTodoStringKeys.hidePassphrase: 'パスフレーズを隠す',
-  PaperTodoStringKeys.hidePassword: 'パスワードを隠す',
-  PaperTodoStringKeys.hideScriptRunWindow: 'スクリプト実行ウィンドウを隠す',
-  PaperTodoStringKeys.hour: '時',
-  PaperTodoStringKeys.hours: '時間',
-  PaperTodoStringKeys.interval: '間隔',
-  PaperTodoStringKeys.intervalMinutes: '同期間隔（分）',
-  PaperTodoStringKeys.large: '大',
-  PaperTodoStringKeys.left: '左',
-  PaperTodoStringKeys.labelNote: 'ノート',
-  PaperTodoStringKeys.labelNoteTitle: 'ノート {0}',
-  PaperTodoStringKeys.labelScript: 'スクリプト',
-  PaperTodoStringKeys.markdownActionBold: '太字',
-  PaperTodoStringKeys.markdownActionBoldShortcut: '太字 (Ctrl+B)',
-  PaperTodoStringKeys.markdownActionCodeBlock: 'コードブロック',
-  PaperTodoStringKeys.markdownActionHeading: '見出し',
-  PaperTodoStringKeys.markdownActionInsertLinkShortcut: 'リンクを挿入 (Ctrl+K)',
-  PaperTodoStringKeys.markdownActionItalic: '斜体',
-  PaperTodoStringKeys.markdownActionItalicShortcut: '斜体 (Ctrl+I)',
-  PaperTodoStringKeys.markdownActionList: 'リスト',
-  PaperTodoStringKeys.markdownActionMore: 'その他の Markdown 操作',
-  PaperTodoStringKeys.markdownActionQuote: '引用',
-  PaperTodoStringKeys.markdownActionStrikethrough: '取り消し線',
-  PaperTodoStringKeys.markdownMode: 'Markdown モード',
-  PaperTodoStringKeys.markdownOff: 'Markdown オフ',
-  PaperTodoStringKeys.maxTitleLength: 'タイトル最大長',
-  PaperTodoStringKeys.medium: '中',
-  PaperTodoStringKeys.minute: '分',
-  PaperTodoStringKeys.minutes: '分',
-  PaperTodoStringKeys.mono: '等幅',
-  PaperTodoStringKeys.nearest: '最も近い',
-  PaperTodoStringKeys.noYear: '年なし',
-  PaperTodoStringKeys.noteEmptyPreview: '_ノート内容はありません。_',
-  PaperTodoStringKeys.noteEditorHint: 'ノートを書く...',
-  PaperTodoStringKeys.noteSpacing: 'ノート行間',
-  PaperTodoStringKeys.noteViewEdit: '編集',
-  PaperTodoStringKeys.noteViewPreview: 'プレビュー',
-  PaperTodoStringKeys.noteViewSplit: '分割',
-  PaperTodoStringKeys.openedMarkdownFile: 'Markdown ファイルを開きました: {0}',
-  PaperTodoStringKeys.openLinkFailed: 'リンクを開けませんでした: {0}',
-  PaperTodoStringKeys.openLinkUnsupported: 'リンクを開けませんでした: 対応していないリンク先です。',
-  PaperTodoStringKeys.paperDeleted: '{0} を削除しました。',
-  PaperTodoStringKeys.paperLimitReached: '紙片の上限に達しました。不要な紙片を削除してから作成してください。',
-  PaperTodoStringKeys.passphraseHelper: 'Windows と Android の暗号化同期に必要です。',
-  PaperTodoStringKeys.password: 'パスワード',
-  PaperTodoStringKeys.persistentPowerShellProcess: '常駐 PowerShell プロセス',
-  PaperTodoStringKeys.platformSettingFullscreenTopmostMode: '全画面/最前面モード',
-  PaperTodoStringKeys.platformSettingGlobalHotkeys: 'グローバルホットキー',
-  PaperTodoStringKeys.platformSettingPaperSurfaces: '紙片ウィンドウ',
-  PaperTodoStringKeys.platformSettingScriptCapsuleProcess: 'スクリプトカプセルプロセス',
-  PaperTodoStringKeys.platformSettingStartupAtLogin: 'ログイン時に開始',
-  PaperTodoStringKeys.platformSettingWindowSwitcherVisibility: 'タスク切り替え表示',
-  PaperTodoStringKeys.platformSettingsFailed: 'プラットフォーム設定に失敗しました: {0}',
-  PaperTodoStringKeys.pinnedNoteHotkey: '固定ノートのホットキー',
-  PaperTodoStringKeys.pinnedTodoHotkey: '固定 ToDo のホットキー',
-  PaperTodoStringKeys.preferPowerShell7: 'PowerShell 7 を優先',
-  PaperTodoStringKeys.relativeDueDates: '相対期限',
-  PaperTodoStringKeys.relativeDueFuture: '{0} 後',
-  PaperTodoStringKeys.relativeDueOverdue: '{0} 超過',
-  PaperTodoStringKeys.recoverySnapshotFallback: 'スナップショット',
-  PaperTodoStringKeys.recoverySnapshotLoadFailed: 'スナップショットを読み込めません: {0}',
-  PaperTodoStringKeys.recoverySnapshotModified: '変更日時 {0}',
-  PaperTodoStringKeys.recoverySnapshotsEmpty: '復元スナップショットが見つかりません。',
-  PaperTodoStringKeys.reminderDisplaySeconds: 'リマインダー表示秒数',
-  PaperTodoStringKeys.reminderEveryHours: '{0} 時間ごと',
-  PaperTodoStringKeys.reminderEveryMinutes: '{0} 分ごと',
-  PaperTodoStringKeys.reminderInterval: 'リマインダー間隔',
-  PaperTodoStringKeys.reminderScope: 'リマインダー範囲',
-  PaperTodoStringKeys.reminderUnit: 'リマインダー単位',
-  PaperTodoStringKeys.remoteFolder: 'リモートフォルダー',
-  PaperTodoStringKeys.requestTimeoutSeconds: 'リクエストタイムアウト秒',
-  PaperTodoStringKeys.right: '右',
-  PaperTodoStringKeys.runLinkedScriptCapsulesOnClick: 'クリックでリンク済みスクリプトカプセルを実行',
-  PaperTodoStringKeys.scriptCapsuleFailed: 'スクリプトカプセルを実行できませんでした: {0}',
-  PaperTodoStringKeys.serif: 'セリフ',
-  PaperTodoStringKeys.settingsSaveFailed: '設定を保存できませんでした: {0}',
-  PaperTodoStringKeys.showDeepCapsuleWhileExpanded: '展開中も端カプセルを表示',
-  PaperTodoStringKeys.showLinkedNoteName: 'リンク済みノート名を表示',
-  PaperTodoStringKeys.showPassphrase: 'パスフレーズを表示',
-  PaperTodoStringKeys.showPassword: 'パスワードを表示',
-  PaperTodoStringKeys.small: '小',
-  PaperTodoStringKeys.startAtLogin: 'ログイン時に開始',
-  PaperTodoStringKeys.stayOnTop: '最前面を維持',
-  PaperTodoStringKeys.trayCollapsed: '折りたたみ',
-  PaperTodoStringKeys.trayDeleteConfirmMessage: '「{0}」を削除しますか？',
-  PaperTodoStringKeys.trayDeleteConfirmTitle: '紙片を削除しますか？',
-  PaperTodoStringKeys.trayDeletePaper: '紙片を削除...',
-  PaperTodoStringKeys.trayInlineConfirmDelete: '⚠ 削除',
-  PaperTodoStringKeys.trayInlineConfirmAction: '確認',
-  PaperTodoStringKeys.trayDesktop: 'デスクトップ',
-  PaperTodoStringKeys.trayExit: '終了',
-  PaperTodoStringKeys.trayHidden: '非表示',
-  PaperTodoStringKeys.trayHideAll: 'すべての紙片を隠す',
-  PaperTodoStringKeys.trayNewNote: '＋ メモ紙を作成',
-  PaperTodoStringKeys.trayNewTodo: '＋ ToDo紙を作成',
-  PaperTodoStringKeys.trayNotePaper: 'メモ',
-  PaperTodoStringKeys.trayPapers: '紙片',
-  PaperTodoStringKeys.trayScriptPaper: 'スクリプト',
-  PaperTodoStringKeys.traySettings: '設定',
-  PaperTodoStringKeys.trayShowAll: 'すべての紙片を表示',
-  PaperTodoStringKeys.trayTodoPaper: 'ToDo',
-  PaperTodoStringKeys.trayToggleAll: 'すべての紙片を切り替え',
-  PaperTodoStringKeys.trayTopmost: '最前面',
-  PaperTodoStringKeys.syncCompleteConfiguration:
-      '先に WebDAV 同期設定と同期暗号化パスフレーズを完了してください。',
-  PaperTodoStringKeys.syncConflict: '同期中にリモートデータが変更されました。アップロード前に再取得してください。',
-  PaperTodoStringKeys.syncConflictSnapshotPreserved:
-      '同期中にリモートデータが変更されました。ローカルスナップショットは {0} に保存されました。',
-  PaperTodoStringKeys.syncDisabled: '同期は無効です。',
-  PaperTodoStringKeys.syncDownloaded: 'リモートデータをダウンロードしました。',
-  PaperTodoStringKeys.syncDownloadedLegacyPlainMigrated:
-      '旧式の平文 WebDAV データからリモートデータをダウンロードし、暗号化ペイロードへ移行しました。',
-  PaperTodoStringKeys.syncDownloadedLegacyPlainNextUpload:
-      '旧式の平文 WebDAV データからリモートデータをダウンロードしました。次の正常なアップロードで暗号化ペイロードを書き込みます。',
-  PaperTodoStringKeys.syncDownloadedLegacyPlainRetry:
-      '旧式の平文 WebDAV データからリモートデータをダウンロードしました。自動暗号化移行は完了できませんでした。もう一度同期してください。',
-  PaperTodoStringKeys.syncEncryptionPassphrase: '同期暗号化パスフレーズ',
-  PaperTodoStringKeys.syncFailed: '同期に失敗しました: {0}',
-  PaperTodoStringKeys.syncFoundLegacyOperationLogs:
-      '旧式の平文 WebDAV {1} が {0} 件見つかりました。リモート ETag が利用可能になった後、もう一度同期して暗号化移行を再試行してください。',
-  PaperTodoStringKeys.syncMergedRemoteChanges: 'リモートの変更 {0} 件を結合しました。',
-  PaperTodoStringKeys.syncMigratedLegacyOperationLogs:
-      '旧式の WebDAV {1} {0} 件を暗号化ペイロードへ移行しました。',
-  PaperTodoStringKeys.syncMigratedLegacyOperationLogsPartial:
-      '旧式の WebDAV {2} {1} 件のうち {0} 件を暗号化ペイロードへ移行しました。残りはもう一度同期して再試行してください。',
-  PaperTodoStringKeys.syncOnStart: '起動時に同期',
-  PaperTodoStringKeys.syncOperationLog: '操作ログ',
-  PaperTodoStringKeys.syncOperationLogs: '操作ログ',
-  PaperTodoStringKeys.syncPayloadUnreadable:
-      'リモート同期データを復号できません。同期暗号化パスフレーズを確認してください。',
-  PaperTodoStringKeys.syncRemoteChange: '変更',
-  PaperTodoStringKeys.syncRemoteChanges: '変更',
-  PaperTodoStringKeys.syncRemoteSnapshotEmpty: 'リモートスナップショットは空です。',
-  PaperTodoStringKeys.syncRestoreSnapshotFailed: '復元に失敗しました: {0}',
-  PaperTodoStringKeys.syncSnapshotRestored: 'スナップショットを復元しました。',
-  PaperTodoStringKeys.syncUploaded: 'ローカルデータをアップロードしました。',
-  PaperTodoStringKeys.theme: 'テーマ',
-  PaperTodoStringKeys.themeDark: 'ダーク',
-  PaperTodoStringKeys.themeLight: 'ライト',
-  PaperTodoStringKeys.themeSystem: 'システム',
-  PaperTodoStringKeys.todoNoteLinks: 'ToDo-ノートリンク',
-  PaperTodoStringKeys.todoReminders: 'ToDo リマインダー',
-  PaperTodoStringKeys.todoSpacing: 'ToDo 行間',
-  PaperTodoStringKeys.todoReminderMultiple: 'リマインダー: {0} 件の ToDo 項目が期限です。',
-  PaperTodoStringKeys.todoReminderSingle: 'リマインダー: {0} - {1}',
-  PaperTodoStringKeys.todoNewItemHint: '新しい項目',
-  PaperTodoStringKeys.todoItemDeleted: '{0} を削除しました。',
-  PaperTodoStringKeys.todoItemFallback: 'ToDo 項目',
-  PaperTodoStringKeys.todoVisualSize: 'ToDo 表示サイズ',
-  PaperTodoStringKeys.tooltips: 'ツールチップ',
-  PaperTodoStringKeys.topBarNewNote: '上部バーの新規ノート',
-  PaperTodoStringKeys.topBarNewTodo: '上部バーの新規 ToDo',
-  PaperTodoStringKeys.topBarOpenSurface: '上部バーのウィンドウを開く',
-  PaperTodoStringKeys.untitledPaper: '無題',
-  PaperTodoStringKeys.username: 'ユーザー名',
-  PaperTodoStringKeys.webDavIssueEndpointInvalid:
-      'ユーザー情報、クエリ、フラグメント、バックスラッシュ、制御文字、エンコードされた権限やパス区切り、空のパス区切り、パス区切り端の空白を含まない完全な http:// または https:// の WebDAV URL を入力してください。',
-  PaperTodoStringKeys.webDavIssueEndpointRequired: 'WebDAV URL を入力してください。',
-  PaperTodoStringKeys.webDavIssuePasswordInvalid: 'パスワードに制御文字は使用できません。',
-  PaperTodoStringKeys.webDavIssuePasswordRequired:
-      'WebDAV パスワードまたはアプリパスワードを入力してください。',
-  PaperTodoStringKeys.webDavIssuePassphraseRequired: '同期暗号化パスフレーズを入力してください。',
-  PaperTodoStringKeys.webDavIssueRootPathInvalid:
-      '親ディレクトリ、無効なパーセントエスケープ、制御文字、空のパス区切りを含まないリモートフォルダーを指定してください。',
-  PaperTodoStringKeys.webDavIssueSummary:
-      'WebDAV URL、ユーザー名、パスワード、リモートフォルダー、同期暗号化パスフレーズを入力してください。',
-  PaperTodoStringKeys.webDavIssueUsernameInvalid: 'ユーザー名にコロンや制御文字は使用できません。',
-  PaperTodoStringKeys.webDavIssueUsernameRequired: 'WebDAV ユーザー名を入力してください。',
-  PaperTodoStringKeys.webDavProvider: 'WebDAV サービス',
-  PaperTodoStringKeys.webDavSync: 'WebDAV 同期',
-  PaperTodoStringKeys.webDavUrl: 'WebDAV URL',
-  PaperTodoStringKeys.xl: '特大',
-  PaperTodoStringKeys.yaHei: 'YaHei',
-  PaperTodoStringKeys.yy: 'YY',
-  PaperTodoStringKeys.yyyy: 'YYYY',
-  PaperTodoStringKeys.zoom: 'ズーム',
-};
-
-const _koStrings = {
-  PaperTodoStringKeys.appTitle: 'RePaperTodo',
-  PaperTodoStringKeys.actionAddColumn: '열 추가',
-  PaperTodoStringKeys.actionAddCanvasBlock: '캔버스 블록 추가',
-  PaperTodoStringKeys.actionAddItem: '항목 추가',
-  PaperTodoStringKeys.actionAddTextBlock: '텍스트 블록 추가',
-  PaperTodoStringKeys.actionBackToBoard: '보드로 돌아가기',
-  PaperTodoStringKeys.actionCancel: '취소',
-  PaperTodoStringKeys.actionChangeDueDate: '마감 시간 변경',
-  PaperTodoStringKeys.actionChangeReminder: '알림 변경',
-  PaperTodoStringKeys.actionClear: '지우기',
-  PaperTodoStringKeys.actionClose: '닫기',
-  PaperTodoStringKeys.actionClearCompleted: '완료 항목 지우기',
-  PaperTodoStringKeys.actionClearCompletedItems: '완료된 항목 지우기',
-  PaperTodoStringKeys.actionClearDueDate: '마감 시간 지우기',
-  PaperTodoStringKeys.actionClearReminder: '알림 지우기',
-  PaperTodoStringKeys.actionClearReminderInterval: '알림 간격 지우기',
-  PaperTodoStringKeys.actionCollapseAll: '모두 접기',
-  PaperTodoStringKeys.actionCollapseAllPapers: '모든 종이 접기',
-  PaperTodoStringKeys.actionCollapsePaper: '종이 접기',
-  PaperTodoStringKeys.actionDelete: '삭제',
-  PaperTodoStringKeys.actionDeleteColumn: '{0}열 삭제',
-  PaperTodoStringKeys.actionDeleteItem: '항목 삭제',
-  PaperTodoStringKeys.actionDeletePaper: '종이 삭제',
-  PaperTodoStringKeys.actionDisableAlwaysOnTop: '항상 위 해제',
-  PaperTodoStringKeys.actionDragToLinkNoteToTodo: '드래그하여 노트를 할 일에 연결',
-  PaperTodoStringKeys.actionDragToReorder: '드래그하여 순서 변경',
-  PaperTodoStringKeys.actionEditLinkedScript: '연결된 스크립트 편집',
-  PaperTodoStringKeys.actionEqualWidths: '같은 너비',
-  PaperTodoStringKeys.actionExpandAll: '모두 펼치기',
-  PaperTodoStringKeys.actionExpandAllPapers: '모든 종이 펼치기',
-  PaperTodoStringKeys.actionExpandPaper: '종이 펼치기',
-  PaperTodoStringKeys.actionHidePaper: '종이 숨기기',
-  PaperTodoStringKeys.actionInsertBeforeColumn: '{0}열 앞에 삽입',
-  PaperTodoStringKeys.actionKeepOnTop: '항상 위에 유지',
-  PaperTodoStringKeys.actionLinkNote: '노트 연결',
-  PaperTodoStringKeys.actionLinkPaper: '{0} 연결',
-  PaperTodoStringKeys.actionMore: '더 많은 작업',
-  PaperTodoStringKeys.actionMoveItemDown: '항목 아래로 이동',
-  PaperTodoStringKeys.actionMoveItemUp: '항목 위로 이동',
-  PaperTodoStringKeys.actionNewNote: '새 노트',
-  PaperTodoStringKeys.actionNewNotePaper: '새 노트 종이',
-  PaperTodoStringKeys.actionNewTodo: '새 할 일',
-  PaperTodoStringKeys.actionNewTodoPaper: '새 할 일 종이',
-  PaperTodoStringKeys.actionOpen: '열기',
-  PaperTodoStringKeys.actionOpenCurrentPaperSurface: '현재 종이 창 열기',
-  PaperTodoStringKeys.actionOpenLinkedNote: '연결된 노트 열기',
-  PaperTodoStringKeys.actionOpenMarkdownExternally: 'Markdown 외부에서 열기',
-  PaperTodoStringKeys.actionOpenPaperSurface: '종이 창 열기',
-  PaperTodoStringKeys.actionOpenSurface: '창 열기',
-  PaperTodoStringKeys.actionPaperActions: '종이 작업',
-  PaperTodoStringKeys.actionPaperTextZoom: '종이 텍스트 확대/축소',
-  PaperTodoStringKeys.actionPinToDesktop: '데스크톱에 고정',
-  PaperTodoStringKeys.actionRecovery: '복구',
-  PaperTodoStringKeys.actionRecoverySnapshots: '복구 스냅샷',
-  PaperTodoStringKeys.actionRedoTodoChange: '할 일 변경 다시 실행',
-  PaperTodoStringKeys.actionRemoveLastColumn: '마지막 열 제거',
-  PaperTodoStringKeys.actionRetry: '다시 시도',
-  PaperTodoStringKeys.actionRestore: '복구',
-  PaperTodoStringKeys.actionRunPaper: '{0} 실행',
-  PaperTodoStringKeys.actionRunLinkedScriptCapsule: '연결된 스크립트 캡슐 실행',
-  PaperTodoStringKeys.actionRunScriptCapsule: '스크립트 캡슐 실행',
-  PaperTodoStringKeys.actionSave: '저장',
-  PaperTodoStringKeys.actionSaveWindowBounds: '창 위치 저장',
-  PaperTodoStringKeys.actionSetDueDate: '마감 시간 설정',
-  PaperTodoStringKeys.actionSetReminder: '알림 설정',
-  PaperTodoStringKeys.actionSetReminderInterval: '알림 간격 설정',
-  PaperTodoStringKeys.actionSettings: '설정',
-  PaperTodoStringKeys.actionShowHidden: '숨김 표시',
-  PaperTodoStringKeys.actionShowHiddenPapers: '숨겨진 종이 표시',
-  PaperTodoStringKeys.actionSyncNow: '지금 동기화',
-  PaperTodoStringKeys.actionTodoColumns: '할 일 열',
-  PaperTodoStringKeys.actionTodoItemActions: '할 일 항목 작업',
-  PaperTodoStringKeys.actionUndo: '실행 취소',
-  PaperTodoStringKeys.actionUndoTodoChange: '할 일 변경 실행 취소',
-  PaperTodoStringKeys.actionUnlinkNote: '노트 연결 해제',
-  PaperTodoStringKeys.actionUnpinFromDesktop: '데스크톱 고정 해제',
-  PaperTodoStringKeys.actionWideFirstColumn: '첫 번째 열 넓게',
-  PaperTodoStringKeys.allowLongLinkedNoteTitles: '긴 연결 노트 제목 허용',
-  PaperTodoStringKeys.allDue: '모든 마감',
-  PaperTodoStringKeys.animations: '애니메이션',
-  PaperTodoStringKeys.appearance: '모양',
-  PaperTodoStringKeys.avoidFullscreen: '전체 화면 피하기',
-  PaperTodoStringKeys.basic: '기본',
-  PaperTodoStringKeys.capsuleMode: '캡슐 모드',
-  PaperTodoStringKeys.canvasBlockActions: '캔버스 블록 작업',
-  PaperTodoStringKeys.canvasBlockGeometry: '캔버스 블록 위치',
-  PaperTodoStringKeys.canvasBlockTypeBlock: '블록',
-  PaperTodoStringKeys.canvasBlockTypeCode: '코드',
-  PaperTodoStringKeys.canvasBlockTypeCodeLabel: '코드',
-  PaperTodoStringKeys.canvasBlockTypeText: '텍스트',
-  PaperTodoStringKeys.canvasBlockTypeTextLabel: '텍스트',
-  PaperTodoStringKeys.canvasBringForward: '앞으로 가져오기',
-  PaperTodoStringKeys.canvasBringToFront: '맨 앞으로 가져오기',
-  PaperTodoStringKeys.canvasDefaultText: '캔버스 텍스트 {0}',
-  PaperTodoStringKeys.canvasDeleteBlock: '캔버스 블록 삭제',
-  PaperTodoStringKeys.canvasDragBlock: '캔버스 블록 끌기',
-  PaperTodoStringKeys.canvasDuplicateBlock: '캔버스 블록 복제',
-  PaperTodoStringKeys.canvasEditGeometry: '캔버스 위치 편집',
-  PaperTodoStringKeys.canvasEnterValidNumbers: '모든 필드에 올바른 숫자를 입력하세요.',
-  PaperTodoStringKeys.canvasFieldHeight: '높이',
-  PaperTodoStringKeys.canvasFieldLayer: '레이어',
-  PaperTodoStringKeys.canvasFieldWidth: '너비',
-  PaperTodoStringKeys.canvasLayer: '레이어 {0}',
-  PaperTodoStringKeys.canvasLayerActions: '캔버스 레이어 작업',
-  PaperTodoStringKeys.canvasResizeBlock: '캔버스 블록 크기 조절',
-  PaperTodoStringKeys.canvasSendBackward: '뒤로 보내기',
-  PaperTodoStringKeys.canvasSendToBack: '맨 뒤로 보내기',
-  PaperTodoStringKeys.canvasTopLayer: '맨 위 {0}',
-  PaperTodoStringKeys.collapseAllActive: '모두 접기 활성',
-  PaperTodoStringKeys.collapseAllControl: '모두 접기 컨트롤',
-  PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick:
-      '펼친 가장자리 캡슐 클릭 시 종이 접기',
-  PaperTodoStringKeys.colorForest: '숲',
-  PaperTodoStringKeys.colorInk: '잉크',
-  PaperTodoStringKeys.colorRose: '장미',
-  PaperTodoStringKeys.colorScheme: '색상 구성',
-  PaperTodoStringKeys.colorWarm: '따뜻한 종이',
-  PaperTodoStringKeys.columnLabel: '{0}열',
-  PaperTodoStringKeys.custom: '사용자 지정',
-  PaperTodoStringKeys.customFontFamily: '사용자 지정 글꼴 패밀리',
-  PaperTodoStringKeys.customThemeColor: '사용자 지정 테마 색',
-  PaperTodoStringKeys.deepCapsuleMode: '가장자리 캡슐 모드',
-  PaperTodoStringKeys.deepCapsuleMonitor: '가장자리 캡슐 모니터',
-  PaperTodoStringKeys.deepCapsuleSide: '가장자리 캡슐 위치',
-  PaperTodoStringKeys.deepCapsuleTopMargin: '가장자리 캡슐 위쪽 여백',
-  PaperTodoStringKeys.defaultFont: '기본값',
-  PaperTodoStringKeys.dengXian: 'DengXian',
-  PaperTodoStringKeys.dialogDeletePaper: '종이를 삭제할까요?',
-  PaperTodoStringKeys.dialogDueDate: '마감 시간',
-  PaperTodoStringKeys.dialogRestoreSnapshot: '스냅샷을 복구할까요?',
-  PaperTodoStringKeys.dialogSyncSettings: '동기화 설정',
-  PaperTodoStringKeys.dueLabel: '마감 {0}',
-  PaperTodoStringKeys.dueTomorrow: '내일 {0}',
-  PaperTodoStringKeys.dueYearDisplay: '마감 연도 표시',
-  PaperTodoStringKeys.enhanced: '강화',
-  PaperTodoStringKeys.externalMarkdownOpenFailed: '외부 Markdown 열기 실패: {0}',
-  PaperTodoStringKeys.externalMarkdownExtension: '외부 Markdown 확장자',
-  PaperTodoStringKeys.fontPreset: '글꼴 프리셋',
-  PaperTodoStringKeys.fullscreenTopmostMode: '전체 화면/항상 위 모드',
-  PaperTodoStringKeys.generic: '일반',
-  PaperTodoStringKeys.hideCoveredDeepCapsules: '가려진 가장자리 캡슐 숨기기',
-  PaperTodoStringKeys.hideFromTaskSwitcher: '작업 전환기에서 숨기기',
-  PaperTodoStringKeys.hideLinkedNoteCapsules: '연결된 노트 캡슐 숨기기',
-  PaperTodoStringKeys.hidePassphrase: '암호 구문 숨기기',
-  PaperTodoStringKeys.hidePassword: '비밀번호 숨기기',
-  PaperTodoStringKeys.hideScriptRunWindow: '스크립트 실행 창 숨기기',
-  PaperTodoStringKeys.hour: '시',
-  PaperTodoStringKeys.hours: '시간',
-  PaperTodoStringKeys.interval: '간격',
-  PaperTodoStringKeys.intervalMinutes: '동기화 간격(분)',
-  PaperTodoStringKeys.large: '큼',
-  PaperTodoStringKeys.left: '왼쪽',
-  PaperTodoStringKeys.labelNote: '노트',
-  PaperTodoStringKeys.labelNoteTitle: '노트 {0}',
-  PaperTodoStringKeys.labelScript: '스크립트',
-  PaperTodoStringKeys.markdownActionBold: '굵게',
-  PaperTodoStringKeys.markdownActionBoldShortcut: '굵게 (Ctrl+B)',
-  PaperTodoStringKeys.markdownActionCodeBlock: '코드 블록',
-  PaperTodoStringKeys.markdownActionHeading: '제목',
-  PaperTodoStringKeys.markdownActionInsertLinkShortcut: '링크 삽입 (Ctrl+K)',
-  PaperTodoStringKeys.markdownActionItalic: '기울임',
-  PaperTodoStringKeys.markdownActionItalicShortcut: '기울임 (Ctrl+I)',
-  PaperTodoStringKeys.markdownActionList: '목록',
-  PaperTodoStringKeys.markdownActionMore: '더 많은 Markdown 작업',
-  PaperTodoStringKeys.markdownActionQuote: '인용',
-  PaperTodoStringKeys.markdownActionStrikethrough: '취소선',
-  PaperTodoStringKeys.markdownMode: 'Markdown 모드',
-  PaperTodoStringKeys.markdownOff: 'Markdown 끄기',
-  PaperTodoStringKeys.maxTitleLength: '최대 제목 길이',
-  PaperTodoStringKeys.medium: '보통',
-  PaperTodoStringKeys.minute: '분',
-  PaperTodoStringKeys.minutes: '분',
-  PaperTodoStringKeys.mono: '고정폭',
-  PaperTodoStringKeys.nearest: '가장 가까운 항목',
-  PaperTodoStringKeys.noYear: '연도 없음',
-  PaperTodoStringKeys.noteEmptyPreview: '_노트 내용이 없습니다._',
-  PaperTodoStringKeys.noteEditorHint: '노트를 작성하세요...',
-  PaperTodoStringKeys.noteSpacing: '노트 줄 간격',
-  PaperTodoStringKeys.noteViewEdit: '편집',
-  PaperTodoStringKeys.noteViewPreview: '미리보기',
-  PaperTodoStringKeys.noteViewSplit: '분할',
-  PaperTodoStringKeys.openedMarkdownFile: 'Markdown 파일을 열었습니다: {0}',
-  PaperTodoStringKeys.openLinkFailed: '링크 열기 실패: {0}',
-  PaperTodoStringKeys.openLinkUnsupported: '링크 열기 실패: 지원되지 않는 링크 대상입니다.',
-  PaperTodoStringKeys.paperDeleted: '{0} 삭제됨.',
-  PaperTodoStringKeys.paperLimitReached:
-      '종이 한도에 도달했습니다. 더 만들기 전에 필요 없는 종이를 삭제하세요.',
-  PaperTodoStringKeys.passphraseHelper: 'Windows와 Android 암호화 동기화에 필요합니다.',
-  PaperTodoStringKeys.password: '비밀번호',
-  PaperTodoStringKeys.persistentPowerShellProcess: '상주 PowerShell 프로세스',
-  PaperTodoStringKeys.platformSettingFullscreenTopmostMode: '전체 화면/항상 위 모드',
-  PaperTodoStringKeys.platformSettingGlobalHotkeys: '전역 단축키',
-  PaperTodoStringKeys.platformSettingPaperSurfaces: '종이 창',
-  PaperTodoStringKeys.platformSettingScriptCapsuleProcess: '스크립트 캡슐 프로세스',
-  PaperTodoStringKeys.platformSettingStartupAtLogin: '로그인 시 시작',
-  PaperTodoStringKeys.platformSettingWindowSwitcherVisibility: '작업 전환기 표시',
-  PaperTodoStringKeys.platformSettingsFailed: '플랫폼 설정 실패: {0}',
-  PaperTodoStringKeys.pinnedNoteHotkey: '고정 노트 단축키',
-  PaperTodoStringKeys.pinnedTodoHotkey: '고정 할 일 단축키',
-  PaperTodoStringKeys.preferPowerShell7: 'PowerShell 7 우선 사용',
-  PaperTodoStringKeys.relativeDueDates: '상대 마감 시간',
-  PaperTodoStringKeys.relativeDueFuture: '{0} 후',
-  PaperTodoStringKeys.relativeDueOverdue: '{0} 지남',
-  PaperTodoStringKeys.recoverySnapshotFallback: '스냅샷',
-  PaperTodoStringKeys.recoverySnapshotLoadFailed: '스냅샷을 불러올 수 없습니다: {0}',
-  PaperTodoStringKeys.recoverySnapshotModified: '수정됨 {0}',
-  PaperTodoStringKeys.recoverySnapshotsEmpty: '복구 스냅샷을 찾을 수 없습니다.',
-  PaperTodoStringKeys.reminderDisplaySeconds: '알림 표시 초',
-  PaperTodoStringKeys.reminderEveryHours: '{0}시간마다',
-  PaperTodoStringKeys.reminderEveryMinutes: '{0}분마다',
-  PaperTodoStringKeys.reminderInterval: '알림 간격',
-  PaperTodoStringKeys.reminderScope: '알림 범위',
-  PaperTodoStringKeys.reminderUnit: '알림 단위',
-  PaperTodoStringKeys.remoteFolder: '원격 폴더',
-  PaperTodoStringKeys.requestTimeoutSeconds: '요청 제한 시간(초)',
-  PaperTodoStringKeys.right: '오른쪽',
-  PaperTodoStringKeys.runLinkedScriptCapsulesOnClick: '클릭 시 연결된 스크립트 캡슐 실행',
-  PaperTodoStringKeys.scriptCapsuleFailed: '스크립트 캡슐 실행 실패: {0}',
-  PaperTodoStringKeys.serif: '세리프',
-  PaperTodoStringKeys.settingsSaveFailed: '설정 저장 실패: {0}',
-  PaperTodoStringKeys.showDeepCapsuleWhileExpanded: '펼친 동안 가장자리 캡슐 표시',
-  PaperTodoStringKeys.showLinkedNoteName: '연결된 노트 이름 표시',
-  PaperTodoStringKeys.showPassphrase: '암호 구문 표시',
-  PaperTodoStringKeys.showPassword: '비밀번호 표시',
-  PaperTodoStringKeys.small: '작음',
-  PaperTodoStringKeys.startAtLogin: '로그인 시 시작',
-  PaperTodoStringKeys.stayOnTop: '항상 위에 유지',
-  PaperTodoStringKeys.trayCollapsed: '접힘',
-  PaperTodoStringKeys.trayDeleteConfirmMessage: '"{0}" 삭제할까요?',
-  PaperTodoStringKeys.trayDeleteConfirmTitle: '종이를 삭제할까요?',
-  PaperTodoStringKeys.trayDeletePaper: '종이 삭제...',
-  PaperTodoStringKeys.trayInlineConfirmDelete: '⚠ 삭제',
-  PaperTodoStringKeys.trayInlineConfirmAction: '확인',
-  PaperTodoStringKeys.trayDesktop: '데스크톱',
-  PaperTodoStringKeys.trayExit: '종료',
-  PaperTodoStringKeys.trayHidden: '숨김',
-  PaperTodoStringKeys.trayHideAll: '모든 종이 숨기기',
-  PaperTodoStringKeys.trayNewNote: '＋ 메모 종이 만들기',
-  PaperTodoStringKeys.trayNewTodo: '＋ 할 일 종이 만들기',
-  PaperTodoStringKeys.trayNotePaper: '메모',
-  PaperTodoStringKeys.trayPapers: '종이',
-  PaperTodoStringKeys.trayScriptPaper: '스크립트',
-  PaperTodoStringKeys.traySettings: '설정',
-  PaperTodoStringKeys.trayShowAll: '모든 종이 보이기',
-  PaperTodoStringKeys.trayTodoPaper: '할 일',
-  PaperTodoStringKeys.trayToggleAll: '모든 종이 전환',
-  PaperTodoStringKeys.trayTopmost: '항상 위',
-  PaperTodoStringKeys.syncCompleteConfiguration:
-      '먼저 WebDAV 동기화 설정과 동기화 암호화 암호 구문을 완료하세요.',
-  PaperTodoStringKeys.syncConflict: '동기화 중 원격 데이터가 변경되었습니다. 업로드 전에 다시 가져오세요.',
-  PaperTodoStringKeys.syncConflictSnapshotPreserved:
-      '동기화 중 원격 데이터가 변경되었습니다. 로컬 스냅샷은 {0}에 보존되었습니다.',
-  PaperTodoStringKeys.syncDisabled: '동기화가 꺼져 있습니다.',
-  PaperTodoStringKeys.syncDownloaded: '원격 데이터를 다운로드했습니다.',
-  PaperTodoStringKeys.syncDownloadedLegacyPlainMigrated:
-      '이전 평문 WebDAV 데이터에서 원격 데이터를 다운로드하고 암호화 페이로드로 이전했습니다.',
-  PaperTodoStringKeys.syncDownloadedLegacyPlainNextUpload:
-      '이전 평문 WebDAV 데이터에서 원격 데이터를 다운로드했습니다. 다음 업로드가 성공하면 암호화 페이로드를 씁니다.',
-  PaperTodoStringKeys.syncDownloadedLegacyPlainRetry:
-      '이전 평문 WebDAV 데이터에서 원격 데이터를 다운로드했습니다. 자동 암호화 이전을 완료하지 못했습니다. 다시 동기화해 주세요.',
-  PaperTodoStringKeys.syncEncryptionPassphrase: '동기화 암호화 암호 구문',
-  PaperTodoStringKeys.syncFailed: '동기화 실패: {0}',
-  PaperTodoStringKeys.syncFoundLegacyOperationLogs:
-      '이전 평문 WebDAV {1} {0}개를 발견했습니다. 원격 ETag를 사용할 수 있게 되면 다시 동기화해 암호화 이전을 재시도하세요.',
-  PaperTodoStringKeys.syncMergedRemoteChanges: '원격 변경 {0}개를 병합했습니다.',
-  PaperTodoStringKeys.syncMigratedLegacyOperationLogs:
-      '이전 WebDAV {1} {0}개를 암호화 페이로드로 이전했습니다.',
-  PaperTodoStringKeys.syncMigratedLegacyOperationLogsPartial:
-      '이전 WebDAV {2} {1}개 중 {0}개를 암호화 페이로드로 이전했습니다. 나머지는 다시 동기화해 재시도하세요.',
-  PaperTodoStringKeys.syncOnStart: '시작 시 동기화',
-  PaperTodoStringKeys.syncOperationLog: '작업 로그',
-  PaperTodoStringKeys.syncOperationLogs: '작업 로그',
-  PaperTodoStringKeys.syncPayloadUnreadable:
-      '원격 동기화 데이터를 복호화할 수 없습니다. 동기화 암호화 암호 구문을 확인하세요.',
-  PaperTodoStringKeys.syncRemoteChange: '변경',
-  PaperTodoStringKeys.syncRemoteChanges: '변경',
-  PaperTodoStringKeys.syncRemoteSnapshotEmpty: '원격 스냅샷이 비어 있습니다.',
-  PaperTodoStringKeys.syncRestoreSnapshotFailed: '복구 실패: {0}',
-  PaperTodoStringKeys.syncSnapshotRestored: '스냅샷을 복구했습니다.',
-  PaperTodoStringKeys.syncUploaded: '로컬 데이터를 업로드했습니다.',
-  PaperTodoStringKeys.theme: '테마',
-  PaperTodoStringKeys.themeDark: '어둡게',
-  PaperTodoStringKeys.themeLight: '밝게',
-  PaperTodoStringKeys.themeSystem: '시스템',
-  PaperTodoStringKeys.todoNoteLinks: '할 일-노트 연결',
-  PaperTodoStringKeys.todoReminders: '할 일 알림',
-  PaperTodoStringKeys.todoSpacing: '할 일 줄 간격',
-  PaperTodoStringKeys.todoReminderMultiple: '알림: {0}개의 할 일 항목이 마감되었습니다.',
-  PaperTodoStringKeys.todoReminderSingle: '알림: {0} - {1}',
-  PaperTodoStringKeys.todoNewItemHint: '새 항목',
-  PaperTodoStringKeys.todoItemDeleted: '{0} 삭제됨.',
-  PaperTodoStringKeys.todoItemFallback: '할 일 항목',
-  PaperTodoStringKeys.todoVisualSize: '할 일 표시 크기',
-  PaperTodoStringKeys.tooltips: '도구 설명',
-  PaperTodoStringKeys.topBarNewNote: '상단 바 새 노트',
-  PaperTodoStringKeys.topBarNewTodo: '상단 바 새 할 일',
-  PaperTodoStringKeys.topBarOpenSurface: '상단 바 창 열기',
-  PaperTodoStringKeys.untitledPaper: '제목 없음',
-  PaperTodoStringKeys.username: '사용자 이름',
-  PaperTodoStringKeys.webDavIssueEndpointInvalid:
-      '사용자 정보, 쿼리, 프래그먼트, 백슬래시, 제어 문자, 인코딩된 권한 또는 경로 구분자, 빈 경로 구간, 경로 구간 양끝 공백이 없는 전체 http:// 또는 https:// WebDAV URL을 입력하세요.',
-  PaperTodoStringKeys.webDavIssueEndpointRequired: 'WebDAV URL을 입력하세요.',
-  PaperTodoStringKeys.webDavIssuePasswordInvalid: '비밀번호에는 제어 문자를 사용할 수 없습니다.',
-  PaperTodoStringKeys.webDavIssuePasswordRequired:
-      'WebDAV 비밀번호 또는 앱 비밀번호를 입력하세요.',
-  PaperTodoStringKeys.webDavIssuePassphraseRequired: '동기화 암호화 암호 구문을 입력하세요.',
-  PaperTodoStringKeys.webDavIssueRootPathInvalid:
-      '상위 디렉터리 구간, 잘못된 퍼센트 이스케이프, 제어 문자, 빈 경로 구간이 없는 원격 폴더를 사용하세요.',
-  PaperTodoStringKeys.webDavIssueSummary:
-      'WebDAV URL, 사용자 이름, 비밀번호, 원격 폴더, 동기화 암호화 암호 구문을 모두 입력하세요.',
-  PaperTodoStringKeys.webDavIssueUsernameInvalid:
-      '사용자 이름에는 콜론이나 제어 문자를 사용할 수 없습니다.',
-  PaperTodoStringKeys.webDavIssueUsernameRequired: 'WebDAV 사용자 이름을 입력하세요.',
-  PaperTodoStringKeys.webDavProvider: 'WebDAV 서비스',
-  PaperTodoStringKeys.webDavSync: 'WebDAV 동기화',
-  PaperTodoStringKeys.webDavUrl: 'WebDAV URL',
-  PaperTodoStringKeys.xl: '매우 큼',
-  PaperTodoStringKeys.yaHei: 'YaHei',
-  PaperTodoStringKeys.yy: 'YY',
-  PaperTodoStringKeys.yyyy: 'YYYY',
-  PaperTodoStringKeys.zoom: '확대/축소',
 };

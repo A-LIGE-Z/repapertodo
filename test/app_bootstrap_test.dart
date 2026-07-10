@@ -256,6 +256,17 @@ void main() {
       bootstrap.controller.state.papers.single.content,
       'Loaded from the old data file',
     );
+    expect(bootstrap.controller.state.sync.operationDeviceSequences, {
+      'legacy-device': 4,
+    });
+    expect(bootstrap.controller.state.sync.deletedPaperTombstones, {
+      'Deleted-Paper': DateTime.utc(2026, 7, 1, 2).toIso8601String(),
+    });
+    expect(bootstrap.controller.state.sync.deletedTodoItemTombstones, {
+      'Deleted-Todo': {
+        'Deleted-Item': DateTime.utc(2026, 7, 1, 3, 30).toIso8601String(),
+      },
+    });
     expect(platform.paperWindows.restoredTitles, ['Legacy']);
     expect(platform.tray.rebuiltTitles, [
       ['Legacy'],
@@ -264,11 +275,21 @@ void main() {
 
     final savedText = await File(store.filePath).readAsString();
     expect(savedText, contains('"papers"'));
+    expect(savedText, contains('"sync"'));
+    expect(savedText, contains('"operationDeviceSequences"'));
     expect(savedText, isNot(contains('"Papers"')));
+    expect(savedText, isNot(contains('"SYNC"')));
+    expect(savedText, isNot(contains('"OPERATIONDEVICESEQUENCES"')));
     final stored = await store.load();
     expect(stored.papers.single.id, 'legacy-note');
     expect(stored.papers.single.title, 'Legacy');
     expect(stored.pinnedTodoHotKey, 'Ctrl+Alt+T');
+    expect(stored.sync.provider, SyncProviderIds.webDav);
+    expect(stored.sync.webDav.presetId, WebDavPresetIds.jianguoyun);
+    expect(stored.sync.webDav.rootPath, 'PaperTodo');
+    expect(stored.sync.operationDeviceSequences, {
+      'legacy-device': 4,
+    });
   });
 
   test('forwards startup args when another instance owns the app', () async {
@@ -314,6 +335,104 @@ void main() {
     expect(savedJson, isNot(contains('"Theme"')));
   });
 
+  test('startup exit command syncs WebDAV before platform cleanup', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_bootstrap_exit_sync_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await store.save(
+      AppState(
+        sync: _configuredSyncSettings(autoSyncOnStart: false),
+        papers: [
+          PaperData(
+            id: 'exit-sync-local',
+            type: PaperTypes.todo,
+            title: 'Local before exit',
+          ),
+        ],
+      ),
+    );
+    final remoteState = AppState(
+      sync: _configuredSyncSettings(autoSyncOnStart: false),
+      papers: [
+        PaperData(
+          id: 'exit-sync-remote',
+          type: PaperTypes.note,
+          title: 'Synced before exit',
+          content: 'Exit sync body',
+        ),
+      ],
+    );
+    final platform = _RecordingBootstrapPlatformServices();
+    final syncService = _StaticStartupSyncService(
+      AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.downloaded,
+          state: remoteState,
+          message: 'Remote data downloaded.',
+        ),
+        state: remoteState,
+      ),
+    );
+
+    final bootstrap = await AppBootstrap.load(
+      const ['--exit'],
+      store: store,
+      platform: platform,
+      syncService: syncService,
+    );
+
+    expect(bootstrap, isNull);
+    expect(platform.systemIntegration.exitApplicationCount, 1);
+    expect(platform.tray.rebuiltTitles, isEmpty);
+    expect(platform.paperWindows.restoredTitles, isEmpty);
+    expect(syncService.calls, 1);
+    expect(syncService.localTitles, ['Local']);
+    final stored = await store.load();
+    expect(stored.papers.single.id, 'exit-sync-remote');
+    expect(stored.papers.single.content, 'Exit sync body');
+  });
+
+  test('startup exit command still cleans up when WebDAV sync fails', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_bootstrap_exit_sync_failure_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await store.save(
+      AppState(
+        sync: _configuredSyncSettings(autoSyncOnStart: false),
+        papers: [
+          PaperData(
+            id: 'exit-sync-failure-local',
+            type: PaperTypes.note,
+            title: 'Local survives exit sync failure',
+            content: 'Local body',
+          ),
+        ],
+      ),
+    );
+    final platform = _RecordingBootstrapPlatformServices();
+    final syncService = _FailingStartupSyncService(
+      StateError('Temporary startup exit sync failure'),
+    );
+
+    final bootstrap = await AppBootstrap.load(
+      const ['--exit'],
+      store: store,
+      platform: platform,
+      syncService: syncService,
+    );
+
+    expect(bootstrap, isNull);
+    expect(syncService.calls, 1);
+    expect(platform.systemIntegration.exitApplicationCount, 1);
+    expect(platform.tray.rebuiltTitles, isEmpty);
+    expect(platform.paperWindows.restoredTitles, isEmpty);
+    final stored = await store.load();
+    expect(stored.papers.single.id, 'exit-sync-failure-local');
+    expect(stored.papers.single.content, 'Local body');
+  });
+
   test('keeps desktop state file beside the executable', () async {
     final directory =
         await Directory.systemTemp.createTemp('repapertodo_desktop_path_');
@@ -339,6 +458,16 @@ void main() {
       ),
       throwsA(isA<StateError>()),
     );
+    await expectLater(
+      AppBootstrap.defaultStateFilePathForPlatform(
+        isDesktop: true,
+        desktopExecutablePath: '${p.join(directory.path, 'repapertodo.exe')}\n',
+        mobileDocumentsDirectoryPath: () {
+          throw StateError('Unexpected mobile directory lookup.');
+        },
+      ),
+      throwsA(isA<StateError>()),
+    );
   });
 
   test('stores mobile state file in the app documents directory', () async {
@@ -353,17 +482,53 @@ void main() {
     );
 
     expect(path, p.join(directory.path, 'data.json'));
+
+    await expectLater(
+      AppBootstrap.defaultStateFilePathForPlatform(
+        isDesktop: false,
+        desktopExecutablePath: p.join(directory.path, 'repapertodo.exe'),
+        mobileDocumentsDirectoryPath: () async => '${directory.path}\u0085',
+      ),
+      throwsA(isA<StateError>()),
+    );
   });
 }
 
 class _FailingStartupSyncService extends AppSyncService {
+  _FailingStartupSyncService([Object? error])
+      : error = error ?? StateError('Temporary startup sync failure');
+
+  final Object error;
+  var calls = 0;
+
   @override
   Future<AppSyncRunResult> syncAndMergeNow({
     required AppState localState,
     required StateStore store,
     DateTime? localUpdatedAtUtc,
   }) async {
-    throw StateError('Temporary startup sync failure');
+    calls += 1;
+    throw error;
+  }
+}
+
+class _StaticStartupSyncService extends AppSyncService {
+  _StaticStartupSyncService(this.result);
+
+  final AppSyncRunResult result;
+  final localTitles = <String>[];
+  var calls = 0;
+
+  @override
+  Future<AppSyncRunResult> syncAndMergeNow({
+    required AppState localState,
+    required StateStore store,
+    DateTime? localUpdatedAtUtc,
+  }) async {
+    calls += 1;
+    localTitles.add(localState.papers.single.title);
+    await store.save(result.state);
+    return result;
   }
 }
 
@@ -404,6 +569,28 @@ String _legacyPaperTodoJson({
   return '''
 {
   "PinnedTodoHotKey": "$pinnedTodoHotKey",
+  "SYNC": {
+    "ENABLED": false,
+    "PROVIDER": "WEBDAV",
+    "OPERATIONDEVICESEQUENCES": {
+      " Legacy Device ": "4"
+    },
+    "DELETEDPAPERTOMBSTONES": {
+      " Deleted-Paper ": "2026-07-01T10:00:00+08:00"
+    },
+    "DELETEDTODOITEMTOMBSTONES": {
+      " Deleted-Todo ": {
+        " Deleted-Item ": "2026-07-01T03:30:00Z"
+      }
+    },
+    "WEBDAV": {
+      "PRESETID": "NUTSTORE",
+      "ENDPOINT": "https://dav.jianguoyun.com/dav/",
+      "USERNAME": "paper@example.com",
+      "PASSWORD": "secret",
+      "ROOTPATH": "/PaperTodo/"
+    }
+  },
   "Papers": [
     {
       "Id": "legacy-note",

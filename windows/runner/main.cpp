@@ -139,7 +139,10 @@ std::string StartupCommandFromArgs(const std::vector<std::string>& args) {
       return command;
     }
   }
-  return "show";
+  if (normalized_args.empty()) {
+    return "show";
+  }
+  return std::string();
 }
 
 bool IsExplicitExitStartupCommand(const std::vector<std::string>& args) {

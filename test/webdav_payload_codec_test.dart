@@ -196,6 +196,117 @@ void main() {
     });
   });
 
+  test('plain payload codec accepts standalone CR operation log line endings',
+      () {
+    const plainCodec = PlainWebDavPayloadCodec();
+    final operationJson = jsonEncode({
+      'id': 'device-a-1',
+      'deviceId': 'device-a',
+      'sequence': 1,
+      'kind': 'updateNoteContent',
+      'createdAtUtc': '2026-07-02T10:00:00Z',
+      'payload': {'paperId': 'note', 'content': 'First edit'},
+    });
+
+    final operations = plainCodec.decodeOperationLog(
+      utf8.encode('\r$operationJson\r'),
+    );
+
+    expect(operations.single.id, 'device-a-1');
+    expect(operations.single.payload['content'], 'First edit');
+  });
+
+  test('plain payload codec reports unknown for non-json plain bytes', () {
+    const plainCodec = PlainWebDavPayloadCodec();
+
+    expect(
+      plainCodec.inspectPayloadFormat(utf8.encode('not-json')),
+      WebDavPayloadFormat.unknown,
+    );
+    expect(
+      plainCodec.inspectPayloadFormat([0xFF, 0xFE, 0xFD]),
+      WebDavPayloadFormat.unknown,
+    );
+  });
+
+  test('plain payload codec rejects empty and multi-operation logs', () {
+    const plainCodec = PlainWebDavPayloadCodec();
+    final firstOperation = jsonEncode({
+      'id': 'device-a-1',
+      'deviceId': 'device-a',
+      'sequence': 1,
+      'kind': 'updateNoteContent',
+      'createdAtUtc': '2026-07-02T10:00:00Z',
+      'payload': {'paperId': 'note', 'content': 'First edit'},
+    });
+    final secondOperation = jsonEncode({
+      'id': 'device-a-2',
+      'deviceId': 'device-a',
+      'sequence': 2,
+      'kind': 'updateNoteContent',
+      'createdAtUtc': '2026-07-02T10:01:00Z',
+      'payload': {'paperId': 'note', 'content': 'Second edit'},
+    });
+
+    for (final operationBytes in [
+      utf8.encode('\r\r'),
+      utf8.encode('$firstOperation\r$secondOperation\r'),
+    ]) {
+      expect(
+        () => plainCodec.decodeOperationLog(operationBytes),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('exactly one operation'),
+          ),
+        ),
+      );
+    }
+  });
+
+  test('plain payload codec reports malformed operation log line numbers', () {
+    const plainCodec = PlainWebDavPayloadCodec();
+    final validOperation = jsonEncode({
+      'id': 'device-a-1',
+      'deviceId': 'device-a',
+      'sequence': 1,
+      'kind': 'updateNoteContent',
+      'createdAtUtc': '2026-07-02T10:00:00Z',
+      'payload': {'paperId': 'note', 'content': 'Remote edit'},
+    });
+    final operationBytes = utf8.encode('\n$validOperation\n\n[]\n');
+
+    expect(
+      () => plainCodec.decodeOperationLog(operationBytes),
+      throwsA(
+        isA<FormatException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('operation log line 4'),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              contains('JSON object'),
+            ),
+      ),
+    );
+
+    final crOperationBytes = utf8.encode('$validOperation\r\r[]\r');
+    expect(
+      () => plainCodec.decodeOperationLog(crOperationBytes),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('operation log line 3'),
+        ),
+      ),
+    );
+  });
+
   test('encrypted payload codec reports unknown for non-json plain bytes', () {
     final encryptedCodec = EncryptedWebDavPayloadCodec(
       passphrase: 'shared sync secret',
@@ -404,6 +515,49 @@ void main() {
             ),
       ),
     );
+  });
+
+  test('encrypted payload codec rejects malformed base64url fields', () async {
+    final codec = EncryptedWebDavPayloadCodec(
+      passphrase: 'shared sync secret',
+      kdfIterations: 100000,
+      random: Random(12),
+    );
+
+    for (final malformedSalt in const ['AQE=', 'salt+value', 'A']) {
+      final malformedEnvelope = utf8.encode(
+        'RePaperTodo-Encrypted-Payload-v1\n'
+        '${jsonEncode({
+              'version': 1,
+              'algorithm': 'aes-gcm-256',
+              'kdf': 'pbkdf2-hmac-sha256',
+              'kdfIterations': 100000,
+              'salt': malformedSalt,
+              'nonce': base64Url.encode(List.filled(12, 2)).replaceAll('=', ''),
+              'cipherText':
+                  base64Url.encode(List.filled(8, 3)).replaceAll('=', ''),
+              'mac': base64Url.encode(List.filled(16, 4)).replaceAll('=', ''),
+            })}\n',
+      );
+
+      expect(
+        codec.decodeSnapshot(malformedEnvelope, const AppStateCodec()),
+        throwsA(
+          isA<WebDavPayloadDecryptionException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains('unsupported or corrupted'),
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                isNot(contains('passphrase')),
+              ),
+        ),
+        reason: malformedSalt,
+      );
+    }
   });
 
   test('encrypted payload codec reports malformed MAC separately', () async {

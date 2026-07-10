@@ -5,7 +5,10 @@ import '../core/model/app_state.dart';
 import '../core/model/paper_constants.dart';
 import '../core/model/sync_settings.dart';
 import '../core/model/webdav_presets.dart';
+import '../platform/platform_services.dart';
 import 'papertodo_strings.dart';
+
+typedef InstalledFontFamilyLoader = Future<List<String>> Function();
 
 class SyncSettingsDialogResult {
   const SyncSettingsDialogResult({
@@ -44,6 +47,7 @@ class SyncSettingsDialogResult {
     required this.showDeepCapsuleWhileExpanded,
     required this.collapseExpandedDeepCapsuleOnClick,
     required this.hideDeepCapsulesWhenCovered,
+    required this.hideDeepCapsulesWhenFullscreen,
     required this.startAtLogin,
     required this.hideFromWindowSwitcher,
     required this.fullscreenTopmostMode,
@@ -94,6 +98,7 @@ class SyncSettingsDialogResult {
   final bool showDeepCapsuleWhileExpanded;
   final bool collapseExpandedDeepCapsuleOnClick;
   final bool hideDeepCapsulesWhenCovered;
+  final bool hideDeepCapsulesWhenFullscreen;
   final bool startAtLogin;
   final bool hideFromWindowSwitcher;
   final String fullscreenTopmostMode;
@@ -146,6 +151,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialShowDeepCapsuleWhileExpanded,
   required bool initialCollapseExpandedDeepCapsuleOnClick,
   required bool initialHideDeepCapsulesWhenCovered,
+  required bool initialHideDeepCapsulesWhenFullscreen,
   required bool initialStartAtLogin,
   required bool supportsStartAtLogin,
   required bool supportsHideFromWindowSwitcher,
@@ -164,6 +170,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialShowLinkedNoteName,
   required bool initialAllowLongLinkedNoteTitles,
   required bool initialHideLinkedNotesFromCapsules,
+  InstalledFontFamilyLoader? loadInstalledFontFamilies,
 }) {
   return showDialog<SyncSettingsDialogResult>(
     context: context,
@@ -205,6 +212,8 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialCollapseExpandedDeepCapsuleOnClick:
           initialCollapseExpandedDeepCapsuleOnClick,
       initialHideDeepCapsulesWhenCovered: initialHideDeepCapsulesWhenCovered,
+      initialHideDeepCapsulesWhenFullscreen:
+          initialHideDeepCapsulesWhenFullscreen,
       initialStartAtLogin: initialStartAtLogin,
       supportsStartAtLogin: supportsStartAtLogin,
       supportsHideFromWindowSwitcher: supportsHideFromWindowSwitcher,
@@ -225,6 +234,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialShowLinkedNoteName: initialShowLinkedNoteName,
       initialAllowLongLinkedNoteTitles: initialAllowLongLinkedNoteTitles,
       initialHideLinkedNotesFromCapsules: initialHideLinkedNotesFromCapsules,
+      loadInstalledFontFamilies: loadInstalledFontFamilies,
     ),
   );
 }
@@ -266,6 +276,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialShowDeepCapsuleWhileExpanded,
     required this.initialCollapseExpandedDeepCapsuleOnClick,
     required this.initialHideDeepCapsulesWhenCovered,
+    required this.initialHideDeepCapsulesWhenFullscreen,
     required this.initialStartAtLogin,
     required this.supportsStartAtLogin,
     required this.supportsHideFromWindowSwitcher,
@@ -284,6 +295,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialShowLinkedNoteName,
     required this.initialAllowLongLinkedNoteTitles,
     required this.initialHideLinkedNotesFromCapsules,
+    this.loadInstalledFontFamilies,
     super.key,
   });
 
@@ -322,6 +334,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialShowDeepCapsuleWhileExpanded;
   final bool initialCollapseExpandedDeepCapsuleOnClick;
   final bool initialHideDeepCapsulesWhenCovered;
+  final bool initialHideDeepCapsulesWhenFullscreen;
   final bool initialStartAtLogin;
   final bool supportsStartAtLogin;
   final bool supportsHideFromWindowSwitcher;
@@ -340,6 +353,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialShowLinkedNoteName;
   final bool initialAllowLongLinkedNoteTitles;
   final bool initialHideLinkedNotesFromCapsules;
+  final InstalledFontFamilyLoader? loadInstalledFontFamilies;
 
   @override
   State<SyncSettingsDialog> createState() => _SyncSettingsDialogState();
@@ -375,6 +389,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late bool _showDeepCapsuleWhileExpanded;
   late bool _collapseExpandedDeepCapsuleOnClick;
   late bool _hideDeepCapsulesWhenCovered;
+  late bool _hideDeepCapsulesWhenFullscreen;
   late bool _startAtLogin;
   late bool _hideFromWindowSwitcher;
   late String _fullscreenTopmostMode;
@@ -400,6 +415,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   final FocusNode _passwordFocusNode = FocusNode();
   final FocusNode _encryptionPassphraseFocusNode = FocusNode();
   final FocusNode _externalMarkdownExtensionFocusNode = FocusNode();
+  final FocusNode _fontFamilyFocusNode = FocusNode();
   late final TextEditingController _intervalController;
   late final TextEditingController _requestTimeoutController;
   late final TextEditingController _fontFamilyController;
@@ -418,6 +434,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   String? _passwordErrorText;
   String? _encryptionPassphraseErrorText;
   String? _externalMarkdownExtensionErrorText;
+  List<String> _installedFontFamilies = const [];
+  bool _isLoadingInstalledFontFamilies = false;
 
   PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
 
@@ -469,6 +487,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _collapseExpandedDeepCapsuleOnClick =
         widget.initialCollapseExpandedDeepCapsuleOnClick;
     _hideDeepCapsulesWhenCovered = widget.initialHideDeepCapsulesWhenCovered;
+    _hideDeepCapsulesWhenFullscreen =
+        widget.initialHideDeepCapsulesWhenFullscreen;
     _startAtLogin = widget.initialStartAtLogin;
     _hideFromWindowSwitcher = widget.initialHideFromWindowSwitcher;
     _fullscreenTopmostMode =
@@ -524,6 +544,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
           .clamp(1, 600)
           .toString(),
     );
+    _loadInstalledFontFamilies();
   }
 
   @override
@@ -539,6 +560,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _passwordFocusNode.dispose();
     _encryptionPassphraseFocusNode.dispose();
     _externalMarkdownExtensionFocusNode.dispose();
+    _fontFamilyFocusNode.dispose();
     _intervalController.dispose();
     _requestTimeoutController.dispose();
     _fontFamilyController.dispose();
@@ -551,6 +573,32 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _reminderIntervalController.dispose();
     _reminderDurationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadInstalledFontFamilies() async {
+    final loader = widget.loadInstalledFontFamilies;
+    if (loader == null) {
+      return;
+    }
+    _isLoadingInstalledFontFamilies = true;
+    try {
+      final families = normalizeInstalledFontFamilies(await loader());
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _installedFontFamilies = families;
+        _isLoadingInstalledFontFamilies = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _installedFontFamilies = const [];
+        _isLoadingInstalledFontFamilies = false;
+      });
+    }
   }
 
   @override
@@ -734,15 +782,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _fontFamilyController,
-                enabled: _uiFontPreset == UiFontPresets.custom,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: strings.get(PaperTodoStringKeys.customFontFamily),
-                  prefixIcon: const Icon(Icons.title_outlined),
-                ),
-              ),
+              _fontFamilyField(),
               const SizedBox(height: 12),
               TextField(
                 controller: _externalMarkdownExtensionController,
@@ -785,7 +825,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.info_outline),
+                secondary: _SettingsHelpIcon(
+                  message: strings.get(PaperTodoStringKeys.tooltipsHelp),
+                ),
                 title: Text(strings.get(PaperTodoStringKeys.tooltips)),
                 value: _enableToolTips,
                 onChanged: (value) => setState(() => _enableToolTips = value),
@@ -869,7 +911,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.open_in_new_outlined),
+                secondary: const Icon(Icons.file_open_outlined),
                 title: Text(strings.get(PaperTodoStringKeys.topBarOpenSurface)),
                 value: _showTopBarExternalOpenButton,
                 onChanged: (value) =>
@@ -889,6 +931,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     _showDeepCapsuleWhileExpanded = false;
                     _collapseExpandedDeepCapsuleOnClick = false;
                     _hideDeepCapsulesWhenCovered = false;
+                    _hideDeepCapsulesWhenFullscreen = false;
                   }
                 }),
               ),
@@ -904,6 +947,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                             _showDeepCapsuleWhileExpanded = false;
                             _collapseExpandedDeepCapsuleOnClick = false;
                             _hideDeepCapsulesWhenCovered = false;
+                            _hideDeepCapsulesWhenFullscreen = false;
                           }
                         })
                     : null,
@@ -1018,6 +1062,19 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                         setState(() => _hideDeepCapsulesWhenCovered = value)
                     : null,
               ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.fullscreen_exit_outlined),
+                title: Text(
+                  strings.get(PaperTodoStringKeys.hideFullscreenDeepCapsules),
+                ),
+                value: _hideDeepCapsulesWhenFullscreen,
+                onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                    ? (value) => setState(
+                          () => _hideDeepCapsulesWhenFullscreen = value,
+                        )
+                    : null,
+              ),
               if (_hasDesktopIntegrationSettings) const Divider(height: 24),
               if (widget.supportsStartAtLogin)
                 SwitchListTile(
@@ -1065,24 +1122,17 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               if (widget.supportsGlobalHotkeys) ...[
                 const SizedBox(height: 12),
                 _adaptiveFieldPair(
-                  first: TextField(
+                  first: _hotKeyCaptureField(
                     controller: _pinnedTodoHotKeyController,
-                    decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      labelText:
-                          strings.get(PaperTodoStringKeys.pinnedTodoHotkey),
-                      prefixIcon: const Icon(Icons.keyboard_outlined),
-                    ),
+                    labelText:
+                        strings.get(PaperTodoStringKeys.pinnedTodoHotkey),
+                    icon: Icons.keyboard_outlined,
                   ),
-                  second: TextField(
+                  second: _hotKeyCaptureField(
                     controller: _pinnedNoteHotKeyController,
-                    decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      labelText:
-                          strings.get(PaperTodoStringKeys.pinnedNoteHotkey),
-                      prefixIcon:
-                          const Icon(Icons.keyboard_command_key_outlined),
-                    ),
+                    labelText:
+                        strings.get(PaperTodoStringKeys.pinnedNoteHotkey),
+                    icon: Icons.keyboard_command_key_outlined,
                   ),
                 ),
               ],
@@ -1097,8 +1147,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     ),
                   ),
                   value: _runLinkedScriptCapsulesOnClick,
-                  onChanged: (value) =>
-                      setState(() => _runLinkedScriptCapsulesOnClick = value),
+                  onChanged: _enableTodoNoteLinks
+                      ? (value) => setState(
+                            () => _runLinkedScriptCapsulesOnClick = value,
+                          )
+                      : null,
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -1109,11 +1162,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     ),
                   ),
                   value: _usePersistentPowerShellProcess,
-                  onChanged: _runLinkedScriptCapsulesOnClick
-                      ? (value) => setState(
-                            () => _usePersistentPowerShellProcess = value,
-                          )
-                      : null,
+                  onChanged: (value) => setState(
+                    () => _usePersistentPowerShellProcess = value,
+                  ),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -1121,9 +1172,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   title:
                       Text(strings.get(PaperTodoStringKeys.preferPowerShell7)),
                   value: _preferPowerShell7,
-                  onChanged: _runLinkedScriptCapsulesOnClick
-                      ? (value) => setState(() => _preferPowerShell7 = value)
-                      : null,
+                  onChanged: (value) =>
+                      setState(() => _preferPowerShell7 = value),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -1131,9 +1181,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   title: Text(
                       strings.get(PaperTodoStringKeys.hideScriptRunWindow)),
                   value: _hideScriptRunWindow,
-                  onChanged: _runLinkedScriptCapsulesOnClick
-                      ? (value) => setState(() => _hideScriptRunWindow = value)
-                      : null,
+                  onChanged: (value) =>
+                      setState(() => _hideScriptRunWindow = value),
                 ),
               ],
               const Divider(height: 24),
@@ -1219,12 +1268,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 secondary: const Icon(Icons.account_tree_outlined),
                 title: Text(strings.get(PaperTodoStringKeys.todoNoteLinks)),
                 value: _enableTodoNoteLinks,
-                onChanged: (value) => setState(() {
-                  _enableTodoNoteLinks = value;
-                  if (!value) {
-                    _hideLinkedNotesFromCapsules = false;
-                  }
-                }),
+                onChanged: (value) =>
+                    setState(() => _enableTodoNoteLinks = value),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -1434,6 +1479,254 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         ),
       ],
     );
+  }
+
+  Widget _fontFamilyField() {
+    final enabled = _uiFontPreset == UiFontPresets.custom;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final optionsWidth =
+            constraints.maxWidth.isFinite ? constraints.maxWidth : 520.0;
+        return RawAutocomplete<String>(
+          textEditingController: _fontFamilyController,
+          focusNode: _fontFamilyFocusNode,
+          displayStringForOption: (option) => option,
+          optionsBuilder: (textEditingValue) {
+            if (!enabled || _installedFontFamilies.isEmpty) {
+              return const Iterable<String>.empty();
+            }
+            final query = normalizeSystemFontFamilyName(
+              textEditingValue.text,
+            ).toLowerCase();
+            if (query.isEmpty) {
+              return _installedFontFamilies.take(40);
+            }
+            return _installedFontFamilies
+                .where((family) => family.toLowerCase().contains(query))
+                .take(40);
+          },
+          onSelected: (fontFamily) {
+            setState(() {
+              _uiFontPreset = UiFontPresets.custom;
+              _fontFamilyController.text = fontFamily;
+            });
+          },
+          fieldViewBuilder: (
+            context,
+            controller,
+            focusNode,
+            onFieldSubmitted,
+          ) {
+            return TextField(
+              key: const ValueKey('settings-custom-font-family-field'),
+              controller: controller,
+              focusNode: focusNode,
+              enabled: enabled,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                labelText: strings.get(PaperTodoStringKeys.customFontFamily),
+                prefixIcon: const Icon(Icons.title_outlined),
+                suffixIcon: _isLoadingInstalledFontFamilies
+                    ? const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : (_installedFontFamilies.isEmpty
+                        ? null
+                        : const Icon(Icons.arrow_drop_down)),
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            final fontOptions = options.toList(growable: false);
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 6,
+                borderRadius: BorderRadius.circular(8),
+                clipBehavior: Clip.antiAlias,
+                child: SizedBox(
+                  width: optionsWidth,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 240),
+                    child: ListView.builder(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: fontOptions.length,
+                      itemBuilder: (context, index) {
+                        final fontFamily = fontOptions[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            fontFamily,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onTap: () => onSelected(fontFamily),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _hotKeyCaptureField({
+    required TextEditingController controller,
+    required String labelText,
+    required IconData icon,
+  }) {
+    return Focus(
+      onKeyEvent: (_, event) => _handleHotKeyCapture(controller, event),
+      child: TextField(
+        controller: controller,
+        readOnly: true,
+        showCursor: false,
+        enableInteractiveSelection: false,
+        onTap: () {
+          controller.selection = TextSelection(
+            baseOffset: 0,
+            extentOffset: controller.text.length,
+          );
+        },
+        decoration: InputDecoration(
+          border: const OutlineInputBorder(),
+          labelText: labelText,
+          prefixIcon: Icon(icon),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: _enableToolTips
+                      ? strings.get(PaperTodoStringKeys.actionClear)
+                      : null,
+                  icon: const Icon(Icons.clear),
+                  onPressed: () => setState(controller.clear),
+                ),
+        ),
+      ),
+    );
+  }
+
+  KeyEventResult _handleHotKeyCapture(
+    TextEditingController controller,
+    KeyEvent event,
+  ) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.backspace ||
+        key == LogicalKeyboardKey.delete) {
+      setState(controller.clear);
+      return KeyEventResult.handled;
+    }
+
+    if (_isHotKeyModifierKey(key)) {
+      return KeyEventResult.handled;
+    }
+
+    final keyboard = HardwareKeyboard.instance;
+    final parts = <String>[
+      if (keyboard.isControlPressed) 'Ctrl',
+      if (keyboard.isAltPressed) 'Alt',
+      if (keyboard.isShiftPressed) 'Shift',
+      if (keyboard.isMetaPressed) 'Win',
+    ];
+    if (parts.isEmpty) {
+      return KeyEventResult.handled;
+    }
+
+    final keyName = _hotKeyNameForKey(key);
+    if (keyName == null) {
+      return KeyEventResult.handled;
+    }
+    parts.add(keyName);
+    final value = parts.join('+');
+    setState(() {
+      controller.text = value;
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: value.length,
+      );
+    });
+    return KeyEventResult.handled;
+  }
+
+  bool _isHotKeyModifierKey(LogicalKeyboardKey key) {
+    return key == LogicalKeyboardKey.controlLeft ||
+        key == LogicalKeyboardKey.controlRight ||
+        key == LogicalKeyboardKey.altLeft ||
+        key == LogicalKeyboardKey.altRight ||
+        key == LogicalKeyboardKey.shiftLeft ||
+        key == LogicalKeyboardKey.shiftRight ||
+        key == LogicalKeyboardKey.metaLeft ||
+        key == LogicalKeyboardKey.metaRight;
+  }
+
+  String? _hotKeyNameForKey(LogicalKeyboardKey key) {
+    final label = key.keyLabel;
+    if (label.length == 1 && RegExp(r'^[A-Za-z0-9]$').hasMatch(label)) {
+      return label.toUpperCase();
+    }
+    if (RegExp(r'^F(?:[1-9]|1[0-9]|2[0-4])$').hasMatch(label)) {
+      return label.toUpperCase();
+    }
+
+    final namedKeys = <LogicalKeyboardKey, String>{
+      LogicalKeyboardKey.numpad0: 'Numpad0',
+      LogicalKeyboardKey.numpad1: 'Numpad1',
+      LogicalKeyboardKey.numpad2: 'Numpad2',
+      LogicalKeyboardKey.numpad3: 'Numpad3',
+      LogicalKeyboardKey.numpad4: 'Numpad4',
+      LogicalKeyboardKey.numpad5: 'Numpad5',
+      LogicalKeyboardKey.numpad6: 'Numpad6',
+      LogicalKeyboardKey.numpad7: 'Numpad7',
+      LogicalKeyboardKey.numpad8: 'Numpad8',
+      LogicalKeyboardKey.numpad9: 'Numpad9',
+      LogicalKeyboardKey.numpadAdd: 'NumpadPlus',
+      LogicalKeyboardKey.numpadSubtract: 'NumpadMinus',
+      LogicalKeyboardKey.numpadMultiply: 'NumpadMultiply',
+      LogicalKeyboardKey.numpadDivide: 'NumpadDivide',
+      LogicalKeyboardKey.numpadDecimal: 'NumpadDecimal',
+      LogicalKeyboardKey.space: 'Space',
+      LogicalKeyboardKey.tab: 'Tab',
+      LogicalKeyboardKey.enter: 'Enter',
+      LogicalKeyboardKey.numpadEnter: 'Enter',
+      LogicalKeyboardKey.insert: 'Insert',
+      LogicalKeyboardKey.home: 'Home',
+      LogicalKeyboardKey.end: 'End',
+      LogicalKeyboardKey.pageUp: 'PageUp',
+      LogicalKeyboardKey.pageDown: 'PageDown',
+      LogicalKeyboardKey.arrowUp: 'Up',
+      LogicalKeyboardKey.arrowDown: 'Down',
+      LogicalKeyboardKey.arrowLeft: 'Left',
+      LogicalKeyboardKey.arrowRight: 'Right',
+      LogicalKeyboardKey.printScreen: 'PrintScreen',
+      LogicalKeyboardKey.capsLock: 'CapsLock',
+      LogicalKeyboardKey.numLock: 'NumLock',
+      LogicalKeyboardKey.scrollLock: 'ScrollLock',
+      LogicalKeyboardKey.equal: 'Equal',
+      LogicalKeyboardKey.minus: 'Minus',
+      LogicalKeyboardKey.comma: 'Comma',
+      LogicalKeyboardKey.period: 'Period',
+      LogicalKeyboardKey.slash: 'Slash',
+      LogicalKeyboardKey.backslash: 'Backslash',
+      LogicalKeyboardKey.semicolon: 'Semicolon',
+      LogicalKeyboardKey.quote: 'Quote',
+      LogicalKeyboardKey.bracketLeft: 'LeftBracket',
+      LogicalKeyboardKey.bracketRight: 'RightBracket',
+      LogicalKeyboardKey.backquote: 'Backquote',
+    };
+    return namedKeys[key];
   }
 
   Widget _adaptiveChoiceSelector({
@@ -1795,6 +2088,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         hideDeepCapsulesWhenCovered: _useCapsuleMode && _useDeepCapsuleMode
             ? _hideDeepCapsulesWhenCovered
             : false,
+        hideDeepCapsulesWhenFullscreen: _useCapsuleMode && _useDeepCapsuleMode
+            ? _hideDeepCapsulesWhenFullscreen
+            : false,
         startAtLogin: _startAtLogin,
         hideFromWindowSwitcher: _hideFromWindowSwitcher,
         fullscreenTopmostMode: _fullscreenTopmostMode,
@@ -1807,8 +2103,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         enableTodoNoteLinks: _enableTodoNoteLinks,
         showLinkedNoteName: _showLinkedNoteName,
         allowLongLinkedNoteTitles: _allowLongLinkedNoteTitles,
-        hideLinkedNotesFromCapsules:
-            _enableTodoNoteLinks && _hideLinkedNotesFromCapsules,
+        hideLinkedNotesFromCapsules: _hideLinkedNotesFromCapsules,
       ),
     );
   }
@@ -1834,8 +2129,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       value = '.$value';
     }
     if (value.length < 2 ||
-        value.length > 32 ||
-        value.contains('..') ||
+        value.length > 120 ||
+        value.endsWith('.') ||
+        value.endsWith(' ') ||
         _hasInvalidFileNameCharacter(value)) {
       return null;
     }
@@ -1876,6 +2172,20 @@ class _SettingsChoice {
   final String value;
   final String label;
   final IconData? icon;
+}
+
+class _SettingsHelpIcon extends StatelessWidget {
+  const _SettingsHelpIcon({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: message,
+      child: const Icon(Icons.info_outline),
+    );
+  }
 }
 
 class _SettingsSlider extends StatelessWidget {

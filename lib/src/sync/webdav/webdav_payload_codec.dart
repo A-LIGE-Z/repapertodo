@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 
 import '../../core/model/app_state.dart';
+import '../../core/model/json_helpers.dart';
 import '../../core/state/app_state_codec.dart';
 import '../sync_operation.dart';
 
@@ -49,7 +50,9 @@ class PlainWebDavPayloadCodec implements WebDavPayloadCodec {
 
   @override
   WebDavPayloadFormat inspectPayloadFormat(List<int> bytes) {
-    return WebDavPayloadFormat.plainJson;
+    return _looksLikePlainJsonPayload(bytes)
+        ? WebDavPayloadFormat.plainJson
+        : WebDavPayloadFormat.unknown;
   }
 
   @override
@@ -59,17 +62,22 @@ class PlainWebDavPayloadCodec implements WebDavPayloadCodec {
 
   @override
   List<SyncOperation> decodeOperationLog(List<int> bytes) {
-    final lines = _decodePlainPayloadText(bytes)
-        .split('\n')
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList(growable: false);
-    return [
-      for (final line in lines)
-        SyncOperation.fromJson(
-          Map<String, Object?>.from(_decodeJsonObject(line)),
-        ),
-    ];
+    final operations = <SyncOperation>[];
+    var lineNumber = 0;
+    for (final rawLine in _splitPhysicalLines(_decodePlainPayloadText(bytes))) {
+      lineNumber += 1;
+      final line = rawLine.trim();
+      if (line.isEmpty) {
+        continue;
+      }
+      operations.add(_decodeOperationLogLine(line, lineNumber));
+    }
+    if (operations.length != 1) {
+      throw const FormatException(
+        'Operation log must contain exactly one operation.',
+      );
+    }
+    return operations;
   }
 
   @override
@@ -241,10 +249,10 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
         'Encrypted WebDAV payload has invalid KDF settings.',
       );
     }
-    final salt = _base64UrlDecode(_stringField(envelope, 'salt'));
-    final nonce = _base64UrlDecode(_stringField(envelope, 'nonce'));
-    final cipherText = _base64UrlDecode(_stringField(envelope, 'cipherText'));
-    final mac = _base64UrlDecode(_stringField(envelope, 'mac'));
+    final salt = _base64UrlField(envelope, 'salt');
+    final nonce = _base64UrlField(envelope, 'nonce');
+    final cipherText = _base64UrlField(envelope, 'cipherText');
+    final mac = _base64UrlField(envelope, 'mac');
     if (salt.length != _saltLength ||
         nonce.length != _nonceLength ||
         mac.length != _macLength) {
@@ -290,17 +298,46 @@ class EncryptedWebDavPayloadCodec implements WebDavPayloadCodec {
   }
 }
 
-Map<Object?, Object?> _decodeJsonObject(String source) {
+SyncOperation _decodeOperationLogLine(String line, int lineNumber) {
+  try {
+    return SyncOperation.fromJson(_decodeJsonObject(line));
+  } on FormatException catch (error) {
+    throw FormatException(
+      'Invalid WebDAV operation log line $lineNumber: ${error.message}',
+      error.source,
+      error.offset,
+    );
+  }
+}
+
+JsonMap _decodeJsonObject(String source) {
   final decoded = jsonDecode(source);
-  if (decoded is! Map) {
+  final map = jsonMapOrNull(decoded);
+  if (map == null) {
     throw const FormatException('Sync payload must be a JSON object.');
   }
-  return decoded;
+  return map;
 }
 
 String _decodePlainPayloadText(List<int> bytes) {
   final text = utf8.decode(bytes);
   return text.startsWith('\uFEFF') ? text.substring(1) : text;
+}
+
+Iterable<String> _splitPhysicalLines(String text) sync* {
+  var start = 0;
+  for (var index = 0; index < text.length; index += 1) {
+    final char = text[index];
+    if (char != '\r' && char != '\n') {
+      continue;
+    }
+    yield text.substring(start, index);
+    if (char == '\r' && index + 1 < text.length && text[index + 1] == '\n') {
+      index += 1;
+    }
+    start = index + 1;
+  }
+  yield text.substring(start);
 }
 
 bool _looksLikePlainJsonPayload(List<int> bytes) {
@@ -319,13 +356,25 @@ bool _hasControlCharacter(String value) {
   );
 }
 
-String _stringField(Map<Object?, Object?> map, String key) {
+String _stringField(JsonMap map, String key) {
   final value = map[key];
   if (value is! String || value.isEmpty) {
     throw FormatException('Encrypted WebDAV payload field is invalid: $key.');
   }
   return value;
 }
+
+List<int> _base64UrlField(JsonMap map, String key) {
+  final value = _stringField(map, key);
+  if (value.contains('=') ||
+      value.length % 4 == 1 ||
+      !_base64UrlNoPaddingPattern.hasMatch(value)) {
+    throw FormatException('Encrypted WebDAV payload field is invalid: $key.');
+  }
+  return _base64UrlDecode(value);
+}
+
+final _base64UrlNoPaddingPattern = RegExp(r'^[A-Za-z0-9_-]+$');
 
 String _base64UrlNoPadding(List<int> bytes) {
   return base64UrlEncode(bytes).replaceAll('=', '');

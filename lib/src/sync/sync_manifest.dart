@@ -126,11 +126,10 @@ int _deviceSequenceFromWire(Object? value) {
 }
 
 int? _positiveIntegerFromWire(Object? value) {
-  if (value is num && value.isFinite && value % 1 == 0) {
-    final integer = value.toInt();
-    return integer > 0 ? integer : null;
+  if (value is int) {
+    return value > 0 ? value : null;
   }
-  if (value is String && value.trim() == value) {
+  if (value is String && _unsignedIntegerStringPattern.hasMatch(value)) {
     final integer = int.tryParse(value);
     if (integer != null && integer > 0) {
       return integer;
@@ -138,6 +137,8 @@ int? _positiveIntegerFromWire(Object? value) {
   }
   return null;
 }
+
+final _unsignedIntegerStringPattern = RegExp(r'^[0-9]+$');
 
 DateTime _updatedAtUtcFromWire(String value) {
   return parseStrictSyncWireDateTimeUtc(

@@ -75,6 +75,14 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
     await expectLater(
+      services.uriOpener.openUri('\nhttps://example.com/paper'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.uriOpener.openUri('https://example.com/paper\t'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
       services.externalFiles.openFile('   '),
       throwsA(isA<ArgumentError>()),
     );
@@ -82,8 +90,70 @@ void main() {
       services.externalFiles.openFile('/tmp/RePaperTodo/bad\nnote.md'),
       throwsA(isA<ArgumentError>()),
     );
+    await expectLater(
+      services.externalFiles.openFile('relative/paper.md'),
+      throwsA(isA<ArgumentError>()),
+    );
 
     expect(calls, isEmpty);
+  });
+
+  test('Android storage rejects unsafe files directory channel results',
+      () async {
+    const blankChannel =
+        MethodChannel('repapertodo/android_blank_storage_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(blankChannel, (call) async {
+      if (call.method == 'getFilesDirectory') {
+        return '   ';
+      }
+      return null;
+    });
+    const controlChannel =
+        MethodChannel('repapertodo/android_control_storage_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(controlChannel, (call) async {
+      if (call.method == 'getFilesDirectory') {
+        return '/data/user/0/com.aligez.repapertodo/files\nbad';
+      }
+      return null;
+    });
+    const relativeChannel =
+        MethodChannel('repapertodo/android_relative_storage_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(relativeChannel, (call) async {
+      if (call.method == 'getFilesDirectory') {
+        return 'data/user/0/com.aligez.repapertodo/files';
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(blankChannel, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(controlChannel, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(relativeChannel, null);
+    });
+
+    await expectLater(
+      AndroidPlatformServices(channel: blankChannel)
+          .storage
+          .documentsDirectoryPath(),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      AndroidPlatformServices(channel: controlChannel)
+          .storage
+          .documentsDirectoryPath(),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      AndroidPlatformServices(channel: relativeChannel)
+          .storage
+          .documentsDirectoryPath(),
+      throwsA(isA<StateError>()),
+    );
   });
 
   test('platform services reject C1 controls without blocking UTF-8 escapes',

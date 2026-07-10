@@ -134,11 +134,19 @@ abstract final class TodoDueYearDisplayModes {
 
 abstract final class NoteCanvasElementTypes {
   static const code = 'code';
-  static const text = 'text';
 
   static String normalize(String? value) {
-    return _normalizedValue(value) == text ? text : code;
+    return code;
   }
+}
+
+abstract final class NoteCanvasElementLimits {
+  static const minCoordinate = -2000.0;
+  static const maxCoordinate = 8000.0;
+  static const minWidth = 72.0;
+  static const maxWidth = 1600.0;
+  static const minHeight = 48.0;
+  static const maxHeight = 1600.0;
 }
 
 String _normalizedValue(String? value) {
@@ -171,4 +179,32 @@ abstract final class PaperLayoutDefaults {
 
 abstract final class PaperLimits {
   static const maxPapers = 100;
+}
+
+String normalizeCapsuleMonitorDeviceName(String? value) {
+  final cleaned = StringBuffer();
+  for (final rune in (value ?? '').runes) {
+    if (!_isRawControlCharacter(rune)) {
+      cleaned.writeCharCode(rune);
+    }
+  }
+  return cleaned.toString().trim();
+}
+
+String normalizeLocalModelId(String? value) {
+  final cleaned = StringBuffer();
+  for (final rune in (value ?? '').runes) {
+    if (!_isRawControlCharacter(rune)) {
+      cleaned.writeCharCode(rune);
+    }
+  }
+  return cleaned.toString().trim();
+}
+
+bool hasRawControlCharacter(String value) {
+  return value.runes.any(_isRawControlCharacter);
+}
+
+bool _isRawControlCharacter(int rune) {
+  return rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
 }

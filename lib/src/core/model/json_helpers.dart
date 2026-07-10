@@ -48,10 +48,14 @@ List<JsonMap> jsonMapList(Object? value) {
   if (value is! List) {
     return const [];
   }
-  return [
-    for (final item in value)
-      if (item is Map) Map<String, Object?>.from(item),
-  ];
+  final maps = <JsonMap>[];
+  for (final item in value) {
+    final map = jsonMapOrNull(item);
+    if (map != null) {
+      maps.add(map);
+    }
+  }
+  return maps;
 }
 
 List<String> stringList(Object? value) {
@@ -152,4 +156,14 @@ double? _doubleValueOrNull(Object? value) {
     }
   }
   return null;
+}
+
+JsonMap? jsonMapOrNull(Object? value) {
+  if (value is! Map) {
+    return null;
+  }
+  if (value.keys.any((key) => key is! String)) {
+    return null;
+  }
+  return Map<String, Object?>.from(value);
 }

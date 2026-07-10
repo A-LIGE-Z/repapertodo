@@ -32,6 +32,8 @@ void main() {
   test('parses html anchor attributes like PaperTodo', () {
     const unquoted =
         '<a data-id=paper href=https://example.com/html class=x>HTML</a>';
+    const quotedGreaterThan = '<a title="2 > 1" data-id=paper '
+        'href="https://example.com/quoted">Quoted</a>';
     const invalidAttribute = '<a broken href="https://example.com/bad">Bad</a>';
     const unclosedQuote =
         '<a href="https://example.com/bad>Bad</a> <a href="https://ok">Ok</a>';
@@ -39,6 +41,12 @@ void main() {
 
     expect(MarkdownLinks.hrefAt(unquoted, unquoted.indexOf('HTML')),
         'https://example.com/html');
+    expect(
+        MarkdownLinks.hrefAt(
+          quotedGreaterThan,
+          quotedGreaterThan.indexOf('Quoted'),
+        ),
+        'https://example.com/quoted');
     expect(
         MarkdownLinks.hrefAt(invalidAttribute, invalidAttribute.indexOf('Bad')),
         isNull);
@@ -51,9 +59,38 @@ void main() {
 
   test('does not resolve links across line boundaries', () {
     const text = 'Read [PaperTodo](https://example.com\n/paper) later';
+    const crLabel = '[PaperTodo\r](https://example.com/paper)';
+    const crHtml = '<a href="https://example.com/html">HTML\r</a>';
 
     expect(MarkdownLinks.hrefAt(text, text.indexOf('PaperTodo')), isNull);
     expect(MarkdownLinks.hrefAt(text, text.indexOf('/paper')), isNull);
+    expect(MarkdownLinks.hrefAt(crLabel, crLabel.indexOf('PaperTodo')), isNull);
+    expect(MarkdownLinks.hrefAt(crHtml, crHtml.indexOf('HTML')), isNull);
+  });
+
+  test('scans full documents one line at a time like PaperTodo', () {
+    const text = '[Broken](https://example.com\n'
+        'still-broken) [Real](https://example.com/real)\r\n'
+        '<a href="https://example.com/html">HTML\r'
+        '</a> <a href="https://example.com/second">Second</a>\n'
+        '`[Code](https://example.com/code)` '
+        '[Visible](https://example.com/visible)';
+
+    final spans = MarkdownLinks.spans(text).toList();
+
+    expect(spans.map((span) => span.href), [
+      'https://example.com/real',
+      'https://example.com/second',
+      'https://example.com/visible',
+    ]);
+    expect(
+      spans.map((span) => text.substring(span.start, span.end)),
+      [
+        '[Real](https://example.com/real)',
+        '<a href="https://example.com/second">Second</a>',
+        '[Visible](https://example.com/visible)',
+      ],
+    );
   });
 
   test('uses PaperTodo lightweight markdown delimiter scanning', () {
@@ -107,6 +144,7 @@ void main() {
   test('accepts only PaperTodo markdown URL target families', () {
     const localPath = r'[Local](C:/PaperTodo/My File.md)';
     const fileUri = '[File](file:///C:/PaperTodo/File%20Uri.md)';
+    const fileUriWithQuery = '[File query](file:///C:/PaperTodo/File.md?x=1)';
     const mailto = '[Mail](mailto:paper@example.com)';
     const emptyMailto = '[Empty mail](mailto:?subject=paper)';
     const authorityMailto = '[Authority mail](mailto://paper@example.com)';
@@ -122,6 +160,13 @@ void main() {
       MarkdownLinks.hrefAt(fileUri, fileUri.indexOf('File'))
           ?.replaceAll(r'\', '/'),
       'C:/PaperTodo/File Uri.md',
+    );
+    expect(
+      MarkdownLinks.hrefAt(
+        fileUriWithQuery,
+        fileUriWithQuery.indexOf('File query'),
+      ),
+      isNull,
     );
     expect(MarkdownLinks.hrefAt(mailto, mailto.indexOf('Mail')),
         'mailto:paper@example.com');
@@ -143,6 +188,8 @@ void main() {
   test('accepts Android local markdown URL target families when requested', () {
     const localPath = '[Local](/storage/emulated/0/Download/My File.md)';
     const fileUri = '[File](file:///storage/emulated/0/Download/File%20Uri.md)';
+    const fileUriWithFragment =
+        '[File fragment](file:///storage/emulated/0/Download/File.md#part)';
     const protocolRelative = '[Protocol](//example.com/file.md)';
     const windowsPath = r'[Windows](C:/PaperTodo/My File.md)';
 
@@ -161,6 +208,14 @@ void main() {
         isWindows: false,
       ),
       '/storage/emulated/0/Download/File Uri.md',
+    );
+    expect(
+      MarkdownLinks.hrefAt(
+        fileUriWithFragment,
+        fileUriWithFragment.indexOf('File fragment'),
+        isWindows: false,
+      ),
+      isNull,
     );
     expect(
       MarkdownLinks.hrefAt(

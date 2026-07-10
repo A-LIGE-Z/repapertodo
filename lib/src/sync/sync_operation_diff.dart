@@ -1,11 +1,13 @@
 import 'package:collection/collection.dart';
 
 import '../core/model/app_state.dart';
-import '../core/model/json_helpers.dart';
+import '../core/model/json_helpers.dart' show JsonMap;
+import '../core/model/paper_constants.dart';
 import '../core/model/paper_data.dart';
 import '../core/model/paper_item.dart';
 import 'sync_device_id.dart';
 import 'sync_operation.dart';
+import 'sync_operation_payload.dart';
 
 class SyncOperationDiffBuilder {
   const SyncOperationDiffBuilder();
@@ -91,7 +93,7 @@ class SyncOperationDiffBuilder {
         )) {
       add(
         SyncOperationKind.updateNoteContent,
-        {'paperId': after.id.trim(), 'content': after.content},
+        {'paperId': _paperId(after), 'content': after.content},
       );
       return;
     }
@@ -117,7 +119,7 @@ class SyncOperationDiffBuilder {
     for (final itemId in beforeItems.keys) {
       if (!afterItems.containsKey(itemId)) {
         add(SyncOperationKind.deleteTodoItem, {
-          'paperId': after.id.trim(),
+          'paperId': _paperId(after),
           'itemId': itemId,
         });
       }
@@ -131,7 +133,7 @@ class SyncOperationDiffBuilder {
             _itemJsonForDiff(current),
           )) {
         add(SyncOperationKind.upsertTodoItem, {
-          'paperId': after.id.trim(),
+          'paperId': _paperId(after),
           'item': _itemJsonForDiff(current),
         });
       }
@@ -151,24 +153,20 @@ class SyncOperationDiffBuilder {
   }
 
   JsonMap _settingsJson(AppState state) {
-    return _withoutKeys(state.toJson(), const {
-      'papers',
-      'sync',
-      'startAtLogin',
-    });
+    return canonicalSyncOperationSettingsPayload(state.toJson());
   }
 
   Map<String, PaperData> _paperMap(List<PaperData> papers) {
     return {
       for (final paper in papers)
-        if (paper.id.trim().isNotEmpty) paper.id.trim(): paper,
+        if (_paperId(paper).isNotEmpty) _paperId(paper): paper,
     };
   }
 
   Map<String, PaperItem> _itemMap(List<PaperItem> items) {
     return {
       for (final item in items)
-        if (item.id.trim().isNotEmpty) item.id.trim(): item,
+        if (_itemId(item).isNotEmpty) _itemId(item): item,
     };
   }
 
@@ -180,23 +178,23 @@ class SyncOperationDiffBuilder {
   }
 
   JsonMap _paperJsonForDiff(PaperData paper) {
-    final json = paper.toJson();
-    json['id'] = stringValue(json['id'], '').trim();
-    json['items'] = [
-      for (final item in jsonMapList(json['items'])) _itemJsonMapForDiff(item),
-    ];
-    return json;
+    return canonicalSyncOperationPaperPayload(
+      PaperData.fromJson(paper.toJson()).toJson(),
+    );
   }
 
   JsonMap _itemJsonForDiff(PaperItem item) {
-    return _itemJsonMapForDiff(item.toJson());
+    return canonicalSyncOperationTodoItemPayload(
+      PaperItem.fromJson(item.toJson()).toJson(),
+    );
   }
 
-  JsonMap _itemJsonMapForDiff(JsonMap item) {
-    return {
-      ...item,
-      'id': stringValue(item['id'], '').trim(),
-    };
+  String _paperId(PaperData paper) {
+    return normalizeLocalModelId(paper.id);
+  }
+
+  String _itemId(PaperItem item) {
+    return normalizeLocalModelId(item.id);
   }
 }
 

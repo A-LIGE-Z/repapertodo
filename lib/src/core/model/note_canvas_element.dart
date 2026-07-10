@@ -74,15 +74,35 @@ class NoteCanvasElement {
   }
 
   void normalize() {
-    id = id.trim();
+    id = normalizeLocalModelId(id);
     if (id.isEmpty) {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
     type = NoteCanvasElementTypes.normalize(type);
-    x = _normalizeCoordinate(x, 32).clamp(-2000, 8000).toDouble();
-    y = _normalizeCoordinate(y, 32).clamp(-2000, 8000).toDouble();
-    width = _normalizeDimension(width, 220, 72).clamp(72, 1600).toDouble();
-    height = _normalizeDimension(height, 110, 48).clamp(48, 1600).toDouble();
+    x = _normalizeCoordinate(x, 32)
+        .clamp(
+          NoteCanvasElementLimits.minCoordinate,
+          NoteCanvasElementLimits.maxCoordinate,
+        )
+        .toDouble();
+    y = _normalizeCoordinate(y, 32)
+        .clamp(
+          NoteCanvasElementLimits.minCoordinate,
+          NoteCanvasElementLimits.maxCoordinate,
+        )
+        .toDouble();
+    width = _normalizeDimension(width, 220, NoteCanvasElementLimits.minWidth)
+        .clamp(
+          NoteCanvasElementLimits.minWidth,
+          NoteCanvasElementLimits.maxWidth,
+        )
+        .toDouble();
+    height = _normalizeDimension(height, 110, NoteCanvasElementLimits.minHeight)
+        .clamp(
+          NoteCanvasElementLimits.minHeight,
+          NoteCanvasElementLimits.maxHeight,
+        )
+        .toDouble();
   }
 
   JsonMap toJson() {

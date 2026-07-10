@@ -542,13 +542,16 @@ class AppSyncService {
       final snapshotState = AppState.fromJson(downloadedSnapshotState.toJson());
       _preserveLocalDeviceState(snapshotState, localState);
       await store.save(snapshotState);
+      final legacyPlainPayloadDetected =
+          _isLegacyPlainPayloadDownload(localState.sync.webDav, result);
       return AppSyncResult(
         status: AppSyncStatus.downloaded,
         state: snapshotState,
-        message: 'Snapshot restored.',
+        message: _snapshotRestoredMessage(
+          legacyPlainPayloadDetected: legacyPlainPayloadDetected,
+        ),
         snapshotPath: result.snapshotPath,
-        legacyPlainPayloadDetected:
-            _isLegacyPlainPayloadDownload(localState.sync.webDav, result),
+        legacyPlainPayloadDetected: legacyPlainPayloadDetected,
       );
     } on WebDavPayloadDecryptionException catch (error) {
       return AppSyncResult(
@@ -650,19 +653,16 @@ class AppSyncService {
     for (final operation in operations) {
       switch (operation.kind) {
         case SyncOperationKind.deletePaper:
-          final paperId = operation.payload['paperId'];
-          if (paperId is String && paperId.trim().isNotEmpty) {
+          final paperId = _payloadString(operation.payload, 'paperId');
+          if (paperId.trim().isNotEmpty) {
             changed =
                 state.sync.markPaperDeleted(paperId, operation.createdAtUtc) ||
                     changed;
           }
         case SyncOperationKind.deleteTodoItem:
-          final paperId = operation.payload['paperId'];
-          final itemId = operation.payload['itemId'];
-          if (paperId is String &&
-              itemId is String &&
-              paperId.trim().isNotEmpty &&
-              itemId.trim().isNotEmpty) {
+          final paperId = _payloadString(operation.payload, 'paperId');
+          final itemId = _payloadString(operation.payload, 'itemId');
+          if (paperId.trim().isNotEmpty && itemId.trim().isNotEmpty) {
             changed = state.sync.markTodoItemDeleted(
                   paperId,
                   itemId,
@@ -680,6 +680,27 @@ class AppSyncService {
     }
     return changed;
   }
+}
+
+String _payloadString(Map<String, Object?> payload, String key) {
+  final value = _payloadValue(payload, key);
+  if (value is! String || _hasControlCharacter(value)) {
+    return '';
+  }
+  return value.trim();
+}
+
+Object? _payloadValue(Map<String, Object?> payload, String key) {
+  if (payload.containsKey(key)) {
+    return payload[key];
+  }
+  final normalizedKey = key.toLowerCase();
+  for (final entry in payload.entries) {
+    if (entry.key.toLowerCase() == normalizedKey) {
+      return entry.value;
+    }
+  }
+  return null;
 }
 
 bool _isLegacyPlainPayloadDownload(
@@ -756,10 +777,39 @@ Future<bool> _migrateLegacyPlainPayload({
 
 String? _strongRemoteEtagValue(String? etag) {
   final trimmed = etag?.trim();
-  if (trimmed == null || trimmed.isEmpty) {
+  if (trimmed == null ||
+      trimmed.isEmpty ||
+      _hasControlCharacter(trimmed) ||
+      !_hasValidRemoteEtagShape(trimmed)) {
     return null;
   }
   return trimmed.toLowerCase().startsWith('w/') ? null : trimmed;
+}
+
+bool _hasValidRemoteEtagShape(String value) {
+  if (value.toLowerCase().startsWith('w/')) {
+    return _isQuotedRemoteEtag(value.substring(2));
+  }
+  if (value.contains('"')) {
+    return _isQuotedRemoteEtag(value);
+  }
+  return true;
+}
+
+bool _isQuotedRemoteEtag(String value) {
+  if (value.length < 2 || !value.startsWith('"') || !value.endsWith('"')) {
+    return false;
+  }
+  final inner = value.substring(1, value.length - 1);
+  return inner.isNotEmpty &&
+      !inner.contains('"') &&
+      !_hasControlCharacter(inner);
+}
+
+bool _hasControlCharacter(String value) {
+  return value.runes.any(
+    (rune) => rune <= 0x1F || (rune >= 0x7F && rune <= 0x9F),
+  );
 }
 
 Future<bool> _migrateLegacyPlainOperationLog({
@@ -803,6 +853,15 @@ String _downloadedMessage({
     return 'Remote data downloaded from legacy plain WebDAV data. Automatic encryption migration could not complete; sync again to retry.';
   }
   return 'Remote data downloaded from legacy plain WebDAV data. The next successful upload will write encrypted payloads.';
+}
+
+String _snapshotRestoredMessage({
+  required bool legacyPlainPayloadDetected,
+}) {
+  if (!legacyPlainPayloadDetected) {
+    return 'Snapshot restored.';
+  }
+  return 'Snapshot restored from legacy plain WebDAV data. The next successful upload will write encrypted payloads.';
 }
 
 String _formatExceptionMessage(FormatException error) {
@@ -887,7 +946,7 @@ Map<String, Map<String, String>> _mergeNestedTombstones(
   final merged = <String, Map<String, String>>{};
   for (final source in [first, second]) {
     for (final paperEntry in source.entries) {
-      final paperId = paperEntry.key.trim();
+      final paperId = _normalizeTombstoneId(paperEntry.key);
       if (paperId.isEmpty) {
         continue;
       }
@@ -911,7 +970,7 @@ void _putLatestTombstone(
   String rawId,
   String rawTimestamp,
 ) {
-  final id = rawId.trim();
+  final id = _normalizeTombstoneId(rawId);
   final timestamp = tryParseStrictSyncWireDateTimeUtc(rawTimestamp);
   if (id.isEmpty || timestamp == null) {
     return;
@@ -920,6 +979,13 @@ void _putLatestTombstone(
   if (previous == null || timestamp.isAfter(previous)) {
     target[id] = timestamp.toIso8601String();
   }
+}
+
+String _normalizeTombstoneId(String value) {
+  if (_hasControlCharacter(value)) {
+    return '';
+  }
+  return value.trim();
 }
 
 class _ConfiguredWebDavClient {

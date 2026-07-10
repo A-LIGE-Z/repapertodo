@@ -39,6 +39,8 @@ void main() {
       'https://example.com/%0Apaper',
       'https://example.com/%C2%85paper',
       'https://example.com/\u0085paper',
+      '\nhttps://example.com/paper',
+      'https://example.com/paper\t',
       'mailto:',
       'mailto:paper%ZZ@example.com',
       'mailto:?subject=paper',
@@ -47,6 +49,13 @@ void main() {
     ]) {
       expect(normalizeExternalUriTarget(target), isNull, reason: target);
     }
+    expect(
+      normalizeExternalUriTarget(
+        ' \nwww.example.com/paper ',
+        allowBareWww: true,
+      ),
+      isNull,
+    );
   });
 
   test('detects encoded authority separators only for web URI authorities', () {

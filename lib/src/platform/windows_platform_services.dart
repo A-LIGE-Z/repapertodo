@@ -13,6 +13,8 @@ import '../core/script/script_capsule.dart';
 import '../core/startup/startup_command.dart';
 import 'platform_services.dart';
 
+const _minimizedWindowCoordinate = -30000.0;
+
 class WindowsPlatformServices implements PlatformServices {
   WindowsPlatformServices({
     MethodChannel channel = const MethodChannel('repapertodo/window'),
@@ -92,6 +94,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async {
+    await _normalizePaperQueueMonitorDeviceName(paper);
     _rememberPaper(paper);
     final workArea = await _channel.invokeMapMethod<String, Object?>(
       'getWorkArea',
@@ -127,7 +130,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
         if (paper == null) {
           return;
         }
-        if (_isMinimizedBoundsEvent(call.arguments)) {
+        if (_shouldIgnoreBoundsEvent(call.arguments)) {
           return;
         }
         final bounds = _boundsFromArguments(call.arguments);
@@ -141,7 +144,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
           return;
         }
         paper.isVisible = false;
-        _activePaper = paper;
+        _retargetActivePaperForVisibilityEvent(call.arguments, paper);
         _surfaceUpdates.add(paper);
       case 'showRequested':
         final paper = _paperFromEventArguments(call.arguments);
@@ -157,7 +160,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
           return;
         }
         paper.isVisible = false;
-        _activePaper = paper;
+        _retargetActivePaperForVisibilityEvent(call.arguments, paper);
         _surfaceUpdates.add(paper);
       case 'startupCommandRequested':
         final command = StartupCommand.parse(_startupCommandArgs(
@@ -171,6 +174,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {
+    await _normalizePaperQueueMonitorDeviceName(paper);
     _rememberPaper(paper);
     final bounds = await _channel.invokeMapMethod<String, Object?>(
       'getBounds',
@@ -185,26 +189,57 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> closePaperSurface(PaperData paper) async {
     paper.isVisible = false;
+    await _normalizePaperQueueMonitorDeviceName(paper);
     _rememberPaper(paper);
+    _retargetActivePaperAfterLocalHide(paper);
     await _channel.invokeMethod<void>('hide', _paperSurfaceArguments(paper));
   }
 
   @override
   Future<void> hidePaper(PaperData paper) async {
     paper.isVisible = false;
+    await _normalizePaperQueueMonitorDeviceName(paper);
     _rememberPaper(paper);
+    _retargetActivePaperAfterLocalHide(paper);
     await _channel.invokeMethod<void>('hide', _paperSurfaceArguments(paper));
   }
 
   @override
   Future<bool> hasVisibleSurfaces(AppState state) async {
     _syncKnownPapers(state);
-    return await _channel.invokeMethod<bool>('hasVisibleSurfaces') ??
-        state.papers.any((paper) => paper.isVisible);
+    final hasNativeVisibleSurface =
+        await _channel.invokeMethod<bool>('hasVisibleSurfaces');
+    if (hasNativeVisibleSurface == true) {
+      return true;
+    }
+    for (final paper in state.papers) {
+      if (!paper.isVisible) {
+        continue;
+      }
+      if (await hasVisibleSurface(paper)) {
+        return true;
+      }
+    }
+    return hasNativeVisibleSurface ??
+        state.papers.any((paper) {
+          return paper.isVisible;
+        });
+  }
+
+  @override
+  Future<bool> hasVisibleSurface(PaperData paper) async {
+    await _normalizePaperQueueMonitorDeviceName(paper);
+    _rememberPaper(paper);
+    return await _channel.invokeMethod<bool>(
+          'hasVisibleSurface',
+          _paperSurfaceArguments(paper),
+        ) ??
+        paper.isVisible;
   }
 
   @override
   Future<void> restoreAll(AppState state) async {
+    await _normalizeStateQueueMonitorDeviceNames(state);
     _syncKnownPapers(state);
     await _syncPaperSurfaceRegistry(state);
     final visiblePapers =
@@ -243,6 +278,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> showPaper(PaperData paper) async {
     paper.isVisible = true;
+    await _normalizePaperQueueMonitorDeviceName(paper);
     _rememberPaper(paper);
     _activePaper = paper;
     await _applyBounds(paper);
@@ -261,9 +297,18 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> revealPinnedPaper(PaperData paper) async {
     paper.isVisible = true;
+    await _normalizePaperQueueMonitorDeviceName(paper);
     _rememberPaper(paper);
     _activePaper = paper;
     await _applyBounds(paper);
+    await _channel.invokeMethod<void>(
+      'setPinnedToDesktop',
+      _paperSurfaceFlagArguments(paper, paper.isPinnedToDesktop),
+    );
+    await _channel.invokeMethod<void>(
+      'setAlwaysOnTop',
+      _paperSurfaceFlagArguments(paper, paper.alwaysOnTop),
+    );
     await _channel.invokeMethod<void>(
       'revealPinnedPaper',
       _paperSurfaceArguments(paper),
@@ -273,8 +318,10 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<void> updatePaperSurface(PaperData paper) async {
+    await _normalizePaperQueueMonitorDeviceName(paper);
     _rememberPaper(paper);
     if (!paper.isVisible) {
+      _retargetActivePaperAfterLocalHide(paper);
       return;
     }
     await _applyBounds(paper);
@@ -294,6 +341,8 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       'paperId': paper.id,
       'isPinnedToDesktop': paper.isPinnedToDesktop,
       'alwaysOnTop': paper.alwaysOnTop,
+      'capsuleSide': paper.capsuleSide,
+      'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
     };
   }
 
@@ -324,9 +373,34 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   Future<void> _syncPaperSurfaceRegistry(AppState state) async {
     await _channel.invokeMethod<void>(
-      'setTrayMenu',
+      'setPaperSurfaces',
       _paperSurfaceRegistryEntries(state),
     );
+  }
+
+  Future<void> _normalizeStateQueueMonitorDeviceNames(AppState state) async {
+    for (final paper in state.papers) {
+      await _normalizePaperQueueMonitorDeviceName(paper);
+    }
+  }
+
+  Future<void> _normalizePaperQueueMonitorDeviceName(PaperData paper) async {
+    final monitorDeviceName = paper.capsuleMonitorDeviceName.trim();
+    if (monitorDeviceName.isEmpty) {
+      paper.capsuleMonitorDeviceName = '';
+      return;
+    }
+
+    String? normalized;
+    try {
+      normalized = await _channel.invokeMethod<String>(
+        'normalizeQueueMonitorDeviceName',
+        {'monitorDeviceName': monitorDeviceName},
+      );
+    } on MissingPluginException {
+      normalized = null;
+    }
+    paper.capsuleMonitorDeviceName = normalized?.trim() ?? monitorDeviceName;
   }
 
   void _rememberPaper(PaperData paper) {
@@ -344,8 +418,11 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     }
     final activePaperId = _activePaper?.id.trim() ?? '';
     if (activePaperId.isNotEmpty && _knownPapers.containsKey(activePaperId)) {
-      _activePaper = _knownPapers[activePaperId];
-      return;
+      final activePaper = _knownPapers[activePaperId]!;
+      if (activePaper.isVisible) {
+        _activePaper = activePaper;
+        return;
+      }
     }
     _activePaper = null;
     for (final paper in state.papers) {
@@ -367,18 +444,59 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     return _activePaper;
   }
 
+  void _retargetActivePaperForVisibilityEvent(
+    Object? arguments,
+    PaperData paper,
+  ) {
+    if (!_hasExplicitPaperIdArgument(arguments)) {
+      _activePaper = paper;
+      return;
+    }
+    if (_activePaper?.id.trim() == paper.id.trim()) {
+      _activePaper = _nextVisibleKnownPaperAfter(paper);
+    }
+  }
+
+  void _retargetActivePaperAfterLocalHide(PaperData paper) {
+    if (_activePaper?.id.trim() == paper.id.trim()) {
+      _activePaper = _nextVisibleKnownPaperAfter(paper);
+    }
+  }
+
+  PaperData? _nextVisibleKnownPaperAfter(PaperData hiddenPaper) {
+    final hiddenPaperId = hiddenPaper.id.trim();
+    for (final candidate in _knownPapers.values) {
+      final candidateId = candidate.id.trim();
+      if (candidateId.isEmpty || candidateId == hiddenPaperId) {
+        continue;
+      }
+      if (candidate.isVisible) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
   String? _paperIdFromArguments(Object? arguments) {
     if (arguments is String) {
-      final trimmed = arguments.trim();
-      return trimmed.isEmpty ? null : trimmed;
+      return _validatedEventPaperId(arguments);
     }
     final map = _argumentMap(arguments);
     final value = map?['paperId'];
     if (value is String) {
-      final trimmed = value.trim();
-      return trimmed.isEmpty ? null : trimmed;
+      return _validatedEventPaperId(value);
     }
     return null;
+  }
+
+  String? _validatedEventPaperId(String value) {
+    if (value.isEmpty || value.trim() != value) {
+      return null;
+    }
+    if (_hasUnsafeExternalFilePathCharacter(value)) {
+      return null;
+    }
+    return value;
   }
 
   bool _hasExplicitPaperIdArgument(Object? arguments) {
@@ -401,14 +519,34 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     return map;
   }
 
-  bool _isMinimizedBoundsEvent(Object? arguments) {
+  bool _shouldIgnoreBoundsEvent(Object? arguments) {
     final map = _argumentMap(arguments);
     if (map == null) {
       return false;
     }
-    return map['isMinimized'] == true ||
+    if (map['isMinimized'] == true ||
         map['minimized'] == true ||
-        map['windowState'] == 'minimized';
+        map['windowState'] == 'minimized') {
+      return true;
+    }
+
+    final bounds = _boundsFromArguments(arguments);
+    return bounds != null && _looksLikeUnusableWindowBounds(bounds);
+  }
+
+  bool _looksLikeUnusableWindowBounds(Map<Object?, Object?> bounds) {
+    final x = _doubleValue(bounds['x'], double.nan);
+    final y = _doubleValue(bounds['y'], double.nan);
+    final width = _doubleValue(bounds['width'], double.nan);
+    final height = _doubleValue(bounds['height'], double.nan);
+    if (!x.isFinite || !y.isFinite || !width.isFinite || !height.isFinite) {
+      return true;
+    }
+    if (x <= _minimizedWindowCoordinate || y <= _minimizedWindowCoordinate) {
+      return true;
+    }
+    return width < PaperLayoutDefaults.minWidth ||
+        height < PaperLayoutDefaults.minHeight;
   }
 
   List<String> _startupCommandArgs(Object? arguments) {
@@ -495,6 +633,7 @@ class WindowsTrayHost implements TrayHost {
 
   @override
   Future<void> rebuildMenu(AppState state, {TrayMenuLabels? labels}) async {
+    await _paperWindows._normalizeStateQueueMonitorDeviceNames(state);
     _paperWindows._syncKnownPapers(state);
     await _channel.invokeMethod<void>(
       'setTrayMenu',
@@ -553,6 +692,8 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
     'height': paper.height,
     'isVisible': paper.isVisible,
     'isCollapsed': paper.isCollapsed,
+    'capsuleSide': paper.capsuleSide,
+    'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
     'alwaysOnTop': paper.alwaysOnTop,
     'isPinnedToDesktop': paper.isPinnedToDesktop,
     'isScriptCapsule':
@@ -585,11 +726,15 @@ String _trayPaperLabel(
 }
 
 class WindowsStartupHost implements StartupHost {
-  WindowsStartupHost(this._channel);
+  WindowsStartupHost(this._channel) {
+    _commands = StreamController<StartupCommand>.broadcast(
+      onListen: _flushPendingCommands,
+    );
+  }
 
   final MethodChannel _channel;
-  final StreamController<StartupCommand> _commands =
-      StreamController<StartupCommand>.broadcast();
+  late final StreamController<StartupCommand> _commands;
+  final List<StartupCommand> _pendingCommands = <StartupCommand>[];
 
   @override
   Future<bool> acquireSingleInstance() async {
@@ -605,7 +750,26 @@ class WindowsStartupHost implements StartupHost {
   }
 
   void addCommand(StartupCommand command) {
+    if (!_commands.hasListener) {
+      _pendingCommands.add(command);
+      return;
+    }
     _commands.add(command);
+  }
+
+  void _flushPendingCommands() {
+    if (_pendingCommands.isEmpty) {
+      return;
+    }
+    final commands = List<StartupCommand>.of(_pendingCommands);
+    _pendingCommands.clear();
+    scheduleMicrotask(() {
+      for (final command in commands) {
+        if (!_commands.isClosed) {
+          _commands.add(command);
+        }
+      }
+    });
   }
 }
 
@@ -632,10 +796,21 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
   }
 
   @override
+  Future<List<String>> installedFontFamilies() async {
+    try {
+      final values =
+          await _channel.invokeListMethod<Object?>('listInstalledFontFamilies');
+      return normalizeInstalledFontFamilies(values ?? const <Object?>[]);
+    } on MissingPluginException {
+      return const [];
+    }
+  }
+
+  @override
   Future<void> registerGlobalHotkeys(AppState state) async {
     await _channel.invokeMethod<void>('registerGlobalHotkeys', {
-      'todo': state.pinnedTodoHotKey,
-      'note': state.pinnedNoteHotKey,
+      'todo': _normalizeHotKeyForPlatform(state.pinnedTodoHotKey),
+      'note': _normalizeHotKeyForPlatform(state.pinnedNoteHotKey),
     });
   }
 
@@ -708,6 +883,13 @@ class WindowsUriOpenHost implements UriOpenHost {
     final trimmedUri = uri.trim();
     if (trimmedUri.isEmpty) {
       throw ArgumentError.value(uri, 'uri', 'Windows URI must not be blank.');
+    }
+    if (hasRawExternalUriControlCharacter(uri)) {
+      throw ArgumentError.value(
+        uri,
+        'uri',
+        'Windows URI must not contain control characters.',
+      );
     }
     if (hasUnsafeExternalUriCharacter(trimmedUri)) {
       throw ArgumentError.value(
@@ -804,8 +986,13 @@ class WindowsAppStorageHost implements AppStorageHost {
 
   @override
   Future<String> documentsDirectoryPath() async {
-    final executablePath =
-        (_executablePath ?? Platform.resolvedExecutable).trim();
+    final rawExecutablePath = _executablePath ?? Platform.resolvedExecutable;
+    if (_hasUnsafeExternalFilePathCharacter(rawExecutablePath)) {
+      throw StateError(
+        'Windows executable path contains unsupported characters.',
+      );
+    }
+    final executablePath = rawExecutablePath.trim();
     if (executablePath.isEmpty) {
       throw StateError('Windows executable path is unavailable.');
     }
@@ -819,6 +1006,18 @@ bool _hasUnsafeExternalFilePathCharacter(String value) {
 
 bool _isControlRune(int rune) {
   return rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
+}
+
+String _normalizeHotKeyForPlatform(String value) {
+  final cleaned = StringBuffer();
+  for (final unit in value.codeUnits) {
+    if (unit <= 0x1F || (unit >= 0x7F && unit <= 0x9F)) {
+      continue;
+    }
+    cleaned.writeCharCode(unit);
+  }
+  final text = cleaned.toString().trim();
+  return text.length > 64 ? text.substring(0, 64) : text;
 }
 
 const _allowedScriptCapsuleEngines = {'auto', 'pwsh', 'powershell'};

@@ -32,6 +32,7 @@ import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
 import 'core/startup/startup_command.dart';
 import 'platform/platform_services.dart';
+import 'sync/android_background_sync.dart';
 import 'sync/app_sync_service.dart';
 import 'sync/webdav/webdav_client.dart';
 import 'sync/webdav/webdav_payload_codec.dart';
@@ -42,6 +43,7 @@ import 'ui/sync_settings_dialog.dart';
 
 const _externalMarkdownExportRetention = Duration(days: 7);
 const _maxExternalMarkdownPaperIdFileNameLength = 96;
+const _maxTodoReminderDetailLines = 4;
 const _todoReminderLeadTime = Duration(minutes: 10);
 const _todoReminderGraceTime = Duration(minutes: 2);
 const _yaHeiFontFamily = 'Microsoft YaHei UI';
@@ -72,6 +74,12 @@ const _dengXianFontFamilyFallback = [
 final _paperTodoMarkdownBuilders = <String, MarkdownElementBuilder>{
   'u': _UnderlineMarkdownElementBuilder(),
 };
+
+typedef AndroidBackgroundSyncConfigurator = Future<void> Function({
+  required SyncSettings sync,
+  required String stateFilePath,
+});
+
 final _paperTodoMarkdownExtensionSet = md.ExtensionSet(
   md.ExtensionSet.commonMark.blockSyntaxes,
   <md.InlineSyntax>[
@@ -105,6 +113,8 @@ class RePaperTodoApp extends StatefulWidget {
     required this.controller,
     required this.store,
     this.syncService,
+    this.configureAndroidBackgroundSync =
+        configureRePaperTodoAndroidBackgroundSync,
     this.customFontLoader,
     super.key,
   });
@@ -112,6 +122,7 @@ class RePaperTodoApp extends StatefulWidget {
   final RePaperTodoController controller;
   final StateStore store;
   final AppSyncService? syncService;
+  final AndroidBackgroundSyncConfigurator configureAndroidBackgroundSync;
   final PaperTodoRuntimeCustomFontLoader? customFontLoader;
 
   @override
@@ -161,6 +172,7 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
         controller: widget.controller,
         store: widget.store,
         syncService: widget.syncService ?? AppSyncService(),
+        configureAndroidBackgroundSync: widget.configureAndroidBackgroundSync,
         onAppThemeChanged: () => setState(() {}),
       ),
     );
@@ -298,9 +310,21 @@ bool _sameStringSet(Set<String> left, Set<String> right) {
 
 String? _tooltipLabel(bool enabled, String label) => enabled ? label : null;
 
-String _readableFailureMessage(Object error) {
+Widget _conditionalTooltip({
+  required bool enabled,
+  required String message,
+  required Widget child,
+}) {
+  return enabled ? Tooltip(message: message, child: child) : child;
+}
+
+String _readableFailureMessage(Object error, {PaperTodoStrings? strings}) {
   return switch (error) {
-    WebDavException(:final message) => message,
+    WebDavException(
+      :final message,
+      :final responseBody,
+    ) =>
+      _webDavFailureMessage(message, responseBody),
     WebDavPayloadDecryptionException(:final message) => message,
     PlatformException(
       :final code,
@@ -311,6 +335,7 @@ String _readableFailureMessage(Object error) {
         code: code,
         message: message,
         details: details,
+        strings: strings,
       ),
     FileSystemException(:final message, :final path) =>
       path == null ? message : '$message: $path',
@@ -322,12 +347,44 @@ String _readableFailureMessage(Object error) {
   };
 }
 
+String _webDavFailureMessage(String message, String responseBody) {
+  final cleanBody = _cleanWebDavResponseBodyForDisplay(responseBody);
+  if (cleanBody.isEmpty ||
+      cleanBody == message ||
+      message.contains(cleanBody) ||
+      cleanBody.contains(message)) {
+    return message;
+  }
+  return '$message Provider details: $cleanBody';
+}
+
+String _cleanWebDavResponseBodyForDisplay(String responseBody) {
+  const maxLength = 240;
+  final normalized = responseBody
+      .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return '${normalized.substring(0, maxLength - 3).trimRight()}...';
+}
+
 String _platformFailureMessage({
   required String code,
   required String? message,
   required Object? details,
+  required PaperTodoStrings? strings,
 }) {
   final readableMessage = message?.trim();
+  final platformMessageKey = _platformFailureMessageKey(code);
+  if (strings != null &&
+      platformMessageKey != null &&
+      (readableMessage == null ||
+          readableMessage.isEmpty ||
+          _isGenericPlatformFailureMessage(code, readableMessage))) {
+    return strings.get(platformMessageKey);
+  }
   if (readableMessage != null && readableMessage.isNotEmpty) {
     return readableMessage;
   }
@@ -338,6 +395,55 @@ String _platformFailureMessage({
   return code;
 }
 
+String? _platformFailureMessageKey(String code) {
+  return switch (code) {
+    'invalid_uri' => PaperTodoStringKeys.platformInvalidUri,
+    'invalid_path' => PaperTodoStringKeys.platformInvalidPath,
+    'file_not_found' => PaperTodoStringKeys.platformFileNotFound,
+    'file_provider_failed' => PaperTodoStringKeys.platformFileShareFailed,
+    'open_external_file_failed' =>
+      PaperTodoStringKeys.platformOpenExternalFileFailed,
+    'open_uri_failed' => PaperTodoStringKeys.platformOpenUriFailed,
+    _ => null,
+  };
+}
+
+bool _isGenericPlatformFailureMessage(String code, String message) {
+  return switch (code) {
+    'invalid_uri' => const {
+        'The URI is empty.',
+        'The URI contains unsupported characters.',
+        'The URI is not valid.',
+        'The URI must include a scheme.',
+        'The URI contains malformed escapes.',
+        'The URI contains encoded unsupported characters.',
+        'The URI scheme is not supported.',
+        'The URI is not valid UTF-8.',
+      }.contains(message),
+    'invalid_path' => const {
+        'The file path is empty.',
+        'The file path contains unsupported characters.',
+        'The file path must be absolute.',
+        'The file path is not valid.',
+        'The file is outside the configured RePaperTodo share directories.',
+        'The external file path is empty.',
+        'The external file path contains unsupported characters.',
+      }.contains(message),
+    'file_not_found' => message == 'The file does not exist.',
+    'file_provider_failed' =>
+      message == 'The file is outside the configured share paths.',
+    'open_external_file_failed' => const {
+        'The external file cannot be shared securely.',
+        'Unable to open the external file.',
+      }.contains(message),
+    'open_uri_failed' => const {
+        'Unable to open the URI.',
+        'The URI cannot be opened securely.',
+      }.contains(message),
+    _ => false,
+  };
+}
+
 String? _normalizeExternalUri(String value) {
   return normalizeExternalUriTarget(value, allowBareWww: true);
 }
@@ -346,10 +452,63 @@ String? _normalizeMarkdownLocalPath(String value) {
   return normalizeMarkdownLocalPathTarget(value);
 }
 
+String _markdownEditorActionLabel(
+  PaperTodoStrings strings,
+  String externalMarkdownExtension,
+) {
+  return strings.format(
+    PaperTodoStringKeys.actionOpenMarkdownInDefaultEditor,
+    [_normalizedExternalMarkdownExtensionForDisplay(externalMarkdownExtension)],
+  );
+}
+
+String _externalMarkdownButtonLabel(String externalMarkdownExtension) {
+  var extension = _normalizedExternalMarkdownExtensionForDisplay(
+    externalMarkdownExtension,
+  ).substring(1);
+  if (extension.trim().isEmpty) {
+    extension = 'md';
+  }
+  return extension.length > 2
+      ? extension.substring(0, 2).toUpperCase()
+      : extension.toUpperCase();
+}
+
+String _normalizedExternalMarkdownExtensionForDisplay(String value) {
+  var extension = value.trim();
+  if (extension.isEmpty) {
+    return '.md';
+  }
+  if (extension.startsWith('*.')) {
+    extension = extension.substring(1);
+  }
+  if (!extension.startsWith('.')) {
+    extension = '.$extension';
+  }
+  if (extension.length < 2 ||
+      extension.length > 120 ||
+      extension.endsWith('.') ||
+      extension.endsWith(' ') ||
+      _hasInvalidExternalMarkdownExtensionCharacter(extension)) {
+    return '.md';
+  }
+  return extension.toLowerCase();
+}
+
+bool _hasInvalidExternalMarkdownExtensionCharacter(String value) {
+  const invalidCharacters = {'<', '>', ':', '"', '/', '\\', '|', '?', '*'};
+  return value.runes.any((rune) {
+    if (rune < 0x20 || (rune >= 0x7F && rune <= 0x9F)) {
+      return true;
+    }
+    return invalidCharacters.contains(String.fromCharCode(rune));
+  });
+}
+
 class _CompactAppBarActions {
   const _CompactAppBarActions._();
 
-  static const openSurface = 'open-surface';
+  static const openMarkdown = 'open-markdown';
   static const newTodo = 'new-todo';
   static const newNote = 'new-note';
   static const toggleCollapseAll = 'toggle-collapse-all';
@@ -363,6 +522,7 @@ class PaperBoardScreen extends StatefulWidget {
     required this.controller,
     required this.store,
     required this.syncService,
+    required this.configureAndroidBackgroundSync,
     this.onAppThemeChanged,
     super.key,
   });
@@ -370,6 +530,7 @@ class PaperBoardScreen extends StatefulWidget {
   final RePaperTodoController controller;
   final StateStore store;
   final AppSyncService syncService;
+  final AndroidBackgroundSyncConfigurator configureAndroidBackgroundSync;
   final VoidCallback? onAppThemeChanged;
 
   @override
@@ -380,16 +541,26 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     with WidgetsBindingObserver {
   bool _isSyncing = false;
   bool _isSettingsOpen = false;
+  bool _deferredSettingsSync = false;
+  bool _queuedSilentSync = false;
   Future<void> _saveQueue = Future<void>.value();
+  Future<void>? _activeSyncFuture;
+  Future<void>? _exitCommandFuture;
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
   StreamSubscription<String>? _paperOpenSubscription;
   StreamSubscription<String>? _paperDeleteSubscription;
   StreamSubscription<StartupCommand>? _startupCommandSubscription;
   Timer? _autoSyncTimer;
+  Timer? _settingsDeferredAutoSyncTimer;
   Timer? _localEditSyncDebounce;
   Timer? _surfaceSaveDebounce;
   Timer? _titleSurfaceDebounce;
   Timer? _todoReminderTimer;
+  Timer? _todoReminderSnackBarDismissTimer;
+  DateTime? _todoReminderSnackBarDismissStartedAt;
+  Duration _todoReminderSnackBarRemaining = Duration.zero;
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>?
+      _todoReminderSnackBarController;
   int _localEditSyncGeneration = 0;
   AppState? _pendingLocalEditBaseState;
   AppState? _pendingLocalEditLatestState;
@@ -454,10 +625,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoSyncTimer?.cancel();
+    _settingsDeferredAutoSyncTimer?.cancel();
     _localEditSyncDebounce?.cancel();
     _surfaceSaveDebounce?.cancel();
     _titleSurfaceDebounce?.cancel();
     _todoReminderTimer?.cancel();
+    _cancelTodoReminderSnackBarDismissTimer();
     unawaited(_surfaceUpdateSubscription?.cancel());
     unawaited(_paperOpenSubscription?.cancel());
     unawaited(_paperDeleteSubscription?.cancel());
@@ -558,7 +731,18 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     required bool enableToolTips,
     required bool compact,
   }) {
+    final currentSurfacePaper = surfacePaper;
     final collapseAllActive = _collapseAllActiveFor(surfacePaper);
+    final canOpenSurfaceMarkdown = currentSurfacePaper != null &&
+        currentSurfacePaper.isNote &&
+        controller.state.showTopBarExternalOpenButton;
+    final openMarkdownEditorLabel = _markdownEditorActionLabel(
+      strings,
+      controller.state.externalMarkdownExtension,
+    );
+    final externalMarkdownButtonLabel = _externalMarkdownButtonLabel(
+      controller.state.externalMarkdownExtension,
+    );
     final syncButton = IconButton(
       tooltip: _tooltipLabel(
         enableToolTips,
@@ -585,12 +769,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           onSelected: (value) =>
               _handleCompactAppBarAction(value, surfacePaper),
           itemBuilder: (context) => [
-            if (surfacePaper != null &&
-                controller.state.showTopBarExternalOpenButton)
+            if (canOpenSurfaceMarkdown)
               _compactMenuItem(
-                value: _CompactAppBarActions.openSurface,
-                icon: Icons.open_in_new,
-                label: strings.get(PaperTodoStringKeys.actionOpenSurface),
+                value: _CompactAppBarActions.openMarkdown,
+                icon: Icons.file_open_outlined,
+                label: openMarkdownEditorLabel,
               ),
             if (controller.state.showTopBarNewTodoButton)
               _compactMenuItem(
@@ -635,14 +818,21 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       ];
     }
     return [
-      if (surfacePaper != null && controller.state.showTopBarExternalOpenButton)
+      if (canOpenSurfaceMarkdown)
         IconButton(
           tooltip: _tooltipLabel(
             enableToolTips,
-            strings.get(PaperTodoStringKeys.actionOpenCurrentPaperSurface),
+            openMarkdownEditorLabel,
           ),
-          onPressed: () => _openPaper(surfacePaper),
-          icon: const Icon(Icons.open_in_new),
+          onPressed: () =>
+              unawaited(_openNoteMarkdownExternally(currentSurfacePaper)),
+          icon: Text(
+            externalMarkdownButtonLabel,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0,
+                ),
+          ),
         ),
       if (controller.state.showTopBarNewTodoButton)
         IconButton(
@@ -725,9 +915,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   void _handleCompactAppBarAction(String value, PaperData? surfacePaper) {
     switch (value) {
-      case _CompactAppBarActions.openSurface:
-        if (surfacePaper != null) {
-          unawaited(_openPaper(surfacePaper));
+      case _CompactAppBarActions.openMarkdown:
+        if (surfacePaper != null && surfacePaper.isNote) {
+          unawaited(_openNoteMarkdownExternally(surfacePaper));
         }
       case _CompactAppBarActions.newTodo:
         unawaited(_createPaper(PaperTypes.todo, sourcePaper: surfacePaper));
@@ -800,6 +990,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       enableToolTips: controller.state.enableToolTips,
       enableAnimations: controller.state.enableAnimations,
       markdownRenderMode: controller.state.markdownRenderMode,
+      externalMarkdownExtension: controller.state.externalMarkdownExtension,
       todoVisualSize: controller.state.todoVisualSize,
       todoLineSpacing: controller.state.todoLineSpacing,
       showTodoDueRelativeTime: controller.state.showTodoDueRelativeTime,
@@ -814,7 +1005,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       noteLineSpacing: controller.state.noteLineSpacing,
       onChanged: _refreshAndSaveState,
       onTitleChanged: _updatePaperTitle,
+      onCreatePaper: _createPaper,
       onOpen: _openPaper,
+      onOpenLinkedNote: _openLinkedNote,
       onRunScriptCapsule: _runScriptCapsule,
       onOpenExternalMarkdown: _openNoteMarkdownExternally,
       onOpenUri: _openUri,
@@ -871,7 +1064,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     await _saveState();
   }
 
-  Future<void> _saveState({bool scheduleLocalEditSync = true}) async {
+  Future<void> _saveState({
+    bool scheduleLocalEditSync = true,
+    bool rebuildTrayMenu = true,
+  }) async {
     AppState? beforeState;
     final saveLocalEditSyncGeneration = _localEditSyncGeneration;
     _saveQueue = _saveQueue.catchError((_) {}).then((_) async {
@@ -882,7 +1078,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         beforeState = null;
       }
       await widget.store.save(controller.state);
-      await _rebuildTrayMenu();
+      if (rebuildTrayMenu) {
+        await _rebuildTrayMenu();
+      }
       _refreshSurfaceVisibilitySnapshot();
     });
     await _saveQueue;
@@ -992,6 +1190,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
               restoredPaper: removedPaper,
               targetIndex: removedIndex,
               detachedLinks: detachedLinks,
+              fallbackPaperIdToRemove: createdDefaultPaper?.id,
             ),
           ),
         ),
@@ -1003,11 +1202,35 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     required PaperData restoredPaper,
     required int targetIndex,
     required List<_LinkedNoteRestore> detachedLinks,
+    String? fallbackPaperIdToRemove,
   }) async {
     if (controller.state.papers.any((paper) => paper.id == restoredPaper.id)) {
       return;
     }
+    PaperData? fallbackPaperToHide;
+    final fallbackDeletedAtUtc = DateTime.now().toUtc();
     setState(() {
+      final fallbackPaperId = fallbackPaperIdToRemove;
+      if (fallbackPaperId != null) {
+        final fallbackIndex = controller.state.papers.indexWhere(
+          (paper) => paper.id == fallbackPaperId,
+        );
+        if (fallbackIndex >= 0) {
+          final fallbackPaper = controller.state.papers[fallbackIndex];
+          if (_isTemporaryDefaultTodoPaper(fallbackPaper)) {
+            fallbackPaperToHide = fallbackPaper;
+            controller.state.papers.removeAt(fallbackIndex);
+            controller.state.sync.markPaperDeleted(
+              fallbackPaper.id,
+              fallbackDeletedAtUtc,
+            );
+            _surfaceVisibilityByPaperId.remove(fallbackPaper.id);
+            if (_surfacePaperId == fallbackPaper.id) {
+              _surfacePaperId = null;
+            }
+          }
+        }
+      }
       final insertIndex = targetIndex
           .clamp(
             0,
@@ -1020,10 +1243,50 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         _restoreLinkedNote(link);
       }
     });
+    final removedFallbackPaper = fallbackPaperToHide;
+    if (removedFallbackPaper != null && removedFallbackPaper.isVisible) {
+      await controller.hidePaper(removedFallbackPaper);
+    }
     if (restoredPaper.isVisible) {
       await controller.showPaper(restoredPaper);
     }
     await _saveState();
+  }
+
+  bool _isTemporaryDefaultTodoPaper(PaperData paper) {
+    if (!paper.isTodo ||
+        paper.alwaysOnTop ||
+        paper.isCollapsed ||
+        paper.isPinnedToDesktop ||
+        (paper.textZoom - 1).abs() > 0.001 ||
+        paper.content.isNotEmpty ||
+        paper.noteCanvasElements.isNotEmpty ||
+        paper.extra.isNotEmpty ||
+        paper.items.length != 1) {
+      return false;
+    }
+    final title = PaperTitles.cleanCustomTitle(paper.title);
+    if (!title.startsWith('Todo')) {
+      return false;
+    }
+    final number = int.tryParse(title.substring('Todo'.length));
+    return number != null &&
+        number > 0 &&
+        _isTemporaryDefaultTodoItem(paper.items.single);
+  }
+
+  bool _isTemporaryDefaultTodoItem(PaperItem item) {
+    return item.text.isEmpty &&
+        !item.done &&
+        item.order == 0 &&
+        item.todoColumnCount == 1 &&
+        item.todoExtraColumns.every((value) => value.isEmpty) &&
+        item.todoColumnWidths.every((width) => (width - 1).abs() <= 0.001) &&
+        item.linkedNoteId == null &&
+        item.dueAtLocal == null &&
+        item.reminderIntervalValue == null &&
+        item.reminderIntervalUnit == null &&
+        item.extra.isEmpty;
   }
 
   void _markTodoItemDeleted(PaperData paper, PaperItem item) {
@@ -1075,6 +1338,16 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     await _saveState();
   }
 
+  Future<void> _openLinkedNote(PaperData note, PaperData anchorPaper) async {
+    setState(() {
+      note.isVisible = true;
+      note.isCollapsed = false;
+      _surfacePaperId = note.id;
+    });
+    await controller.openLinkedNote(note, anchorPaper: anchorPaper);
+    await _saveState();
+  }
+
   Future<void> _openNoteMarkdownExternally(PaperData paper) async {
     if (!paper.isNote) {
       return;
@@ -1101,7 +1374,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           content: Text(
             strings.format(
               PaperTodoStringKeys.externalMarkdownOpenFailed,
-              [_readableFailureMessage(error)],
+              [_readableFailureMessage(error, strings: strings)],
             ),
           ),
         ),
@@ -1121,7 +1394,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           content: Text(
             strings.format(
               PaperTodoStringKeys.scriptCapsuleFailed,
-              [_readableFailureMessage(error)],
+              [_readableFailureMessage(error, strings: strings)],
             ),
           ),
         ),
@@ -1143,7 +1416,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             content: Text(
               strings.format(
                 PaperTodoStringKeys.openLinkFailed,
-                [_readableFailureMessage(error)],
+                [_readableFailureMessage(error, strings: strings)],
               ),
             ),
           ),
@@ -1177,7 +1450,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           content: Text(
             strings.format(
               PaperTodoStringKeys.openLinkFailed,
-              [_readableFailureMessage(error)],
+              [_readableFailureMessage(error, strings: strings)],
             ),
           ),
         ),
@@ -1202,7 +1475,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         'paper-$paperId${controller.state.externalMarkdownExtension}',
       ),
     );
-    file.writeAsStringSync(paper.content);
+    file.writeAsStringSync(paper.content, flush: true);
     return file;
   }
 
@@ -1249,6 +1522,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _handlePaperOpenRequest(String paperId) async {
+    if (_exitCommandFuture != null) {
+      return;
+    }
     final paperIndex = controller.state.papers.indexWhere(
       (paper) => paper.id == paperId,
     );
@@ -1264,6 +1540,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _handlePaperDeleteRequest(String paperId) async {
+    if (_exitCommandFuture != null) {
+      return;
+    }
     final paperIndex = controller.state.papers.indexWhere(
       (paper) => paper.id == paperId,
     );
@@ -1277,16 +1556,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (command.kind == StartupCommandKind.none) {
       return;
     }
-    if (command.kind == StartupCommandKind.settings) {
-      await _openSettings();
-      return;
-    }
     if (command.kind == StartupCommandKind.exit) {
-      await _saveAndSyncBeforeExit();
-      await controller.executeStartupCommand(command);
+      _exitCommandFuture ??= _runExitStartupCommand(command);
+      await _exitCommandFuture;
       if (mounted) {
         setState(() {});
       }
+      return;
+    }
+    if (_exitCommandFuture != null) {
+      return;
+    }
+    if (command.kind == StartupCommandKind.settings) {
+      await _openSettings();
       return;
     }
     await controller.executeStartupCommand(command);
@@ -1299,6 +1581,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     await _saveState();
   }
 
+  Future<void> _runExitStartupCommand(StartupCommand command) async {
+    await _saveAndSyncBeforeExit();
+    await controller.executeStartupCommand(command);
+  }
+
   Future<void> _saveAndSyncBeforeExit() async {
     _surfaceSaveDebounce?.cancel();
     _surfaceSaveDebounce = null;
@@ -1306,7 +1593,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _localEditSyncDebounce?.cancel();
     _localEditSyncDebounce = null;
     if (_isSyncing) {
-      return;
+      await _activeSyncFuture;
     }
     await _uploadLocalEditsThenSync();
   }
@@ -1315,15 +1602,64 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (!mounted) {
       return;
     }
+    if (_exitCommandFuture != null && !paper.isVisible) {
+      return;
+    }
+    final paperIndex = controller.state.papers.indexWhere(
+      (candidate) => candidate.id == paper.id,
+    );
+    if (paperIndex < 0) {
+      _surfaceVisibilityByPaperId.remove(paper.id);
+      return;
+    }
+    final statePaper = controller.state.papers[paperIndex];
     final visibilityChanged = _rememberSurfaceVisibility(paper);
-    setState(() {});
+    setState(() => _applyPlatformSurfaceUpdate(statePaper, paper));
     if (visibilityChanged) {
       unawaited(_rebuildTrayMenu());
     }
     _surfaceSaveDebounce?.cancel();
     _surfaceSaveDebounce = Timer(const Duration(milliseconds: 500), () {
-      unawaited(_saveState());
+      unawaited(_saveState(rebuildTrayMenu: false));
     });
+  }
+
+  void _applyPlatformSurfaceUpdate(PaperData target, PaperData source) {
+    target
+      ..x = _platformSurfaceCoordinate(source.x, fallback: target.x)
+      ..y = _platformSurfaceCoordinate(source.y, fallback: target.y)
+      ..width = _platformSurfaceDimension(
+        source.width,
+        fallback: target.width,
+        min: PaperLayoutDefaults.minWidth,
+      )
+      ..height = _platformSurfaceDimension(
+        source.height,
+        fallback: target.height,
+        min: PaperLayoutDefaults.minHeight,
+      )
+      ..isVisible = source.isVisible;
+  }
+
+  double _platformSurfaceCoordinate(double value, {required double fallback}) {
+    if (value.isFinite) {
+      return value;
+    }
+    return fallback.isFinite ? fallback : 120;
+  }
+
+  double _platformSurfaceDimension(
+    double value, {
+    required double fallback,
+    required double min,
+  }) {
+    if (value.isFinite && value >= min) {
+      return value;
+    }
+    if (fallback.isFinite && fallback >= min) {
+      return fallback;
+    }
+    return min;
   }
 
   bool _rememberSurfaceVisibility(PaperData paper) {
@@ -1408,13 +1744,23 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     await _saveState();
   }
 
-  Future<void> _syncNow({bool showMessage = true}) async {
+  Future<void> _syncNow({bool showMessage = true}) {
     if (_isSyncing) {
-      return;
+      return Future<void>.value();
     }
     if (!mounted) {
-      return;
+      return Future<void>.value();
     }
+    final syncFuture = _runSyncNow(showMessage: showMessage);
+    _activeSyncFuture = syncFuture;
+    return syncFuture.whenComplete(() {
+      if (identical(_activeSyncFuture, syncFuture)) {
+        _activeSyncFuture = null;
+      }
+    });
+  }
+
+  Future<void> _runSyncNow({required bool showMessage}) async {
     setState(() => _isSyncing = true);
     _localEditSyncDebounce?.cancel();
     _localEditSyncDebounce = null;
@@ -1455,8 +1801,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       }
       _showSyncFailureSnackBar(error);
     } finally {
+      final shouldRunQueuedSilentSync =
+          _queuedSilentSync && mounted && _canRunAutoSync();
+      _queuedSilentSync = false;
       if (mounted) {
         setState(() => _isSyncing = false);
+      }
+      if (shouldRunQueuedSilentSync) {
+        unawaited(_syncSilentlyIfConfigured());
       }
     }
   }
@@ -1490,6 +1842,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             localState: controller.state,
             store: widget.store,
           ),
+          onOpenSettings: () {
+            Navigator.of(context).pop();
+            if (mounted) {
+              unawaited(_openSettings());
+            }
+          },
         );
       },
     );
@@ -1572,6 +1930,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         _pendingLocalEditLatestState != null;
     _localEditSyncDebounce?.cancel();
     _localEditSyncDebounce = null;
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
+    _startSettingsDeferredAutoSyncTimer();
     final previousSyncJson = jsonEncode(controller.state.sync.toJson());
     _isSettingsOpen = true;
     final previousUsePersistentPowerShellProcess =
@@ -1598,6 +1959,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       collapseExpandedDeepCapsuleOnClick:
           controller.state.collapseExpandedDeepCapsuleOnClick,
       hideDeepCapsulesWhenCovered: controller.state.hideDeepCapsulesWhenCovered,
+      hideDeepCapsulesWhenFullscreen:
+          controller.state.hideDeepCapsulesWhenFullscreen,
     );
     final result = await showSyncSettingsDialog(
       context: context,
@@ -1647,6 +2010,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           controller.state.collapseExpandedDeepCapsuleOnClick,
       initialHideDeepCapsulesWhenCovered:
           controller.state.hideDeepCapsulesWhenCovered,
+      initialHideDeepCapsulesWhenFullscreen:
+          controller.state.hideDeepCapsulesWhenFullscreen,
       initialStartAtLogin: controller.state.startAtLogin,
       supportsStartAtLogin: controller.supportsStartupAtLogin,
       supportsHideFromWindowSwitcher:
@@ -1671,12 +2036,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           controller.state.allowLongLinkedNoteTitles,
       initialHideLinkedNotesFromCapsules:
           controller.state.hideLinkedNotesFromCapsules,
+      loadInstalledFontFamilies: controller.installedFontFamilies,
     );
     if (result == null) {
       _isSettingsOpen = false;
+      _settingsDeferredAutoSyncTimer?.cancel();
+      _settingsDeferredAutoSyncTimer = null;
+      if (mounted) {
+        _restartAutoSyncTimer();
+      }
       if (hadPendingLocalEditSync) {
         _reschedulePendingLocalEditSync();
       }
+      _runDeferredSettingsSyncIfNeeded();
       return;
     }
     final syncSettingsChanged =
@@ -1702,6 +2074,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           collapseExpandedDeepCapsuleOnClick:
               result.collapseExpandedDeepCapsuleOnClick,
           hideDeepCapsulesWhenCovered: result.hideDeepCapsulesWhenCovered,
+          hideDeepCapsulesWhenFullscreen: result.hideDeepCapsulesWhenFullscreen,
         );
     if (reminderCadenceChanged) {
       _lastTodoReminderAt.clear();
@@ -1749,6 +2122,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         collapseExpandedDeepCapsuleOnClick:
             result.collapseExpandedDeepCapsuleOnClick,
         hideDeepCapsulesWhenCovered: result.hideDeepCapsulesWhenCovered,
+        hideDeepCapsulesWhenFullscreen: result.hideDeepCapsulesWhenFullscreen,
       );
       controller.state.startAtLogin = result.startAtLogin;
       controller.state.hidePapersFromWindowSwitcher =
@@ -1778,7 +2152,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         await action();
       } catch (error) {
         platformSettingErrors.add(
-          '${strings.get(labelKey)}: ${_readableFailureMessage(error)}',
+          '${strings.get(labelKey)}: '
+          '${_readableFailureMessage(error, strings: strings)}',
         );
       }
     }
@@ -1842,7 +2217,6 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       );
     }
     widget.onAppThemeChanged?.call();
-    _restartAutoSyncTimer();
     if (syncSettingsChanged || !_canRunAutoSync()) {
       _clearPendingLocalEditSync();
     } else if (hadPendingLocalEditSync) {
@@ -1851,6 +2225,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _restartTodoReminderTimer();
     try {
       await _saveState(scheduleLocalEditSync: false);
+      await _configureAndroidBackgroundSyncAfterSettingsSave();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1858,7 +2233,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             content: Text(
               strings.format(
                 PaperTodoStringKeys.settingsSaveFailed,
-                [_readableFailureMessage(error)],
+                [_readableFailureMessage(error, strings: strings)],
               ),
             ),
           ),
@@ -1866,6 +2241,42 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       }
     } finally {
       _isSettingsOpen = false;
+      _settingsDeferredAutoSyncTimer?.cancel();
+      _settingsDeferredAutoSyncTimer = null;
+      if (mounted) {
+        _restartAutoSyncTimer();
+      }
+      if (syncSettingsChanged) {
+        _deferredSettingsSync = false;
+      } else {
+        _runDeferredSettingsSyncIfNeeded();
+      }
+    }
+  }
+
+  Future<void> _configureAndroidBackgroundSyncAfterSettingsSave() async {
+    try {
+      await widget.configureAndroidBackgroundSync(
+        sync: controller.state.sync,
+        stateFilePath: widget.store.filePath,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            strings.format(
+              PaperTodoStringKeys.platformSettingsFailed,
+              [
+                'WebDAV sync: '
+                    '${_readableFailureMessage(error, strings: strings)}',
+              ],
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -1909,7 +2320,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         content: Text(
           strings.format(
             PaperTodoStringKeys.syncFailed,
-            [_readableFailureMessage(error)],
+            [_readableFailureMessage(error, strings: strings)],
           ),
         ),
         action: SnackBarAction(
@@ -1934,7 +2345,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         content: Text(
           strings.format(
             PaperTodoStringKeys.syncRestoreSnapshotFailed,
-            [_readableFailureMessage(error)],
+            [_readableFailureMessage(error, strings: strings)],
           ),
         ),
         action: SnackBarAction(
@@ -2013,6 +2424,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         strings.get(PaperTodoStringKeys.syncRemoteSnapshotEmpty),
       'Snapshot restored.' =>
         strings.get(PaperTodoStringKeys.syncSnapshotRestored),
+      'Snapshot restored from legacy plain WebDAV data. The next successful upload will write encrypted payloads.' =>
+        strings.get(
+          PaperTodoStringKeys.syncSnapshotRestoredLegacyPlainNextUpload,
+        ),
       'Remote data changed during sync. Pull again before upload.' =>
         strings.get(PaperTodoStringKeys.syncConflict),
       _
@@ -2093,11 +2508,47 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     });
   }
 
+  void _startSettingsDeferredAutoSyncTimer() {
+    _settingsDeferredAutoSyncTimer?.cancel();
+    _settingsDeferredAutoSyncTimer = null;
+    if (!_canRunAutoSync()) {
+      return;
+    }
+    final interval = Duration(
+      minutes: controller.state.sync.webDav.autoSyncIntervalMinutes,
+    );
+    _settingsDeferredAutoSyncTimer = Timer(interval, () {
+      _settingsDeferredAutoSyncTimer = null;
+      if (_isSettingsOpen) {
+        _deferredSettingsSync = true;
+      }
+    });
+  }
+
   Future<void> _syncSilentlyIfConfigured() async {
-    if (_isSyncing || _isSettingsOpen || !_canRunAutoSync()) {
+    if (_isSettingsOpen) {
+      _deferredSettingsSync = true;
+      return;
+    }
+    if (!_canRunAutoSync()) {
+      _queuedSilentSync = false;
+      return;
+    }
+    if (_isSyncing) {
+      _queuedSilentSync = true;
       return;
     }
     await _syncNow(showMessage: false);
+  }
+
+  void _runDeferredSettingsSyncIfNeeded() {
+    if (!_deferredSettingsSync) {
+      return;
+    }
+    _deferredSettingsSync = false;
+    if (mounted) {
+      unawaited(_syncSilentlyIfConfigured());
+    }
   }
 
   void _scheduleLocalEditSync({
@@ -2372,6 +2823,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   void _showTodoReminder(List<_TodoReminderCandidate> candidates) {
     final messenger = ScaffoldMessenger.of(context);
+    _cancelTodoReminderSnackBarDismissTimer();
+    _todoReminderSnackBarController = null;
     messenger.hideCurrentSnackBar();
     final reminderItemIds = candidates
         .map((candidate) => candidate.item.id.trim())
@@ -2388,30 +2841,144 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final message = candidates.length == 1
         ? strings.format(
             PaperTodoStringKeys.todoReminderSingle,
-            [_displayTitle(first.paper), _displayItemText(first.item)],
+            [
+              _displayTitle(first.paper),
+              _displayReminderItemText(first.paper, first.item),
+            ],
           )
         : strings.format(
             PaperTodoStringKeys.todoReminderMultiple,
             [candidates.length],
           );
+    final reminderNow = DateTime.now();
+    final details = candidates
+        .take(_maxTodoReminderDetailLines)
+        .map(
+          (candidate) => _formatTodoReminderDetail(
+            candidate,
+            reminderNow,
+            includeItemText: candidates.length > 1,
+          ),
+        )
+        .toList();
+    final reminderDuration = Duration(
+      seconds: controller.state.todoReminderBubbleDurationSeconds,
+    );
     final snackBarController = messenger.showSnackBar(
       SnackBar(
-        content: Text(message),
-        duration: Duration(
-          seconds: controller.state.todoReminderBubbleDurationSeconds,
+        content: MouseRegion(
+          onEnter: (_) => _pauseTodoReminderSnackBarDismissTimer(),
+          onExit: (_) => _resumeTodoReminderSnackBarDismissTimer(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message),
+              for (final detail in details) ...[
+                const SizedBox(height: 4),
+                Text(
+                  detail,
+                  style: DefaultTextStyle.of(context).style.copyWith(
+                        fontSize: 12,
+                        height: 1.2,
+                      ),
+                ),
+              ],
+            ],
+          ),
         ),
+        duration: const Duration(days: 1),
         action: SnackBarAction(
           label: strings.get(PaperTodoStringKeys.actionOpen),
-          onPressed: () => unawaited(_openPaper(first.paper)),
+          onPressed: () => unawaited(_openTodoReminderPaper(first.paper)),
         ),
       ),
     );
+    _todoReminderSnackBarController = snackBarController;
+    _startTodoReminderSnackBarDismissTimer(
+      reminderDuration,
+      snackBarController,
+    );
     unawaited(snackBarController.closed.then((_) {
+      if (identical(_todoReminderSnackBarController, snackBarController)) {
+        _cancelTodoReminderSnackBarDismissTimer();
+        _todoReminderSnackBarController = null;
+      }
       if (_sameStringSet(_activeTodoReminderKeys, reminderKeys)) {
         _activeTodoReminderItemIds.clear();
         _activeTodoReminderKeys.clear();
       }
     }));
+  }
+
+  void _startTodoReminderSnackBarDismissTimer(
+    Duration duration,
+    ScaffoldFeatureController<SnackBar, SnackBarClosedReason> controller,
+  ) {
+    _todoReminderSnackBarDismissTimer?.cancel();
+    _todoReminderSnackBarRemaining = duration;
+    if (duration <= Duration.zero) {
+      controller.close();
+      return;
+    }
+    _todoReminderSnackBarDismissStartedAt = DateTime.now();
+    _todoReminderSnackBarDismissTimer = Timer(duration, () {
+      if (identical(_todoReminderSnackBarController, controller)) {
+        controller.close();
+      }
+    });
+  }
+
+  void _pauseTodoReminderSnackBarDismissTimer() {
+    final timer = _todoReminderSnackBarDismissTimer;
+    final startedAt = _todoReminderSnackBarDismissStartedAt;
+    if (timer == null || !timer.isActive || startedAt == null) {
+      return;
+    }
+    final remaining =
+        _todoReminderSnackBarRemaining - DateTime.now().difference(startedAt);
+    _todoReminderSnackBarRemaining =
+        remaining > Duration.zero ? remaining : Duration.zero;
+    timer.cancel();
+    _todoReminderSnackBarDismissTimer = null;
+    _todoReminderSnackBarDismissStartedAt = null;
+  }
+
+  void _resumeTodoReminderSnackBarDismissTimer() {
+    final controller = _todoReminderSnackBarController;
+    if (controller == null || _todoReminderSnackBarDismissTimer != null) {
+      return;
+    }
+    final remaining = _todoReminderSnackBarRemaining;
+    if (remaining <= Duration.zero) {
+      controller.close();
+      return;
+    }
+    _startTodoReminderSnackBarDismissTimer(remaining, controller);
+  }
+
+  void _cancelTodoReminderSnackBarDismissTimer() {
+    _todoReminderSnackBarDismissTimer?.cancel();
+    _todoReminderSnackBarDismissTimer = null;
+    _todoReminderSnackBarDismissStartedAt = null;
+    _todoReminderSnackBarRemaining = Duration.zero;
+  }
+
+  void _hideCurrentTodoReminderSnackBar() {
+    _cancelTodoReminderSnackBarDismissTimer();
+    _todoReminderSnackBarController = null;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+  }
+
+  Future<void> _openTodoReminderPaper(PaperData paper) async {
+    setState(() {
+      paper
+        ..isVisible = true
+        ..isCollapsed = false;
+      _surfacePaperId = paper.id;
+    });
+    await controller.openReminderPaper(paper);
+    await _saveState();
   }
 
   void _reconcileTodoReminderStateAfterReplacement() {
@@ -2434,7 +3001,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         _activeTodoReminderKeys.every(activeWindowCandidateKeys.contains) &&
             _activeTodoReminderItemIds.every(candidateItemIds.contains);
     if (_activeTodoReminderKeys.isNotEmpty && !activeReminderStillExists) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _hideCurrentTodoReminderSnackBar();
       _activeTodoReminderItemIds.clear();
       _activeTodoReminderKeys.clear();
     }
@@ -2466,7 +3033,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     });
     if (hideActiveSnackBar &&
         _activeTodoReminderItemIds.any(itemIds.contains)) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _hideCurrentTodoReminderSnackBar();
       _activeTodoReminderItemIds.clear();
       _activeTodoReminderKeys.clear();
       return;
@@ -2477,11 +3044,76 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     });
   }
 
-  String _displayItemText(PaperItem item) {
-    final text = item.text.trim();
-    return text.isEmpty
-        ? strings.get(PaperTodoStringKeys.todoItemFallback)
-        : text;
+  String _displayReminderItemText(PaperData paper, PaperItem item) {
+    var text = item.text.trim();
+    if (text.isEmpty) {
+      text = controller.paperTitleText(paper);
+    }
+    if (text.length > 80) {
+      return '${text.substring(0, 80)}...';
+    }
+    return text;
+  }
+
+  String _formatTodoReminderDetail(
+    _TodoReminderCandidate candidate,
+    DateTime now, {
+    required bool includeItemText,
+  }) {
+    final dueAt = candidate.dueAt.toLocal();
+    final dueText = '${dueAt.year.toString().padLeft(4, '0')}-'
+        '${dueAt.month.toString().padLeft(2, '0')}-'
+        '${dueAt.day.toString().padLeft(2, '0')} '
+        '${dueAt.hour.toString().padLeft(2, '0')}:'
+        '${dueAt.minute.toString().padLeft(2, '0')}:'
+        '${dueAt.second.toString().padLeft(2, '0')}';
+    final relativeText = _formatTodoReminderRelativeTime(dueAt, now);
+    final dueDetail = strings.format(
+      PaperTodoStringKeys.dueLabel,
+      ['$dueText ($relativeText)'],
+    );
+    if (!includeItemText) {
+      return dueDetail;
+    }
+    return '${_displayReminderItemText(candidate.paper, candidate.item)} - '
+        '$dueDetail';
+  }
+
+  String _formatTodoReminderRelativeTime(DateTime dueAt, DateTime now) {
+    final difference = dueAt.difference(now);
+    final absoluteDifference = difference.isNegative
+        ? Duration(microseconds: -difference.inMicroseconds)
+        : difference;
+    final countdown = _formatTodoReminderCountdown(absoluteDifference);
+    final key = difference.isNegative
+        ? PaperTodoStringKeys.relativeDueOverdue
+        : PaperTodoStringKeys.relativeDueFuture;
+    return strings.format(key, [countdown]);
+  }
+
+  String _formatTodoReminderCountdown(Duration span) {
+    var totalSeconds =
+        (span.inMicroseconds / Duration.microsecondsPerSecond).ceil();
+    if (totalSeconds < 0) {
+      totalSeconds = 0;
+    }
+    final days = totalSeconds ~/ 86400;
+    totalSeconds %= 86400;
+    final hours = totalSeconds ~/ 3600;
+    totalSeconds %= 3600;
+    final minutes = totalSeconds ~/ Duration.secondsPerMinute;
+    final seconds = totalSeconds % Duration.secondsPerMinute;
+
+    if (days > 0) {
+      return '${days}d${hours}h${minutes}m${seconds}s';
+    }
+    if (hours > 0) {
+      return '${hours}h${minutes}m${seconds}s';
+    }
+    if (minutes > 0) {
+      return '${minutes}m${seconds}s';
+    }
+    return '${seconds}s';
   }
 }
 
@@ -2524,6 +3156,7 @@ class _ReminderIntervalDialog extends StatefulWidget {
 
 class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
   late final TextEditingController _intervalController;
+  late final FocusNode _intervalFocusNode;
   late String _unit;
 
   @override
@@ -2532,11 +3165,23 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
     _intervalController = TextEditingController(
       text: (widget.initialValue ?? 10).clamp(1, 240).toString(),
     );
+    _intervalFocusNode = FocusNode(debugLabel: 'todo-reminder-interval');
     _unit = TodoReminderIntervalUnits.normalize(widget.initialUnit);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _intervalFocusNode.requestFocus();
+      _intervalController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _intervalController.text.length,
+      );
+    });
   }
 
   @override
   void dispose() {
+    _intervalFocusNode.dispose();
     _intervalController.dispose();
     super.dispose();
   }
@@ -2544,62 +3189,98 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
   @override
   Widget build(BuildContext context) {
     final strings = PaperTodoStringsScope.of(context);
-    return AlertDialog(
-      title: Text(strings.get(PaperTodoStringKeys.reminderInterval)),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _intervalController,
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                labelText: strings.get(PaperTodoStringKeys.interval),
-                prefixIcon: const Icon(Icons.notifications_active_outlined),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-            SegmentedButton<String>(
-              segments: [
-                ButtonSegment(
-                  value: TodoReminderIntervalUnits.minutes,
-                  icon: const Icon(Icons.timer_outlined),
-                  label: Text(strings.get(PaperTodoStringKeys.minutes)),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _handleDialogKeyEvent,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.enter): _save,
+          const SingleActivator(LogicalKeyboardKey.escape): _cancel,
+        },
+        child: AlertDialog(
+          title: Text(strings.get(PaperTodoStringKeys.reminderInterval)),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _intervalController,
+                  focusNode: _intervalFocusNode,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: strings.get(PaperTodoStringKeys.interval),
+                    prefixIcon: const Icon(Icons.notifications_active_outlined),
+                  ),
+                  keyboardType: TextInputType.number,
+                  onSubmitted: (_) => _save(),
                 ),
-                ButtonSegment(
-                  value: TodoReminderIntervalUnits.hours,
-                  icon: const Icon(Icons.schedule_outlined),
-                  label: Text(strings.get(PaperTodoStringKeys.hours)),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: [
+                    ButtonSegment(
+                      value: TodoReminderIntervalUnits.minutes,
+                      icon: const Icon(Icons.timer_outlined),
+                      label: Text(strings.get(PaperTodoStringKeys.minutes)),
+                    ),
+                    ButtonSegment(
+                      value: TodoReminderIntervalUnits.hours,
+                      icon: const Icon(Icons.schedule_outlined),
+                      label: Text(strings.get(PaperTodoStringKeys.hours)),
+                    ),
+                  ],
+                  selected: {_unit},
+                  onSelectionChanged: (selection) {
+                    setState(() => _unit = selection.single);
+                  },
                 ),
               ],
-              selected: {_unit},
-              onSelectionChanged: (selection) {
-                setState(() => _unit = selection.single);
-              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: _clear,
+              child: Text(strings.get(PaperTodoStringKeys.actionClear)),
+            ),
+            TextButton(
+              onPressed: _cancel,
+              child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
+            ),
+            FilledButton.icon(
+              onPressed: _save,
+              icon: const Icon(Icons.check),
+              label: Text(strings.get(PaperTodoStringKeys.actionSave)),
             ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(
-            const _ReminderIntervalSelection.clear(),
-          ),
-          child: Text(strings.get(PaperTodoStringKeys.actionClear)),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
-        ),
-        FilledButton.icon(
-          onPressed: _save,
-          icon: const Icon(Icons.check),
-          label: Text(strings.get(PaperTodoStringKeys.actionSave)),
-        ),
-      ],
     );
+  }
+
+  KeyEventResult _handleDialogKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
+      _save();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _cancel();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _clear() {
+    Navigator.of(context).pop(
+      const _ReminderIntervalSelection.clear(),
+    );
+  }
+
+  void _cancel() {
+    Navigator.of(context).pop();
   }
 
   void _save() {
@@ -2628,9 +3309,11 @@ class _LinkedNoteRestore {
 class _RecoverySnapshotsDialog extends StatefulWidget {
   const _RecoverySnapshotsDialog({
     required this.loadSnapshots,
+    required this.onOpenSettings,
   });
 
   final Future<List<WebDavSnapshotRecord>> Function() loadSnapshots;
+  final VoidCallback onOpenSettings;
 
   @override
   State<_RecoverySnapshotsDialog> createState() =>
@@ -2682,21 +3365,39 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
                         child: Text(
                           strings.format(
                             PaperTodoStringKeys.recoverySnapshotLoadFailed,
-                            [_readableFailureMessage(snapshot.error!)],
+                            [
+                              _readableFailureMessage(
+                                snapshot.error!,
+                                strings: strings,
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: FilledButton.icon(
-                        key: const ValueKey('retry-recovery-snapshots'),
-                        onPressed: _retry,
-                        icon: const Icon(Icons.refresh_outlined),
-                        label:
-                            Text(strings.get(PaperTodoStringKeys.actionRetry)),
-                      ),
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        TextButton.icon(
+                          key: const ValueKey('settings-recovery-snapshots'),
+                          onPressed: widget.onOpenSettings,
+                          icon: const Icon(Icons.settings_outlined),
+                          label: Text(
+                            strings.get(PaperTodoStringKeys.actionSettings),
+                          ),
+                        ),
+                        FilledButton.icon(
+                          key: const ValueKey('retry-recovery-snapshots'),
+                          onPressed: _retry,
+                          icon: const Icon(Icons.refresh_outlined),
+                          label: Text(
+                            strings.get(PaperTodoStringKeys.actionRetry),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -2868,6 +3569,20 @@ String _formatByteCount(int value) {
   return '${mib.toStringAsFixed(mib < 10 ? 1 : 0)} MiB';
 }
 
+PopupMenuItem<String> _paperTodoMenuHeader(String label) {
+  return PopupMenuItem<String>(
+    enabled: false,
+    height: 32,
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
+
 class PaperPreview extends StatelessWidget {
   const PaperPreview({
     required this.paper,
@@ -2881,6 +3596,7 @@ class PaperPreview extends StatelessWidget {
     required this.enableToolTips,
     required this.enableAnimations,
     required this.markdownRenderMode,
+    required this.externalMarkdownExtension,
     required this.todoVisualSize,
     required this.todoLineSpacing,
     required this.showTodoDueRelativeTime,
@@ -2891,7 +3607,9 @@ class PaperPreview extends StatelessWidget {
     required this.noteLineSpacing,
     required this.onChanged,
     required this.onTitleChanged,
+    required this.onCreatePaper,
     required this.onOpen,
+    required this.onOpenLinkedNote,
     required this.onRunScriptCapsule,
     required this.onOpenExternalMarkdown,
     required this.onOpenUri,
@@ -2909,8 +3627,13 @@ class PaperPreview extends StatelessWidget {
 
   static const _compactPaperActionOpenSurface = 'open-surface';
   static const _compactPaperActionOpenMarkdown = 'open-markdown';
+  static const _compactPaperActionNewTodo = 'new-todo';
+  static const _compactPaperActionNewNote = 'new-note';
+  static const _compactPaperActionClearDone = 'clear-done';
+  static const _compactPaperActionAddCanvasBlock = 'add-canvas-block';
   static const _compactPaperActionToggleAlwaysOnTop = 'toggle-always-on-top';
   static const _compactPaperActionTogglePinned = 'toggle-pinned';
+  static const _compactPaperActionToggleCollapsed = 'toggle-collapsed';
   static const _compactPaperActionCaptureBounds = 'capture-bounds';
   static const _compactPaperActionHide = 'hide';
   static const _compactPaperActionDelete = 'delete';
@@ -2927,6 +3650,7 @@ class PaperPreview extends StatelessWidget {
   final bool enableToolTips;
   final bool enableAnimations;
   final String markdownRenderMode;
+  final String externalMarkdownExtension;
   final String todoVisualSize;
   final double todoLineSpacing;
   final bool showTodoDueRelativeTime;
@@ -2937,7 +3661,11 @@ class PaperPreview extends StatelessWidget {
   final double noteLineSpacing;
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
+  final Future<void> Function(String type, {PaperData? sourcePaper})
+      onCreatePaper;
   final Future<void> Function(PaperData paper) onOpen;
+  final Future<void> Function(PaperData paper, PaperData anchorPaper)
+      onOpenLinkedNote;
   final Future<void> Function(ScriptCapsuleSpec spec) onRunScriptCapsule;
   final Future<void> Function(PaperData paper) onOpenExternalMarkdown;
   final Future<void> Function(String uri) onOpenUri;
@@ -2956,7 +3684,6 @@ class PaperPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final strings = PaperTodoStringsScope.of(context);
     final isCollapsed = collapseAllActive || paper.isCollapsed;
     final scriptCapsuleSpec =
         paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
@@ -2985,51 +3712,40 @@ class PaperPreview extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      paper.isTodo
-                          ? Icons.check_box_outlined
-                          : scriptCapsuleSpec != null
-                              ? Icons.bolt_outlined
-                              : Icons.notes_outlined,
-                      size: 18,
-                      color: colorScheme.primary,
-                    ),
-                    if (paper.isNote && enableTodoNoteLinks) ...[
-                      const SizedBox(width: 4),
-                      _noteLinkDragHandle(context),
-                    ],
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextFormField(
-                        key: ValueKey('${paper.id}-title'),
-                        initialValue:
-                            PaperTitles.cleanCustomTitle(paper.title).isEmpty
-                                ? titleText
-                                : paper.title,
-                        inputFormatters: const [
-                          _PaperTitleTextInputFormatter(
-                            maxLength: PaperTitles.maxTitleLength,
-                          ),
-                        ],
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          hintText:
-                              strings.get(PaperTodoStringKeys.untitledPaper),
-                          isDense: true,
-                        ),
-                        enabled: !desktopInteractionLocked,
-                        style: theme.textTheme.titleMedium?.apply(
-                          fontSizeFactor: textZoom,
-                        ),
-                        onChanged: (value) {
-                          paper.title = PaperTitles.cleanCustomTitle(value);
-                          unawaited(onTitleChanged(paper));
-                        },
+                Listener(
+                  key: ValueKey('${paper.id}-paper-header'),
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (event) =>
+                      _handlePaperContextMenuPointerDown(context, event),
+                  child: Row(
+                    children: [
+                      Icon(
+                        paper.isTodo
+                            ? Icons.check_box_outlined
+                            : scriptCapsuleSpec != null
+                                ? Icons.bolt_outlined
+                                : Icons.notes_outlined,
+                        size: 18,
+                        color: colorScheme.primary,
                       ),
-                    ),
-                  ],
+                      if (paper.isNote && enableTodoNoteLinks) ...[
+                        const SizedBox(width: 4),
+                        _noteLinkDragHandle(context),
+                      ],
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _PaperTitleEditor(
+                          paper: paper,
+                          titleText: titleText,
+                          textZoom: textZoom,
+                          enabled: !desktopInteractionLocked && !isCollapsed,
+                          fieldEnabled: !desktopInteractionLocked,
+                          enableToolTips: enableToolTips,
+                          onTitleChanged: onTitleChanged,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Align(
@@ -3121,8 +3837,9 @@ class PaperPreview extends StatelessWidget {
         ),
       ),
       childWhenDragging: Opacity(opacity: 0.45, child: handle),
-      child: Tooltip(
-        message: _tooltipLabel(enableToolTips, dragLabel) ?? '',
+      child: _conditionalTooltip(
+        enabled: enableToolTips,
+        message: dragLabel,
         child: handle,
       ),
     );
@@ -3160,7 +3877,7 @@ class PaperPreview extends StatelessWidget {
                   defaultReminderIntervalValue:
                       defaultTodoReminderIntervalValue,
                   defaultReminderIntervalUnit: defaultTodoReminderIntervalUnit,
-                  onOpen: onOpen,
+                  onOpenLinkedNote: onOpenLinkedNote,
                   onRunScriptCapsule: onRunScriptCapsule,
                   onChanged: onChanged,
                   onItemDeleted: onTodoItemDeleted,
@@ -3173,8 +3890,11 @@ class PaperPreview extends StatelessWidget {
                   markdownRenderMode: markdownRenderMode,
                   lineSpacing: noteLineSpacing,
                   textZoom: paper.textZoom,
+                  enableToolTips: enableToolTips,
                   onOpenUri: onOpenUri,
                   onChanged: onChanged,
+                  onTextZoomChanged: _setTextZoom,
+                  onShowPaperContextMenu: _showPaperContextMenu,
                 ),
             ],
           );
@@ -3208,12 +3928,9 @@ class PaperPreview extends StatelessWidget {
         final strings = PaperTodoStringsScope.of(context);
         return Padding(
           padding: const EdgeInsets.only(top: 10),
-          child: Tooltip(
-            message: _tooltipLabel(
-                  enableToolTips,
-                  strings.get(PaperTodoStringKeys.actionRunScriptCapsule),
-                ) ??
-                '',
+          child: _conditionalTooltip(
+            enabled: enableToolTips,
+            message: strings.get(PaperTodoStringKeys.actionRunScriptCapsule),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => unawaited(onRunScriptCapsule(spec)),
@@ -3271,6 +3988,9 @@ class PaperPreview extends StatelessWidget {
       return [_pinnedDesktopUnlockButton(context)];
     }
     final strings = PaperTodoStringsScope.of(context);
+    final hideThisPaperLabel =
+        strings.get(PaperTodoStringKeys.actionHideThisPaper);
+    final openMarkdownEditorLabel = _openMarkdownEditorLabel(strings);
     final compact = MediaQuery.sizeOf(context).width < 600;
     if (compact) {
       return [
@@ -3293,9 +4013,7 @@ class PaperPreview extends StatelessWidget {
               _paperActionMenuItem(
                 value: _compactPaperActionOpenMarkdown,
                 icon: Icons.file_open_outlined,
-                label: strings.get(
-                  PaperTodoStringKeys.actionOpenMarkdownExternally,
-                ),
+                label: openMarkdownEditorLabel,
               ),
             const PopupMenuDivider(),
             for (final option in _TextZoomOption.values)
@@ -3332,7 +4050,7 @@ class PaperPreview extends StatelessWidget {
             _paperActionMenuItem(
               value: _compactPaperActionHide,
               icon: Icons.visibility_off_outlined,
-              label: strings.get(PaperTodoStringKeys.actionHidePaper),
+              label: hideThisPaperLabel,
             ),
             _paperActionMenuItem(
               value: _compactPaperActionDelete,
@@ -3356,7 +4074,7 @@ class PaperPreview extends StatelessWidget {
         IconButton(
           tooltip: _tooltipLabel(
             enableToolTips,
-            strings.get(PaperTodoStringKeys.actionOpenMarkdownExternally),
+            openMarkdownEditorLabel,
           ),
           onPressed: () => unawaited(onOpenExternalMarkdown(paper)),
           icon: const Icon(Icons.file_open_outlined),
@@ -3415,7 +4133,7 @@ class PaperPreview extends StatelessWidget {
       IconButton(
         tooltip: _tooltipLabel(
           enableToolTips,
-          strings.get(PaperTodoStringKeys.actionHidePaper),
+          hideThisPaperLabel,
         ),
         onPressed: () => unawaited(onHide(paper)),
         icon: const Icon(Icons.visibility_off_outlined),
@@ -3443,6 +4161,10 @@ class PaperPreview extends StatelessWidget {
     );
   }
 
+  String _openMarkdownEditorLabel(PaperTodoStrings strings) {
+    return _markdownEditorActionLabel(strings, externalMarkdownExtension);
+  }
+
   IconButton _collapseButton(BuildContext context, bool isCollapsed) {
     final strings = PaperTodoStringsScope.of(context);
     return IconButton(
@@ -3459,13 +4181,163 @@ class PaperPreview extends StatelessWidget {
     );
   }
 
+  void _handlePaperContextMenuPointerDown(
+    BuildContext context,
+    PointerDownEvent event,
+  ) {
+    if (event.buttons & kSecondaryMouseButton == 0) {
+      return;
+    }
+    unawaited(_showPaperContextMenu(context, event.position));
+  }
+
+  Future<void> _showPaperContextMenu(
+    BuildContext context,
+    Offset globalPosition,
+  ) async {
+    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
+    if (overlay is! RenderBox) {
+      return;
+    }
+    final selected = await showMenu<String>(
+      context: context,
+      requestFocus: false,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+        Offset.zero & overlay.size,
+      ),
+      items: _paperContextMenuItems(context),
+    );
+    if (!context.mounted || selected == null) {
+      return;
+    }
+    _handleCompactPaperAction(selected);
+  }
+
+  List<PopupMenuEntry<String>> _paperContextMenuItems(BuildContext context) {
+    final strings = PaperTodoStringsScope.of(context);
+    final hideThisPaperLabel =
+        strings.get(PaperTodoStringKeys.actionHideThisPaper);
+    final openMarkdownEditorLabel = _openMarkdownEditorLabel(strings);
+    final textZoom = paper.textZoom.clamp(0.5, 1.5).toDouble();
+    if (_desktopInteractionLocked) {
+      return [
+        _paperTodoMenuHeader(
+          strings.get(PaperTodoStringKeys.menuDesktopPin),
+        ),
+        _paperActionMenuItem(
+          value: _compactPaperActionTogglePinned,
+          icon: Icons.desktop_windows,
+          label: strings.get(PaperTodoStringKeys.actionUnpinFromDesktop),
+        ),
+      ];
+    }
+    return [
+      _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuNew)),
+      _paperActionMenuItem(
+        value: _compactPaperActionNewTodo,
+        icon: Icons.add_task,
+        label: strings.get(PaperTodoStringKeys.actionNewTodoPaper),
+      ),
+      _paperActionMenuItem(
+        value: _compactPaperActionNewNote,
+        icon: Icons.note_add_outlined,
+        label: strings.get(PaperTodoStringKeys.actionNewNotePaper),
+      ),
+      if (paper.isTodo) ...[
+        const PopupMenuDivider(),
+        _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuTodo)),
+        _paperActionMenuItem(
+          value: _compactPaperActionClearDone,
+          icon: Icons.delete_sweep_outlined,
+          label: strings.get(PaperTodoStringKeys.actionClearCompleted),
+          enabled: _hasDoneTodoItems,
+        ),
+      ],
+      if (_canAddCanvasBlockFromPaperMenu) ...[
+        const PopupMenuDivider(),
+        _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuCanvas)),
+        _paperActionMenuItem(
+          value: _compactPaperActionAddCanvasBlock,
+          icon: Icons.add_box_outlined,
+          label: strings.get(PaperTodoStringKeys.actionAddCanvasBlock),
+        ),
+      ],
+      const PopupMenuDivider(),
+      _paperTodoMenuHeader(_displayPaperTitle()),
+      _paperActionMenuItem(
+        value: _compactPaperActionOpenSurface,
+        icon: Icons.open_in_new,
+        label: strings.get(PaperTodoStringKeys.actionOpenSurface),
+      ),
+      if (paper.isNote)
+        _paperActionMenuItem(
+          value: _compactPaperActionOpenMarkdown,
+          icon: Icons.file_open_outlined,
+          label: openMarkdownEditorLabel,
+        ),
+      const PopupMenuDivider(),
+      for (final option in _TextZoomOption.values)
+        CheckedPopupMenuItem<String>(
+          value: '$_compactPaperZoomActionPrefix${option.value}',
+          checked: option.value == textZoom,
+          child: Text('${strings.get(PaperTodoStringKeys.zoom)} '
+              '${option.label}'),
+        ),
+      const PopupMenuDivider(),
+      _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuDesktopPin)),
+      _paperActionMenuItem(
+        value: _compactPaperActionToggleAlwaysOnTop,
+        icon: paper.alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
+        label: paper.alwaysOnTop
+            ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
+            : strings.get(PaperTodoStringKeys.actionKeepOnTop),
+      ),
+      _paperActionMenuItem(
+        value: _compactPaperActionTogglePinned,
+        icon: paper.isPinnedToDesktop
+            ? Icons.desktop_windows
+            : Icons.desktop_windows_outlined,
+        label: paper.isPinnedToDesktop
+            ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
+            : strings.get(PaperTodoStringKeys.actionPinToDesktop),
+      ),
+      if (!collapseAllActive)
+        _paperActionMenuItem(
+          value: _compactPaperActionToggleCollapsed,
+          icon: paper.isCollapsed ? Icons.expand_more : Icons.expand_less,
+          label: paper.isCollapsed
+              ? strings.get(PaperTodoStringKeys.actionRestoreWindow)
+              : strings.get(PaperTodoStringKeys.actionCollapseToCapsule),
+        ),
+      _paperActionMenuItem(
+        value: _compactPaperActionCaptureBounds,
+        icon: Icons.aspect_ratio_outlined,
+        label: strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
+      ),
+      const PopupMenuDivider(),
+      _paperActionMenuItem(
+        value: _compactPaperActionHide,
+        icon: Icons.visibility_off_outlined,
+        label: hideThisPaperLabel,
+      ),
+      _paperActionMenuItem(
+        value: _compactPaperActionDelete,
+        icon: Icons.delete_outline,
+        label: strings.get(PaperTodoStringKeys.actionDeletePaper),
+      ),
+    ];
+  }
+
   PopupMenuItem<String> _paperActionMenuItem({
     required String value,
     required IconData icon,
     required String label,
+    bool enabled = true,
   }) {
     return PopupMenuItem<String>(
       value: value,
+      enabled: enabled,
       child: Row(
         children: [
           Icon(icon),
@@ -3484,6 +4356,14 @@ class PaperPreview extends StatelessWidget {
       return;
     }
     switch (value) {
+      case _compactPaperActionNewTodo:
+        unawaited(onCreatePaper(PaperTypes.todo, sourcePaper: paper));
+      case _compactPaperActionNewNote:
+        unawaited(onCreatePaper(PaperTypes.note, sourcePaper: paper));
+      case _compactPaperActionClearDone:
+        _clearDoneTodoItemsFromPaperMenu();
+      case _compactPaperActionAddCanvasBlock:
+        _addNoteCanvasBlockFromPaperMenu();
       case _compactPaperActionOpenSurface:
         unawaited(onOpen(paper));
       case _compactPaperActionOpenMarkdown:
@@ -3492,6 +4372,8 @@ class PaperPreview extends StatelessWidget {
         _toggleAlwaysOnTop();
       case _compactPaperActionTogglePinned:
         _togglePinnedToDesktop();
+      case _compactPaperActionToggleCollapsed:
+        _toggleCollapsed();
       case _compactPaperActionCaptureBounds:
         unawaited(onCaptureBounds(paper));
       case _compactPaperActionHide:
@@ -3499,6 +4381,118 @@ class PaperPreview extends StatelessWidget {
       case _compactPaperActionDelete:
         unawaited(onDelete(paper));
     }
+  }
+
+  bool get _hasDoneTodoItems {
+    return paper.items.any((item) => item.done);
+  }
+
+  bool get _canAddCanvasBlockFromPaperMenu {
+    return paper.isNote &&
+        !paper.isCollapsed &&
+        !collapseAllActive &&
+        !paper.isPinnedToDesktop;
+  }
+
+  void _clearDoneTodoItemsFromPaperMenu() {
+    if (!paper.isTodo) {
+      return;
+    }
+    final completedItems = paper.items.where((item) => item.done).toList();
+    if (completedItems.isEmpty) {
+      return;
+    }
+    final completedIds = completedItems.map((item) => item.id).toSet();
+    paper.items = [
+      for (final item in paper.items)
+        if (!completedIds.contains(item.id)) item,
+    ];
+    if (paper.items.isEmpty) {
+      paper.items.add(_newTodoItemFromPaperMenu());
+    }
+    paper.normalize();
+    for (final item in completedItems) {
+      onTodoItemDeleted(paper, item);
+    }
+    unawaited(onChanged());
+  }
+
+  PaperItem _newTodoItemFromPaperMenu() {
+    return PaperItem(
+      id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
+    );
+  }
+
+  void _addNoteCanvasBlockFromPaperMenu() {
+    if (!_canAddCanvasBlockFromPaperMenu) {
+      return;
+    }
+    final elements = paper.noteCanvasElements;
+    const width = 230.0;
+    const height = 116.0;
+    final point = _nextNoteCanvasElementPointFromPaperMenu(
+      width,
+      height,
+      elements.length,
+    );
+    elements.add(
+      NoteCanvasElement(
+        id: _newCanvasElementIdFromPaperMenu(),
+        type: NoteCanvasElementTypes.code,
+        text: 'Console.WriteLine("PaperTodo");',
+        x: point.dx,
+        y: point.dy,
+        width: width,
+        height: height,
+        zIndex: _maxCanvasElementLayer(elements) + 10,
+      ),
+    );
+    paper.normalize();
+    unawaited(onChanged());
+  }
+
+  String _newCanvasElementIdFromPaperMenu() {
+    final existingIds = paper.noteCanvasElements.map((element) => element.id);
+    return _newUniqueChildId(existingIds);
+  }
+
+  Offset _nextNoteCanvasElementPointFromPaperMenu(
+    double width,
+    double height,
+    int existingCount,
+  ) {
+    final layerWidth = math.max(220.0, paper.width - 40);
+    final layerHeight = math.max(160.0, paper.height - 90);
+    final offset = math.min(80.0, existingCount * 12.0);
+    final x = math.max(
+      10.0,
+      math.min(layerWidth - width - 10.0, 28.0 + offset),
+    );
+    final y = math.max(
+      10.0,
+      math.min(layerHeight - height - 10.0, 28.0 + offset),
+    );
+    return Offset(x, y);
+  }
+
+  int _maxCanvasElementLayer(List<NoteCanvasElement> elements) {
+    if (elements.isEmpty) {
+      return 0;
+    }
+    return elements
+        .map((element) => element.zIndex)
+        .reduce((max, zIndex) => zIndex > max ? zIndex : max);
+  }
+
+  String _newUniqueChildId(Iterable<String> existingIds) {
+    final usedIds = existingIds.toSet();
+    var id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+    var suffix = 1;
+    while (usedIds.contains(id)) {
+      id = '${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}-$suffix';
+      suffix += 1;
+    }
+    return id;
   }
 
   void _toggleCollapsed() {
@@ -3558,6 +4552,226 @@ class PaperPreview extends StatelessWidget {
   }
 }
 
+class _PaperTitleEditor extends StatefulWidget {
+  const _PaperTitleEditor({
+    required this.paper,
+    required this.titleText,
+    required this.textZoom,
+    required this.enabled,
+    required this.fieldEnabled,
+    required this.enableToolTips,
+    required this.onTitleChanged,
+  });
+
+  final PaperData paper;
+  final String titleText;
+  final double textZoom;
+  final bool enabled;
+  final bool fieldEnabled;
+  final bool enableToolTips;
+  final Future<void> Function(PaperData paper) onTitleChanged;
+
+  @override
+  State<_PaperTitleEditor> createState() => _PaperTitleEditorState();
+}
+
+class _PaperTitleEditorState extends State<_PaperTitleEditor> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+  bool _isEditingTitle = false;
+  String _titleBeforeEdit = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: _displayTitle);
+    _focusNode = FocusNode();
+    _focusNode.addListener(_handleFocusChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PaperTitleEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.paper.id != widget.paper.id) {
+      _isEditingTitle = false;
+      _titleBeforeEdit = '';
+      _syncControllerToDisplayTitle();
+      return;
+    }
+    if (!_isEditingTitle) {
+      _syncControllerToDisplayTitle();
+    } else if (!widget.enabled) {
+      unawaited(_endTitleEdit(commit: true));
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChanged);
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final strings = PaperTodoStringsScope.of(context);
+    final editTitleLabel = strings.get(PaperTodoStringKeys.actionEditTitle);
+    final field = Focus(
+      onKeyEvent: _handleKeyEvent,
+      child: TextFormField(
+        key: ValueKey('${widget.paper.id}-title'),
+        controller: _controller,
+        focusNode: _focusNode,
+        inputFormatters: const [
+          _PaperTitleTextInputFormatter(
+            maxLength: PaperTitles.maxTitleLength,
+          ),
+        ],
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          hintText: strings.get(PaperTodoStringKeys.untitledPaper),
+          isDense: true,
+        ),
+        enabled: widget.fieldEnabled,
+        readOnly: !_isEditingTitle,
+        showCursor: _isEditingTitle,
+        maxLines: 1,
+        textInputAction: TextInputAction.done,
+        style: theme.textTheme.titleMedium?.apply(
+          fontSizeFactor: widget.textZoom,
+        ),
+        onTap: _beginTitleEdit,
+        onChanged: _handleTitleChanged,
+        onFieldSubmitted: (_) => unawaited(_endTitleEdit(commit: true)),
+      ),
+    );
+    return Semantics(
+      button: widget.enabled && !_isEditingTitle,
+      textField: _isEditingTitle,
+      label: editTitleLabel,
+      child: _conditionalTooltip(
+        enabled: widget.enableToolTips,
+        message: editTitleLabel,
+        child: MouseRegion(
+          cursor: widget.enabled
+              ? SystemMouseCursors.text
+              : SystemMouseCursors.basic,
+          child: field,
+        ),
+      ),
+    );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent || !_isEditingTitle) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      unawaited(_endTitleEdit(commit: false));
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      unawaited(_endTitleEdit(commit: true));
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _handleFocusChanged() {
+    if (_focusNode.hasFocus) {
+      if (!_isEditingTitle) {
+        _beginTitleEdit();
+      }
+      return;
+    }
+    if (_isEditingTitle) {
+      unawaited(_endTitleEdit(commit: true));
+    }
+  }
+
+  void _beginTitleEdit() {
+    if (!widget.enabled) {
+      return;
+    }
+    if (_isEditingTitle) {
+      _selectAll();
+      return;
+    }
+    _titleBeforeEdit = widget.paper.title;
+    final title = _displayTitle;
+    setState(() {
+      _isEditingTitle = true;
+      _controller.value = TextEditingValue(
+        text: title,
+        selection: TextSelection(baseOffset: 0, extentOffset: title.length),
+      );
+    });
+    _focusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isEditingTitle) {
+        _selectAll();
+      }
+    });
+  }
+
+  void _selectAll() {
+    _controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _controller.text.length,
+    );
+  }
+
+  void _handleTitleChanged(String value) {
+    if (!_isEditingTitle) {
+      return;
+    }
+    final cleaned = PaperTitles.cleanCustomTitle(value);
+    if (widget.paper.title == cleaned) {
+      return;
+    }
+    widget.paper.title = cleaned;
+    unawaited(widget.onTitleChanged(widget.paper));
+  }
+
+  Future<void> _endTitleEdit({required bool commit}) async {
+    if (!_isEditingTitle) {
+      return;
+    }
+    final nextTitle = commit
+        ? PaperTitles.cleanCustomTitle(_controller.text)
+        : _titleBeforeEdit;
+    final changed = widget.paper.title != nextTitle;
+    setState(() {
+      _isEditingTitle = false;
+      widget.paper.title = nextTitle;
+      _syncControllerToDisplayTitle();
+    });
+    _focusNode.unfocus();
+    if (changed || !commit) {
+      await widget.onTitleChanged(widget.paper);
+    }
+  }
+
+  void _syncControllerToDisplayTitle() {
+    final title = _displayTitle;
+    if (_controller.text == title) {
+      return;
+    }
+    _controller.value = TextEditingValue(
+      text: title,
+      selection: TextSelection.collapsed(offset: title.length),
+    );
+  }
+
+  String get _displayTitle {
+    final customTitle = PaperTitles.cleanCustomTitle(widget.paper.title);
+    return customTitle.isEmpty ? widget.titleText : customTitle;
+  }
+}
+
 class _TextZoomOption {
   const _TextZoomOption(this.value, this.label);
 
@@ -3578,16 +4792,23 @@ class _NoteEditor extends StatefulWidget {
     required this.markdownRenderMode,
     required this.lineSpacing,
     required this.textZoom,
+    required this.enableToolTips,
     required this.onOpenUri,
     required this.onChanged,
+    required this.onTextZoomChanged,
+    required this.onShowPaperContextMenu,
   });
 
   final PaperData paper;
   final String markdownRenderMode;
   final double lineSpacing;
   final double textZoom;
+  final bool enableToolTips;
   final Future<void> Function(String uri) onOpenUri;
   final Future<void> Function() onChanged;
+  final void Function(double value) onTextZoomChanged;
+  final Future<void> Function(BuildContext context, Offset globalPosition)
+      onShowPaperContextMenu;
 
   @override
   State<_NoteEditor> createState() => _NoteEditorState();
@@ -3602,6 +4823,12 @@ class _NoteEditorState extends State<_NoteEditor> {
   static const _markdownActionQuote = 'quote';
   static const _markdownActionList = 'list';
   static const _markdownActionCodeBlock = 'code-block';
+  static const _markdownActionBold = 'bold';
+  static const _markdownActionItalic = 'italic';
+  static const _markdownActionInsertLink = 'insert-link';
+  static const _markdownActionCopy = 'copy';
+  static const _markdownActionPaste = 'paste';
+  static const _markdownActionSelectAll = 'select-all';
 
   late final TextEditingController _contentController;
   late final FocusNode _contentFocusNode;
@@ -3740,30 +4967,34 @@ class _NoteEditorState extends State<_NoteEditor> {
         const SizedBox(height: 8),
         Focus(
           onKeyEvent: _handleMarkdownKeyEvent,
-          child: TextFormField(
-            key: ValueKey('${widget.paper.id}-content'),
-            controller: _contentController,
-            focusNode: _contentFocusNode,
-            onTapAlwaysCalled: true,
-            onTap: () => _handleEditorTap(context),
-            minLines: minLines,
-            maxLines: maxLines,
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              hintText: strings.get(PaperTodoStringKeys.noteEditorHint),
+          child: Listener(
+            onPointerDown: (event) =>
+                _handleMarkdownEditorContextMenuPointerDown(context, event),
+            child: TextFormField(
+              key: ValueKey('${widget.paper.id}-content'),
+              controller: _contentController,
+              focusNode: _contentFocusNode,
+              onTapAlwaysCalled: true,
+              onTap: () => _handleEditorTap(context),
+              minLines: minLines,
+              maxLines: maxLines,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                hintText: strings.get(PaperTodoStringKeys.noteEditorHint),
+              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.apply(
+                    fontSizeFactor: widget.textZoom,
+                  )
+                  .copyWith(height: widget.lineSpacing),
+              inputFormatters: const [
+                _MarkdownPasteTextInputFormatter(),
+                _MarkdownListContinuationTextInputFormatter(),
+              ],
+              onChanged: _commitContent,
             ),
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.apply(
-                  fontSizeFactor: widget.textZoom,
-                )
-                .copyWith(height: widget.lineSpacing),
-            inputFormatters: const [
-              _MarkdownPasteTextInputFormatter(),
-              _MarkdownListContinuationTextInputFormatter(),
-            ],
-            onChanged: _commitContent,
           ),
         ),
       ],
@@ -3837,7 +5068,7 @@ class _NoteEditorState extends State<_NoteEditor> {
     required VoidCallback onPressed,
   }) {
     return IconButton.outlined(
-      tooltip: tooltip,
+      tooltip: _tooltipLabel(widget.enableToolTips, tooltip),
       icon: Icon(icon),
       onPressed: onPressed,
     );
@@ -3846,7 +5077,10 @@ class _NoteEditorState extends State<_NoteEditor> {
   Widget _compactMarkdownActions() {
     return PopupMenuButton<String>(
       key: const ValueKey('compact-markdown-toolbar-actions'),
-      tooltip: strings.get(PaperTodoStringKeys.markdownActionMore),
+      tooltip: _tooltipLabel(
+        widget.enableToolTips,
+        strings.get(PaperTodoStringKeys.markdownActionMore),
+      ),
       icon: const Icon(Icons.more_vert),
       onOpened: _beginToolbarInteraction,
       onCanceled: _endToolbarInteraction,
@@ -3888,9 +5122,11 @@ class _NoteEditorState extends State<_NoteEditor> {
     required String value,
     required IconData icon,
     required String label,
+    bool enabled = true,
   }) {
     return PopupMenuItem<String>(
       value: value,
+      enabled: enabled,
       child: Row(
         children: [
           Icon(icon),
@@ -3899,6 +5135,111 @@ class _NoteEditorState extends State<_NoteEditor> {
         ],
       ),
     );
+  }
+
+  void _handleMarkdownEditorContextMenuPointerDown(
+    BuildContext context,
+    PointerDownEvent event,
+  ) {
+    if (event.buttons & kSecondaryMouseButton == 0) {
+      return;
+    }
+    unawaited(_showMarkdownEditorContextMenu(context, event.position));
+  }
+
+  Future<void> _showMarkdownEditorContextMenu(
+    BuildContext context,
+    Offset globalPosition,
+  ) async {
+    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
+    if (overlay is! RenderBox) {
+      return;
+    }
+    _beginToolbarInteraction();
+    try {
+      final selected = await showMenu<String>(
+        context: context,
+        position: RelativeRect.fromRect(
+          Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+          Offset.zero & overlay.size,
+        ),
+        items: _markdownEditorContextMenuItems(),
+      );
+      if (!mounted || !context.mounted || selected == null) {
+        return;
+      }
+      await _handleMarkdownEditorContextAction(selected);
+    } finally {
+      _endToolbarInteraction();
+    }
+  }
+
+  List<PopupMenuEntry<String>> _markdownEditorContextMenuItems() {
+    final hasSelection = _contentController.selection.isValid &&
+        !_contentController.selection.isCollapsed;
+    final hasText = _contentController.text.isNotEmpty;
+    return [
+      _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuFormat)),
+      _markdownMenuItem(
+        value: _markdownActionBold,
+        icon: Icons.format_bold,
+        label: strings.get(PaperTodoStringKeys.markdownActionBold),
+      ),
+      _markdownMenuItem(
+        value: _markdownActionItalic,
+        icon: Icons.format_italic,
+        label: strings.get(PaperTodoStringKeys.markdownActionItalic),
+      ),
+      _markdownMenuItem(
+        value: _markdownActionStrikethrough,
+        icon: Icons.strikethrough_s,
+        label: strings.get(PaperTodoStringKeys.markdownActionStrikethrough),
+      ),
+      _markdownMenuItem(
+        value: _markdownActionHeading,
+        icon: Icons.title,
+        label: strings.get(PaperTodoStringKeys.markdownActionHeading),
+      ),
+      _markdownMenuItem(
+        value: _markdownActionQuote,
+        icon: Icons.format_quote,
+        label: strings.get(PaperTodoStringKeys.markdownActionQuote),
+      ),
+      _markdownMenuItem(
+        value: _markdownActionList,
+        icon: Icons.format_list_bulleted,
+        label: strings.get(PaperTodoStringKeys.markdownActionList),
+      ),
+      _markdownMenuItem(
+        value: _markdownActionCodeBlock,
+        icon: Icons.code,
+        label: strings.get(PaperTodoStringKeys.markdownActionCodeBlock),
+      ),
+      _markdownMenuItem(
+        value: _markdownActionInsertLink,
+        icon: Icons.link,
+        label: strings.get(PaperTodoStringKeys.markdownActionInsertLink),
+      ),
+      const PopupMenuDivider(),
+      _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuText)),
+      _markdownMenuItem(
+        value: _markdownActionCopy,
+        icon: Icons.content_copy_outlined,
+        label: strings.get(PaperTodoStringKeys.actionCopy),
+        enabled: hasSelection,
+      ),
+      _markdownMenuItem(
+        value: _markdownActionPaste,
+        icon: Icons.content_paste_outlined,
+        label: strings.get(PaperTodoStringKeys.actionPaste),
+      ),
+      _markdownMenuItem(
+        value: _markdownActionSelectAll,
+        icon: Icons.select_all,
+        label: strings.get(PaperTodoStringKeys.actionSelectAll),
+        enabled: hasText,
+      ),
+    ];
   }
 
   void _formatBold() {
@@ -3964,6 +5305,71 @@ class _NoteEditorState extends State<_NoteEditor> {
       case _markdownActionCodeBlock:
         _formatCodeBlock();
     }
+  }
+
+  Future<void> _handleMarkdownEditorContextAction(String value) async {
+    switch (value) {
+      case _markdownActionBold:
+        _formatBold();
+      case _markdownActionItalic:
+        _formatItalic();
+      case _markdownActionInsertLink:
+        _insertMarkdownLink();
+      case _markdownActionCopy:
+        await _copyMarkdownSelection();
+      case _markdownActionPaste:
+        await _pasteMarkdownClipboardText();
+      case _markdownActionSelectAll:
+        _selectAllMarkdownText();
+      default:
+        _handleCompactMarkdownAction(value);
+    }
+  }
+
+  Future<void> _copyMarkdownSelection() async {
+    final selection = _contentController.selection;
+    if (!selection.isValid || selection.isCollapsed) {
+      _contentFocusNode.requestFocus();
+      return;
+    }
+    await Clipboard.setData(
+      ClipboardData(text: selection.textInside(_contentController.text)),
+    );
+    _contentFocusNode.requestFocus();
+  }
+
+  Future<void> _pasteMarkdownClipboardText() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final pasteText = data?.text;
+    if (pasteText == null || pasteText.isEmpty) {
+      _contentFocusNode.requestFocus();
+      return;
+    }
+    final oldValue = _contentController.value;
+    final selection = oldValue.selection.isValid
+        ? oldValue.selection
+        : TextSelection.collapsed(offset: oldValue.text.length);
+    final rawValue = TextEditingValue(
+      text: '${selection.textBefore(oldValue.text)}'
+          '$pasteText'
+          '${selection.textAfter(oldValue.text)}',
+      selection: TextSelection.collapsed(
+        offset: selection.textBefore(oldValue.text).length + pasteText.length,
+      ),
+    );
+    final formattedValue =
+        MarkdownPasteText.formatEditUpdate(oldValue, rawValue);
+    _contentController.value = formattedValue;
+    _commitContent(formattedValue.text);
+    _contentFocusNode.requestFocus();
+  }
+
+  void _selectAllMarkdownText() {
+    _contentController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _contentController.text.length,
+    );
+    _contentFocusNode.requestFocus();
   }
 
   void _beginToolbarInteraction() {
@@ -4104,15 +5510,50 @@ class _NoteEditorState extends State<_NoteEditor> {
                 style: textStyle,
               ),
             ),
-            Text(
-              '${(widget.textZoom * 100).round()}%',
-              key: const ValueKey('note-status-zoom'),
-              style: textStyle,
-            ),
+            _noteZoomStatus(context, textStyle),
           ],
         ),
       ),
     );
+  }
+
+  Widget _noteZoomStatus(BuildContext context, TextStyle? textStyle) {
+    final strings = PaperTodoStringsScope.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final canReset = (widget.textZoom - 1).abs() > 0.001;
+    final zoomText = Text(
+      '${(widget.textZoom * 100).round()}%',
+      style: canReset
+          ? textStyle?.copyWith(
+              color: colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            )
+          : textStyle,
+    );
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: zoomText,
+    );
+    return _conditionalTooltip(
+      enabled: widget.enableToolTips,
+      message: strings.get(PaperTodoStringKeys.actionResetTextZoom),
+      child: MouseRegion(
+        cursor: canReset ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: GestureDetector(
+          key: const ValueKey('note-status-zoom'),
+          behavior: HitTestBehavior.opaque,
+          onTap: canReset ? _resetTextZoom : null,
+          child: content,
+        ),
+      ),
+    );
+  }
+
+  void _resetTextZoom() {
+    if ((widget.textZoom - 1).abs() <= 0.001) {
+      return;
+    }
+    widget.onTextZoomChanged(1);
   }
 
   String _noteStatsText() {
@@ -4154,36 +5595,50 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   Widget _preview(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      key: ValueKey('${widget.paper.id}-preview'),
-      behavior: HitTestBehavior.opaque,
-      onTap: _enterEditorFromPreview,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border.all(color: colorScheme.outlineVariant),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 112),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: MarkdownBody(
-              data: widget.paper.content.trim().isEmpty
-                  ? strings.get(PaperTodoStringKeys.noteEmptyPreview)
-                  : widget.paper.content,
-              inlineSyntaxes: paperTodoMarkdownInlineHtmlSyntaxes(),
-              extensionSet: _paperTodoMarkdownExtensionSet,
-              builders: _paperTodoMarkdownBuilders,
-              imageBuilder: _paperTodoMarkdownImageBuilder,
-              onTapLink: (text, href, title) =>
-                  _openMarkdownLink(context, href),
-              styleSheet: _previewMarkdownStyleSheet(context),
-              selectable: true,
+    return Listener(
+      onPointerDown: (event) =>
+          _handlePreviewContextMenuPointerDown(context, event),
+      child: GestureDetector(
+        key: ValueKey('${widget.paper.id}-preview'),
+        behavior: HitTestBehavior.opaque,
+        onTap: _enterEditorFromPreview,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(color: colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 112),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: MarkdownBody(
+                data: widget.paper.content.trim().isEmpty
+                    ? strings.get(PaperTodoStringKeys.noteEmptyPreview)
+                    : widget.paper.content,
+                inlineSyntaxes: paperTodoMarkdownInlineHtmlSyntaxes(),
+                extensionSet: _paperTodoMarkdownExtensionSet,
+                builders: _paperTodoMarkdownBuilders,
+                imageBuilder: _paperTodoMarkdownImageBuilder,
+                onTapLink: (text, href, title) =>
+                    _openMarkdownLink(context, href),
+                styleSheet: _previewMarkdownStyleSheet(context),
+                selectable: true,
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  void _handlePreviewContextMenuPointerDown(
+    BuildContext context,
+    PointerDownEvent event,
+  ) {
+    if (event.buttons & kSecondaryMouseButton == 0) {
+      return;
+    }
+    unawaited(widget.onShowPaperContextMenu(context, event.position));
   }
 
   Widget _paperTodoMarkdownImageBuilder(
@@ -4236,7 +5691,7 @@ class _NoteEditorState extends State<_NoteEditor> {
             content: Text(
               strings.format(
                 PaperTodoStringKeys.openLinkFailed,
-                [_readableFailureMessage(error)],
+                [_readableFailureMessage(error, strings: strings)],
               ),
             ),
           ),
@@ -4282,6 +5737,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       elements: widget.paper.noteCanvasElements,
       selectedElementId: _selectedCanvasElementId,
       geometryGesturesEnabled: !widget.paper.isPinnedToDesktop,
+      enableToolTips: widget.enableToolTips,
       textZoom: widget.textZoom,
       onChanged: widget.onChanged,
       onGeometryChanging: _refreshCanvasGeometry,
@@ -4301,25 +5757,12 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   Widget _addCanvasButton() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      children: [
-        TextButton.icon(
-          onPressed: widget.paper.isPinnedToDesktop
-              ? null
-              : () => _addCanvasElement(NoteCanvasElementTypes.code),
-          icon: const Icon(Icons.add_box_outlined),
-          label: Text(strings.get(PaperTodoStringKeys.actionAddCanvasBlock)),
-        ),
-        TextButton.icon(
-          onPressed: widget.paper.isPinnedToDesktop
-              ? null
-              : () => _addCanvasElement(NoteCanvasElementTypes.text),
-          icon: const Icon(Icons.note_add_outlined),
-          label: Text(strings.get(PaperTodoStringKeys.actionAddTextBlock)),
-        ),
-      ],
+    return TextButton.icon(
+      onPressed: widget.paper.isPinnedToDesktop
+          ? null
+          : () => _addCanvasElement(NoteCanvasElementTypes.code),
+      icon: const Icon(Icons.add_box_outlined),
+      label: Text(strings.get(PaperTodoStringKeys.actionAddCanvasBlock)),
     );
   }
 
@@ -4329,9 +5772,8 @@ class _NoteEditorState extends State<_NoteEditor> {
     }
     final elements = widget.paper.noteCanvasElements;
     final normalizedType = NoteCanvasElementTypes.normalize(type);
-    final nextIndex = elements.length + 1;
-    final width = _defaultNoteCanvasElementWidth(normalizedType);
-    final height = _defaultNoteCanvasElementHeight(normalizedType);
+    final width = _defaultNoteCanvasElementWidth();
+    final height = _defaultNoteCanvasElementHeight();
     final point = _nextNoteCanvasElementPoint(width, height, elements.length);
     final maxLayer = _maxCanvasElementLayer(elements);
     setState(() {
@@ -4340,7 +5782,7 @@ class _NoteEditorState extends State<_NoteEditor> {
         NoteCanvasElement(
           id: elementId,
           type: normalizedType,
-          text: _defaultNoteCanvasElementText(normalizedType, nextIndex),
+          text: _defaultNoteCanvasElementText(),
           x: point.dx,
           y: point.dy,
           width: width,
@@ -4407,6 +5849,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       switch (action) {
         case _CanvasLayerAction.bringForward:
           if (elementIndex < orderedElements.length - 1) {
+            _renumberDuplicateCanvasLayers(orderedElements);
             final nextElement = orderedElements[elementIndex + 1];
             final currentLayer = element.zIndex;
             element.zIndex = nextElement.zIndex;
@@ -4416,6 +5859,7 @@ class _NoteEditorState extends State<_NoteEditor> {
           break;
         case _CanvasLayerAction.sendBackward:
           if (elementIndex > 0) {
+            _renumberDuplicateCanvasLayers(orderedElements);
             final previousElement = orderedElements[elementIndex - 1];
             final currentLayer = element.zIndex;
             element.zIndex = previousElement.zIndex;
@@ -4529,24 +5973,36 @@ class _NoteEditorState extends State<_NoteEditor> {
         .reduce((min, zIndex) => zIndex < min ? zIndex : min);
   }
 
-  double _defaultNoteCanvasElementWidth(String type) {
-    return switch (type) {
-      NoteCanvasElementTypes.text => 230,
-      _ => 230,
-    };
-  }
-
-  double _defaultNoteCanvasElementHeight(String type) {
-    return switch (type) {
-      NoteCanvasElementTypes.text => 116,
-      _ => 116,
-    };
-  }
-
-  String _defaultNoteCanvasElementText(String type, int index) {
-    if (type == NoteCanvasElementTypes.text) {
-      return strings.format(PaperTodoStringKeys.canvasDefaultText, [index]);
+  void _renumberDuplicateCanvasLayers(
+    List<NoteCanvasElement> orderedElements,
+  ) {
+    final seenLayers = <int>{};
+    var hasDuplicateLayer = false;
+    for (final element in orderedElements) {
+      if (!seenLayers.add(element.zIndex)) {
+        hasDuplicateLayer = true;
+        break;
+      }
     }
+    if (!hasDuplicateLayer || orderedElements.isEmpty) {
+      return;
+    }
+
+    final firstLayer = orderedElements.first.zIndex;
+    for (var index = 0; index < orderedElements.length; index += 1) {
+      orderedElements[index].zIndex = firstLayer + index;
+    }
+  }
+
+  double _defaultNoteCanvasElementWidth() {
+    return 230;
+  }
+
+  double _defaultNoteCanvasElementHeight() {
+    return 116;
+  }
+
+  String _defaultNoteCanvasElementText() {
     return 'Console.WriteLine("PaperTodo");';
   }
 }
@@ -4556,6 +6012,7 @@ class _NoteCanvasPreview extends StatelessWidget {
     required this.elements,
     required this.selectedElementId,
     required this.geometryGesturesEnabled,
+    required this.enableToolTips,
     required this.textZoom,
     required this.onChanged,
     required this.onGeometryChanging,
@@ -4569,6 +6026,7 @@ class _NoteCanvasPreview extends StatelessWidget {
   final List<NoteCanvasElement> elements;
   final String? selectedElementId;
   final bool geometryGesturesEnabled;
+  final bool enableToolTips;
   final double textZoom;
   final Future<void> Function() onChanged;
   final VoidCallback onGeometryChanging;
@@ -4630,6 +6088,7 @@ class _NoteCanvasPreview extends StatelessWidget {
                       layerCount: sortedElements.length,
                       isSelected: sortedElements[index].id == selectedElementId,
                       geometryGesturesEnabled: geometryGesturesEnabled,
+                      enableToolTips: enableToolTips,
                       strings: strings,
                       scale: scale,
                       canvasWidth: canvasWidth,
@@ -4672,6 +6131,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
     required this.layerCount,
     required this.isSelected,
     required this.geometryGesturesEnabled,
+    required this.enableToolTips,
     required this.strings,
     required this.scale,
     required this.canvasWidth,
@@ -4692,6 +6152,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
   final int layerCount;
   final bool isSelected;
   final bool geometryGesturesEnabled;
+  final bool enableToolTips;
   final PaperTodoStrings strings;
   final double scale;
   final double canvasWidth;
@@ -4773,385 +6234,414 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
         element.height * widget.scale < 72;
     final elementPadding =
         compactContent ? 4.0 : (8 * widget.scale).clamp(4, 8).toDouble();
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHigh,
-        border: Border.all(
-          color: widget.isSelected
-              ? colorScheme.primary
-              : colorScheme.outlineVariant,
-          width: widget.isSelected ? 2 : 1,
-        ),
-        borderRadius: BorderRadius.circular(6),
-        boxShadow: widget.isSelected
-            ? [
-                BoxShadow(
-                  color: colorScheme.primary.withValues(alpha: 0.18),
-                  blurRadius: 10,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
-      ),
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          Padding(
-            padding: EdgeInsets.all(elementPadding),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Tooltip(
-                        message: widget.strings
-                            .get(PaperTodoStringKeys.canvasDragBlock),
-                        child: MouseRegion(
-                          cursor: widget.geometryGesturesEnabled
-                              ? SystemMouseCursors.move
-                              : SystemMouseCursors.basic,
-                          child: Listener(
-                            key: ValueKey(
-                              'note-canvas-drag-handle-${element.id}',
-                            ),
-                            behavior: HitTestBehavior.opaque,
-                            onPointerDown: (event) => _beginGeometryGesture(
-                              event,
-                              _CanvasGeometryDragMode.move,
-                            ),
-                            onPointerMove: _updateGeometryGesture,
-                            onPointerUp: _endGeometryGesture,
-                            onPointerCancel: _endGeometryGesture,
-                            child: compactContent
-                                ? Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Icon(
-                                      Icons.open_with,
-                                      size: (16 * widget.scale)
-                                          .clamp(12, 16)
-                                          .toDouble(),
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
-                                  )
-                                : Wrap(
-                                    spacing: (6 * widget.scale)
-                                        .clamp(3, 6)
-                                        .toDouble(),
-                                    runSpacing: (4 * widget.scale)
-                                        .clamp(2, 4)
-                                        .toDouble(),
-                                    children: [
-                                      _NoteCanvasElementBadge(
-                                        label: typeLabel,
-                                        scale: widget.scale,
-                                        color: colorScheme.primaryContainer,
-                                        foregroundColor:
-                                            colorScheme.onPrimaryContainer,
-                                      ),
-                                      _NoteCanvasElementBadge(
-                                        label: layerLabel,
-                                        scale: widget.scale,
-                                        color: colorScheme.secondaryContainer,
-                                        foregroundColor:
-                                            colorScheme.onSecondaryContainer,
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (showInlineActions) ...[
-                      SizedBox.square(
-                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
-                        child: IconButton(
-                          tooltip: widget.strings
-                              .get(PaperTodoStringKeys.canvasEditGeometry),
-                          style: IconButton.styleFrom(
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            minimumSize: Size.zero,
-                          ),
-                          onPressed: widget.geometryGesturesEnabled
-                              ? () {
-                                  widget.onSelect(element);
-                                  unawaited(widget.onEdit(element));
-                                }
-                              : null,
-                          iconSize:
-                              (18 * widget.scale).clamp(16, 18).toDouble(),
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.tune_outlined),
-                        ),
-                      ),
-                      SizedBox.square(
-                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
-                        child: IconButton(
-                          tooltip: widget.strings
-                              .get(PaperTodoStringKeys.canvasDuplicateBlock),
-                          style: IconButton.styleFrom(
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            minimumSize: Size.zero,
-                          ),
-                          onPressed: widget.geometryGesturesEnabled
-                              ? () {
-                                  widget.onSelect(element);
-                                  widget.onDuplicate(element);
-                                }
-                              : null,
-                          iconSize:
-                              (18 * widget.scale).clamp(16, 18).toDouble(),
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.content_copy_outlined),
-                        ),
-                      ),
-                      SizedBox.square(
-                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
-                        child: PopupMenuButton<_CanvasLayerAction>(
-                          key: ValueKey(
-                            'note-canvas-layer-actions-${element.id}',
-                          ),
-                          enabled: widget.geometryGesturesEnabled,
-                          tooltip: widget.strings
-                              .get(PaperTodoStringKeys.canvasLayerActions),
-                          child: Center(
-                            child: Icon(
-                              Icons.layers_outlined,
-                              size:
-                                  (18 * widget.scale).clamp(16, 18).toDouble(),
-                            ),
-                          ),
-                          onSelected: (action) {
-                            widget.onSelect(element);
-                            widget.onLayerAction(element, action);
-                          },
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: _CanvasLayerAction.bringToFront,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasBringToFront,
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _CanvasLayerAction.bringForward,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasBringForward,
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _CanvasLayerAction.sendBackward,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasSendBackward,
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _CanvasLayerAction.sendToBack,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasSendToBack,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      SizedBox.square(
-                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
-                        child: IconButton(
-                          tooltip: widget.strings
-                              .get(PaperTodoStringKeys.canvasDeleteBlock),
-                          style: IconButton.styleFrom(
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            minimumSize: Size.zero,
-                          ),
-                          onPressed: widget.geometryGesturesEnabled
-                              ? () {
-                                  widget.onSelect(element);
-                                  widget.onDelete(element);
-                                }
-                              : null,
-                          iconSize:
-                              (18 * widget.scale).clamp(16, 18).toDouble(),
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.close_outlined),
-                        ),
-                      ),
-                    ] else
-                      SizedBox.square(
-                        dimension: (28 * widget.scale).clamp(24, 28).toDouble(),
-                        child: PopupMenuButton<String>(
-                          key: ValueKey(
-                            'note-canvas-compact-actions-${element.id}',
-                          ),
-                          enabled: widget.geometryGesturesEnabled,
-                          tooltip: widget.strings
-                              .get(PaperTodoStringKeys.canvasBlockActions),
-                          child: Center(
-                            child: Icon(
-                              Icons.more_vert,
-                              size:
-                                  (18 * widget.scale).clamp(16, 18).toDouble(),
-                            ),
-                          ),
-                          onSelected: _handleCompactCanvasAction,
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: _compactCanvasActionEdit,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasEditGeometry,
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _compactCanvasActionDuplicate,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasDuplicateBlock,
-                                ),
-                              ),
-                            ),
-                            const PopupMenuDivider(),
-                            PopupMenuItem(
-                              value: _compactCanvasActionBringToFront,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasBringToFront,
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _compactCanvasActionBringForward,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasBringForward,
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _compactCanvasActionSendBackward,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasSendBackward,
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _compactCanvasActionSendToBack,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.canvasSendToBack,
-                                ),
-                              ),
-                            ),
-                            const PopupMenuDivider(),
-                            PopupMenuItem(
-                              value: _compactCanvasActionDelete,
-                              child: Text(
-                                widget.strings.get(
-                                  PaperTodoStringKeys.actionDelete,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-                Expanded(
-                  child: compactContent
-                      ? GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => widget.onSelect(element),
-                          child: ClipRect(
-                            child: Align(
-                              alignment: Alignment.topLeft,
-                              child: Text(
-                                element.text,
-                                maxLines: 1,
-                                overflow: TextOverflow.fade,
-                                softWrap: false,
-                                style: style?.copyWith(
-                                  color: colorScheme.onSurface,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ),
-                          ),
-                        )
-                      : Focus(
-                          onKeyEvent: _handleCanvasTextKeyEvent,
-                          child: TextFormField(
-                            key: ValueKey(
-                              'note-canvas-element-text-${element.id}',
-                            ),
-                            controller: _textController,
-                            readOnly: !widget.geometryGesturesEnabled,
-                            enableInteractiveSelection:
-                                widget.geometryGesturesEnabled,
-                            expands: true,
-                            maxLines: null,
-                            minLines: null,
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              isDense: true,
-                            ),
-                            style: style?.copyWith(
-                              color: colorScheme.onSurface,
-                              height: 1.35,
-                            ),
-                            onTap: () => widget.onSelect(element),
-                            onChanged: _commitCanvasText,
-                          ),
-                        ),
-                ),
-              ],
-            ),
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handleCanvasContextMenuPointerDown,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHigh,
+          border: Border.all(
+            color: widget.isSelected
+                ? colorScheme.primary
+                : colorScheme.outlineVariant,
+            width: widget.isSelected ? 2 : 1,
           ),
-          Positioned(
-            right: 3,
-            bottom: 3,
-            child: Tooltip(
-              message:
-                  widget.strings.get(PaperTodoStringKeys.canvasResizeBlock),
-              child: MouseRegion(
-                cursor: widget.geometryGesturesEnabled
-                    ? SystemMouseCursors.resizeDownRight
-                    : SystemMouseCursors.basic,
-                child: Listener(
-                  key: ValueKey('note-canvas-resize-handle-${element.id}'),
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: (event) => _beginGeometryGesture(
-                    event,
-                    _CanvasGeometryDragMode.resize,
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: widget.isSelected
+              ? [
+                  BoxShadow(
+                    color: colorScheme.primary.withValues(alpha: 0.18),
+                    blurRadius: 10,
+                    spreadRadius: 1,
                   ),
-                  onPointerMove: _updateGeometryGesture,
-                  onPointerUp: _endGeometryGesture,
-                  onPointerCancel: _endGeometryGesture,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.32),
-                      borderRadius: BorderRadius.circular(4),
+                ]
+              : null,
+        ),
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Padding(
+              padding: EdgeInsets.all(elementPadding),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _conditionalTooltip(
+                          enabled: widget.enableToolTips,
+                          message: widget.strings
+                              .get(PaperTodoStringKeys.canvasDragBlock),
+                          child: MouseRegion(
+                            cursor: widget.geometryGesturesEnabled
+                                ? SystemMouseCursors.move
+                                : SystemMouseCursors.basic,
+                            child: Listener(
+                              key: ValueKey(
+                                'note-canvas-drag-handle-${element.id}',
+                              ),
+                              behavior: HitTestBehavior.opaque,
+                              onPointerDown: (event) => _beginGeometryGesture(
+                                event,
+                                _CanvasGeometryDragMode.move,
+                              ),
+                              onPointerMove: _updateGeometryGesture,
+                              onPointerUp: _endGeometryGesture,
+                              onPointerCancel: _endGeometryGesture,
+                              child: compactContent
+                                  ? Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Icon(
+                                        Icons.open_with,
+                                        size: (16 * widget.scale)
+                                            .clamp(12, 16)
+                                            .toDouble(),
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    )
+                                  : Wrap(
+                                      spacing: (6 * widget.scale)
+                                          .clamp(3, 6)
+                                          .toDouble(),
+                                      runSpacing: (4 * widget.scale)
+                                          .clamp(2, 4)
+                                          .toDouble(),
+                                      children: [
+                                        _NoteCanvasElementBadge(
+                                          label: typeLabel,
+                                          scale: widget.scale,
+                                          color: colorScheme.primaryContainer,
+                                          foregroundColor:
+                                              colorScheme.onPrimaryContainer,
+                                        ),
+                                        _NoteCanvasElementBadge(
+                                          label: layerLabel,
+                                          scale: widget.scale,
+                                          color: colorScheme.secondaryContainer,
+                                          foregroundColor:
+                                              colorScheme.onSecondaryContainer,
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (showInlineActions) ...[
+                        SizedBox.square(
+                          dimension:
+                              (28 * widget.scale).clamp(24, 28).toDouble(),
+                          child: IconButton(
+                            tooltip: _tooltipLabel(
+                              widget.enableToolTips,
+                              widget.strings
+                                  .get(PaperTodoStringKeys.canvasEditGeometry),
+                            ),
+                            style: IconButton.styleFrom(
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              minimumSize: Size.zero,
+                            ),
+                            onPressed: widget.geometryGesturesEnabled
+                                ? () {
+                                    widget.onSelect(element);
+                                    unawaited(widget.onEdit(element));
+                                  }
+                                : null,
+                            iconSize:
+                                (18 * widget.scale).clamp(16, 18).toDouble(),
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.tune_outlined),
+                          ),
+                        ),
+                        SizedBox.square(
+                          dimension:
+                              (28 * widget.scale).clamp(24, 28).toDouble(),
+                          child: IconButton(
+                            tooltip: _tooltipLabel(
+                              widget.enableToolTips,
+                              widget.strings.get(
+                                PaperTodoStringKeys.canvasDuplicateBlock,
+                              ),
+                            ),
+                            style: IconButton.styleFrom(
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              minimumSize: Size.zero,
+                            ),
+                            onPressed: widget.geometryGesturesEnabled
+                                ? () {
+                                    widget.onSelect(element);
+                                    widget.onDuplicate(element);
+                                  }
+                                : null,
+                            iconSize:
+                                (18 * widget.scale).clamp(16, 18).toDouble(),
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.content_copy_outlined),
+                          ),
+                        ),
+                        SizedBox.square(
+                          dimension:
+                              (28 * widget.scale).clamp(24, 28).toDouble(),
+                          child: PopupMenuButton<_CanvasLayerAction>(
+                            key: ValueKey(
+                              'note-canvas-layer-actions-${element.id}',
+                            ),
+                            enabled: widget.geometryGesturesEnabled,
+                            tooltip: _tooltipLabel(
+                              widget.enableToolTips,
+                              widget.strings
+                                  .get(PaperTodoStringKeys.canvasLayerActions),
+                            ),
+                            child: Center(
+                              child: Icon(
+                                Icons.layers_outlined,
+                                size: (18 * widget.scale)
+                                    .clamp(16, 18)
+                                    .toDouble(),
+                              ),
+                            ),
+                            onSelected: (action) {
+                              widget.onSelect(element);
+                              widget.onLayerAction(element, action);
+                            },
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: _CanvasLayerAction.bringToFront,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasBringToFront,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: _CanvasLayerAction.bringForward,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasBringForward,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: _CanvasLayerAction.sendBackward,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasSendBackward,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: _CanvasLayerAction.sendToBack,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasSendToBack,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox.square(
+                          dimension:
+                              (28 * widget.scale).clamp(24, 28).toDouble(),
+                          child: IconButton(
+                            tooltip: _tooltipLabel(
+                              widget.enableToolTips,
+                              widget.strings
+                                  .get(PaperTodoStringKeys.canvasDeleteBlock),
+                            ),
+                            style: IconButton.styleFrom(
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              minimumSize: Size.zero,
+                            ),
+                            onPressed: widget.geometryGesturesEnabled
+                                ? () {
+                                    widget.onSelect(element);
+                                    widget.onDelete(element);
+                                  }
+                                : null,
+                            iconSize:
+                                (18 * widget.scale).clamp(16, 18).toDouble(),
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.close_outlined),
+                          ),
+                        ),
+                      ] else
+                        SizedBox.square(
+                          dimension:
+                              (28 * widget.scale).clamp(24, 28).toDouble(),
+                          child: PopupMenuButton<String>(
+                            key: ValueKey(
+                              'note-canvas-compact-actions-${element.id}',
+                            ),
+                            enabled: widget.geometryGesturesEnabled,
+                            tooltip: _tooltipLabel(
+                              widget.enableToolTips,
+                              widget.strings
+                                  .get(PaperTodoStringKeys.canvasBlockActions),
+                            ),
+                            child: Center(
+                              child: Icon(
+                                Icons.more_vert,
+                                size: (18 * widget.scale)
+                                    .clamp(16, 18)
+                                    .toDouble(),
+                              ),
+                            ),
+                            onSelected: _handleCompactCanvasAction,
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: _compactCanvasActionEdit,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasEditGeometry,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: _compactCanvasActionDuplicate,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasDuplicateBlock,
+                                  ),
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                value: _compactCanvasActionBringToFront,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasBringToFront,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: _compactCanvasActionBringForward,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasBringForward,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: _compactCanvasActionSendBackward,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasSendBackward,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: _compactCanvasActionSendToBack,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.canvasSendToBack,
+                                  ),
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                value: _compactCanvasActionDelete,
+                                child: Text(
+                                  widget.strings.get(
+                                    PaperTodoStringKeys.actionDelete,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  Expanded(
+                    child: compactContent
+                        ? GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => widget.onSelect(element),
+                            child: ClipRect(
+                              child: Align(
+                                alignment: Alignment.topLeft,
+                                child: Text(
+                                  element.text,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                  style: style?.copyWith(
+                                    color: colorScheme.onSurface,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                        : Focus(
+                            onKeyEvent: _handleCanvasTextKeyEvent,
+                            child: TextFormField(
+                              key: ValueKey(
+                                'note-canvas-element-text-${element.id}',
+                              ),
+                              controller: _textController,
+                              readOnly: !widget.geometryGesturesEnabled,
+                              enableInteractiveSelection:
+                                  widget.geometryGesturesEnabled,
+                              expands: true,
+                              maxLines: null,
+                              minLines: null,
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                              style: style?.copyWith(
+                                color: colorScheme.onSurface,
+                                height: 1.35,
+                              ),
+                              onTap: () => widget.onSelect(element),
+                              onChanged: _commitCanvasText,
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              right: 3,
+              bottom: 3,
+              child: _conditionalTooltip(
+                enabled: widget.enableToolTips,
+                message:
+                    widget.strings.get(PaperTodoStringKeys.canvasResizeBlock),
+                child: MouseRegion(
+                  cursor: widget.geometryGesturesEnabled
+                      ? SystemMouseCursors.resizeDownRight
+                      : SystemMouseCursors.basic,
+                  child: Listener(
+                    key: ValueKey('note-canvas-resize-handle-${element.id}'),
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: (event) => _beginGeometryGesture(
+                      event,
+                      _CanvasGeometryDragMode.resize,
                     ),
-                    child: SizedBox.square(
-                      dimension: (16 * widget.scale).clamp(14, 18).toDouble(),
-                      child: Icon(
-                        Icons.open_in_full,
-                        size: (11 * widget.scale).clamp(9, 11).toDouble(),
-                        color: colorScheme.onPrimaryContainer,
+                    onPointerMove: _updateGeometryGesture,
+                    onPointerUp: _endGeometryGesture,
+                    onPointerCancel: _endGeometryGesture,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.32),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: SizedBox.square(
+                        dimension: (16 * widget.scale).clamp(14, 18).toDouble(),
+                        child: Icon(
+                          Icons.open_in_full,
+                          size: (11 * widget.scale).clamp(9, 11).toDouble(),
+                          color: colorScheme.onPrimaryContainer,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -5163,6 +6653,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
     if (!widget.geometryGesturesEnabled) {
       return;
     }
+    if (event.buttons & kPrimaryMouseButton == 0) {
+      return;
+    }
     if (_geometryPointer != null) {
       return;
     }
@@ -5170,6 +6663,88 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
     _geometryDragMode = mode;
     _geometryChanged = false;
     widget.onSelect(widget.element);
+  }
+
+  void _handleCanvasContextMenuPointerDown(PointerDownEvent event) {
+    if (!widget.geometryGesturesEnabled) {
+      return;
+    }
+    if (event.buttons & kSecondaryMouseButton == 0) {
+      return;
+    }
+    widget.onSelect(widget.element);
+    unawaited(_showCanvasElementContextMenu(event.position));
+  }
+
+  Future<void> _showCanvasElementContextMenu(Offset globalPosition) async {
+    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
+    if (overlay is! RenderBox) {
+      return;
+    }
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+        Offset.zero & overlay.size,
+      ),
+      items: _canvasElementContextMenuItems(),
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    _handleCompactCanvasAction(selected);
+  }
+
+  List<PopupMenuEntry<String>> _canvasElementContextMenuItems() {
+    return [
+      PopupMenuItem<String>(
+        enabled: false,
+        child: Text(
+          '${_noteCanvasElementTypeLabel(widget.strings, widget.element.type)}'
+          ' · ${_noteCanvasLayerLabel(
+            widget.strings,
+            widget.layerRank,
+            widget.layerCount,
+          )}',
+        ),
+      ),
+      const PopupMenuDivider(),
+      _canvasElementContextMenuItem(
+        value: _compactCanvasActionBringForward,
+        label: widget.strings.get(PaperTodoStringKeys.canvasBringForward),
+      ),
+      _canvasElementContextMenuItem(
+        value: _compactCanvasActionSendBackward,
+        label: widget.strings.get(PaperTodoStringKeys.canvasSendBackward),
+      ),
+      _canvasElementContextMenuItem(
+        value: _compactCanvasActionBringToFront,
+        label: widget.strings.get(PaperTodoStringKeys.canvasBringToFront),
+      ),
+      _canvasElementContextMenuItem(
+        value: _compactCanvasActionSendToBack,
+        label: widget.strings.get(PaperTodoStringKeys.canvasSendToBack),
+      ),
+      _canvasElementContextMenuItem(
+        value: _compactCanvasActionDuplicate,
+        label: widget.strings.get(PaperTodoStringKeys.canvasDuplicateBlock),
+      ),
+      const PopupMenuDivider(),
+      _canvasElementContextMenuItem(
+        value: _compactCanvasActionDelete,
+        label: widget.strings.get(PaperTodoStringKeys.actionDelete),
+      ),
+    ];
+  }
+
+  PopupMenuItem<String> _canvasElementContextMenuItem({
+    required String value,
+    required String label,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Text(label),
+    );
   }
 
   void _handleCompactCanvasAction(String action) {
@@ -5326,15 +6901,7 @@ class _NoteCanvasElementBadge extends StatelessWidget {
 }
 
 String _noteCanvasElementTypeLabel(PaperTodoStrings strings, String type) {
-  return switch (type) {
-    NoteCanvasElementTypes.text =>
-      strings.get(PaperTodoStringKeys.canvasBlockTypeText),
-    NoteCanvasElementTypes.code =>
-      strings.get(PaperTodoStringKeys.canvasBlockTypeCode),
-    _ => type.trim().isEmpty
-        ? strings.get(PaperTodoStringKeys.canvasBlockTypeBlock)
-        : type.trim().toUpperCase(),
-  };
+  return strings.get(PaperTodoStringKeys.canvasBlockTypeCode);
 }
 
 String _noteCanvasLayerLabel(
@@ -5390,13 +6957,11 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
   late final TextEditingController _widthController;
   late final TextEditingController _heightController;
   late final TextEditingController _layerController;
-  late String _type;
   String? _errorText;
 
   @override
   void initState() {
     super.initState();
-    _type = NoteCanvasElementTypes.normalize(widget.element.type);
     _xController = TextEditingController(text: _format(widget.element.x));
     _yController = TextEditingController(text: _format(widget.element.y));
     _widthController =
@@ -5437,31 +7002,6 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
               ),
               const SizedBox(height: 12),
             ],
-            Align(
-              alignment: Alignment.centerLeft,
-              child: SegmentedButton<String>(
-                segments: [
-                  ButtonSegment(
-                    value: NoteCanvasElementTypes.code,
-                    icon: const Icon(Icons.code_outlined),
-                    label: Text(
-                      strings.get(PaperTodoStringKeys.canvasBlockTypeCodeLabel),
-                    ),
-                  ),
-                  ButtonSegment(
-                    value: NoteCanvasElementTypes.text,
-                    icon: const Icon(Icons.notes_outlined),
-                    label: Text(
-                      strings.get(PaperTodoStringKeys.canvasBlockTypeTextLabel),
-                    ),
-                  ),
-                ],
-                selected: {_type},
-                onSelectionChanged: (selection) =>
-                    setState(() => _type = selection.single),
-              ),
-            ),
-            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(child: _numberField(_xController, 'X')),
@@ -5551,7 +7091,7 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
     }
     Navigator.of(context).pop(
       _CanvasGeometry(
-        type: _type,
+        type: NoteCanvasElementTypes.code,
         x: x,
         y: y,
         width: width,
@@ -5586,7 +7126,7 @@ class _TodoEditor extends StatefulWidget {
     required this.dueYearDisplayMode,
     required this.defaultReminderIntervalValue,
     required this.defaultReminderIntervalUnit,
-    required this.onOpen,
+    required this.onOpenLinkedNote,
     required this.onRunScriptCapsule,
     required this.onChanged,
     required this.onItemDeleted,
@@ -5609,7 +7149,8 @@ class _TodoEditor extends StatefulWidget {
   final String dueYearDisplayMode;
   final int defaultReminderIntervalValue;
   final String defaultReminderIntervalUnit;
-  final Future<void> Function(PaperData paper) onOpen;
+  final Future<void> Function(PaperData paper, PaperData anchorPaper)
+      onOpenLinkedNote;
   final Future<void> Function(ScriptCapsuleSpec spec) onRunScriptCapsule;
   final Future<void> Function() onChanged;
   final void Function(PaperData paper, PaperItem item) onItemDeleted;
@@ -5631,10 +7172,16 @@ class _TodoEditorState extends State<_TodoEditor> {
   final _todoFocusNode = FocusNode(debugLabel: 'todo-editor');
   final _todoMainFieldFocusNodes = <String, FocusNode>{};
   final _todoExtraFieldFocusNodes = <String, FocusNode>{};
+  final _todoColumnHitTestKeys = <String, GlobalKey>{};
+  final _todoDropTargetKeys = <String, GlobalKey>{};
   final _undoStack = <List<Map<String, Object?>>>[];
   final _redoStack = <List<Map<String, Object?>>>[];
+  final _focusedTodoTextUndoStack = <String>[];
+  final _focusedTodoTextRedoStack = <String>[];
   var _textFieldRevision = 0;
   var _suppressTodoBackspaceUntilKeyUp = false;
+  var _applyingTodoTextHistory = false;
+  var _isDraggingTodoItem = false;
   String? _activeOriginalTodoItemId;
   int? _activeOriginalTodoColumnIndex;
   String? _activeOriginalTodoText;
@@ -5674,54 +7221,20 @@ class _TodoEditorState extends State<_TodoEditor> {
           final useCompactItemActions = availableWidth < 600;
           return Column(
             children: [
-              ReorderableListView.builder(
-                buildDefaultDragHandles: false,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: widget.paper.items.length,
-                onReorderItem: _reorderTodoItem,
-                itemBuilder: (context, index) {
-                  final item = widget.paper.items[index];
-                  return _todoRow(
+              for (var itemIndex = 0;
+                  itemIndex < widget.paper.items.length;
+                  itemIndex++)
+                _todoReorderDropTarget(
+                  item: widget.paper.items[itemIndex],
+                  child: _todoRow(
                     context: context,
-                    item: item,
-                    itemIndex: index,
+                    item: widget.paper.items[itemIndex],
                     itemTextStyle: itemTextStyle,
                     visualSpec: visualSpec,
                     compactActions: useCompactItemActions,
-                  );
-                },
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextButton.icon(
-                      onPressed: _addItem,
-                      icon: const Icon(Icons.add),
-                      label:
-                          Text(strings.get(PaperTodoStringKeys.actionAddItem)),
-                    ),
-                    IconButton(
-                      tooltip: _tooltipLabel(
-                        widget.enableToolTips,
-                        strings.get(PaperTodoStringKeys.actionUndoTodoChange),
-                      ),
-                      onPressed: _undoStack.isEmpty ? null : _undoTodoChange,
-                      icon: const Icon(Icons.undo),
-                    ),
-                    IconButton(
-                      tooltip: _tooltipLabel(
-                        widget.enableToolTips,
-                        strings.get(PaperTodoStringKeys.actionRedoTodoChange),
-                      ),
-                      onPressed: _redoStack.isEmpty ? null : _redoTodoChange,
-                      icon: const Icon(Icons.redo),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              _todoDeleteDropTarget(context, visualSpec),
             ],
           );
         },
@@ -5729,10 +7242,164 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
   }
 
+  Widget _todoReorderDropTarget({
+    required PaperItem item,
+    required Widget child,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final dropTargetKey = _todoDropTargetKey(item);
+    return DragTarget<PaperItem>(
+      onWillAcceptWithDetails: (details) =>
+          _canAcceptTodoItemDrop(details.data, item),
+      onAcceptWithDetails: (details) => _reorderTodoItemToTarget(
+        details.data,
+        item,
+        after: _dropAfterTodoTarget(item, details.offset),
+      ),
+      builder: (context, candidateData, rejectedData) {
+        final highlighted = candidateData
+            .whereType<PaperItem>()
+            .any((dragged) => _canAcceptTodoItemDrop(dragged, item));
+        return DecoratedBox(
+          key: dropTargetKey,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: highlighted ? colorScheme.primary : Colors.transparent,
+            ),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: child,
+        );
+      },
+    );
+  }
+
+  GlobalKey _todoDropTargetKey(PaperItem item) {
+    return _todoDropTargetKeys.putIfAbsent(
+      item.id,
+      () => GlobalKey(debugLabel: '${widget.paper.id}-${item.id}-drop-target'),
+    );
+  }
+
+  bool _dropAfterTodoTarget(PaperItem target, Offset globalOffset) {
+    final key = _todoDropTargetKeys[target.id];
+    final renderObject = key?.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox ||
+        !renderObject.hasSize ||
+        renderObject.size.height <= 0) {
+      return false;
+    }
+    final localOffset = renderObject.globalToLocal(globalOffset);
+    return localOffset.dy >= renderObject.size.height / 2;
+  }
+
+  Widget _todoDeleteDropTarget(
+    BuildContext context,
+    _TodoVisualSpec visualSpec,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DragTarget<PaperItem>(
+      onWillAcceptWithDetails: (details) => _todoItemIndex(details.data) >= 0,
+      onAcceptWithDetails: (details) {
+        _setTodoItemDragging(false);
+        _deleteItem(context, details.data);
+      },
+      builder: (context, candidateData, rejectedData) {
+        final highlighted = candidateData
+            .whereType<PaperItem>()
+            .any((item) => _todoItemIndex(item) >= 0);
+        final visible = _isDraggingTodoItem || highlighted;
+        final targetHeight = math.max(48.0, visualSpec.controlExtent + 12);
+        if (!visible) {
+          return SizedBox(
+            key: ValueKey('${widget.paper.id}-todo-delete-drop-target'),
+            height: targetHeight,
+            child: _todoFooterActions(),
+          );
+        }
+        return SizedBox(
+          key: ValueKey('${widget.paper.id}-todo-delete-drop-target'),
+          height: targetHeight,
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.errorContainer.withValues(
+                alpha: highlighted ? 0.74 : 0.28,
+              ),
+              border: Border.all(
+                color: colorScheme.error.withValues(
+                  alpha: highlighted ? 0.92 : 0.32,
+                ),
+              ),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: visible
+                ? ClipRect(
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            size: visualSpec.iconSize,
+                            color: colorScheme.onErrorContainer,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            strings.get(PaperTodoStringKeys.actionDeleteItem),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(
+                                  color: colorScheme.onErrorContainer,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _todoFooterActions() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton.icon(
+            onPressed: _addItem,
+            icon: const Icon(Icons.add),
+            label: Text(strings.get(PaperTodoStringKeys.actionAddItem)),
+          ),
+          IconButton(
+            tooltip: _tooltipLabel(
+              widget.enableToolTips,
+              strings.get(PaperTodoStringKeys.actionUndoTodoChange),
+            ),
+            onPressed: _undoStack.isEmpty ? null : _undoTodoChange,
+            icon: const Icon(Icons.undo),
+          ),
+          IconButton(
+            tooltip: _tooltipLabel(
+              widget.enableToolTips,
+              strings.get(PaperTodoStringKeys.actionRedoTodoChange),
+            ),
+            onPressed: _redoStack.isEmpty ? null : _redoTodoChange,
+            icon: const Icon(Icons.redo),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _todoRow({
     required BuildContext context,
     required PaperItem item,
-    required int itemIndex,
     required TextStyle? itemTextStyle,
     required _TodoVisualSpec visualSpec,
     required bool compactActions,
@@ -5763,30 +7430,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                 spacing: 6,
                 runSpacing: 4,
                 children: [
-                  if (_formatDueDate(item.dueAtLocal) case final dueDate?)
-                    InputChip(
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      avatar: Icon(
-                        Icons.event_outlined,
-                        size: visualSpec.chipIconSize,
-                      ),
-                      labelStyle: _todoChipTextStyle(visualSpec),
-                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      label: Text(
-                        strings.format(PaperTodoStringKeys.dueLabel, [dueDate]),
-                      ),
-                      onPressed: () => unawaited(_pickDueDate(context, item)),
-                      onDeleted: () => _clearDueDate(item),
-                      deleteIcon: Icon(
-                        Icons.close_outlined,
-                        size: visualSpec.chipIconSize,
-                      ),
-                      deleteButtonTooltipMessage: _tooltipLabel(
-                        widget.enableToolTips,
-                        strings.get(PaperTodoStringKeys.actionClearDueDate),
-                      ),
-                    ),
+                  ..._todoDueChips(context, item, visualSpec),
                   if (_formatReminderInterval(item)
                       case final reminderInterval?)
                     InputChip(
@@ -5828,17 +7472,304 @@ class _TodoEditorState extends State<_TodoEditor> {
         ..._todoItemActions(
           context: context,
           item: item,
-          itemIndex: itemIndex,
           visualSpec: visualSpec,
           compact: compactActions,
         ),
       ],
     );
+    final rowBody =
+        widget.enableTodoNoteLinks ? _noteLinkDropTarget(item, row) : row;
     return Padding(
       key: ValueKey('${widget.paper.id}-${item.id}-row'),
       padding: EdgeInsets.only(bottom: visualSpec.itemGap),
-      child: widget.enableTodoNoteLinks ? _noteLinkDropTarget(item, row) : row,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (event) =>
+            _handleTodoContextMenuPointerDown(context, item, event),
+        child: rowBody,
+      ),
     );
+  }
+
+  void _handleTodoContextMenuPointerDown(
+    BuildContext context,
+    PaperItem item,
+    PointerDownEvent event,
+  ) {
+    if (event.buttons & kSecondaryMouseButton == 0) {
+      return;
+    }
+    final columnIndex = _todoContextColumnIndexForPosition(
+      item,
+      event.position,
+    );
+    _focusTodoColumn(item, columnIndex);
+    unawaited(
+      _showTodoItemContextMenu(
+        context,
+        item,
+        columnIndex,
+        event.position,
+      ),
+    );
+  }
+
+  Future<void> _showTodoItemContextMenu(
+    BuildContext context,
+    PaperItem item,
+    int columnIndex,
+    Offset globalPosition,
+  ) async {
+    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
+    if (overlay is! RenderBox) {
+      return;
+    }
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+        Offset.zero & overlay.size,
+      ),
+      items: _todoItemContextMenuItems(item, columnIndex),
+    );
+    if (!mounted || !context.mounted) {
+      return;
+    }
+    _focusTodoColumn(item, columnIndex);
+    if (selected == null) {
+      return;
+    }
+    _handleCompactTodoAction(context: context, item: item, value: selected);
+  }
+
+  List<PopupMenuEntry<String>> _todoItemContextMenuItems(
+    PaperItem item,
+    int columnIndex,
+  ) {
+    final hasLinkedNote = item.linkedNoteId?.trim().isNotEmpty ?? false;
+    final normalizedColumnIndex =
+        columnIndex.clamp(0, math.max(0, item.todoColumnCount - 1)).toInt();
+    return [
+      _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuTodoItem)),
+      if (widget.enableTodoNoteLinks && hasLinkedNote) ...[
+        if (_linkedNoteFor(item) case final PaperData linkedNote)
+          _todoActionMenuItem(
+            value: _compactTodoActionOpenLinkedNote,
+            icon: Icons.open_in_new,
+            label: widget.runLinkedScriptCapsulesOnClick &&
+                    ScriptCapsuleSpec.tryParse(linkedNote.content) != null
+                ? strings.get(PaperTodoStringKeys.actionEditLinkedScript)
+                : strings.get(PaperTodoStringKeys.actionOpenLinkedNote),
+          ),
+        _todoActionMenuItem(
+          value: _compactTodoActionUnlinkNote,
+          icon: Icons.link_off_outlined,
+          label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
+        ),
+        const PopupMenuDivider(),
+      ],
+      _todoActionMenuItem(
+        value: _compactTodoActionDueDate,
+        icon: Icons.event_outlined,
+        label: _hasDueDate(item)
+            ? strings.get(PaperTodoStringKeys.actionChangeDueDate)
+            : strings.get(PaperTodoStringKeys.actionSetDueDate),
+      ),
+      if (_hasDueDate(item))
+        _todoActionMenuItem(
+          value: _compactTodoActionClearDueDate,
+          icon: Icons.event_busy_outlined,
+          label: strings.get(PaperTodoStringKeys.actionClearDueDate),
+        ),
+      _todoActionMenuItem(
+        value: _compactTodoActionReminder,
+        icon: Icons.notifications_none_outlined,
+        label: _hasReminderInterval(item)
+            ? strings.get(PaperTodoStringKeys.actionChangeReminder)
+            : strings.get(PaperTodoStringKeys.actionSetReminder),
+      ),
+      if (_hasReminderInterval(item))
+        _todoActionMenuItem(
+          value: _compactTodoActionClearReminder,
+          icon: Icons.notifications_off_outlined,
+          label: strings.get(PaperTodoStringKeys.actionClearReminder),
+        ),
+      if (widget.enableTodoNoteLinks &&
+          widget.notePapers.isNotEmpty &&
+          !hasLinkedNote) ...[
+        const PopupMenuDivider(),
+        for (final note in widget.notePapers)
+          _todoActionMenuItem(
+            value: '$_compactTodoLinkActionPrefix${note.id}',
+            icon: Icons.notes_outlined,
+            label: _displayPaperTitle(note),
+          ),
+      ],
+      const PopupMenuDivider(),
+      _todoActionMenuItem(
+        value:
+            '$_compactTodoColumnActionPrefix$_columnActionInsertBeforePrefix$normalizedColumnIndex',
+        icon: Icons.add_box_outlined,
+        label: strings.format(
+          PaperTodoStringKeys.actionInsertBeforeColumn,
+          [normalizedColumnIndex + 1],
+        ),
+        enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
+      ),
+      _todoActionMenuItem(
+        value:
+            '$_compactTodoColumnActionPrefix$_columnActionDeletePrefix$normalizedColumnIndex',
+        icon: Icons.delete_sweep_outlined,
+        label: strings.format(
+          PaperTodoStringKeys.actionDeleteColumn,
+          [normalizedColumnIndex + 1],
+        ),
+        enabled: item.todoColumnCount > 1,
+      ),
+      _todoActionMenuItem(
+        value: '$_compactTodoColumnActionPrefix$_columnActionAdd',
+        icon: Icons.add,
+        label: strings.get(PaperTodoStringKeys.actionAddColumn),
+        enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
+      ),
+      _todoActionMenuItem(
+        value: '$_compactTodoColumnActionPrefix$_columnActionRemove',
+        icon: Icons.remove,
+        label: strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
+        enabled: item.todoColumnCount > 1,
+      ),
+      _todoActionMenuItem(
+        value: '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
+        icon: Icons.view_column_outlined,
+        label: strings.get(PaperTodoStringKeys.actionEqualWidths),
+        enabled: item.todoColumnCount > 1,
+      ),
+      _todoActionMenuItem(
+        value: '$_compactTodoColumnActionPrefix$_columnActionWideFirst',
+        icon: Icons.view_week_outlined,
+        label: strings.get(PaperTodoStringKeys.actionWideFirstColumn),
+        enabled: item.todoColumnCount > 1,
+      ),
+      const PopupMenuDivider(),
+      _todoActionMenuItem(
+        value: _compactTodoActionMoveUp,
+        icon: Icons.keyboard_arrow_up,
+        label: strings.get(PaperTodoStringKeys.actionMoveItemUp),
+        enabled: _canMoveTodoItem(item, -1),
+      ),
+      _todoActionMenuItem(
+        value: _compactTodoActionMoveDown,
+        icon: Icons.keyboard_arrow_down,
+        label: strings.get(PaperTodoStringKeys.actionMoveItemDown),
+        enabled: _canMoveTodoItem(item, 1),
+      ),
+      const PopupMenuDivider(),
+      _todoActionMenuItem(
+        value: _compactTodoActionDelete,
+        icon: Icons.delete_outline,
+        label: strings.get(PaperTodoStringKeys.actionDeleteItem),
+      ),
+      _todoActionMenuItem(
+        value: _compactTodoActionClearDone,
+        icon: Icons.delete_sweep_outlined,
+        label: strings.get(PaperTodoStringKeys.actionClearCompleted),
+        enabled: _hasDoneTodoItems,
+      ),
+    ];
+  }
+
+  int _todoContextColumnIndexForPosition(
+    PaperItem item,
+    Offset globalPosition,
+  ) {
+    item.normalize();
+    for (var columnIndex = 0;
+        columnIndex < item.todoColumnCount;
+        columnIndex++) {
+      if (_globalPositionInsideKey(
+        _todoColumnHitTestKey(item, columnIndex),
+        globalPosition,
+      )) {
+        return columnIndex;
+      }
+    }
+    return 0;
+  }
+
+  bool _globalPositionInsideKey(GlobalKey key, Offset globalPosition) {
+    final renderObject = key.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return false;
+    }
+    final rect = renderObject.localToGlobal(Offset.zero) & renderObject.size;
+    return rect.contains(globalPosition);
+  }
+
+  List<Widget> _todoDueChips(
+    BuildContext context,
+    PaperItem item,
+    _TodoVisualSpec visualSpec,
+  ) {
+    final dueAt = parsePaperTodoDueAtLocal(item.dueAtLocal);
+    if (dueAt == null) {
+      return const [];
+    }
+
+    final chipTextStyle = _todoChipTextStyle(visualSpec);
+    final chips = <Widget>[];
+    if (widget.showDueRelativeTime) {
+      chips.add(
+        Chip(
+          key: ValueKey('${widget.paper.id}-${item.id}-due-relative'),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          avatar: Icon(
+            Icons.schedule_outlined,
+            size: visualSpec.chipIconSize,
+          ),
+          labelStyle: chipTextStyle,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+          label: Text(
+            strings.format(
+              PaperTodoStringKeys.dueLabel,
+              [_formatRelativeDueDate(dueAt)],
+            ),
+          ),
+        ),
+      );
+    }
+
+    chips.add(
+      InputChip(
+        key: ValueKey('${widget.paper.id}-${item.id}-due-absolute'),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        avatar: Icon(
+          Icons.event_outlined,
+          size: visualSpec.chipIconSize,
+        ),
+        labelStyle: chipTextStyle,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        label: Text(
+          strings.format(
+            PaperTodoStringKeys.dueLabel,
+            [_formatAbsoluteDueDate(dueAt)],
+          ),
+        ),
+        onPressed: () => unawaited(_pickDueDate(context, item)),
+        onDeleted: () => _clearDueDate(item),
+        deleteIcon: Icon(
+          Icons.close_outlined,
+          size: visualSpec.chipIconSize,
+        ),
+        deleteButtonTooltipMessage: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionClearDueDate),
+        ),
+      ),
+    );
+
+    return chips;
   }
 
   Widget _noteLinkDropTarget(PaperItem item, Widget row) {
@@ -5893,7 +7824,6 @@ class _TodoEditorState extends State<_TodoEditor> {
   List<Widget> _todoItemActions({
     required BuildContext context,
     required PaperItem item,
-    required int itemIndex,
     required _TodoVisualSpec visualSpec,
     required bool compact,
   }) {
@@ -6072,17 +8002,23 @@ class _TodoEditorState extends State<_TodoEditor> {
       ];
     }
     return [
-      ReorderableDragStartListener(
+      Draggable<PaperItem>(
         key: ValueKey('${widget.paper.id}-${item.id}-drag-handle'),
-        index: itemIndex,
+        data: item,
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedback: _todoDragFeedback(item, visualSpec),
+        childWhenDragging: Opacity(
+          opacity: 0.35,
+          child: _todoDragHandle(visualSpec),
+        ),
+        onDragStarted: () => _setTodoItemDragging(true),
+        onDragCompleted: () => _setTodoItemDragging(false),
+        onDraggableCanceled: (_, __) => _setTodoItemDragging(false),
+        onDragEnd: (_) => _setTodoItemDragging(false),
         child: _maybeTooltip(
           enabled: widget.enableToolTips,
           message: strings.get(PaperTodoStringKeys.actionDragToReorder),
-          child: SizedBox(
-            width: visualSpec.controlExtent,
-            height: visualSpec.controlExtent,
-            child: Icon(Icons.drag_handle, size: visualSpec.iconSize),
-          ),
+          child: _todoDragHandle(visualSpec),
         ),
       ),
       IconButton(
@@ -6308,6 +8244,62 @@ class _TodoEditorState extends State<_TodoEditor> {
     ];
   }
 
+  Widget _todoDragHandle(_TodoVisualSpec visualSpec) {
+    return SizedBox(
+      width: visualSpec.controlExtent,
+      height: visualSpec.controlExtent,
+      child: Icon(Icons.drag_handle, size: visualSpec.iconSize),
+    );
+  }
+
+  Widget _todoDragFeedback(PaperItem item, _TodoVisualSpec visualSpec) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            border: Border.all(color: colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(alpha: 0.18),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.drag_handle,
+                  size: visualSpec.iconSize,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _displayItemText(item),
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   PopupMenuItem<String> _todoActionMenuItem({
     required String value,
     required IconData icon,
@@ -6466,9 +8458,17 @@ class _TodoEditorState extends State<_TodoEditor> {
       widget.paper.normalize();
       _textFieldRevision++;
     });
+    _clearActiveTodoTextTracking();
     _reconcileTodoItemTombstones(beforeItems, afterItems);
     _requestTodoFocus();
     unawaited(widget.onChanged());
+  }
+
+  void _clearActiveTodoTextTracking() {
+    _activeOriginalTodoItemId = null;
+    _activeOriginalTodoColumnIndex = null;
+    _activeOriginalTodoText = null;
+    _clearFocusedTodoTextHistory();
   }
 
   void _reconcileTodoItemTombstones(
@@ -6524,13 +8524,16 @@ class _TodoEditorState extends State<_TodoEditor> {
       _activeOriginalTodoItemId = itemId;
       _activeOriginalTodoColumnIndex = null;
       _activeOriginalTodoText = _todoItemById(itemId)?.text ?? '';
+      _clearFocusedTodoTextHistory();
       return;
     }
     if (_activeOriginalTodoItemId != itemId ||
         _activeOriginalTodoColumnIndex != null) {
       return;
     }
-    if (_commitFocusedTodoTextIfNeeded(clearRedo: true) && mounted) {
+    final committed = _commitFocusedTodoTextIfNeeded(clearRedo: true);
+    _clearFocusedTodoTextHistory();
+    if (committed && mounted) {
       setState(() {});
     }
   }
@@ -6563,13 +8566,16 @@ class _TodoEditorState extends State<_TodoEditor> {
       _activeOriginalTodoColumnIndex = columnIndex;
       _activeOriginalTodoText =
           item == null ? '' : _todoColumnText(item, columnIndex) ?? '';
+      _clearFocusedTodoTextHistory();
       return;
     }
     if (_activeOriginalTodoItemId != itemId ||
         _activeOriginalTodoColumnIndex != columnIndex) {
       return;
     }
-    if (_commitFocusedTodoTextIfNeeded(clearRedo: true) && mounted) {
+    final committed = _commitFocusedTodoTextIfNeeded(clearRedo: true);
+    _clearFocusedTodoTextHistory();
+    if (committed && mounted) {
       setState(() {});
     }
   }
@@ -6594,6 +8600,19 @@ class _TodoEditorState extends State<_TodoEditor> {
       focusNode.requestFocus();
       _placeTodoCaret(focusNode, placement);
     });
+  }
+
+  void _focusTodoColumn(PaperItem item, int columnIndex) {
+    final normalizedColumnIndex =
+        columnIndex.clamp(0, math.max(0, item.todoColumnCount - 1)).toInt();
+    final focusNode = normalizedColumnIndex == 0
+        ? _todoMainFieldFocusNodes[item.id]
+        : _todoExtraFieldFocusNodes['${item.id}:${normalizedColumnIndex - 1}'];
+    if (focusNode == null) {
+      return;
+    }
+    focusNode.requestFocus();
+    FocusManager.instance.applyFocusChangesIfNeeded();
   }
 
   void _placeTodoCaret(FocusNode focusNode, _TodoFocusPlacement placement) {
@@ -6699,6 +8718,10 @@ class _TodoEditorState extends State<_TodoEditor> {
     PaperItem item,
     KeyEvent event,
   ) {
+    final textShortcutResult = _handleFocusedTodoTextShortcut(node, event);
+    if (textShortcutResult != null) {
+      return textShortcutResult;
+    }
     if (_shouldDeferToTodoTextUndo(event)) {
       return KeyEventResult.ignored;
     }
@@ -6740,11 +8763,90 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
       return false;
     }
-    if (event.logicalKey != LogicalKeyboardKey.keyZ &&
-        event.logicalKey != LogicalKeyboardKey.keyY) {
-      return false;
+    if (event.logicalKey == LogicalKeyboardKey.keyZ) {
+      return _focusedTodoTextUndoStack.isNotEmpty ||
+          _focusedTodoTextHasUncommittedEdit;
     }
-    return _focusedTodoTextHasUncommittedEdit;
+    if (event.logicalKey == LogicalKeyboardKey.keyY) {
+      return _focusedTodoTextRedoStack.isNotEmpty;
+    }
+    return false;
+  }
+
+  KeyEventResult? _handleFocusedTodoTextShortcut(
+    FocusNode node,
+    KeyEvent event,
+  ) {
+    if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
+      return null;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyZ) {
+      if (_focusedTodoTextUndoStack.isEmpty) {
+        return null;
+      }
+      _applyFocusedTodoTextHistory(
+        node,
+        source: _focusedTodoTextUndoStack,
+        target: _focusedTodoTextRedoStack,
+      );
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyY) {
+      if (_focusedTodoTextRedoStack.isEmpty) {
+        return null;
+      }
+      _applyFocusedTodoTextHistory(
+        node,
+        source: _focusedTodoTextRedoStack,
+        target: _focusedTodoTextUndoStack,
+      );
+      return KeyEventResult.handled;
+    }
+    return null;
+  }
+
+  void _applyFocusedTodoTextHistory(
+    FocusNode node, {
+    required List<String> source,
+    required List<String> target,
+  }) {
+    final itemId = _activeOriginalTodoItemId;
+    final columnIndex = _activeOriginalTodoColumnIndex;
+    if (itemId == null || source.isEmpty) {
+      return;
+    }
+    final item = _todoItemById(itemId);
+    if (item == null || !_isTodoColumnFocused(itemId, columnIndex)) {
+      return;
+    }
+
+    final currentText = _todoColumnText(item, columnIndex) ?? '';
+    final nextText = source.removeLast();
+    if (currentText != nextText) {
+      target.add(currentText);
+    }
+    _applyingTodoTextHistory = true;
+    try {
+      setState(() => _setTodoColumnText(item, columnIndex, nextText));
+      final editable = _editableTextStateFor(node.context);
+      if (editable != null) {
+        final previousValue = editable.textEditingValue;
+        final offset = previousValue.selection.extentOffset
+            .clamp(0, nextText.length)
+            .toInt();
+        editable.userUpdateTextEditingValue(
+          previousValue.copyWith(
+            text: nextText,
+            selection: TextSelection.collapsed(offset: offset),
+            composing: TextRange.empty,
+          ),
+          SelectionChangedCause.keyboard,
+        );
+      }
+    } finally {
+      _applyingTodoTextHistory = false;
+    }
+    unawaited(widget.onChanged());
   }
 
   bool get _focusedTodoTextHasUncommittedEdit {
@@ -6766,6 +8868,13 @@ class _TodoEditorState extends State<_TodoEditor> {
       return _todoMainFieldFocusNodes[itemId]?.hasFocus == true;
     }
     return _todoExtraFieldFocusNodes['$itemId:$columnIndex']?.hasFocus == true;
+  }
+
+  GlobalKey _todoColumnHitTestKey(PaperItem item, int columnIndex) {
+    return _todoColumnHitTestKeys.putIfAbsent(
+      '${item.id}:$columnIndex',
+      () => GlobalKey(debugLabel: 'todo-column-${item.id}-$columnIndex'),
+    );
   }
 
   bool get _noKeyboardModifiersPressed {
@@ -6947,55 +9056,58 @@ class _TodoEditorState extends State<_TodoEditor> {
     final colorScheme = Theme.of(context).colorScheme;
     return KeyedSubtree(
       key: ValueKey('${widget.paper.id}-${item.id}-text'),
-      child: _todoItemKeyboardScope(
-        item,
-        ConstrainedBox(
-          constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
-          child: TextFormField(
-            key: ValueKey(
-              '${widget.paper.id}-${item.id}-text-field-$_textFieldRevision',
-            ),
-            focusNode: _mainTodoFieldFocusNode(item),
-            initialValue: item.text,
-            keyboardType: TextInputType.multiline,
-            minLines: 1,
-            maxLines: null,
-            textInputAction: TextInputAction.next,
-            decoration: InputDecoration(
-              border: item.todoColumnCount > 1
-                  ? const OutlineInputBorder()
-                  : InputBorder.none,
-              labelText: item.todoColumnCount > 1
-                  ? strings.format(PaperTodoStringKeys.columnLabel, [1])
-                  : null,
-              hintText: strings.get(PaperTodoStringKeys.todoNewItemHint),
-              isDense: true,
-              contentPadding: visualSpec.mainContentPadding,
-            ),
-            style: itemTextStyle?.copyWith(
-              color: item.done ? colorScheme.outline : colorScheme.onSurface,
-              decoration: item.done ? TextDecoration.lineThrough : null,
-            ),
-            inputFormatters: [
-              _TodoPasteTextInputFormatter(
-                onPaste: (lines, replacementText, previousValue) =>
-                    _handleMultiLinePaste(
-                  item,
-                  replacementText,
-                  previousColumnText: previousValue,
-                  parsedLines: lines,
-                ),
+      child: KeyedSubtree(
+        key: _todoColumnHitTestKey(item, 0),
+        child: _todoItemKeyboardScope(
+          item,
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
+            child: TextFormField(
+              key: ValueKey(
+                '${widget.paper.id}-${item.id}-text-field-$_textFieldRevision',
               ),
-              LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
-            ],
-            onChanged: (value) {
-              if (_handleMultiLinePaste(item, value)) {
-                return;
-              }
-              item.text = value;
-              unawaited(widget.onChanged());
-            },
-            onFieldSubmitted: (_) => _insertItemAfter(item),
+              focusNode: _mainTodoFieldFocusNode(item),
+              initialValue: item.text,
+              keyboardType: TextInputType.multiline,
+              minLines: 1,
+              maxLines: null,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(
+                border: item.todoColumnCount > 1
+                    ? const OutlineInputBorder()
+                    : InputBorder.none,
+                labelText: item.todoColumnCount > 1
+                    ? strings.format(PaperTodoStringKeys.columnLabel, [1])
+                    : null,
+                hintText: strings.get(PaperTodoStringKeys.todoNewItemHint),
+                isDense: true,
+                contentPadding: visualSpec.mainContentPadding,
+              ),
+              style: itemTextStyle?.copyWith(
+                color: item.done ? colorScheme.outline : colorScheme.onSurface,
+                decoration: item.done ? TextDecoration.lineThrough : null,
+              ),
+              inputFormatters: [
+                _TodoPasteTextInputFormatter(
+                  onPaste: (lines, replacementText, previousValue) =>
+                      _handleMultiLinePaste(
+                    item,
+                    replacementText,
+                    previousColumnText: previousValue,
+                    parsedLines: lines,
+                  ),
+                ),
+                LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
+              ],
+              onChanged: (value) {
+                if (_handleMultiLinePaste(item, value)) {
+                  return;
+                }
+                _recordTodoTextInput(item, null, value);
+                unawaited(widget.onChanged());
+              },
+              onFieldSubmitted: (_) => _insertItemAfter(item),
+            ),
           ),
         ),
       ),
@@ -7084,54 +9196,57 @@ class _TodoEditorState extends State<_TodoEditor> {
     _TodoVisualSpec visualSpec,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
-    return _todoItemKeyboardScope(
-      item,
-      ConstrainedBox(
-        constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
-        child: TextFormField(
-          key: ValueKey(
-            '${widget.paper.id}-${item.id}-column-${index + 2}',
-          ),
-          focusNode: _extraTodoFieldFocusNode(item, index),
-          initialValue: item.todoExtraColumns[index],
-          keyboardType: TextInputType.multiline,
-          minLines: 1,
-          maxLines: null,
-          textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(),
-            labelText: strings.format(
-              PaperTodoStringKeys.columnLabel,
-              [index + 2],
+    return KeyedSubtree(
+      key: _todoColumnHitTestKey(item, index + 1),
+      child: _todoItemKeyboardScope(
+        item,
+        ConstrainedBox(
+          constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
+          child: TextFormField(
+            key: ValueKey(
+              '${widget.paper.id}-${item.id}-column-${index + 2}',
             ),
-            isDense: true,
-            contentPadding: visualSpec.extraContentPadding,
-          ),
-          style: itemTextStyle?.copyWith(
-            color: item.done ? colorScheme.outline : colorScheme.onSurface,
-            decoration: item.done ? TextDecoration.lineThrough : null,
-          ),
-          inputFormatters: [
-            _TodoPasteTextInputFormatter(
-              onPaste: (lines, replacementText, previousValue) =>
-                  _handleMultiLinePaste(
-                item,
-                replacementText,
-                extraColumnIndex: index,
-                previousColumnText: previousValue,
-                parsedLines: lines,
+            focusNode: _extraTodoFieldFocusNode(item, index),
+            initialValue: item.todoExtraColumns[index],
+            keyboardType: TextInputType.multiline,
+            minLines: 1,
+            maxLines: null,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              labelText: strings.format(
+                PaperTodoStringKeys.columnLabel,
+                [index + 2],
               ),
+              isDense: true,
+              contentPadding: visualSpec.extraContentPadding,
             ),
-            LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
-          ],
-          onChanged: (value) {
-            if (_handleMultiLinePaste(item, value, extraColumnIndex: index)) {
-              return;
-            }
-            item.todoExtraColumns[index] = value;
-            unawaited(widget.onChanged());
-          },
-          onFieldSubmitted: (_) => _insertItemAfter(item),
+            style: itemTextStyle?.copyWith(
+              color: item.done ? colorScheme.outline : colorScheme.onSurface,
+              decoration: item.done ? TextDecoration.lineThrough : null,
+            ),
+            inputFormatters: [
+              _TodoPasteTextInputFormatter(
+                onPaste: (lines, replacementText, previousValue) =>
+                    _handleMultiLinePaste(
+                  item,
+                  replacementText,
+                  extraColumnIndex: index,
+                  previousColumnText: previousValue,
+                  parsedLines: lines,
+                ),
+              ),
+              LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
+            ],
+            onChanged: (value) {
+              if (_handleMultiLinePaste(item, value, extraColumnIndex: index)) {
+                return;
+              }
+              _recordTodoTextInput(item, index, value);
+              unawaited(widget.onChanged());
+            },
+            onFieldSubmitted: (_) => _insertItemAfter(item),
+          ),
         ),
       ),
     );
@@ -7147,6 +9262,30 @@ class _TodoEditorState extends State<_TodoEditor> {
       return;
     }
     item.todoExtraColumns[extraColumnIndex] = value;
+  }
+
+  void _recordTodoTextInput(
+    PaperItem item,
+    int? columnIndex,
+    String value,
+  ) {
+    final previousText = _todoColumnText(item, columnIndex) ?? '';
+    if (!_applyingTodoTextHistory &&
+        _activeOriginalTodoItemId == item.id &&
+        _activeOriginalTodoColumnIndex == columnIndex &&
+        previousText != value) {
+      _focusedTodoTextUndoStack.add(previousText);
+      if (_focusedTodoTextUndoStack.length > _maxTodoUndoDepth) {
+        _focusedTodoTextUndoStack.removeAt(0);
+      }
+      _focusedTodoTextRedoStack.clear();
+    }
+    _setTodoColumnText(item, columnIndex, value);
+  }
+
+  void _clearFocusedTodoTextHistory() {
+    _focusedTodoTextUndoStack.clear();
+    _focusedTodoTextRedoStack.clear();
   }
 
   String? _todoColumnText(PaperItem item, int? extraColumnIndex) {
@@ -7255,12 +9394,30 @@ class _TodoEditorState extends State<_TodoEditor> {
     unawaited(widget.onChanged());
   }
 
-  void _reorderTodoItem(int oldIndex, int newIndex) {
-    if (oldIndex < 0 || oldIndex >= widget.paper.items.length) {
+  bool _canAcceptTodoItemDrop(PaperItem dragged, PaperItem target) {
+    return dragged.id != target.id &&
+        _todoItemIndex(dragged) >= 0 &&
+        _todoItemIndex(target) >= 0;
+  }
+
+  void _reorderTodoItemToTarget(
+    PaperItem dragged,
+    PaperItem target, {
+    required bool after,
+  }) {
+    final oldIndex = _todoItemIndex(dragged);
+    final targetIndex = _todoItemIndex(target);
+    if (oldIndex < 0 ||
+        targetIndex < 0 ||
+        oldIndex >= widget.paper.items.length ||
+        targetIndex >= widget.paper.items.length ||
+        oldIndex == targetIndex) {
       return;
     }
-    final insertIndex =
-        newIndex.clamp(0, widget.paper.items.length - 1).toInt();
+    var insertIndex = targetIndex + (after ? 1 : 0);
+    if (oldIndex < insertIndex) {
+      insertIndex--;
+    }
     if (insertIndex == oldIndex) {
       return;
     }
@@ -7274,6 +9431,13 @@ class _TodoEditorState extends State<_TodoEditor> {
     });
     _requestTodoItemFocus(movedItem.id);
     unawaited(widget.onChanged());
+  }
+
+  void _setTodoItemDragging(bool value) {
+    if (!mounted || _isDraggingTodoItem == value) {
+      return;
+    }
+    setState(() => _isDraggingTodoItem = value);
   }
 
   void _insertTodoColumnBefore(PaperItem item, int columnIndex) {
@@ -7623,7 +9787,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (linkedNote == null) {
       return;
     }
-    unawaited(widget.onOpen(linkedNote));
+    unawaited(widget.onOpenLinkedNote(linkedNote, widget.paper));
   }
 
   void _linkNote(PaperItem item, String noteId) {
@@ -7701,7 +9865,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           unawaited(widget.onRunScriptCapsule(scriptSpec));
           return;
         }
-        unawaited(widget.onOpen(linkedNote));
+        unawaited(widget.onOpenLinkedNote(linkedNote, widget.paper));
       },
       onDeleted: () => _clearLinkedNote(item),
       deleteIcon: Icon(Icons.close_outlined, size: visualSpec.chipIconSize),
@@ -7769,14 +9933,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         : text;
   }
 
-  String? _formatDueDate(String? value) {
-    final date = parsePaperTodoDueAtLocal(value);
-    if (date == null) {
-      return null;
-    }
-    if (widget.showDueRelativeTime) {
-      return _relativeDueDate(date);
-    }
+  String _formatAbsoluteDueDate(DateTime date) {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
     final time = _formatDueTime(date);
@@ -7831,7 +9988,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     return strings.format(key, [value]);
   }
 
-  String _relativeDueDate(DateTime date) {
+  String _formatRelativeDueDate(DateTime date) {
     final now = DateTime.now();
     final difference = date.difference(now);
     final isPast = difference.isNegative;
@@ -7899,114 +10056,148 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
   @override
   Widget build(BuildContext context) {
     final strings = PaperTodoStringsScope.of(context);
-    return AlertDialog(
-      title: Text(strings.get(PaperTodoStringKeys.dialogDueDate)),
-      content: SizedBox(
-        width: 360,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                height: 330,
-                child: CalendarDatePicker(
-                  initialDate: _selectedDate,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                  onDateChanged: (value) {
-                    setState(() {
-                      _selectedDate = DateTime(
-                        value.year,
-                        value.month,
-                        value.day,
-                      );
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _handleDialogKeyEvent,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.enter): _save,
+          const SingleActivator(LogicalKeyboardKey.escape): _cancel,
+        },
+        child: AlertDialog(
+          title: Text(strings.get(PaperTodoStringKeys.dialogDueDate)),
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: DropdownButtonFormField<int>(
-                      key: const ValueKey('todo-due-hour'),
-                      initialValue: _hour,
-                      decoration: InputDecoration(
-                        labelText: strings.get(PaperTodoStringKeys.hour),
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: [
-                        for (var value = 0; value < 24; value++)
-                          DropdownMenuItem(
-                            value: value,
-                            child: Text(value.toString().padLeft(2, '0')),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _hour = value);
-                        }
+                  SizedBox(
+                    height: 330,
+                    child: CalendarDatePicker(
+                      initialDate: _selectedDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                      onDateChanged: (value) {
+                        setState(() {
+                          _selectedDate = DateTime(
+                            value.year,
+                            value.month,
+                            value.day,
+                          );
+                        });
                       },
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<int>(
-                      key: const ValueKey('todo-due-minute'),
-                      initialValue: _minute,
-                      decoration: InputDecoration(
-                        labelText: strings.get(PaperTodoStringKeys.minute),
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: [
-                        for (var value = 0; value < 60; value++)
-                          DropdownMenuItem(
-                            value: value,
-                            child: Text(value.toString().padLeft(2, '0')),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          key: const ValueKey('todo-due-hour'),
+                          initialValue: _hour,
+                          decoration: InputDecoration(
+                            labelText: strings.get(PaperTodoStringKeys.hour),
+                            border: const OutlineInputBorder(),
+                            isDense: true,
                           ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _minute = value);
-                        }
-                      },
-                    ),
+                          items: [
+                            for (var value = 0; value < 24; value++)
+                              DropdownMenuItem(
+                                value: value,
+                                child: Text(value.toString().padLeft(2, '0')),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _hour = value);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          key: const ValueKey('todo-due-minute'),
+                          initialValue: _minute,
+                          decoration: InputDecoration(
+                            labelText: strings.get(PaperTodoStringKeys.minute),
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: [
+                            for (var value = 0; value < 60; value++)
+                              DropdownMenuItem(
+                                value: value,
+                                child: Text(value.toString().padLeft(2, '0')),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _minute = value);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: _clear,
+              child: Text(strings.get(PaperTodoStringKeys.actionClear)),
+            ),
+            TextButton(
+              onPressed: _cancel,
+              child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
+            ),
+            FilledButton(
+              onPressed: _save,
+              child: Text(strings.get(PaperTodoStringKeys.actionSave)),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () =>
-              Navigator.of(context).pop(const _TodoDueSelection.clear()),
-          child: Text(strings.get(PaperTodoStringKeys.actionClear)),
+    );
+  }
+
+  KeyEventResult _handleDialogKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
+      _save();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _cancel();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _clear() {
+    Navigator.of(context).pop(const _TodoDueSelection.clear());
+  }
+
+  void _cancel() {
+    Navigator.of(context).pop();
+  }
+
+  void _save() {
+    Navigator.of(context).pop(
+      _TodoDueSelection.set(
+        DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          _hour,
+          _minute,
         ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
-        ),
-        FilledButton(
-          onPressed: () {
-            Navigator.of(context).pop(
-              _TodoDueSelection.set(
-                DateTime(
-                  _selectedDate.year,
-                  _selectedDate.month,
-                  _selectedDate.day,
-                  _hour,
-                  _minute,
-                ),
-              ),
-            );
-          },
-          child: Text(strings.get(PaperTodoStringKeys.actionSave)),
-        ),
-      ],
+      ),
     );
   }
 }

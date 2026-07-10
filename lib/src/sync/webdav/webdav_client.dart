@@ -103,8 +103,11 @@ class WebDavClient {
   Uri get baseUri => _baseUri;
 
   void close() {
-    if (_ownsHttpClient && !_closed) {
-      _closed = true;
+    if (_closed) {
+      return;
+    }
+    _closed = true;
+    if (_ownsHttpClient) {
       _httpClient.close();
     }
   }
@@ -115,16 +118,16 @@ class WebDavClient {
 
   Future<WebDavResourceMetadata?> metadata(String path) async {
     final response = await _send('HEAD', path);
+    if (_shouldFallbackToPropFindForMetadata(response.statusCode)) {
+      return _metadataFromPropFind(path);
+    }
     if (_isMissingResourceStatus(response.statusCode)) {
       return null;
-    }
-    if (response.statusCode == 405 || response.statusCode == 501) {
-      return _metadataFromPropFind(path);
     }
     _throwIfUnexpected(response, expected: {200, 204});
     final lastModified = _headerValue(response.headers, 'last-modified');
     return WebDavResourceMetadata(
-      etag: _nonBlankHeaderValue(_headerValue(response.headers, 'etag')),
+      etag: _normalizedHeaderEtagValue(_headerValue(response.headers, 'etag')),
       contentLength: _tryParseContentLength(
         _headerValue(response.headers, 'content-length'),
       ),
@@ -145,7 +148,7 @@ class WebDavClient {
     String? ifMatch,
     bool createOnly = false,
   }) async {
-    final normalizedIfMatch = _nonBlankHeaderValue(ifMatch);
+    final normalizedIfMatch = _normalizedIfMatchHeaderValue(ifMatch);
     final headers = <String, String>{
       'content-type': 'application/octet-stream',
       if (normalizedIfMatch != null) 'if-match': normalizedIfMatch,
@@ -165,7 +168,7 @@ class WebDavClient {
   }
 
   Future<void> delete(String path, {String? ifMatch}) async {
-    final normalizedIfMatch = _nonBlankHeaderValue(ifMatch);
+    final normalizedIfMatch = _normalizedIfMatchHeaderValue(ifMatch);
     final response = await _send(
       'DELETE',
       path,
@@ -226,6 +229,11 @@ class WebDavClient {
 
   Uri _resolve(String path) {
     final segments = _normalizeRequestPathSegments(path);
+    if (path.endsWith('/') && segments.isNotEmpty) {
+      return _baseUri.resolveUri(
+        Uri(pathSegments: [...segments, '']),
+      );
+    }
     return _baseUri.resolveUri(Uri(pathSegments: segments));
   }
 
@@ -252,7 +260,14 @@ class WebDavClient {
 
   Future<List<WebDavEntry>> _propFind(String path,
       {required String depth}) async {
-    final response = await _sendPropFind(path, depth: depth);
+    var response = await _sendPropFind(path, depth: depth);
+    if (_shouldRetryCollectionPropFindWithTrailingSlash(
+      path: path,
+      depth: depth,
+      statusCode: response.statusCode,
+    )) {
+      response = await _sendPropFind(_withTrailingSlash(path), depth: depth);
+    }
     _throwIfUnexpected(response, expected: {207});
     return _parseMultiStatusResponse(response);
   }
@@ -274,6 +289,27 @@ class WebDavClient {
   }
 }
 
+bool _shouldRetryCollectionPropFindWithTrailingSlash({
+  required String path,
+  required String depth,
+  required int statusCode,
+}) {
+  if (depth == '0' || path.trim().isEmpty || path.endsWith('/')) {
+    return false;
+  }
+  return statusCode == 301 ||
+      statusCode == 302 ||
+      statusCode == 303 ||
+      statusCode == 307 ||
+      statusCode == 308 ||
+      statusCode == 404 ||
+      statusCode == 405;
+}
+
+String _withTrailingSlash(String path) {
+  return path.endsWith('/') ? path : '$path/';
+}
+
 WebDavEntry? _entryForRequestPath(
   List<WebDavEntry> entries,
   Uri requestUri,
@@ -288,15 +324,14 @@ WebDavEntry? _entryForRequestPath(
 }
 
 bool _hrefMatchesRequestPath(String href, Uri requestUri, Uri baseUri) {
-  final trimmedHref = href.trim();
-  final uri = Uri.tryParse(trimmedHref);
+  if (href != href.trim()) {
+    return false;
+  }
+  final uri = Uri.tryParse(href);
   if (uri == null) {
     return false;
   }
   if (uri.hasQuery || uri.hasFragment) {
-    return false;
-  }
-  if (_hrefRawPathHasDotSegments(trimmedHref, uri)) {
     return false;
   }
   if (uri.hasScheme || uri.hasAuthority) {
@@ -304,34 +339,67 @@ bool _hrefMatchesRequestPath(String href, Uri requestUri, Uri baseUri) {
       return false;
     }
   }
-  final path = uri.path;
-  final requestPath = requestUri.path;
-  if (path == requestPath) {
-    return true;
-  }
-  if (path.startsWith('/')) {
+  final rawPath = _rawHrefPath(href, uri);
+  final hrefSegments = _safeDecodedHrefPathSegments(rawPath);
+  if (hrefSegments == null) {
     return false;
   }
-  final relativeRequestPath = _relativeRequestPath(requestUri, baseUri);
-  return path.isNotEmpty && path == relativeRequestPath;
+  if (rawPath.startsWith('/')) {
+    return _pathSegmentsEqual(
+      hrefSegments,
+      _decodedUriPathSegments(requestUri),
+    );
+  }
+  if (hrefSegments.isNotEmpty &&
+      _pathSegmentsEqual(
+        hrefSegments,
+        _requestParentRelativePathSegments(requestUri, baseUri),
+      )) {
+    return true;
+  }
+  return hrefSegments.isNotEmpty &&
+      _pathSegmentsEqual(
+        hrefSegments,
+        _relativeRequestPathSegments(requestUri, baseUri),
+      );
 }
 
-bool _hrefRawPathHasDotSegments(String href, Uri uri) {
-  final path = _rawHrefPath(href, uri);
-  for (final segment in path.split('/')) {
+List<String>? _safeDecodedHrefPathSegments(String path) {
+  final segments = <String>[];
+  final rawSegments = path.split('/');
+  for (var index = 0; index < rawSegments.length; index += 1) {
+    final rawSegment = rawSegments[index];
+    if (rawSegment.isEmpty) {
+      if (index == 0 || index == rawSegments.length - 1) {
+        continue;
+      }
+      return null;
+    }
     late final String decodedSegment;
     try {
-      decodedSegment = Uri.decodeComponent(segment);
+      decodedSegment = Uri.decodeComponent(rawSegment);
     } on ArgumentError {
-      return true;
+      return null;
     } on FormatException {
-      return true;
+      return null;
     }
-    if (decodedSegment == '.' || decodedSegment == '..') {
-      return true;
+    if (decodedSegment.contains('/') ||
+        decodedSegment.contains('\\') ||
+        _hasControlCharacter(decodedSegment)) {
+      return null;
     }
+    final trimmed = decodedSegment.trim();
+    if (rawSegment.isNotEmpty && trimmed.isEmpty) {
+      return null;
+    }
+    if (decodedSegment != trimmed ||
+        decodedSegment == '.' ||
+        decodedSegment == '..') {
+      return null;
+    }
+    segments.add(decodedSegment);
   }
-  return false;
+  return segments;
 }
 
 String _rawHrefPath(String href, Uri uri) {
@@ -372,21 +440,59 @@ int? _firstIndexOfAny(String value, List<String> needles) {
   return first;
 }
 
-String _relativeRequestPath(Uri requestUri, Uri baseUri) {
-  final requestPath = requestUri.path;
-  final basePath = baseUri.path;
-  if (requestPath.startsWith(basePath)) {
-    return requestPath.substring(basePath.length);
+List<String> _relativeRequestPathSegments(Uri requestUri, Uri baseUri) {
+  final requestSegments = _decodedUriPathSegments(requestUri);
+  final baseSegments = _decodedUriPathSegments(baseUri);
+  if (baseSegments.length <= requestSegments.length) {
+    var matchesBase = true;
+    for (var index = 0; index < baseSegments.length; index += 1) {
+      if (requestSegments[index] != baseSegments[index]) {
+        matchesBase = false;
+        break;
+      }
+    }
+    if (matchesBase) {
+      return requestSegments.skip(baseSegments.length).toList(growable: false);
+    }
   }
-  return requestPath.startsWith('/') ? requestPath.substring(1) : requestPath;
+  return requestSegments;
+}
+
+List<String> _requestParentRelativePathSegments(
+  Uri requestUri,
+  Uri baseUri,
+) {
+  final requestSegments = _relativeRequestPathSegments(requestUri, baseUri);
+  if (requestSegments.isEmpty) {
+    return const [];
+  }
+  return [requestSegments.last];
+}
+
+List<String> _decodedUriPathSegments(Uri uri) {
+  return uri.pathSegments
+      .where((segment) => segment.isNotEmpty)
+      .toList(growable: false);
+}
+
+bool _pathSegmentsEqual(List<String> left, List<String> right) {
+  if (left.length != right.length) {
+    return false;
+  }
+  for (var index = 0; index < left.length; index += 1) {
+    if (left[index] != right[index]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool _hrefHasSameOrigin(Uri hrefUri, Uri requestUri) {
-  return hrefUri.hasScheme &&
-      hrefUri.hasAuthority &&
-      hrefUri.scheme.toLowerCase() == requestUri.scheme.toLowerCase() &&
+  return hrefUri.hasAuthority &&
+      (!hrefUri.hasScheme ||
+          hrefUri.scheme.toLowerCase() == requestUri.scheme.toLowerCase()) &&
       hrefUri.host.toLowerCase() == requestUri.host.toLowerCase() &&
-      _effectivePort(hrefUri) == _effectivePort(requestUri);
+      _effectiveHrefPort(hrefUri, requestUri) == _effectivePort(requestUri);
 }
 
 int _effectivePort(Uri uri) {
@@ -398,6 +504,16 @@ int _effectivePort(Uri uri) {
     'https' => 443,
     _ => 0,
   };
+}
+
+int _effectiveHrefPort(Uri hrefUri, Uri requestUri) {
+  if (hrefUri.hasPort) {
+    return hrefUri.port;
+  }
+  if (!hrefUri.hasScheme) {
+    return _effectivePort(requestUri);
+  }
+  return _effectivePort(hrefUri);
 }
 
 final _propFindBody = utf8.encode('''<?xml version="1.0" encoding="utf-8" ?>
@@ -534,7 +650,7 @@ void _throwIfUnexpected(http.Response response, {required Set<int> expected}) {
   throw WebDavException(
     _unexpectedStatusMessage(response),
     statusCode: response.statusCode,
-    responseBody: response.body,
+    responseBody: _decodedResponseBody(response),
   );
 }
 
@@ -588,8 +704,8 @@ String _retryAfterSuffix(String? retryAfter) {
   if (value == null || value.isEmpty) {
     return '';
   }
-  final seconds = int.tryParse(value);
-  if (seconds != null && seconds >= 0) {
+  final seconds = RegExp(r'^\d+$').hasMatch(value) ? int.tryParse(value) : null;
+  if (seconds != null) {
     return ' Retry after $seconds ${seconds == 1 ? 'second' : 'seconds'}.';
   }
   try {
@@ -604,13 +720,20 @@ bool _isMissingResourceStatus(int statusCode) {
   return statusCode == 404 || statusCode == 410;
 }
 
+bool _shouldFallbackToPropFindForMetadata(int statusCode) {
+  return statusCode == 403 ||
+      statusCode == 404 ||
+      statusCode == 405 ||
+      statusCode == 501;
+}
+
 bool _isAlreadyExistingCollectionResponse(http.Response response) {
   if (response.statusCode != 409 && response.statusCode != 412) {
     return false;
   }
   return _responseBodyCandidates(response).any((body) {
-    return body.contains('already') ||
-        body.contains('exist') ||
+    return body.contains('already exist') ||
+        body.contains('already-created') ||
         body.contains('\u5df2\u5b58\u5728') ||
         body.contains('\u5df2\u7ecf\u5b58\u5728') ||
         body.contains('已存在') ||
@@ -619,14 +742,49 @@ bool _isAlreadyExistingCollectionResponse(http.Response response) {
 }
 
 Iterable<String> _responseBodyCandidates(http.Response response) sync* {
-  yield response.body.toLowerCase();
+  final body = _fallbackDecodedResponseBody(response).toLowerCase();
+  yield body;
+  final headerEncoding = _encodingFromContentTypeOrNull(
+      _headerValue(response.headers, 'content-type'));
+  if (headerEncoding != null) {
+    try {
+      final decoded = headerEncoding.decode(response.bodyBytes).toLowerCase();
+      if (decoded != body) {
+        yield decoded;
+      }
+    } on FormatException {
+      // Keep provider failures on the WebDAV error path even when the
+      // declared response charset does not match the bytes actually returned.
+    }
+  }
   try {
     final utf8Body = utf8.decode(response.bodyBytes).toLowerCase();
-    if (utf8Body != response.body.toLowerCase()) {
+    if (utf8Body != body) {
       yield utf8Body;
     }
   } on FormatException {
     return;
+  }
+}
+
+String _decodedResponseBody(http.Response response) {
+  final headerEncoding = _encodingFromContentTypeOrNull(
+      _headerValue(response.headers, 'content-type'));
+  if (headerEncoding != null) {
+    try {
+      return headerEncoding.decode(response.bodyBytes);
+    } on FormatException {
+      return _fallbackDecodedResponseBody(response);
+    }
+  }
+  return _fallbackDecodedResponseBody(response);
+}
+
+String _fallbackDecodedResponseBody(http.Response response) {
+  try {
+    return response.body;
+  } on FormatException {
+    return utf8.decode(response.bodyBytes, allowMalformed: true);
   }
 }
 
@@ -681,13 +839,13 @@ List<WebDavEntry> _parseMultiStatusResponse(http.Response response) {
     throw WebDavException(
       'Malformed WebDAV multistatus response: ${error.message}',
       statusCode: response.statusCode,
-      responseBody: response.body,
+      responseBody: _decodedResponseBody(response),
     );
   } on XmlException catch (error) {
     throw WebDavException(
       'Malformed WebDAV multistatus response: ${error.message}',
       statusCode: response.statusCode,
-      responseBody: response.body,
+      responseBody: _decodedResponseBody(response),
     );
   }
 }
@@ -726,6 +884,14 @@ Encoding? _encodingFromContentType(String? contentType) {
     return _encodingByName(trimmed.substring(separator + 1));
   }
   return null;
+}
+
+Encoding? _encodingFromContentTypeOrNull(String? contentType) {
+  try {
+    return _encodingFromContentType(contentType);
+  } on FormatException {
+    return null;
+  }
 }
 
 Encoding? _encodingFromXmlDeclaration(List<int> bytes) {
@@ -779,7 +945,7 @@ List<WebDavEntry> _parseMultiStatus(String xml) {
 }
 
 WebDavEntry? _parseEntry(XmlElement element) {
-  final href = _firstDirectElementText(element, 'href');
+  final href = _firstDirectElementRawText(element, 'href');
   if (href == null || href.isEmpty) {
     throw const FormatException(
       'WebDAV response entries must include a DAV: href element.',
@@ -788,9 +954,11 @@ WebDavEntry? _parseEntry(XmlElement element) {
   if (!_responseStatusIsSuccessful(element)) {
     return null;
   }
-  final etag = _stripQuotes(_firstSuccessfulPropText(element, 'getetag'));
-  final lengthText = _firstSuccessfulPropText(element, 'getcontentlength');
-  final lastModifiedText = _firstSuccessfulPropText(
+  final etag = _normalizedPropEtagValue(
+    _firstSuccessfulPropText(element, 'getetag'),
+  );
+  final lengthText = _firstSuccessfulPropRawText(element, 'getcontentlength');
+  final lastModifiedText = _firstSuccessfulPropRawText(
     element,
     'getlastmodified',
   );
@@ -814,34 +982,56 @@ bool _responseStatusIsSuccessful(XmlElement element) {
 }
 
 DateTime? _tryParseHttpDate(String value) {
+  if (value != value.trim() || _hasControlCharacter(value)) {
+    return null;
+  }
   try {
-    return HttpDate.parse(value.trim());
+    return HttpDate.parse(value);
   } on FormatException {
+    return null;
+  } on HttpException {
     return null;
   }
 }
 
 int? _tryParseContentLength(String? value) {
-  final parsed = int.tryParse(value?.trim() ?? '');
-  if (parsed == null || parsed < 0) {
+  if (value == null ||
+      value != value.trim() ||
+      _hasControlCharacter(value) ||
+      !RegExp(r'^\d+$').hasMatch(value)) {
     return null;
   }
-  return parsed;
+  return int.tryParse(value);
 }
 
 String? _firstDirectElementText(XmlElement element, String localName) {
+  final text = _firstDirectElementRawText(element, localName);
+  return text?.trim();
+}
+
+String? _firstDirectElementRawText(XmlElement element, String localName) {
   final matches = element.children
       .whereType<XmlElement>()
       .where((child) => _isWebDavElement(child, localName));
   if (matches.isEmpty) {
     return null;
   }
-  return matches.first.innerText.trim();
+  return matches.first.innerText;
 }
 
 String? _firstSuccessfulPropText(XmlElement element, String localName) {
   for (final prop in _successfulPropElements(element)) {
     final text = _firstDirectElementText(prop, localName);
+    if (text != null) {
+      return text;
+    }
+  }
+  return null;
+}
+
+String? _firstSuccessfulPropRawText(XmlElement element, String localName) {
+  for (final prop in _successfulPropElements(element)) {
+    final text = _firstDirectElementRawText(prop, localName);
     if (text != null) {
       return text;
     }
@@ -902,27 +1092,77 @@ bool _isWebDavElement(XmlElement element, String localName) {
       element.name.namespaceUri == _webDavNamespace;
 }
 
-String? _stripQuotes(String? value) {
-  if (value == null) {
+String? _normalizedHeaderEtagValue(String? value) {
+  return _normalizedRemoteEtagValue(value, stripStrongQuotes: false);
+}
+
+String? _normalizedPropEtagValue(String? value) {
+  return _normalizedRemoteEtagValue(value, stripStrongQuotes: true);
+}
+
+String? _normalizedRemoteEtagValue(
+  String? value, {
+  required bool stripStrongQuotes,
+}) {
+  final trimmed = value?.trim();
+  if (trimmed == null || trimmed.isEmpty || _hasControlCharacter(trimmed)) {
     return null;
   }
-  final trimmed = value.trim();
-  if (trimmed.isEmpty) {
+  if (!_hasValidRemoteEtagShape(trimmed)) {
     return null;
   }
-  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    final unquoted = trimmed.substring(1, trimmed.length - 1);
-    return unquoted.isEmpty ? null : unquoted;
+  if (stripStrongQuotes && _isQuotedRemoteEtag(trimmed)) {
+    return trimmed.substring(1, trimmed.length - 1);
   }
   return trimmed;
 }
 
-String? _nonBlankHeaderValue(String? value) {
+String? _normalizedIfMatchHeaderValue(String? value) {
   final trimmed = value?.trim();
   if (trimmed == null || trimmed.isEmpty) {
     return null;
   }
-  return trimmed;
+  if (_hasControlCharacter(trimmed) ||
+      !_hasValidRemoteEtagShape(trimmed, allowWildcard: true)) {
+    throw ArgumentError.value(
+      value,
+      'ifMatch',
+      'WebDAV If-Match value must be a valid ETag without control characters.',
+    );
+  }
+  if (trimmed == '*' ||
+      trimmed.contains('"') ||
+      trimmed.toLowerCase().startsWith('w/')) {
+    return trimmed;
+  }
+  return '"$trimmed"';
+}
+
+bool _hasValidRemoteEtagShape(
+  String value, {
+  bool allowWildcard = false,
+}) {
+  if (value == '*') {
+    return allowWildcard;
+  }
+  if (value.toLowerCase().startsWith('w/')) {
+    return _isQuotedRemoteEtag(value.substring(2));
+  }
+  if (value.contains('"')) {
+    return _isQuotedRemoteEtag(value);
+  }
+  return true;
+}
+
+bool _isQuotedRemoteEtag(String value) {
+  if (value.length < 2 || !value.startsWith('"') || !value.endsWith('"')) {
+    return false;
+  }
+  final inner = value.substring(1, value.length - 1);
+  if (inner.isEmpty || inner.contains('"') || _hasControlCharacter(inner)) {
+    return false;
+  }
+  return true;
 }
 
 List<String> _normalizeRequestPathSegments(String path) {

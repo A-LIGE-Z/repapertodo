@@ -276,21 +276,17 @@ abstract final class MarkdownLineAnalysis {
     }
     var start = 0;
     for (var index = 0; index < text.length; index++) {
-      if (text[index] != '\n') {
+      final char = text[index];
+      if (char != '\r' && char != '\n') {
         continue;
       }
-      var end = index;
-      if (end > start && text[end - 1] == '\r') {
-        end--;
+      yield text.substring(start, index);
+      if (char == '\r' && index + 1 < text.length && text[index + 1] == '\n') {
+        index++;
       }
-      yield text.substring(start, end);
       start = index + 1;
     }
-    var end = text.length;
-    if (end > start && text[end - 1] == '\r') {
-      end--;
-    }
-    yield text.substring(start, end);
+    yield text.substring(start);
   }
 
   static int _countIndent(String text) {

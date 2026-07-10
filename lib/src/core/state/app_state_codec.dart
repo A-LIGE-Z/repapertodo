@@ -9,12 +9,13 @@ class AppStateCodec {
   const AppStateCodec();
 
   AppState decode(String source) {
-    final decoded = jsonDecode(source);
-    if (decoded is! Map) {
+    final decoded = _decodePaperTodoStateJson(source);
+    final decodedMap = jsonMapOrNull(decoded);
+    if (decodedMap == null) {
       throw const FormatException('PaperTodo state must be a JSON object.');
     }
     return AppState.fromJson(
-      migrateLegacyPaperTodoJson(Map<String, Object?>.from(decoded)),
+      migrateLegacyPaperTodoJson(decodedMap),
     );
   }
 
@@ -41,10 +42,11 @@ class AppStateCodec {
 
 JsonMap decodeJsonObject(String source) {
   final decoded = jsonDecode(source);
-  if (decoded is! Map) {
+  final decodedMap = jsonMapOrNull(decoded);
+  if (decodedMap == null) {
     throw const FormatException('Expected a JSON object.');
   }
-  return Map<String, Object?>.from(decoded);
+  return decodedMap;
 }
 
 JsonMap _remoteSnapshotSyncJson(SyncSettings settings) {
@@ -65,3 +67,144 @@ JsonMap _remoteSnapshotSyncJson(SyncSettings settings) {
 }
 
 const _prettyJson = JsonEncoder.withIndent('  ');
+
+Object? _decodePaperTodoStateJson(String source) {
+  final normalizedSource = _stripByteOrderMark(source);
+  try {
+    return jsonDecode(normalizedSource);
+  } on FormatException {
+    return jsonDecode(
+      _removePaperTodoJsonTrailingCommas(
+        _stripPaperTodoJsonComments(normalizedSource),
+      ),
+    );
+  }
+}
+
+String _stripByteOrderMark(String source) {
+  if (source.startsWith('\uFEFF')) {
+    return source.substring(1);
+  }
+  return source;
+}
+
+String _stripPaperTodoJsonComments(String source) {
+  final buffer = StringBuffer();
+  var inString = false;
+  var escaped = false;
+  var inLineComment = false;
+  var inBlockComment = false;
+
+  for (var index = 0; index < source.length; index++) {
+    final char = source[index];
+    final next = index + 1 < source.length ? source[index + 1] : '';
+
+    if (inLineComment) {
+      if (char == '\n' || char == '\r') {
+        inLineComment = false;
+        buffer.write(char);
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char == '*' && next == '/') {
+        inBlockComment = false;
+        buffer.write(' ');
+        index++;
+      } else if (char == '\n' || char == '\r') {
+        buffer.write(char);
+      }
+      continue;
+    }
+
+    if (inString) {
+      buffer.write(char);
+      if (escaped) {
+        escaped = false;
+      } else if (char == r'\') {
+        escaped = true;
+      } else if (char == '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char == '"') {
+      inString = true;
+      buffer.write(char);
+      continue;
+    }
+
+    if (char == '/' && next == '/') {
+      inLineComment = true;
+      buffer.write(' ');
+      index++;
+      continue;
+    }
+
+    if (char == '/' && next == '*') {
+      inBlockComment = true;
+      buffer.write(' ');
+      index++;
+      continue;
+    }
+
+    buffer.write(char);
+  }
+
+  if (inBlockComment) {
+    throw const FormatException('Unterminated PaperTodo JSON block comment.');
+  }
+
+  return buffer.toString();
+}
+
+String _removePaperTodoJsonTrailingCommas(String source) {
+  final buffer = StringBuffer();
+  var inString = false;
+  var escaped = false;
+
+  for (var index = 0; index < source.length; index++) {
+    final char = source[index];
+
+    if (inString) {
+      buffer.write(char);
+      if (escaped) {
+        escaped = false;
+      } else if (char == r'\') {
+        escaped = true;
+      } else if (char == '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char == '"') {
+      inString = true;
+      buffer.write(char);
+      continue;
+    }
+
+    if (char == ',') {
+      final nextToken = _nextNonWhitespace(source, index + 1);
+      if (nextToken == ']' || nextToken == '}') {
+        continue;
+      }
+    }
+
+    buffer.write(char);
+  }
+
+  return buffer.toString();
+}
+
+String? _nextNonWhitespace(String source, int start) {
+  for (var index = start; index < source.length; index++) {
+    final char = source[index];
+    if (char != ' ' && char != '\t' && char != '\n' && char != '\r') {
+      return char;
+    }
+  }
+  return null;
+}

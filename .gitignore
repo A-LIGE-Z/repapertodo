@@ -5,6 +5,7 @@
 .packages
 build/
 dist/
+android/.kotlin/
 
 # IDE
 .idea/

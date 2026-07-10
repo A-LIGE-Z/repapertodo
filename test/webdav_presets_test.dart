@@ -9,6 +9,7 @@ void main() {
     expect(WebDavPresets.all, containsAll([preset, WebDavPresets.custom]));
     expect(WebDavPresets.byId(' jianguoyun '), same(preset));
     expect(WebDavPresets.byId('坚果云'), same(preset));
+    expect(WebDavPresets.byId('坚果云 WebDAV'), same(preset));
     expect(WebDavPresets.byId('坚 果 云'), same(preset));
     expect(WebDavPresets.byId('坚_果_云'), same(preset));
     expect(WebDavPresets.byId('坚-果-云 WebDAV'), same(preset));
@@ -20,9 +21,10 @@ void main() {
     expect(WebDavPresets.byId('nutstore-webdav'), same(preset));
     expect(WebDavPresets.byId('nut store webdav'), same(preset));
     expect(WebDavPresetIds.normalize('jianguoyun'), WebDavPresetIds.jianguoyun);
+    expect(WebDavPresetIds.normalize('坚果云'), WebDavPresetIds.jianguoyun);
     expect(WebDavPresetIds.normalize('坚果云 WebDAV'), WebDavPresetIds.jianguoyun);
     expect(WebDavPresetIds.normalize('NUTSTORE'), WebDavPresetIds.jianguoyun);
-    expect(preset.label, 'Jianguoyun');
+    expect(preset.label, '坚果云');
     expect(preset.name, 'Jianguoyun WebDAV');
     expect(preset.endpointText, 'https://dav.jianguoyun.com/dav/');
     expect(preset.defaultRootPath, 'RePaperTodo');
@@ -62,6 +64,45 @@ void main() {
     expect(settings.rootPath, WebDavPresets.jianguoyun.defaultRootPath);
     expect(settings.isConfigured, true);
     expect(settings.isSecurelyConfigured, true);
+  });
+
+  test('normalizes preset default root paths before applying them', () {
+    expect(
+      const WebDavPreset(
+        id: 'nested',
+        name: 'Nested WebDAV',
+        label: 'Nested',
+        defaultRemotePath: r' /Team/RePaperTodo/ ',
+      ).defaultRootPath,
+      'Team/RePaperTodo',
+    );
+    expect(
+      const WebDavPreset(
+        id: 'parent',
+        name: 'Parent WebDAV',
+        label: 'Parent',
+        defaultRemotePath: '../RePaperTodo',
+      ).defaultRootPath,
+      isEmpty,
+    );
+    expect(
+      const WebDavPreset(
+        id: 'blank-segment',
+        name: 'Blank Segment WebDAV',
+        label: 'Blank',
+        defaultRemotePath: 'Team//RePaperTodo',
+      ).defaultRootPath,
+      isEmpty,
+    );
+    expect(
+      const WebDavPreset(
+        id: 'control',
+        name: 'Control WebDAV',
+        label: 'Control',
+        defaultRemotePath: 'Team/RePaperTodo\u0001',
+      ).defaultRootPath,
+      isEmpty,
+    );
   });
 
   test('distinguishes WebDAV connection settings from secure sync settings',

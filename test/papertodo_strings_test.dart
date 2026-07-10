@@ -17,7 +17,11 @@ import 'package:repapertodo/src/sync/webdav/webdav_state_sync_service.dart';
 import 'package:repapertodo/src/ui/papertodo_strings.dart';
 
 void main() {
-  test('resolves supported system languages and falls back to English', () {
+  test('exposes Chinese and English and falls back to English', () {
+    expect(
+      PaperTodoStrings.supportedLocales,
+      const [Locale('zh'), Locale('en')],
+    );
     expect(
       PaperTodoStrings.resolveLocale(
         const Locale('zh', 'CN'),
@@ -27,21 +31,35 @@ void main() {
     );
     expect(
       PaperTodoStrings.resolveLocale(
-        const Locale('ja', 'JP'),
+        const Locale('en', 'US'),
         PaperTodoStrings.supportedLocales,
       ),
-      const Locale('ja'),
+      const Locale('en'),
     );
     expect(
       PaperTodoStrings.resolveLocale(
-        const Locale('ko', 'KR'),
+        const Locale('zz', 'TEST'),
         PaperTodoStrings.supportedLocales,
       ),
-      const Locale('ko'),
+      const Locale('en'),
     );
     expect(
       PaperTodoStrings.resolveLocale(
-        const Locale('fr', 'FR'),
+        const Locale('zz', 'TEST'),
+        const [Locale('zz'), Locale('zh'), Locale('en')],
+      ),
+      const Locale('en'),
+    );
+    expect(
+      PaperTodoStrings.resolveLocale(
+        const Locale('zh', 'CN'),
+        const [Locale('zz'), Locale('zh', 'CN'), Locale('en')],
+      ),
+      const Locale('zh'),
+    );
+    expect(
+      PaperTodoStrings.resolveLocale(
+        null,
         PaperTodoStrings.supportedLocales,
       ),
       const Locale('en'),
@@ -50,21 +68,79 @@ void main() {
 
   test('looks up localized strings and preserves unknown keys', () {
     final zh = PaperTodoStrings.resolve(const Locale('zh'));
-    final fr = PaperTodoStrings.resolve(const Locale('fr'));
+    final unsupported = PaperTodoStrings.resolve(const Locale('zz'));
 
     expect(zh.get(PaperTodoStringKeys.dialogSyncSettings), '同步设置');
     expect(zh.get(PaperTodoStringKeys.webDavIssueSummary), contains('WebDAV'));
-    expect(fr.get(PaperTodoStringKeys.dialogSyncSettings), 'Sync settings');
-    expect(fr.format(PaperTodoStringKeys.syncFailed, ['timeout']),
+    expect(zh.get(PaperTodoStringKeys.menuFormat), '格式');
+    expect(zh.get(PaperTodoStringKeys.menuText), '文本');
+    expect(zh.get(PaperTodoStringKeys.menuTodoItem), '事项');
+    expect(zh.get(PaperTodoStringKeys.actionCollapseToCapsule), '折叠为胶囊');
+    expect(zh.get(PaperTodoStringKeys.actionRestoreWindow), '恢复窗口');
+    expect(zh.get(PaperTodoStringKeys.actionResetTextZoom), '点击恢复为 100%');
+    expect(zh.get(PaperTodoStringKeys.actionEditTitle), '点击编辑标题');
+    expect(zh.get(PaperTodoStringKeys.actionHideThisPaper), '隐藏这张纸');
+    expect(
+      zh.format(
+        PaperTodoStringKeys.actionOpenMarkdownInDefaultEditor,
+        ['.md'],
+      ),
+      '用默认 .md 编辑器打开',
+    );
+    expect(unsupported.get(PaperTodoStringKeys.menuDesktopPin), 'Desktop pin');
+    expect(unsupported.get(PaperTodoStringKeys.actionCollapseToCapsule),
+        'Collapse to capsule');
+    expect(unsupported.get(PaperTodoStringKeys.actionRestoreWindow),
+        'Restore window');
+    expect(unsupported.get(PaperTodoStringKeys.actionResetTextZoom),
+        'Click to reset to 100%');
+    expect(unsupported.get(PaperTodoStringKeys.actionEditTitle),
+        'Click to edit title');
+    expect(unsupported.get(PaperTodoStringKeys.actionHideThisPaper),
+        'Hide this paper');
+    expect(
+      unsupported.format(
+        PaperTodoStringKeys.actionOpenMarkdownInDefaultEditor,
+        ['.md'],
+      ),
+      'Open in default .md editor',
+    );
+    expect(
+      zh.get(PaperTodoStringKeys.syncSnapshotRestoredLegacyPlainNextUpload),
+      contains('旧版明文 WebDAV 数据'),
+    );
+    expect(unsupported.get(PaperTodoStringKeys.dialogSyncSettings),
+        'Sync settings');
+    expect(unsupported.format(PaperTodoStringKeys.syncFailed, ['timeout']),
         'Sync failed: timeout');
+    expect(
+      unsupported
+          .get(PaperTodoStringKeys.syncSnapshotRestoredLegacyPlainNextUpload),
+      contains('legacy plain WebDAV data'),
+    );
+    expect(
+      zh.get(PaperTodoStringKeys.platformOpenUriFailed),
+      '无法打开链接。',
+    );
+    expect(
+      zh.get(PaperTodoStringKeys.platformOpenExternalFileFailed),
+      '无法打开外部文件。',
+    );
+    expect(
+      unsupported.get(PaperTodoStringKeys.platformOpenUriFailed),
+      'Unable to open the URI.',
+    );
+    expect(
+      unsupported.get(PaperTodoStringKeys.platformInvalidPath),
+      'The file path is invalid or outside the RePaperTodo share folders.',
+    );
     expect(zh.get('unknown.key'), 'unknown.key');
   });
 
   test('looks up localized Windows tray menu strings', () {
     final en = PaperTodoStrings.resolve(const Locale('en'));
     final zh = PaperTodoStrings.resolve(const Locale('zh'));
-    final ja = PaperTodoStrings.resolve(const Locale('ja'));
-    final ko = PaperTodoStrings.resolve(const Locale('ko'));
+    final unsupported = PaperTodoStrings.resolve(const Locale('zz'));
 
     expect(en.get(PaperTodoStringKeys.trayNewTodo), '+ New todo paper');
     expect(en.get(PaperTodoStringKeys.trayHideAll), 'Hide all papers');
@@ -73,18 +149,16 @@ void main() {
     expect(
         zh.get(PaperTodoStringKeys.trayInlineConfirmDelete), startsWith('⚠ '));
     expect(zh.get(PaperTodoStringKeys.trayInlineConfirmAction), isNotEmpty);
-    expect(
-        ja.get(PaperTodoStringKeys.trayInlineConfirmDelete), startsWith('⚠ '));
-    expect(ja.get(PaperTodoStringKeys.trayInlineConfirmAction), isNotEmpty);
-    expect(
-        ko.get(PaperTodoStringKeys.trayInlineConfirmDelete), startsWith('⚠ '));
-    expect(ko.get(PaperTodoStringKeys.trayInlineConfirmAction), isNotEmpty);
+    expect(unsupported.get(PaperTodoStringKeys.trayInlineConfirmDelete),
+        startsWith('⚠ '));
+    expect(unsupported.get(PaperTodoStringKeys.trayInlineConfirmAction),
+        'Confirm');
     expect(zh.get(PaperTodoStringKeys.trayNewTodo), '＋ 新建待办纸');
     expect(zh.get(PaperTodoStringKeys.trayPapers), '纸片');
-    expect(ja.get(PaperTodoStringKeys.trayNewTodo), '＋ ToDo紙を作成');
-    expect(ja.get(PaperTodoStringKeys.trayHideAll), 'すべての紙片を隠す');
-    expect(ko.get(PaperTodoStringKeys.trayNewTodo), '＋ 할 일 종이 만들기');
-    expect(ko.get(PaperTodoStringKeys.trayPapers), '종이');
+    expect(
+        unsupported.get(PaperTodoStringKeys.trayNewTodo), '+ New todo paper');
+    expect(unsupported.get(PaperTodoStringKeys.trayHideAll), 'Hide all papers');
+    expect(unsupported.get(PaperTodoStringKeys.trayPapers), 'Papers');
     expect(
       zh.format(PaperTodoStringKeys.trayDeleteConfirmMessage, ['X']),
       '删除“X”？',
@@ -297,7 +371,7 @@ void main() {
               ),
               NoteCanvasElement(
                 id: 'localized-canvas-text',
-                type: NoteCanvasElementTypes.text,
+                type: 'text',
                 text: '画布想法',
                 x: 280,
                 y: 24,
@@ -323,9 +397,9 @@ void main() {
     expect(find.byTooltip('斜体 (Ctrl+I)'), findsOneWidget);
     expect(find.byTooltip('插入链接 (Ctrl+K)'), findsOneWidget);
     expect(find.widgetWithText(TextButton, '添加画布块'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, '添加文本块'), findsOneWidget);
-    expect(find.text('代码'), findsOneWidget);
-    expect(find.text('文本'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '添加文本块'), findsNothing);
+    expect(find.text('代码'), findsNWidgets(2));
+    expect(find.text('文本'), findsNothing);
     expect(find.text('层级 1'), findsOneWidget);
     expect(find.text('顶层 2'), findsOneWidget);
     expect(find.byTooltip('拖动画布块'), findsWidgets);

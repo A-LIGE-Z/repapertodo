@@ -39,10 +39,11 @@ JsonMap? _migrateOptionalMap(
   Object? value,
   JsonMap Function(JsonMap source) migrate,
 ) {
-  if (value is! Map) {
+  final map = jsonMapOrNull(value);
+  if (map == null) {
     return null;
   }
-  return migrate(Map<String, Object?>.from(value));
+  return migrate(map);
 }
 
 List<JsonMap> _migrateList(
@@ -54,7 +55,7 @@ List<JsonMap> _migrateList(
   }
   return [
     for (final item in value)
-      if (item is Map) migrate(Map<String, Object?>.from(item)),
+      if (jsonMapOrNull(item) case final map?) migrate(map),
   ];
 }
 

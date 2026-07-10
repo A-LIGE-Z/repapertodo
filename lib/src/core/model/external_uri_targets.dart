@@ -6,6 +6,9 @@ String? normalizeExternalUriTarget(
   if (trimmed.isEmpty) {
     return null;
   }
+  if (hasRawExternalUriControlCharacter(value)) {
+    return null;
+  }
   if (allowBareWww && trimmed.toLowerCase().startsWith('www.')) {
     trimmed = 'https://$trimmed';
   }
@@ -78,6 +81,10 @@ bool hasUnsafeExternalUriCharacter(String value) {
   return value.runes.any(
     (rune) => rune <= 0x20 || (rune >= 0x7F && rune <= 0x9F),
   );
+}
+
+bool hasRawExternalUriControlCharacter(String value) {
+  return value.runes.any(_isControlRune);
 }
 
 bool hasEncodedUnsafeExternalUriCharacter(String value) {

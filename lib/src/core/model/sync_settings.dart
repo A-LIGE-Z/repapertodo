@@ -47,13 +47,12 @@ class SyncSettings {
   JsonMap extra;
 
   factory SyncSettings.fromJson(JsonMap json) {
-    final webDavJson = json['webDav'];
+    final webDavJson = jsonMapOrNull(json['webDav']);
     return SyncSettings(
       enabled: boolValue(json['enabled'], false),
       provider: stringValue(json['provider'], SyncProviderIds.none),
-      webDav: webDavJson is Map
-          ? WebDavSyncSettings.fromJson(Map<String, Object?>.from(webDavJson))
-          : null,
+      webDav:
+          webDavJson == null ? null : WebDavSyncSettings.fromJson(webDavJson),
       operationDeviceSequences:
           _syncDeviceSequencesFromWire(json['operationDeviceSequences']),
       deletedPaperTombstones:
@@ -80,17 +79,22 @@ class SyncSettings {
   }
 
   bool isPaperDeleted(String paperId) {
-    return deletedPaperTombstones.containsKey(paperId.trim());
+    final id = _normalizeTombstoneId(paperId);
+    return id.isNotEmpty && deletedPaperTombstones.containsKey(id);
   }
 
   DateTime? paperDeletedAtUtc(String paperId) {
+    final id = _normalizeTombstoneId(paperId);
+    if (id.isEmpty) {
+      return null;
+    }
     return tryParseStrictSyncWireDateTimeUtc(
-      deletedPaperTombstones[paperId.trim()] ?? '',
+      deletedPaperTombstones[id] ?? '',
     );
   }
 
   bool markPaperDeleted(String paperId, DateTime deletedAtUtc) {
-    final id = paperId.trim();
+    final id = _normalizeTombstoneId(paperId);
     if (id.isEmpty) {
       return false;
     }
@@ -139,7 +143,7 @@ class SyncSettings {
   }
 
   void clearPaperDeleted(String paperId) {
-    final id = paperId.trim();
+    final id = _normalizeTombstoneId(paperId);
     if (id.isEmpty) {
       return;
     }
@@ -147,15 +151,25 @@ class SyncSettings {
   }
 
   bool isTodoItemDeleted(String paperId, String itemId) {
-    return deletedTodoItemTombstones[paperId.trim()]?.containsKey(
-          itemId.trim(),
+    final normalizedPaperId = _normalizeTombstoneId(paperId);
+    final normalizedItemId = _normalizeTombstoneId(itemId);
+    if (normalizedPaperId.isEmpty || normalizedItemId.isEmpty) {
+      return false;
+    }
+    return deletedTodoItemTombstones[normalizedPaperId]?.containsKey(
+          normalizedItemId,
         ) ??
         false;
   }
 
   DateTime? todoItemDeletedAtUtc(String paperId, String itemId) {
+    final normalizedPaperId = _normalizeTombstoneId(paperId);
+    final normalizedItemId = _normalizeTombstoneId(itemId);
+    if (normalizedPaperId.isEmpty || normalizedItemId.isEmpty) {
+      return null;
+    }
     return tryParseStrictSyncWireDateTimeUtc(
-      deletedTodoItemTombstones[paperId.trim()]?[itemId.trim()] ?? '',
+      deletedTodoItemTombstones[normalizedPaperId]?[normalizedItemId] ?? '',
     );
   }
 
@@ -164,8 +178,8 @@ class SyncSettings {
     String itemId,
     DateTime deletedAtUtc,
   ) {
-    final normalizedPaperId = paperId.trim();
-    final normalizedItemId = itemId.trim();
+    final normalizedPaperId = _normalizeTombstoneId(paperId);
+    final normalizedItemId = _normalizeTombstoneId(itemId);
     if (normalizedPaperId.isEmpty || normalizedItemId.isEmpty) {
       return false;
     }
@@ -188,8 +202,8 @@ class SyncSettings {
   }
 
   void clearTodoItemDeleted(String paperId, String itemId) {
-    final normalizedPaperId = paperId.trim();
-    final normalizedItemId = itemId.trim();
+    final normalizedPaperId = _normalizeTombstoneId(paperId);
+    final normalizedItemId = _normalizeTombstoneId(itemId);
     final paperTombstones = deletedTodoItemTombstones[normalizedPaperId];
     if (paperTombstones == null || normalizedItemId.isEmpty) {
       return;
@@ -242,7 +256,9 @@ class WebDavSyncSettings {
     this.autoSyncIntervalMinutes = 15,
     this.requestTimeoutSeconds = 30,
     JsonMap? extra,
-  }) : extra = extra ?? <String, Object?>{};
+    bool preserveExplicitRootPath = false,
+  })  : extra = extra ?? <String, Object?>{},
+        _preserveExplicitRootPath = preserveExplicitRootPath;
 
   static const _knownKeys = {
     'presetId',
@@ -266,6 +282,7 @@ class WebDavSyncSettings {
   int autoSyncIntervalMinutes;
   int requestTimeoutSeconds;
   JsonMap extra;
+  bool _preserveExplicitRootPath;
 
   factory WebDavSyncSettings.jianguoyun({
     String username = '',
@@ -284,17 +301,21 @@ class WebDavSyncSettings {
   }
 
   factory WebDavSyncSettings.fromJson(JsonMap json) {
+    final presetId = stringValue(json['presetId'], WebDavPresetIds.custom);
     return WebDavSyncSettings(
-      presetId: stringValue(json['presetId'], WebDavPresetIds.custom),
+      presetId: presetId,
       endpoint: stringValue(json['endpoint'], ''),
       username: stringValue(json['username'], ''),
       password: stringValue(json['password'], ''),
       encryptionPassphrase: stringValue(json['encryptionPassphrase'], ''),
-      rootPath: stringValue(json['rootPath'], 'repapertodo'),
+      rootPath: json.containsKey('rootPath')
+          ? stringValue(json['rootPath'], '')
+          : _defaultRootPathForPreset(presetId),
       autoSyncOnStart: boolValue(json['autoSyncOnStart'], false),
       autoSyncIntervalMinutes: intValue(json['autoSyncIntervalMinutes'], 15),
       requestTimeoutSeconds: intValue(json['requestTimeoutSeconds'], 30),
       extra: preserveUnknown(json, _knownKeys),
+      preserveExplicitRootPath: json.containsKey('rootPath'),
     )..normalize();
   }
 
@@ -345,6 +366,7 @@ class WebDavSyncSettings {
   }
 
   void normalize() {
+    final rootPathWasBlank = rootPath.trim().isEmpty;
     presetId = WebDavPresetIds.normalize(presetId);
     endpoint = _normalizeEndpoint(endpoint);
     username = username.trim();
@@ -355,6 +377,12 @@ class WebDavSyncSettings {
     final preset = WebDavPresets.configuredById(presetId);
     if (preset != null && endpoint.isEmpty) {
       endpoint = preset.endpointText;
+    }
+    if (preset != null &&
+        rootPath.isEmpty &&
+        rootPathWasBlank &&
+        !_preserveExplicitRootPath) {
+      rootPath = preset.defaultRootPath;
     }
   }
 
@@ -370,6 +398,7 @@ class WebDavSyncSettings {
       autoSyncIntervalMinutes: autoSyncIntervalMinutes,
       requestTimeoutSeconds: requestTimeoutSeconds,
       extra: Map<String, Object?>.from(extra),
+      preserveExplicitRootPath: _preserveExplicitRootPath,
     );
   }
 
@@ -444,6 +473,11 @@ bool _hasUnsafeEndpointAuthority(Uri uri) {
     }
   }
   return false;
+}
+
+String _defaultRootPathForPreset(String presetId) {
+  final preset = WebDavPresets.configuredById(presetId);
+  return preset?.defaultRootPath ?? 'repapertodo';
 }
 
 String _normalizeRootPath(String value) {
@@ -578,7 +612,7 @@ Map<String, String> _normalizeTombstoneMap(Object? value) {
     if (entry.key is! String || entry.value is! String) {
       continue;
     }
-    final id = (entry.key as String).trim();
+    final id = _normalizeTombstoneId(entry.key as String);
     final timestamp = _normalizeTombstoneTimestamp(entry.value as String);
     if (id.isEmpty || timestamp.isEmpty) {
       continue;
@@ -597,7 +631,7 @@ Map<String, Map<String, String>> _normalizeNestedTombstoneMap(Object? value) {
     if (entry.key is! String) {
       continue;
     }
-    final paperId = (entry.key as String).trim();
+    final paperId = _normalizeTombstoneId(entry.key as String);
     final itemTombstones = _normalizeTombstoneMap(entry.value);
     if (paperId.isEmpty || itemTombstones.isEmpty) {
       continue;
@@ -640,17 +674,22 @@ int? _syncDeviceSequenceFromWire(Object? value) {
   if (value is int) {
     return isSyncDeviceSequenceInRange(value) ? value : null;
   }
-  if (value is num && value.isFinite && value % 1 == 0) {
-    final sequence = value.toInt();
-    return isSyncDeviceSequenceInRange(sequence) ? sequence : null;
-  }
-  if (value is String && value.trim() == value) {
+  if (value is String && _unsignedIntegerStringPattern.hasMatch(value)) {
     final sequence = int.tryParse(value);
     if (sequence != null && isSyncDeviceSequenceInRange(sequence)) {
       return sequence;
     }
   }
   return null;
+}
+
+final _unsignedIntegerStringPattern = RegExp(r'^[0-9]+$');
+
+String _normalizeTombstoneId(String value) {
+  if (_hasControlCharacter(value)) {
+    return '';
+  }
+  return value.trim();
 }
 
 bool _putLatestTombstone(

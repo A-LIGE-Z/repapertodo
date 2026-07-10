@@ -26,6 +26,7 @@ abstract interface class PaperWindowHost {
   Future<void> hidePaper(PaperData paper);
   Future<void> revealPinnedPaper(PaperData paper);
   Future<bool> hasVisibleSurfaces(AppState state);
+  Future<bool> hasVisibleSurface(PaperData paper);
   Future<void> closePaperSurface(PaperData paper);
   Future<void> updatePaperSurface(PaperData paper);
   Future<void> capturePaperSurfaceBounds(PaperData paper);
@@ -149,6 +150,7 @@ abstract interface class SystemIntegrationHost {
   bool get supportsFullscreenTopmostMode;
   bool get supportsGlobalHotkeys;
 
+  Future<List<String>> installedFontFamilies();
   Future<void> registerGlobalHotkeys(AppState state);
   Future<void> unregisterGlobalHotkeys();
   Future<bool> isForegroundFullscreen();
@@ -179,4 +181,24 @@ abstract interface class ScriptCapsuleHost {
 
 abstract interface class AppStorageHost {
   Future<String> documentsDirectoryPath();
+}
+
+List<String> normalizeInstalledFontFamilies(Iterable<Object?> values) {
+  final unique = <String, String>{};
+  for (final value in values) {
+    if (value is! String) {
+      continue;
+    }
+    final family = normalizeSystemFontFamilyName(value);
+    if (family.isEmpty) {
+      continue;
+    }
+    unique.putIfAbsent(family.toLowerCase(), () => family);
+  }
+  final families = unique.values.toList();
+  families.sort((left, right) {
+    final comparison = left.toLowerCase().compareTo(right.toLowerCase());
+    return comparison == 0 ? left.compareTo(right) : comparison;
+  });
+  return families;
 }

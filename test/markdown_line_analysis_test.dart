@@ -130,5 +130,19 @@ void main() {
         MarkdownLineKind.heading1,
       ],
     );
+
+    final crOnlyStyles = MarkdownLineAnalysis.analyzeLines(
+      '```dart\r# code\r```\r# Title',
+    );
+
+    expect(
+      crOnlyStyles.map((style) => style.kind),
+      [
+        MarkdownLineKind.codeFence,
+        MarkdownLineKind.codeBlock,
+        MarkdownLineKind.codeFence,
+        MarkdownLineKind.heading1,
+      ],
+    );
   });
 }

@@ -14,11 +14,17 @@ String? normalizeMarkdownLocalPathTarget(
 
   final uri = Uri.tryParse(trimmed);
   if (uri != null && uri.scheme.toLowerCase() == 'file') {
+    if (uri.hasQuery || uri.hasFragment) {
+      return null;
+    }
     try {
       trimmed = uri.toFilePath(windows: windows);
     } on UnsupportedError {
       return null;
     } on ArgumentError {
+      return null;
+    }
+    if (trimmed.isEmpty || _hasControlCharacter(trimmed)) {
       return null;
     }
   }
@@ -33,7 +39,11 @@ String? normalizeMarkdownLocalPathTarget(
   );
   try {
     final fullPath = context.normalize(context.absolute(trimmed));
-    return _isUnsafeDevicePath(fullPath, isWindows: windows) ? null : fullPath;
+    if (_hasControlCharacter(fullPath) ||
+        _isUnsafeDevicePath(fullPath, isWindows: windows)) {
+      return null;
+    }
+    return fullPath;
   } on ArgumentError {
     return null;
   }

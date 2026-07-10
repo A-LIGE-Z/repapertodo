@@ -39,6 +39,18 @@ import compatibility, including Jianguoyun, Jian Guo Yun, Nutstore, and
 `坚果云` spellings with spaces, underscores, or hyphens, but unknown provider
 IDs must fall back to the generic WebDAV option.
 
+Preset default root paths must normalize to safe relative WebDAV folders before
+settings apply them. Built-in provider defaults must reject parent-directory
+segments, control characters, and blank middle path segments instead of relying
+on later upload-time validation.
+When imported or restored WebDAV settings name a known provider preset but omit
+the root path field, the model should apply that preset's default remote path;
+explicit custom or blank root path values must remain user-controlled and be
+validated normally.
+New programmatic WebDAV settings for a known provider may also fill a blank
+root path from the preset default, but unsafe explicit root paths must remain
+invalid instead of being silently replaced by the provider default.
+
 ## Current Remote Layout
 
 Each device uploads a distinct snapshot path using `If-None-Match: *` and
@@ -56,6 +68,8 @@ AES-GCM-256 encrypted payloads with a PBKDF2-HMAC-SHA256 derived key while
 preserving WebDAV path, ETag, retry, and merge behavior. The lower-level codec
 can still read legacy plain JSON payloads during normal pull, operation-log
 merge, and recovery restore so existing remote data can be migrated gradually.
+Payload format inspection must report non-JSON or non-UTF-8 plain bytes as
+unknown instead of treating arbitrary remote bytes as legacy plain JSON.
 Encrypted payload KDF iteration counts are bounded during both encoding and
 decoding so malformed remote envelopes cannot force unbounded key derivation
 work before surfacing as corrupted sync data.
@@ -80,8 +94,11 @@ data with a passphrase-focused recovery message. Malformed, unsupported, or
 corrupted encrypted envelopes should be reported separately from passphrase
 failures. V1 encrypted envelope fields must be present and non-empty, and salt,
 nonce, and MAC field sizes must be validated before decrypting so malformed
-structural data is not mistaken for a wrong passphrase. Neither case may
-replace local state or be shown as a generic network failure.
+structural data is not mistaken for a wrong passphrase. Envelope byte fields
+must use unpadded base64url text; padded, non-URL-safe, control-character, or
+impossible-length values are treated as corrupted payload structure before
+decrypting. Neither case may replace local state or be shown as a generic
+network failure.
 User-visible sync-disabled, unreadable-payload, and missing-configuration
 messages should offer a direct settings action so users can enable sync or fix
 the WebDAV endpoint, credentials, or sync encryption passphrase without
@@ -95,8 +112,8 @@ Recovery snapshot browsing should use the same configuration gate; incomplete
 WebDAV settings must be reported as recoverable configuration problems instead
 of showing an empty snapshot list.
 Transient WebDAV listing failures in the recovery snapshot browser should keep
-the dialog open and expose a retry action instead of forcing users to close and
-reopen the flow.
+the dialog open and expose retry and settings actions instead of forcing users
+to close and reopen the flow or hunt for the sync configuration.
 Remote snapshots redact local WebDAV configuration, credentials, and
 startup-at-login state before upload. Downloading or restoring a snapshot
 preserves the current device's local WebDAV settings and startup-at-login state
@@ -187,12 +204,17 @@ with raw or percent-encoded leading or trailing whitespace inside a non-empty
 segment are ignored instead of being trimmed into a different snapshot or
 operation-log path.
 Network-path `href` values with an authority but no scheme, such as
-`//host/path`, are treated as absolute references and ignored for the same
-reason. Relative-looking `href` values that decode into network-path or
-absolute URL references are ignored before root-folder matching. Plain relative
-`href` values must already start at the sync root; server-absolute `href`
-values must stay under the configured endpoint path before they can be reduced
-to endpoint-relative sync paths.
+`//host/path`, are resolved with the configured endpoint scheme and accepted
+only when they satisfy the same origin, credential, query, fragment, encoded
+segment, and base-path checks as absolute listing entries. Cross-origin or
+userinfo-bearing network-path listing entries are ignored for the same reason.
+Relative-looking `href` values that decode into network-path or absolute URL
+references are ignored before root-folder matching. Plain relative `href`
+values with path separators must already start at the sync root, while bare
+child file names from snapshot or operation-log collection listings may be
+resolved relative to the requested collection. Server-absolute `href` values
+must stay under the configured endpoint path before they can be reduced to
+endpoint-relative sync paths.
 The WebDAV client itself also refuses absolute or parent-traversing request
 paths, request paths with backslashes, paths with control characters,
 unsafe base URI authorities with encoded separators, unsafe base URI paths including control
@@ -204,19 +226,29 @@ whitespace, so low-level callers cannot silently address a different remote
 file by adding raw or percent-encoded edge spaces.
 It resolves all accepted paths beneath the configured endpoint.
 Metadata reads prefer `HEAD`, but must fall back to `PROPFIND` with `Depth: 0`
-when a provider does not implement `HEAD`. When a fallback `PROPFIND` response
-contains multiple entries, metadata must be taken from the entry matching the
-requested resource path instead of blindly trusting the first response entry.
+when a provider does not implement `HEAD` or forbids `HEAD` while still
+allowing WebDAV property reads. Some providers also return a false `404` for
+`HEAD` on existing resources; metadata reads may retry those with `PROPFIND`
+and accept the resource only when a matching safe `href` is returned. When a
+fallback `PROPFIND` response contains multiple entries, metadata must be taken
+from the entry matching the requested resource path instead of blindly trusting
+the first response entry.
 Metadata `href` matches with query components or fragments are ignored instead
-of silently dropping non-path URI parts. Absolute metadata `href` matches must
-also stay on the same WebDAV origin and must not contain embedded credentials
-before their path can be used for fallback metadata selection. Metadata `href`
+of silently dropping non-path URI parts. Absolute and scheme-relative metadata
+`href` matches must also stay on the same WebDAV origin and must not contain
+embedded credentials before their path can be used for fallback metadata
+selection. Metadata `href`
 matches with raw or percent-encoded control characters are ignored before their
 paths can be compared with the requested resource. Metadata `href` matches
 with raw or percent-encoded dot-segments are ignored instead of being normalized
-to a different resource path.
+to a different resource path. Safe percent-encoded metadata `href` paths, such
+as UTF-8 file names, are compared by decoded path segment so providers that
+return encoded `PROPFIND` hrefs still match the requested resource without
+allowing encoded separators, control characters, blank segments, or
+dot-segments.
 Relative metadata `href` matches must be relative to the configured WebDAV
-endpoint, not an arbitrary suffix of the requested resource path.
+endpoint or to the requested resource's parent directory for `Depth: 0`
+fallbacks, not an arbitrary suffix of the requested resource path.
 Missing-resource responses should accept both `404 Not Found` and `410 Gone`
 for metadata probes, idempotent cleanup deletes, and missing snapshot or
 operation-log collections; direct payload downloads must still fail when the
@@ -224,6 +256,9 @@ selected remote file is gone.
 If `manifest.json` disappears with `404` or `410` between metadata probing and
 download, sync treats the manifest as missing again and recreates it only with
 `If-None-Match: *`.
+Provider `409` or `412` responses to that create-only manifest write are
+treated as manifest conflicts so the uploaded snapshot remains recoverable and
+the local state can retry instead of surfacing a provider-specific hard failure.
 WebDAV requests use a bounded client timeout so offline or stalled providers
 surface as retryable sync failures instead of leaving manual or automatic sync
 waiting on the platform network stack indefinitely. The timeout is stored in
@@ -234,27 +269,59 @@ minutes, and are normalized to 1 through 1440 minutes.
 WebDAV requests send explicit `Accept` headers. Generic requests accept any
 content type, while `PROPFIND` prefers XML responses before falling back to any
 content type for provider compatibility.
+Collection listings use `PROPFIND` with `Depth: 1`. If a provider rejects or
+redirects that collection request without a trailing slash, the client may retry
+the same normalized path once with a trailing slash. This retry must not follow
+an arbitrary `Location` header and must not be used for file-level metadata,
+download, or upload requests.
 WebDAV requests also send a stable `User-Agent` so provider logs and throttling
 diagnostics can distinguish RePaperTodo from generic client traffic.
+WebDAV `Content-Length` and `getcontentlength` metadata must be accepted only
+as unsigned decimal digits without leading or trailing whitespace or control
+characters; signed, decimal, negative, padded, or malformed size values are
+ignored instead of being used for recovery sorting or diagnostics.
+WebDAV `Last-Modified` and `getlastmodified` metadata must parse as exact HTTP
+date values without leading or trailing whitespace or control characters.
+Malformed date metadata is ignored instead of failing listing or recovery
+metadata reads.
 WebDAV requests must not follow HTTP redirects automatically; redirect
 responses should tell users to check the configured endpoint so credentials and
 payload writes stay bound to the intended provider origin.
 HTTP client and socket transport failures should be surfaced through the same
 retryable WebDAV error path.
+WebDAV failure response bodies should respect declared HTTP charsets before
+they are attached to sync diagnostics, so provider-localized quota,
+permission, or throttling details remain readable when troubleshooting.
+Non-empty provider response details should be shown in user-facing retryable
+sync errors after whitespace/control-character cleanup, including DEL and C1
+controls, and bounded truncation, unless they duplicate the primary WebDAV
+failure message.
+Closing a WebDAV client wrapper must always prevent later wrapper requests,
+even when the underlying HTTP client was injected and remains owned by the
+caller.
 Provider `Retry-After` hints on throttling or temporary-unavailable responses
 should be preserved in retryable WebDAV error messages so users can wait the
 right amount of time before trying again. A zero-second retry hint is valid and
-means the user can retry immediately; negative or malformed values are ignored.
+means the user can retry immediately; signed or decimal delay values are
+malformed, and negative or malformed values are ignored.
 Missing or weak ETags must not be used for manifest overwrite conditions:
 manifest writes for an existing remote manifest require a strong ETag and are
 treated as conflicts instead of unsafe unconditional overwrites when that ETag
 is unavailable. Optional legacy operation-log migrations are skipped until a
 strong ETag is available.
+WebDAV ETag metadata with control characters, empty quoted tags, wildcard-only
+values, or malformed quote structure is ignored before it can affect recovery
+sorting or conditional writes. Unquoted provider ETags may be retained for
+compatibility, but `If-Match` generation must quote them before transport and
+must reject weak, control-character, or malformed values instead of sending an
+unsafe condition header.
 Collection creation treats common successful or already-existing `MKCOL`
 responses as accepted, including provider-specific 409/412 responses only when
 their body clearly reports that the collection already exists, including
 localized already-exists wording, while preserving hard failures such as missing
-parents, permission errors, and quota errors.
+parents, permission errors, and quota errors. English detection must not treat
+generic `exist` wording such as `does not exist` as an already-existing
+collection.
 Configured WebDAV root folders use the same decoded path rules; unsafe or
 malformed roots are treated as incomplete sync settings instead of falling back
 to another remote folder. Root folders with raw or percent-encoded control
@@ -281,9 +348,12 @@ progress but do not count as newly uploaded bytes.
 If local persistence of accepted operation upload progress fails, the upload
 must surface as failed so pending local edits can retry instead of treating
 unsaved sequence progress as accepted.
-Operation upload queues must skip operations whose device ID normalizes to blank
-or whose sequence falls outside the 12-digit remote sequence range before
-collection creation or upload requests can reach WebDAV.
+Operation upload queues must skip operations whose device ID normalizes to
+blank, whose sequence falls outside the 12-digit remote sequence range, or
+whose targeted payload is structurally incomplete before collection creation or
+upload requests can reach WebDAV. Skipping a malformed local operation must not
+allow a later operation from the same device to be uploaded out of sequence and
+create a remote gap.
 Manifest wire keys are decoded case-insensitively for legacy or hand-edited
 WebDAV metadata compatibility, while modern camelCase keys win when duplicate
 legacy keys are present.
@@ -291,9 +361,11 @@ Manifest `updatedAtUtc` wire timestamps must parse strictly with an explicit
 time zone; overflow dates or times must be rejected instead of normalized to a
 different instant, invalid time-zone offsets are rejected, and leading or
 trailing whitespace is not accepted.
-Manifest schema and sequence numbers accept positive integer JSON strings as
-well as JSON numbers, while non-integer, non-positive, or leading/trailing
-whitespace string values remain invalid.
+Manifest schema and sequence numbers accept unsigned decimal integer JSON
+strings as well as JSON numbers, while signed, non-integer, non-positive, or
+leading/trailing whitespace string values remain invalid. Decimal or exponent
+numeric forms such as `1.0` or `1e0` are rejected instead of being rounded or
+coerced into an integer.
 Manifest device sequences must reject values outside the 12-digit remote
 sequence range before they can advance local operation progress.
 When downloading an operation log, the `<deviceId>-<sequence>` file name is
@@ -302,10 +374,38 @@ metadata cannot advance the wrong device sequence.
 Each decoded operation log payload must contain exactly one non-empty JSON
 operation. Known operation wire keys are decoded case-insensitively for legacy
 compatibility, while modern camelCase keys win when duplicate legacy keys are
-present. Operation sequence numbers accept positive integer JSON strings inside
-the supported remote sequence range for hand-edited legacy logs, while
-leading/trailing whitespace string values remain invalid; the file name remains
-authoritative after decode.
+present. Operation sequence numbers accept unsigned decimal integer JSON strings
+inside the supported remote sequence range for hand-edited legacy logs, while
+signed strings, leading/trailing whitespace string values, and decimal or
+exponent numeric forms remain invalid; the file name remains authoritative
+after decode.
+Delete operation payload keys must remain case-insensitive through the full app
+sync merge path, including the local tombstone preservation step after the
+merge applier runs, so legacy-cased `PaperID` or `ItemID` payloads cannot delete
+data without recording the matching local delete tombstone.
+Snapshot-marker operations do not modify local state, but they must still carry
+a non-empty safe relative `snapshotPath` before they can advance operation
+sequence progress. Snapshot marker paths must reject absolute URLs, scheme-like
+or authority paths, parent-directory segments, blank path segments, backslashes,
+control characters, and encoded path separators. Newly written snapshot-marker
+operation logs must use the canonical payload shape with `snapshotPath` only,
+so local diagnostic fields do not become part of the remote sync contract.
+Paper and todo-item upsert payloads must compare by the same model
+normalization that merge application uses when their IDs are stable, so legacy
+PaperTodo casing, default dimensions, clamped text zoom, note-canvas z-order,
+todo column limits, due dates, and reminder ranges do not turn equivalent
+duplicate logs into conflicts. Local operation diff generation must use the
+same model-normalized paper and todo-item payloads before comparing local
+states or uploading new upsert logs, so Windows and Android do not publish
+remote changes for values that normalize back to the same model state.
+Malformed operation-log JSONL entries should preserve the physical line number
+in their format error so damaged remote logs can be diagnosed without guessing.
+Plain operation-log decoding should treat CRLF, LF, and standalone CR as
+physical line delimiters for legacy or hand-repaired WebDAV files while newly
+written canonical logs continue to use LF.
+Operation kind values are matched case-insensitively for legacy compatibility,
+but leading or trailing whitespace is rejected instead of being trimmed into a
+different valid operation kind.
 Operation `createdAtUtc` wire timestamps must parse strictly with an explicit
 time zone; overflow dates or times must be rejected instead of normalized to a
 different instant, invalid time-zone offsets are rejected, and leading or
@@ -318,10 +418,12 @@ progress. Migration records whose device ID or sequence does not match their
 operation-log path, or whose downloaded result path does not match the migration
 record path, must be skipped before rewrite requests can reach WebDAV. Migration
 downloads that are not legacy plain JSON or do not contain exactly one operation
-must be skipped at the same boundary. Missing ETags or conditional conflicts
-leave the merge accepted and surface a retryable migration status instead of
-blocking user data. Legacy operation-log migration failures must be counted as
-not migrated while still applying the downloaded operations.
+must be skipped at the same boundary. Structurally incomplete operation payloads
+must also be skipped before legacy plain operation logs are rewritten as
+encrypted payloads. Missing ETags or conditional conflicts leave the merge
+accepted and surface a retryable migration status instead of blocking user data.
+Legacy operation-log migration failures must be counted as not migrated while
+still applying the downloaded operations.
 During upload and merge, operation logs are selected and applied per device
 only while their sequence numbers are contiguous from the locally recorded
 progress. If sequence `2` is missing, sequence `3` is left untouched until the
@@ -339,9 +441,176 @@ sequences inside the same 12-digit remote sequence range used by WebDAV paths.
 Merge application must apply matching duplicate operations for the same device
 sequence at most once, and conflicting duplicate operations must block that
 device sequence instead of applying an arbitrary candidate.
+Merge application must also block a device sequence when a targeted operation
+payload is structurally incomplete, such as a missing paper, item, settings
+object, paper ID, item ID, or note-content string field. Well-formed operations
+that produce no local change because the target no longer exists or a tombstone
+wins are still consumed, so stale but readable logs do not permanently block
+later operations from that device.
+Target paper IDs, todo-item IDs, linked-note IDs, and note-canvas element IDs
+inside operation payloads must also be nonblank after trimming and must not
+contain raw control characters. Malformed ID payloads block that device
+sequence before they can write local state, tombstones, or uploaded canonical
+operation logs.
+Local model normalization strips raw control characters, including DEL and C1
+controls, from stored paper IDs, todo-item IDs, linked-note IDs, and
+note-canvas element IDs before de-duplication, link validation, platform
+surface refresh, or WebDAV upload.
+Todo-item payloads clear a linked note by omitting `linkedNoteId`; blank
+`linkedNoteId` strings are structurally incomplete instead of being normalized
+to an unlink operation during merge.
+Upsert-paper payloads must also keep nested todo-item IDs and note-canvas
+element IDs unique after trimming. Duplicate nested IDs are structurally
+incomplete because normalizing them would mint replacement IDs differently on
+each device.
+Settings operations that contain only protected local fields such as WebDAV
+sync settings, startup-at-login, or paper lists must be treated as structurally
+incomplete instead of advancing device progress as no-op setting changes.
+Settings operations also use an explicit app-preference whitelist: unknown
+root setting fields must not be copied into local extension metadata, and a
+settings operation containing only unknown fields must be treated as
+structurally incomplete. Local operation diff generation must use the same
+whitelist so unknown local `AppState.extra` fields are not uploaded as remote
+settings changes, and it must generate canonical settings payloads with the
+same enum, numeric, boolean, color, hotkey, extension, and queue-map
+normalization used by merge application. Invalid local setting values must be
+dropped before upload, and semantically equivalent setting formats must not
+create remote operation logs. Integer app-preference settings accept JSON
+integers and unsigned integer strings without leading or trailing whitespace
+only; signed, whitespace-padded, fractional, decimal, or exponent forms must be
+dropped instead of rounded into valid settings.
+Double app-preference settings accept finite JSON numbers and unsigned decimal
+strings without leading or trailing whitespace only; signed,
+whitespace-padded, exponent, infinity, NaN, or malformed forms must be dropped
+instead of parsed into valid settings.
+Capsule-mode dependency settings must also be folded before comparison or
+upload: disabling capsule mode, deep capsules, or collapse-all implies the same
+dependent queue, active-state, and deep-capsule
+margin resets that `AppState.normalize` applies locally.
+Boolean queue-map settings such as collapse-all active queues must also use
+the same alias precedence as `AppState.normalize`: exact canonical
+`monitor|side` keys override older aliases, and canonical `false` values remove
+an older truthy alias before upload or equivalence comparison.
+Double queue-map settings such as deep-capsule start margins use the same exact
+canonical key precedence, then clamp margins to the app's valid range before
+upload or equivalence comparison.
+Deep-capsule monitor names and queue-map keys with raw control characters are
+dropped from remote settings operations before they can become local queue
+state.
+Upsert-paper top-level fields that preserve paper type, title, content,
+window geometry, visibility flags, text zoom, or capsule identity must keep
+their expected wire types when present; malformed known fields are
+structurally incomplete instead of being defaulted into a different paper type,
+blank title/content, fallback bounds, or changed visibility state during merge.
+Paper `type` is required in `upsertPaper` operation payloads and must be `todo`
+or `note` case-insensitively; missing types are structurally incomplete instead
+of being defaulted to todo papers during merge.
+Paper titles in upsert payloads must already match the app's hard stored-title
+shape: no leading or trailing whitespace, no raw control characters, and no
+more than the shared storage title length cap. Malformed title payloads are
+structurally incomplete instead of being silently stripped or truncated during
+merge.
+Note content in `upsertPaper` and `updateNoteContent` operation payloads must
+also stay within the shared Markdown editor storage limit. Todo-paper
+`upsertPaper` payloads must not carry non-empty note `content`, so hidden note
+body text cannot later resurface after a remote type change. Oversized note
+content and non-empty todo-paper content are structurally incomplete instead of
+being silently truncated or hidden during merge.
+Paper window dimensions in operation payloads must stay at or above the shared
+minimum paper size, and `textZoom` must be positive; dimensions that would fall
+back to default bounds or non-positive zoom values are structurally incomplete
+instead of being accepted as remote geometry changes.
+Paper capsule identity fields must also keep safe values when present:
+`capsuleSide` must be blank, `left`, or `right` case-insensitively, and
+`capsuleMonitorDeviceName` must not contain raw control characters. Malformed
+capsule payloads are structurally incomplete instead of being normalized into a
+different edge or monitor during merge.
+Nested operation payload objects such as `paper`, `item`, and `settings` must
+remain JSON objects with string keys; malformed local or remote payload objects
+must be treated as structurally incomplete instead of throwing during merge or
+upload filtering.
+When an upsert-paper payload includes nested collection fields such as `items`
+or `noteCanvasElements`, those fields must be lists whose entries are JSON
+objects with string keys. Malformed nested collection fields are structurally
+incomplete instead of being silently dropped, because dropping them could
+overwrite a local paper with a partial remote payload.
+`upsertPaper` payloads must also keep non-empty collections on the matching
+paper type: todo papers may carry todo `items`, note papers may carry
+`noteCanvasElements`, and empty irrelevant lists remain compatible. Non-empty
+wrong-type collections are structurally incomplete instead of being hidden in
+the model and resurfacing after a later type change.
+Todo-item collection subfields such as `todoExtraColumns` and
+`todoColumnWidths` must also keep their expected list shapes when present;
+malformed column payloads are structurally incomplete instead of being coerced
+to empty or default columns during merge.
+Zero-width legacy values in `todoColumnWidths` may still normalize to the
+default width for compatibility, and oversized positive values may still clamp
+to the app range. Negative column widths are structurally incomplete instead of
+being silently reset to the default width during merge.
+Remote operations that include `todoExtraColumns` or `todoColumnWidths` must
+also include `todoColumnCount`, and those lists must not exceed the declared
+column shape. Otherwise the operation is structurally incomplete instead of
+being defaulted to one column or truncated by model normalization.
+Todo column counts in operation payloads must be positive JSON integers when
+present; positive values above the app limit remain legacy compatible and are
+clamped by model normalization. Zero or negative column counts are
+structurally incomplete instead of being silently normalized to one column
+during merge.
+Todo-item scalar subfields that preserve user content or scheduling state, such
+as `text`, `done`, `order`, `todoColumnCount`, `linkedNoteId`, `dueAtLocal`,
+`reminderIntervalValue`, and `reminderIntervalUnit`, must also keep their
+expected wire types when present; malformed todo-item payloads are structurally
+incomplete instead of being defaulted into blank text, unchecked state, fallback
+ordering, cleared due dates, or changed reminder settings during merge.
+Todo item text fields, including extra column text, must also stay within the
+shared Todo text-entry line limit. Oversized Todo text payloads are
+structurally incomplete instead of being truncated during merge or allowed to
+bypass the local editor limit through WebDAV operation logs.
+Todo due-date payloads may use PaperTodo-compatible parseable date strings,
+including ISO-like, slash-separated, day-first, Chinese year/month/day, and
+.NET seven-fractional-digit forms, and are canonicalized by model
+normalization. If a `dueAtLocal` field is present, blank, control-character, or
+unparseable values are structurally incomplete instead of clearing the todo's
+due date during merge; clearing a due date is represented by omitting the field
+from the full todo-item payload.
+Todo reminder interval values in operation payloads must be positive JSON
+integers when present; positive values above the app limit remain legacy
+compatible and are clamped by model normalization. Reminder interval units may
+appear only with a positive interval value, must be `minutes` or `hours`
+case-insensitively, and must not contain leading or trailing whitespace or raw
+control characters. Zero, negative, dangling, padded, control-character, or
+unknown reminder interval payloads are structurally incomplete instead of
+clearing reminders or silently defaulting the unit to minutes during merge.
+Note-canvas element subfields that preserve user content, block kind, or
+geometry, such as `type`, `text`, `x`, `y`, `width`, `height`, and `zIndex`,
+must also keep their expected wire types when present; malformed canvas payloads
+are structurally incomplete instead of being defaulted into blank code blocks,
+code block types, or fallback geometry during merge.
+Canvas element text payloads must stay within the shared Markdown text limit so
+operation logs cannot inject blocks larger than the note editor accepts.
+Oversized canvas text payloads are structurally incomplete instead of being
+silently truncated during merge.
+Canvas `type` payloads must already be one of the current or known legacy block
+types (`code`, `text`, or `sticky`) case-insensitively, without leading or
+trailing whitespace or raw control characters. Unknown canvas types are
+structurally incomplete instead of being silently normalized to code blocks
+during merge.
+Canvas geometry values in operation payloads must also stay within the shared
+note-canvas coordinate and size bounds; coordinates or dimensions that would be
+clamped or defaulted by model normalization are structurally incomplete instead
+of being accepted as remote canvas changes.
+Canvas `zIndex` values must be JSON integers greater than or equal to zero;
+legacy zero values remain accepted for model-normalized comparison, but
+negative layers are structurally incomplete instead of being reassigned during
+merge.
 Matching duplicate upload candidates for the same device sequence are
 deduplicated, while conflicting duplicates block that device so an arbitrary
-operation is never chosen.
+operation is never chosen. Accepted operation upload candidates must be written
+with canonical operation payloads, not whichever legacy-cased or hand-edited
+duplicate happened to appear first, so remote logs keep a stable wire shape.
+Malformed duplicate upload candidates for the current device sequence block
+that device even when another candidate for the same sequence is well formed,
+so upload selection never silently chooses around damaged local queue data.
 When multiple devices have ready operations at the same time, the merge core
 keeps each device's sequence order but applies the ready operation with the
 earliest `createdAtUtc` first. This prevents device ID sorting from deciding
@@ -359,11 +628,18 @@ Downloaded, decoded, or restored tombstone timestamps must parse strictly with
 an explicit time zone; overflow dates or times are discarded instead of
 normalized to a different instant, and invalid time-zone offsets or
 leading/trailing whitespace are discarded.
+Downloaded, decoded, or restored tombstone paper IDs and todo-item IDs must be
+nonblank after trimming and must not contain raw control characters, including
+leading or trailing control characters that `trim()` would otherwise remove.
+Invalid tombstone IDs are discarded before they can preserve deletes or pollute
+local sync metadata.
 
 Settings operations are intentionally limited to app preferences. They do not
 replace local sync settings, WebDAV credentials, operation device sequences, or
 delete tombstones, and they do not replace local startup-at-login state. Sync
 progress comes from manifests, operation logs, and local upload results instead.
+They also do not replace unknown local `AppState.extra` fields, so future or
+plugin-local settings cannot be injected through remote operation logs.
 
 Local device sequence progress must never move backward. Operation upload
 progress comes from returned device sequence metadata and explicitly accepted
@@ -373,9 +649,10 @@ device. Upload result sequence maps must be normalized before saving so blank
 device IDs, short-invalid device IDs, and sequence values outside the remote
 range cannot pollute local sync progress.
 Persisted or restored operation device sequence maps must accept only integer
-JSON numbers or integer strings; fractional numbers and leading/trailing
-whitespace string values must be discarded instead of rounded or trimmed into
-valid sync progress.
+JSON numbers or unsigned decimal integer strings; signed strings, decimal or
+exponent numeric forms such as `1.0` or `1e0`, non-positive values, values
+outside the remote range, and leading/trailing whitespace string values must be
+discarded instead of rounded, coerced, or trimmed into valid sync progress.
 Downloaded or restored snapshot and manifest sequence progress is merged the
 same way with existing local progress, so sparse, stale, or malformed remote
 sequence maps cannot drop known device progress or save invalid device IDs
@@ -390,6 +667,10 @@ reporting success, so delete tombstones and sequence progress can be retried or
 reconciled from durable state.
 Recovery snapshot restores must also surface local save failures instead of
 reporting success, preserving the previous local state on disk.
+Restoring a legacy plain recovery snapshot while encrypted sync is configured
+must report the legacy plain source to the user, but the restore action itself
+must not upload a migration snapshot; the next normal successful upload writes
+encrypted payload bytes.
 
 ## Payload-Encrypted Remote Layout
 
@@ -431,6 +712,45 @@ Snapshot and operation-log file contents are encrypted for user-facing sync;
   uploaded remote snapshots.
 - Sync on startup, exit, foreground/background transitions, manual request, and debounced local edits.
   Foreground/background transitions must flush any pending local-edit operation upload before running the snapshot sync, instead of waiting for the debounce timer.
+  If a foreground/background transition requests a silent sync while another
+  WebDAV sync is already active, the lifecycle request must be queued and run
+  once after the active sync finishes, so Android backgrounding does not drop
+  the last opportunistic WebDAV pass.
+  Exit commands must wait for any active manual or automatic sync attempt to
+  finish before flushing pending local-edit operations and running the final
+  sync, so platform cleanup does not race ahead of in-flight WebDAV work.
+  Duplicate exit commands must share the same in-flight exit save/sync future,
+  so tray exit, forwarded `--exit`, and Windows session-ending retries cannot
+  upload the same pending operation or run the final sync more than once.
+  While that exit future is active, late startup commands, tray open/delete
+  requests, and native hidden-surface updates must be ignored so shutdown
+  retries cannot mutate paper visibility or tombstones before cleanup.
+  If the active sync fails, the exit flow must still continue with the final
+  local-edit upload attempt and platform cleanup instead of leaving the app
+  running half-closed.
+  On Android, a WorkManager periodic task should register a headless Dart
+  background dispatcher when WebDAV sync is securely configured. The background
+  task receives only the local `data.json` path, reloads the StateStore, and
+  reuses the shared `AppSyncService.syncAndMergeNow` path instead of
+  reimplementing WebDAV merge logic in Kotlin. Incomplete or disabled WebDAV
+  settings should cancel the periodic task. Registration and task execution
+  must both reject unsafe or relative state-file paths instead of scheduling
+  doomed background work. The task must require network connectivity, use
+  bounded backoff, and report failure to WorkManager only when it should be
+  retried.
+  Disabled sync,
+  incomplete configuration, and unreadable remote payloads are user-recoverable
+  non-retry states; remote write conflicts remain retryable so WorkManager can
+  make another attempt after backoff.
+  Saving sync settings while the app is running must refresh that Android
+  background registration after the new StateStore contents are durably saved,
+  so enabling or disabling WebDAV does not wait for the next app launch.
+  Primary startup `exit` commands use the same exit-sync gate before platform
+  cleanup even when startup auto-sync is disabled; WebDAV failures there are
+  still opportunistic and must not prevent exit.
+  Silent local-edit upload failures must keep the pending edit so later
+  automatic, lifecycle, or manual sync attempts retry the same operation without
+  requiring another user edit.
 - Opening settings must pause pending debounced local-edit uploads and defer lifecycle/auto sync while the dialog is open; canceling settings or saving settings without changing sync configuration restores the pending upload, even when platform setting application reports errors, while saving sync setting changes clears stale pending uploads so edits are not sent under a new sync configuration. Settings save failures must surface as readable UI errors and must not drop the paused pending edit or leave later local edits blocked from debounced upload.
-- After any sync, recovery restore, or local-operation upload replaces local state, reapply the resulting state to the platform layer so Windows surfaces, tray state, hotkeys, and window policies match the accepted data.
+- After any sync, recovery restore, or local-operation upload replaces local state, reapply the resulting state to the platform layer so Windows surfaces, tray state, hotkeys, and window policies match the accepted data. This still applies when an operation upload is accepted idempotently and creates no new remote log, because sequence progress and canonicalized state affect later sync inputs and Windows integration.
 - Offer retry actions for transient manual sync, recovery snapshot listing, and recovery restore failures.

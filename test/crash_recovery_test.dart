@@ -101,4 +101,34 @@ void main() {
     expect(recoveredState.papers.single.title,
         List.filled(state.maxTitleLength, 'A').join());
   });
+
+  test('crash logs are trimmed before appending new failures', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'repapertodo_crash_recovery_log_trim_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    const writer = CrashRecoveryWriter();
+    final log = File(writer.logPathFor(store));
+    final oldPrefix = 'old-prefix-${List.filled(101 * 1024, 'x').join()}';
+    const preservedTail = 'preserved-tail';
+    log.writeAsStringSync('$oldPrefix$preservedTail');
+
+    writer.saveSync(
+      store: store,
+      state: AppState(theme: 'dark'),
+      error: ArgumentError('trim me'),
+      stackTrace: StackTrace.fromString('fresh stack'),
+    );
+
+    final logText = await log.readAsString();
+    expect(logText, contains('Crash log trimmed to last 80 KB'));
+    expect(logText, isNot(contains('old-prefix')));
+    expect(logText, contains(preservedTail));
+    expect(logText, contains('Unhandled RePaperTodo error'));
+    expect(logText, contains('Invalid argument(s): trim me'));
+    expect(logText, contains('fresh stack'));
+    expect(log.lengthSync(), lessThan(90 * 1024));
+  });
 }

@@ -22,6 +22,15 @@ void main() {
       ScriptCapsuleSpec.tryParse('!winps\nwindows-powershell')!.engine,
       'powershell',
     );
+    expect(
+      ScriptCapsuleSpec.tryParse('!p PaperTodo style comment\nWrite-Output ok'),
+      isNotNull,
+    );
+    expect(
+      ScriptCapsuleSpec.tryParse(
+          '!p\tunsupported-tab-comment\nWrite-Output ok'),
+      isNull,
+    );
     expect(ScriptCapsuleSpec.tryParse('plain note'), isNull);
   });
 

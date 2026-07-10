@@ -39,7 +39,7 @@ abstract final class WebDavPresets {
   static final jianguoyun = WebDavPreset(
     id: WebDavPresetIds.jianguoyun,
     name: 'Jianguoyun WebDAV',
-    label: 'Jianguoyun',
+    label: '坚果云',
     endpoint: Uri.parse('https://dav.jianguoyun.com/dav/'),
     defaultRemotePath: '/RePaperTodo/',
   );
@@ -113,11 +113,43 @@ String? _normalizePresetId(String? id) {
 }
 
 String _normalizePresetRootPath(String value) {
-  return value
-      .trim()
-      .replaceAll('\\', '/')
-      .split('/')
-      .map((segment) => segment.trim())
-      .where((segment) => segment.isNotEmpty && segment != '.')
-      .join('/');
+  final normalizedSegments = <String>[];
+  final rawSegments = value.trim().replaceAll('\\', '/').split('/');
+  for (var index = 0; index < rawSegments.length; index += 1) {
+    final segment = rawSegments[index];
+    if (segment.isEmpty &&
+        _hasNonEmptySegmentBefore(rawSegments, index) &&
+        _hasNonEmptySegmentAfter(rawSegments, index)) {
+      return '';
+    }
+    if (_hasControlCharacter(segment)) {
+      return '';
+    }
+    final trimmedSegment = segment.trim();
+    if (segment.isNotEmpty && trimmedSegment.isEmpty) {
+      return '';
+    }
+    if (trimmedSegment.isEmpty || trimmedSegment == '.') {
+      continue;
+    }
+    if (trimmedSegment == '..') {
+      return '';
+    }
+    normalizedSegments.add(trimmedSegment);
+  }
+  return normalizedSegments.join('/');
+}
+
+bool _hasNonEmptySegmentBefore(List<String> segments, int index) {
+  return segments.take(index).any((segment) => segment.isNotEmpty);
+}
+
+bool _hasNonEmptySegmentAfter(List<String> segments, int index) {
+  return segments.skip(index + 1).any((segment) => segment.isNotEmpty);
+}
+
+bool _hasControlCharacter(String value) {
+  return value.runes.any(
+    (rune) => rune <= 0x1F || (rune >= 0x7F && rune <= 0x9F),
+  );
 }

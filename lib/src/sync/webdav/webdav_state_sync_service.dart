@@ -9,6 +9,7 @@ import '../../core/state/app_state_codec.dart';
 import '../sync_device_id.dart';
 import '../sync_manifest.dart';
 import '../sync_operation.dart';
+import '../sync_operation_payload.dart';
 import 'webdav_client.dart';
 import 'webdav_payload_codec.dart';
 
@@ -32,7 +33,7 @@ class WebDavStateSyncPaths {
   final String snapshotDirectoryName;
   final String operationDirectoryName;
 
-  String get rootCollectionPath => _normalizeRemotePath(rootPath);
+  String get rootCollectionPath => _normalizeConfiguredRemotePath(rootPath);
 
   String get manifestPath =>
       _joinRemotePath(rootCollectionPath, manifestFileName);
@@ -567,7 +568,8 @@ class WebDavStateSyncService {
         downloadedResult ?? await downloadOperationLogWithMetadata(record.path);
     if (result.path != normalizedPath ||
         result.payloadFormat != WebDavPayloadFormat.plainJson ||
-        result.operations.length != 1) {
+        result.operations.length != 1 ||
+        !isSyncOperationPayloadWellFormed(result.operations.single)) {
       return false;
     }
     final encryptedBytes =
@@ -584,7 +586,7 @@ class WebDavStateSyncService {
       );
       return true;
     } on WebDavException catch (error) {
-      if (error.statusCode == 412) {
+      if (error.statusCode == 409 || error.statusCode == 412) {
         return false;
       }
       rethrow;
@@ -662,7 +664,11 @@ class WebDavStateSyncService {
   }
 
   WebDavSnapshotRecord? _snapshotRecordFromEntry(WebDavEntry entry) {
-    final path = _tryNormalizeEntryPath(entry.href, _normalizeSnapshotPath);
+    final path = _tryNormalizeEntryPath(
+      entry.href,
+      _normalizeSnapshotPath,
+      relativeCollectionPath: _paths.snapshotCollectionPath,
+    );
     if (path == null) {
       return null;
     }
@@ -690,7 +696,11 @@ class WebDavStateSyncService {
   }
 
   WebDavOperationLogRecord? _operationLogRecordFromEntry(WebDavEntry entry) {
-    final path = _tryNormalizeEntryPath(entry.href, _normalizeOperationLogPath);
+    final path = _tryNormalizeEntryPath(
+      entry.href,
+      _normalizeOperationLogPath,
+      relativeCollectionPath: _paths.operationCollectionPath,
+    );
     if (path == null) {
       return null;
     }
@@ -708,9 +718,12 @@ class WebDavStateSyncService {
     );
   }
 
-  String _entryRemotePath(String href) {
+  String _entryRemotePath(
+    String href, {
+    String? relativeCollectionPath,
+  }) {
     final absolutePath = _absoluteHrefPath(href);
-    var path = absolutePath ?? href.trim();
+    var path = absolutePath ?? href;
     if (!_hasUnambiguousEncodedPathSegments(path) ||
         !_hasStableDecodedPathSegments(path)) {
       throw const WebDavSyncConfigurationException(
@@ -736,33 +749,39 @@ class WebDavStateSyncService {
         return _normalizeDecodedRemotePath(path);
       }
     }
+    if (relativeCollectionPath != null && !path.contains('/')) {
+      return _joinRemotePath(relativeCollectionPath, path);
+    }
     return _normalizeDecodedRemotePath(path);
   }
 
   String? _absoluteHrefPath(String href) {
-    final uri = Uri.tryParse(href.trim());
-    if (uri == null) {
-      return null;
-    }
-    if (!uri.hasScheme) {
-      if (uri.hasAuthority) {
-        throw const WebDavSyncConfigurationException(
-          'WebDAV entry href must stay on the configured endpoint origin and path.',
-        );
-      }
-      return null;
-    }
-    if (!_hasSameOrigin(uri, _client.baseUri) ||
-        !_hasUnambiguousEncodedPathSegments(uri.path) ||
-        !_absoluteHrefStaysBelowBasePath(uri) ||
-        uri.userInfo.isNotEmpty ||
-        uri.hasQuery ||
-        uri.hasFragment) {
+    if (href != href.trim()) {
       throw const WebDavSyncConfigurationException(
         'WebDAV entry href must stay on the configured endpoint origin and path.',
       );
     }
-    return uri.path;
+    final uri = Uri.tryParse(href);
+    if (uri == null) {
+      return null;
+    }
+    final absoluteUri = !uri.hasScheme && uri.hasAuthority
+        ? uri.replace(scheme: _client.baseUri.scheme)
+        : uri;
+    if (!absoluteUri.hasScheme) {
+      return null;
+    }
+    if (!_hasSameOrigin(absoluteUri, _client.baseUri) ||
+        !_hasUnambiguousEncodedPathSegments(absoluteUri.path) ||
+        !_absoluteHrefStaysBelowBasePath(absoluteUri) ||
+        absoluteUri.userInfo.isNotEmpty ||
+        absoluteUri.hasQuery ||
+        absoluteUri.hasFragment) {
+      throw const WebDavSyncConfigurationException(
+        'WebDAV entry href must stay on the configured endpoint origin and path.',
+      );
+    }
+    return absoluteUri.path;
   }
 
   String _serverAbsoluteRemotePath(String path) {
@@ -802,10 +821,16 @@ class WebDavStateSyncService {
 
   String? _tryNormalizeEntryPath(
     String href,
-    String Function(String path) normalize,
-  ) {
+    String Function(String path) normalize, {
+    String? relativeCollectionPath,
+  }) {
     try {
-      return normalize(_entryRemotePath(href));
+      return normalize(
+        _entryRemotePath(
+          href,
+          relativeCollectionPath: relativeCollectionPath,
+        ),
+      );
     } on WebDavSyncConfigurationException {
       return null;
     }
@@ -1016,14 +1041,15 @@ class WebDavStateSyncService {
   }
 
   Future<bool> _putOperationLog(SyncOperation operation) async {
+    final canonicalOperation = _canonicalOperationForUpload(operation);
     final operationLogPath = _paths.operationLogPath(
-      operation.deviceId,
-      operation.sequence,
+      canonicalOperation.deviceId,
+      canonicalOperation.sequence,
     );
     try {
       await _client.putBytes(
         operationLogPath,
-        await _payloadCodec.encodeOperationLog(operation),
+        await _payloadCodec.encodeOperationLog(canonicalOperation),
         createOnly: true,
       );
       return true;
@@ -1036,7 +1062,7 @@ class WebDavStateSyncService {
         originalError: error,
       );
       if (existingOperations.length != 1 ||
-          !_operationsMatch(existingOperations.single, operation)) {
+          !_operationsMatch(existingOperations.single, canonicalOperation)) {
         _throwWebDavException(error);
       }
       return false;
@@ -1121,7 +1147,7 @@ class WebDavStateSyncService {
       );
       return true;
     } on WebDavException catch (error) {
-      if (error.statusCode == 412) {
+      if (error.statusCode == 409 || error.statusCode == 412) {
         return false;
       }
       rethrow;
@@ -1153,12 +1179,7 @@ class WebDavStateSyncService {
 }
 
 bool _operationsMatch(SyncOperation left, SyncOperation right) {
-  return left.id == right.id &&
-      left.deviceId == right.deviceId &&
-      left.sequence == right.sequence &&
-      left.kind == right.kind &&
-      left.createdAtUtc.toUtc().isAtSameMomentAs(right.createdAtUtc.toUtc()) &&
-      const DeepCollectionEquality().equals(left.payload, right.payload);
+  return areSyncOperationsEquivalent(left, right);
 }
 
 List<SyncOperation> _contiguousOperationsForUpload(
@@ -1193,9 +1214,13 @@ List<SyncOperation> _contiguousOperationsForUpload(
         break;
       }
       final operation = deviceOperations[groupStart];
+      if (!isSyncOperationPayloadWellFormed(operation)) {
+        break;
+      }
       var hasConflictingDuplicate = false;
       for (var index = groupStart + 1; index < cursor; index += 1) {
-        if (!_operationsMatch(operation, deviceOperations[index])) {
+        if (!isSyncOperationPayloadWellFormed(deviceOperations[index]) ||
+            !_operationsMatch(operation, deviceOperations[index])) {
           hasConflictingDuplicate = true;
           break;
         }
@@ -1203,11 +1228,26 @@ List<SyncOperation> _contiguousOperationsForUpload(
       if (hasConflictingDuplicate) {
         break;
       }
-      selected.add(operation);
+      selected.add(_canonicalOperationForUpload(operation));
       expectedSequence += 1;
     }
   }
   return selected;
+}
+
+SyncOperation _canonicalOperationForUpload(SyncOperation operation) {
+  final canonicalPayload = canonicalSyncOperationPayload(operation);
+  if (canonicalPayload == null) {
+    return operation;
+  }
+  return SyncOperation(
+    id: '${operation.deviceId}-${operation.sequence}',
+    deviceId: operation.deviceId,
+    sequence: operation.sequence,
+    kind: operation.kind,
+    createdAtUtc: operation.createdAtUtc,
+    payload: canonicalPayload,
+  );
 }
 
 Map<String, int> _operationDeviceSequences(Iterable<SyncOperation> operations) {
@@ -1251,13 +1291,36 @@ String? _nonBlankRemoteValue(String? value) {
 
 String? _ifMatchHeaderValue(String etag) {
   final trimmed = etag.trim();
-  if (trimmed.isEmpty || trimmed.toLowerCase().startsWith('w/')) {
+  if (trimmed.isEmpty ||
+      _hasControlCharacter(trimmed) ||
+      trimmed.toLowerCase().startsWith('w/') ||
+      !_hasValidRemoteEtagShape(trimmed)) {
     return null;
   }
   if (trimmed.startsWith('"') || trimmed.contains('"')) {
     return trimmed;
   }
   return '"$trimmed"';
+}
+
+bool _hasValidRemoteEtagShape(String value) {
+  if (value.toLowerCase().startsWith('w/')) {
+    return _isQuotedRemoteEtag(value.substring(2));
+  }
+  if (value.contains('"')) {
+    return _isQuotedRemoteEtag(value);
+  }
+  return true;
+}
+
+bool _isQuotedRemoteEtag(String value) {
+  if (value.length < 2 || !value.startsWith('"') || !value.endsWith('"')) {
+    return false;
+  }
+  final inner = value.substring(1, value.length - 1);
+  return inner.isNotEmpty &&
+      !inner.contains('"') &&
+      !_hasControlCharacter(inner);
 }
 
 String _decodeManifestText(List<int> bytes) {
@@ -1342,8 +1405,43 @@ String _normalizeRemotePath(String path) {
   return _normalizeDecodedRemotePath(_decodeRemotePath(path));
 }
 
+String _normalizeConfiguredRemotePath(String path) {
+  final trimmedPath = path.trim();
+  if (!_hasUnambiguousConfiguredPathSegments(trimmedPath)) {
+    throw const WebDavSyncConfigurationException(
+      'Remote path segments must not decode to path separators.',
+    );
+  }
+  return _normalizeDecodedRemotePath(
+    _decodeRemotePath(trimmedPath),
+    trimDecodedSegments: true,
+  );
+}
+
 bool _looksLikeAbsoluteHrefPath(String path) {
   return path.startsWith('//') || (Uri.tryParse(path)?.hasScheme ?? false);
+}
+
+bool _hasUnambiguousConfiguredPathSegments(String path) {
+  final segments = path.split('/');
+  for (var index = 0; index < segments.length; index += 1) {
+    final segment = segments[index];
+    if (segment.isEmpty && index > 0 && index < segments.length - 1) {
+      return false;
+    }
+    final decoded = _decodeRemotePath(segment);
+    if (decoded.contains('/') || decoded.contains('\\')) {
+      return false;
+    }
+    final trimmed = decoded.trim();
+    if (segment.isNotEmpty && trimmed.isEmpty) {
+      return false;
+    }
+    if (trimmed == '.' || trimmed == '..') {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool _hasUnambiguousEncodedPathSegments(String path) {
@@ -1393,7 +1491,7 @@ bool _hasStableDecodedPathSegments(String path) {
 
 String _decodeRemotePath(String path) {
   try {
-    return Uri.decodeComponent(path.trim());
+    return Uri.decodeComponent(path);
   } on ArgumentError {
     throw const WebDavSyncConfigurationException(
       'Remote path contains invalid percent encoding.',
@@ -1405,9 +1503,12 @@ String _decodeRemotePath(String path) {
   }
 }
 
-String _normalizeDecodedRemotePath(String path) {
+String _normalizeDecodedRemotePath(
+  String path, {
+  bool trimDecodedSegments = false,
+}) {
   final segments = <String>[];
-  final rawSegments = path.trim().replaceAll('\\', '/').split('/');
+  final rawSegments = path.replaceAll('\\', '/').split('/');
   for (var index = 0; index < rawSegments.length; index += 1) {
     final segment = rawSegments[index];
     if (segment.isEmpty && index > 0 && index < rawSegments.length - 1) {
@@ -1424,6 +1525,11 @@ String _normalizeDecodedRemotePath(String path) {
     if (segment.isNotEmpty && trimmed.isEmpty) {
       throw const WebDavSyncConfigurationException(
         'Remote path segments must not collapse to blank.',
+      );
+    }
+    if (!trimDecodedSegments && segment.isNotEmpty && segment != trimmed) {
+      throw const WebDavSyncConfigurationException(
+        'Remote path segments must not contain leading or trailing whitespace.',
       );
     }
     if (trimmed.isEmpty || trimmed == '.') {

@@ -13,6 +13,12 @@
         name="external_files"
         path="." />
     <external-path
-        name="external_storage"
-        path="." />
+        name="external_repapertodo"
+        path="RePaperTodo/" />
+    <external-path
+        name="external_documents_repapertodo"
+        path="Documents/RePaperTodo/" />
+    <external-path
+        name="external_download_repapertodo"
+        path="Download/RePaperTodo/" />
 </paths>

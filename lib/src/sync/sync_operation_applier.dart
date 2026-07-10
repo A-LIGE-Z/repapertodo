@@ -7,6 +7,7 @@ import '../core/model/paper_item.dart';
 import '../core/state/papertodo_legacy_migration.dart';
 import 'sync_device_id.dart';
 import 'sync_operation.dart';
+import 'sync_operation_payload.dart';
 
 class SyncOperationApplyResult {
   const SyncOperationApplyResult({
@@ -83,6 +84,10 @@ class SyncOperationApplier {
       }
       if (nextOperation == null) {
         break;
+      }
+      if (!isSyncOperationPayloadWellFormed(nextOperation)) {
+        blockedDevices.add(nextOperation.deviceId);
+        continue;
       }
       _applyOperation(state, nextOperation);
       sequences[nextOperation.deviceId] = nextOperation.sequence;
@@ -275,10 +280,7 @@ class SyncOperationApplier {
     if (settings == null || settings.isEmpty) {
       return;
     }
-    final migratedSettings = migrateLegacyPaperTodoJson(settings);
-    final safeSettings = Map<String, Object?>.from(migratedSettings)
-      ..remove('sync')
-      ..remove('startAtLogin');
+    final safeSettings = canonicalSyncOperationSettingsPayload(settings);
     if (safeSettings.isEmpty) {
       return;
     }
@@ -327,9 +329,9 @@ class SyncOperationApplier {
       ..collapseExpandedDeepCapsuleOnClick =
           updated.collapseExpandedDeepCapsuleOnClick
       ..hideDeepCapsulesWhenCovered = updated.hideDeepCapsulesWhenCovered
+      ..hideDeepCapsulesWhenFullscreen = updated.hideDeepCapsulesWhenFullscreen
       ..enableAnimations = updated.enableAnimations
       ..enableToolTips = updated.enableToolTips
-      ..startAtLogin = updated.startAtLogin
       ..pinnedTodoHotKey = updated.pinnedTodoHotKey
       ..pinnedNoteHotKey = updated.pinnedNoteHotKey
       ..fullscreenTopmostMode = updated.fullscreenTopmostMode
@@ -340,9 +342,7 @@ class SyncOperationApplier {
       ..deepCapsuleQueueStartTopMargins =
           updated.deepCapsuleQueueStartTopMargins
       ..deepCapsuleSide = updated.deepCapsuleSide
-      ..deepCapsuleMonitorDeviceName = updated.deepCapsuleMonitorDeviceName
-      ..sync = updated.sync
-      ..extra = updated.extra;
+      ..deepCapsuleMonitorDeviceName = updated.deepCapsuleMonitorDeviceName;
   }
 
   bool _shouldSkipTodoItemUpsert(
@@ -385,16 +385,11 @@ bool _hasConflictingDuplicateAt(
 }
 
 bool _operationsMatch(SyncOperation left, SyncOperation right) {
-  return left.id == right.id &&
-      left.deviceId == right.deviceId &&
-      left.sequence == right.sequence &&
-      left.kind == right.kind &&
-      left.createdAtUtc.toUtc().isAtSameMomentAs(right.createdAtUtc.toUtc()) &&
-      const DeepCollectionEquality().equals(left.payload, right.payload);
+  return areSyncOperationsEquivalent(left, right);
 }
 
 JsonMap? _jsonMapOrNull(Object? value) {
-  return value is Map ? Map<String, Object?>.from(value) : null;
+  return jsonMapOrNull(value);
 }
 
 Object? _payloadValue(JsonMap payload, String key) {

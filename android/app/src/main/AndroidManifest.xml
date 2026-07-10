@@ -5,6 +5,7 @@
         android:label="RePaperTodo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:localeConfig="@xml/locales_config"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"

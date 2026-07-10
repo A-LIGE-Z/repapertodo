@@ -161,6 +161,54 @@ void main() {
     });
   });
 
+  test('drops tombstones with control-character ids', () {
+    final deletedAt = DateTime.utc(2026, 7, 1, 10);
+    final settings = SyncSettings.fromJson({
+      'deletedPaperTombstones': {
+        'valid-paper': deletedAt.toIso8601String(),
+        'bad\u0000paper': deletedAt.toIso8601String(),
+        '\nedge-control-paper': deletedAt.toIso8601String(),
+      },
+      'deletedTodoItemTombstones': {
+        'todo': {
+          'valid-item': deletedAt.toIso8601String(),
+          'bad\u007Fitem': deletedAt.toIso8601String(),
+          'edge-control-item\r': deletedAt.toIso8601String(),
+        },
+        'bad\u0085paper': {
+          'dropped-item': deletedAt.toIso8601String(),
+        },
+      },
+    });
+
+    expect(settings.deletedPaperTombstones, {
+      'valid-paper': deletedAt.toIso8601String(),
+    });
+    expect(settings.deletedTodoItemTombstones, {
+      'todo': {'valid-item': deletedAt.toIso8601String()},
+    });
+
+    expect(settings.isPaperDeleted('valid-paper'), true);
+    expect(settings.isPaperDeleted('bad\u0000paper'), false);
+    expect(settings.paperDeletedAtUtc('\nvalid-paper'), isNull);
+    expect(settings.isTodoItemDeleted('todo', 'valid-item'), true);
+    expect(settings.isTodoItemDeleted('todo', 'bad\u007Fitem'), false);
+    expect(settings.todoItemDeletedAtUtc('todo\r', 'valid-item'), isNull);
+
+    expect(settings.markPaperDeleted('new\u0000paper', deletedAt), false);
+    expect(settings.markTodoItemDeleted('todo', 'new\nitem', deletedAt), false);
+    settings
+      ..clearPaperDeleted('valid-paper\n')
+      ..clearTodoItemDeleted('todo', 'valid-item\n');
+
+    expect(settings.deletedPaperTombstones, {
+      'valid-paper': deletedAt.toIso8601String(),
+    });
+    expect(settings.deletedTodoItemTombstones, {
+      'todo': {'valid-item': deletedAt.toIso8601String()},
+    });
+  });
+
   test('normalizes WebDAV provider values case-insensitively', () {
     expect(SyncProviderIds.normalize(' WEBDAV '), SyncProviderIds.webDav);
     expect(SyncProviderIds.normalize('webdav'), SyncProviderIds.webDav);
@@ -173,6 +221,22 @@ void main() {
 
     expect(settings.enabled, true);
     expect(settings.provider, SyncProviderIds.webDav);
+  });
+
+  test('skips malformed non-json WebDAV settings objects', () {
+    final settings = SyncSettings.fromJson({
+      'enabled': true,
+      'provider': SyncProviderIds.webDav,
+      'webDav': <Object?, Object?>{1: 'not-json-object'},
+    });
+
+    expect(settings.enabled, true);
+    expect(settings.provider, SyncProviderIds.webDav);
+    expect(settings.webDav.endpoint, isEmpty);
+    expect(
+      settings.webDav.configurationIssues,
+      contains(WebDavSyncConfigurationIssue.endpoint),
+    );
   });
 
   test('keeps generic WebDAV settings generic after normalization', () {
@@ -188,6 +252,88 @@ void main() {
     expect(settings.presetId, WebDavPresetIds.custom);
     expect(settings.endpoint, 'https://dav.jianguoyun.com/dav/');
     expect(settings.isSecurelyConfigured, true);
+  });
+
+  test('uses preset root defaults only when imported WebDAV root is missing',
+      () {
+    final missingRoot = WebDavSyncSettings.fromJson({
+      'presetId': WebDavPresetIds.jianguoyun,
+      'endpoint': '',
+      'username': 'user@example.com',
+      'password': 'app-password',
+      'encryptionPassphrase': 'shared sync secret',
+    });
+    final customRoot = WebDavSyncSettings.fromJson({
+      'presetId': WebDavPresetIds.jianguoyun,
+      'endpoint': '',
+      'username': 'user@example.com',
+      'password': 'app-password',
+      'encryptionPassphrase': 'shared sync secret',
+      'rootPath': 'My Papers',
+    });
+    final explicitBlankRoot = WebDavSyncSettings.fromJson({
+      'presetId': WebDavPresetIds.jianguoyun,
+      'endpoint': '',
+      'username': 'user@example.com',
+      'password': 'app-password',
+      'encryptionPassphrase': 'shared sync secret',
+      'rootPath': '',
+    });
+
+    expect(missingRoot.endpoint, WebDavPresets.jianguoyun.endpointText);
+    expect(missingRoot.rootPath, WebDavPresets.jianguoyun.defaultRootPath);
+    expect(customRoot.rootPath, 'My Papers');
+    expect(explicitBlankRoot.rootPath, isEmpty);
+    expect(
+      explicitBlankRoot.configurationIssues,
+      contains(WebDavSyncConfigurationIssue.rootPath),
+    );
+  });
+
+  test('applies domestic preset root defaults for new programmatic settings',
+      () {
+    final blankRoot = WebDavSyncSettings(
+      presetId: WebDavPresetIds.jianguoyun,
+      endpoint: '',
+      username: 'user@example.com',
+      password: 'app-password',
+      encryptionPassphrase: 'shared sync secret',
+      rootPath: '',
+    )..normalize();
+    final unsafeRoot = WebDavSyncSettings(
+      presetId: WebDavPresetIds.jianguoyun,
+      endpoint: '',
+      username: 'user@example.com',
+      password: 'app-password',
+      encryptionPassphrase: 'shared sync secret',
+      rootPath: '../Other',
+    )..normalize();
+
+    expect(blankRoot.endpoint, WebDavPresets.jianguoyun.endpointText);
+    expect(blankRoot.rootPath, WebDavPresets.jianguoyun.defaultRootPath);
+    expect(blankRoot.isSecurelyConfigured, true);
+    expect(unsafeRoot.endpoint, WebDavPresets.jianguoyun.endpointText);
+    expect(unsafeRoot.rootPath, isEmpty);
+    expect(
+      unsafeRoot.configurationIssues,
+      contains(WebDavSyncConfigurationIssue.rootPath),
+    );
+  });
+
+  test('normalizes domestic WebDAV preset aliases during settings import', () {
+    final settings = WebDavSyncSettings.fromJson({
+      'presetId': '坚果云 WebDAV',
+      'endpoint': '',
+      'username': 'user@example.com',
+      'password': 'app-password',
+      'encryptionPassphrase': 'shared sync secret',
+    });
+
+    expect(settings.presetId, WebDavPresetIds.jianguoyun);
+    expect(settings.endpoint, WebDavPresets.jianguoyun.endpointText);
+    expect(settings.rootPath, WebDavPresets.jianguoyun.defaultRootPath);
+    expect(settings.isSecurelyConfigured, true);
+    expect(settings.toJson()['presetId'], WebDavPresetIds.jianguoyun);
   });
 
   test('requires encryption passphrase for secure WebDAV configuration', () {
@@ -277,8 +423,11 @@ void main() {
         ' Device A ': '7',
         'device-a': 8,
         'device-b': 2.0,
+        'device-j': 1e0,
         'device-c': 1.2,
         'device-d': '1.2',
+        'device-i': '1e0',
+        'device-plus': '+1',
         'device-e': 0,
         'device-f': maxSyncDeviceSequence + 1,
         'device-g': ' 9',
@@ -289,7 +438,6 @@ void main() {
 
     expect(settings.operationDeviceSequences, {
       'device-a': 8,
-      'device-b': 2,
     });
   });
 

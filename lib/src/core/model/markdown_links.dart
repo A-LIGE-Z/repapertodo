@@ -38,15 +38,17 @@ abstract final class MarkdownLinks {
     String text, {
     bool? isWindows,
   }) sync* {
-    final ignoredSpans = _closedInlineCodeSpans(text).toList();
-    for (final link in _markdownLinks(text, isWindows: isWindows)) {
-      if (!_isIgnored(ignoredSpans, link.start, link.end)) {
-        yield link;
+    for (final line in _lineSpans(text)) {
+      final ignoredSpans = _closedInlineCodeSpans(line.text).toList();
+      for (final link in _markdownLinks(line.text, isWindows: isWindows)) {
+        if (!_isIgnored(ignoredSpans, link.start, link.end)) {
+          yield line.offset(link);
+        }
       }
-    }
-    for (final link in _htmlAnchorLinks(text, isWindows: isWindows)) {
-      if (!_isIgnored(ignoredSpans, link.start, link.end)) {
-        yield link;
+      for (final link in _htmlAnchorLinks(line.text, isWindows: isWindows)) {
+        if (!_isIgnored(ignoredSpans, link.start, link.end)) {
+          yield line.offset(link);
+        }
       }
     }
   }
@@ -277,14 +279,39 @@ abstract final class MarkdownLinks {
   }
 
   static int _lineStartBefore(String text, int offset) {
-    final searchFrom = offset <= 0 ? 0 : offset - 1;
-    final previousBreak = text.lastIndexOf('\n', searchFrom);
-    return previousBreak < 0 ? 0 : previousBreak + 1;
+    for (var index = offset <= 0 ? -1 : offset - 1; index >= 0; index--) {
+      if (text[index] == '\r' || text[index] == '\n') {
+        return index + 1;
+      }
+    }
+    return 0;
   }
 
   static int _lineEndAfter(String text, int offset) {
-    final nextBreak = text.indexOf('\n', offset);
-    return nextBreak < 0 ? text.length : nextBreak;
+    for (var index = offset.clamp(0, text.length).toInt();
+        index < text.length;
+        index++) {
+      if (text[index] == '\r' || text[index] == '\n') {
+        return index;
+      }
+    }
+    return text.length;
+  }
+
+  static Iterable<_LineSpan> _lineSpans(String text) sync* {
+    var start = 0;
+    for (var index = 0; index < text.length; index++) {
+      final char = text[index];
+      if (char != '\r' && char != '\n') {
+        continue;
+      }
+      yield _LineSpan(start: start, text: text.substring(start, index));
+      if (char == '\r' && index + 1 < text.length && text[index + 1] == '\n') {
+        index++;
+      }
+      start = index + 1;
+    }
+    yield _LineSpan(start: start, text: text.substring(start));
   }
 
   static Iterable<_InlineCodeSpan> _closedInlineCodeSpans(String text) sync* {
@@ -378,6 +405,21 @@ class _InlineCodeSpan {
   final int end;
 
   bool intersects(int start, int end) => start < this.end && end > this.start;
+}
+
+class _LineSpan {
+  const _LineSpan({required this.start, required this.text});
+
+  final int start;
+  final String text;
+
+  MarkdownLinkSpan offset(MarkdownLinkSpan span) {
+    return MarkdownLinkSpan(
+      start: start + span.start,
+      end: start + span.end,
+      href: span.href,
+    );
+  }
 }
 
 class _HtmlOpenAnchor {

@@ -68,4 +68,21 @@ void main() {
     expect(await file.readAsString(), 'device-temp');
     expect(await temp.exists(), false);
   });
+
+  test('serializes concurrent device id creation for one file path', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'repapertodo_device_id_concurrent_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File(p.join(directory.path, 'sync-device-id'));
+
+    final ids = await Future.wait([
+      for (var index = 0; index < 24; index += 1)
+        SyncDeviceIdStore(filePath: file.path).loadOrCreate(),
+    ]);
+
+    expect(ids.toSet(), hasLength(1));
+    expect(await file.readAsString(), ids.first);
+    expect(await File('${file.path}.tmp').exists(), false);
+  });
 }

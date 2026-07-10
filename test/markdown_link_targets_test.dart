@@ -70,5 +70,47 @@ void main() {
       ),
       isNull,
     );
+    expect(
+      normalizeMarkdownLocalPathTarget(
+        'file:///C:/PaperTodo/paper.md?download=1',
+        isWindows: true,
+      ),
+      isNull,
+    );
+    expect(
+      normalizeMarkdownLocalPathTarget(
+        'file:///storage/emulated/0/paper.md#section',
+        isWindows: false,
+      ),
+      isNull,
+    );
+    expect(
+      normalizeMarkdownLocalPathTarget(
+        'file:///storage/emulated/0/bad%0Apaper.md',
+        isWindows: false,
+      ),
+      isNull,
+    );
+    expect(
+      normalizeMarkdownLocalPathTarget(
+        'file:///storage/emulated/0/bad%C2%85paper.md',
+        isWindows: false,
+      ),
+      isNull,
+    );
+    expect(
+      normalizeMarkdownLocalPathTarget(
+        'file:///C:/PaperTodo/bad%0Apaper.md',
+        isWindows: true,
+      ),
+      isNull,
+    );
+    expect(
+      normalizeMarkdownLocalPathTarget(
+        'file:///C:/PaperTodo/bad%C2%85paper.md',
+        isWindows: true,
+      ),
+      isNull,
+    );
   });
 }

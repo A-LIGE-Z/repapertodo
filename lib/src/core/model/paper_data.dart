@@ -104,7 +104,7 @@ class PaperData {
     int maxTitleLength = 40,
     bool storageCompatibility = false,
   }) {
-    id = id.trim();
+    id = normalizeLocalModelId(id);
     if (id.isEmpty) {
       id = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
     }
@@ -137,10 +137,11 @@ class PaperData {
     capsuleSide = capsuleSide.trim().isEmpty
         ? ''
         : DeepCapsuleSides.normalize(capsuleSide);
-    capsuleMonitorDeviceName = capsuleMonitorDeviceName.trim();
+    capsuleMonitorDeviceName =
+        normalizeCapsuleMonitorDeviceName(capsuleMonitorDeviceName);
     final usedItemIds = <String>{};
     for (final item in items) {
-      item.id = item.id.trim();
+      item.id = normalizeLocalModelId(item.id);
       if (item.id.isEmpty || !usedItemIds.add(item.id)) {
         item.id = _newUniqueId(usedItemIds);
       }
@@ -152,7 +153,7 @@ class PaperData {
     final usedElementIds = <String>{};
     for (var index = 0; index < noteCanvasElements.length; index++) {
       final element = noteCanvasElements[index];
-      element.id = element.id.trim();
+      element.id = normalizeLocalModelId(element.id);
       if (element.id.isEmpty || !usedElementIds.add(element.id)) {
         element.id = _newUniqueId(usedElementIds);
       }

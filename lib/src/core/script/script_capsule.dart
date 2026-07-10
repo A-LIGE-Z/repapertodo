@@ -71,8 +71,13 @@ class ScriptCapsuleSpec {
   }
 
   static _ScriptCapsuleMarkerSpec? _markerSpec(String firstLine) {
-    final marker =
-        firstLine.trim().toLowerCase().split(RegExp(r'\s+')).firstOrNull ?? '';
+    final marker = firstLine
+            .trim()
+            .toLowerCase()
+            .split(' ')
+            .where((part) => part.isNotEmpty)
+            .firstOrNull ??
+        '';
     return switch (marker) {
       '!pf' || '!powerf' => const _ScriptCapsuleMarkerSpec(
           engine: 'auto',
@@ -144,8 +149,4 @@ int _leadingWhitespaceLength(String text) {
     length++;
   }
   return length;
-}
-
-extension _FirstOrNull<T> on List<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

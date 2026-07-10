@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +46,156 @@ void main() {
     expect(paper['futurePaperField'], 42);
     expect(item['futureItemField'], true);
     expect(item['order'], 0);
+  });
+
+  test('decodes representative original PaperTodo camelCase data', () {
+    final source =
+        File('test/fixtures/papertodo_original_data.json').readAsStringSync();
+
+    const codec = AppStateCodec();
+    final state = codec.decode(source);
+    final encoded = jsonDecode(codec.encode(state)) as Map<String, Object?>;
+    final papers = state.papers;
+    final todo = papers.first;
+    final note = papers.last;
+    final firstItem = todo.items.first;
+    final secondItem = todo.items.last;
+
+    expect(papers, hasLength(2));
+    expect(state.theme, 'dark');
+    expect(state.colorScheme, ColorSchemes.forest);
+    expect(state.customThemeColorHex, '#33AA77');
+    expect(state.markdownRenderMode, MarkdownRenderModes.enhanced);
+    expect(state.todoVisualSize, TodoVisualSizes.extraLarge);
+    expect(state.uiFontPreset, UiFontPresets.yaHei);
+    expect(state.systemFontFamilyName, 'Microsoft YaHei UI');
+    expect(state.zoom, 1.25);
+    expect(state.useCapsuleMode, true);
+    expect(state.useDeepCapsuleMode, true);
+    expect(state.useCapsuleCollapseAll, true);
+    expect(state.capsuleCollapseAllActive, true);
+    expect(state.capsuleCollapseAllActiveQueues, {
+      r'\\.\DISPLAY1|left': true,
+    });
+    expect(state.deepCapsuleQueueStartTopMargins, {
+      r'\\.\DISPLAY1|left': 96,
+    });
+    expect(state.deepCapsuleSide, DeepCapsuleSides.left);
+    expect(state.deepCapsuleMonitorDeviceName, r'\\.\DISPLAY1');
+    expect(state.showTopBarNewTodoButton, true);
+    expect(state.showTopBarNewNoteButton, false);
+    expect(state.hidePapersFromWindowSwitcher, true);
+    expect(state.enableTodoNoteLinks, true);
+    expect(state.showTodoDueRelativeTime, true);
+    expect(state.todoDueYearDisplayMode, TodoDueYearDisplayModes.short);
+    expect(state.todoLineSpacing, 1.2);
+    expect(state.noteLineSpacing, 1.35);
+    expect(state.useTodoReminderInterval, true);
+    expect(state.todoReminderIntervalValue, 15);
+    expect(state.todoReminderIntervalUnit, TodoReminderIntervalUnits.hours);
+    expect(state.todoReminderScope, TodoReminderScopes.nearest);
+    expect(state.todoReminderBubbleDurationSeconds, 12);
+    expect(state.showLinkedNoteName, true);
+    expect(state.allowLongLinkedNoteTitles, true);
+    expect(state.runLinkedScriptCapsulesOnClick, true);
+    expect(state.pinnedTodoHotKey, 'Ctrl+Alt+T');
+    expect(state.pinnedNoteHotKey, 'Ctrl+Alt+N');
+    expect(state.fullscreenTopmostMode, FullscreenTopmostModes.stayOnTop);
+    expect(state.usePersistentPowerShellProcess, true);
+    expect(state.preferPowerShell7, true);
+    expect(state.hideScriptRunWindow, true);
+    expect(state.sync.provider, SyncProviderIds.none);
+
+    expect(todo.id, 'todo-paper-001');
+    expect(todo.type, PaperTypes.todo);
+    expect(todo.title, 'Inbox');
+    expect(todo.x, 160);
+    expect(todo.y, 96);
+    expect(todo.width, 310);
+    expect(todo.height, 370);
+    expect(todo.isVisible, true);
+    expect(todo.alwaysOnTop, true);
+    expect(todo.isCollapsed, true);
+    expect(todo.textZoom, 1.2);
+    expect(todo.capsuleSide, DeepCapsuleSides.left);
+    expect(todo.capsuleMonitorDeviceName, r'\\.\DISPLAY1');
+    expect(todo.items, hasLength(2));
+
+    expect(firstItem.id, 'todo-item-001');
+    expect(firstItem.text, 'Review migrated todo');
+    expect(firstItem.done, false);
+    expect(firstItem.order, 0);
+    expect(firstItem.todoColumnCount, 3);
+    expect(firstItem.todoExtraColumns, ['Paper', 'High']);
+    expect(firstItem.todoColumnWidths, [2.5, 1, 0.5]);
+    expect(firstItem.linkedNoteId, 'note-paper-001');
+    expect(firstItem.dueAtLocal, '2026-07-06T09:30:15');
+    expect(firstItem.reminderIntervalValue, 30);
+    expect(firstItem.reminderIntervalUnit, TodoReminderIntervalUnits.minutes);
+    expect(secondItem.id, 'todo-item-002');
+    expect(secondItem.done, true);
+    expect(secondItem.order, 1);
+    expect(secondItem.todoColumnWidths, [1]);
+
+    expect(note.id, 'note-paper-001');
+    expect(note.type, PaperTypes.note);
+    expect(note.title, 'Paper notes');
+    expect(note.content, '# PaperTodo\n\n- preserve markdown body');
+    expect(note.noteCanvasElements, hasLength(1));
+    expect(note.noteCanvasElements.single.id, 'code-block-001');
+    expect(note.noteCanvasElements.single.type, NoteCanvasElementTypes.code);
+    expect(
+      note.noteCanvasElements.single.text,
+      'Console.WriteLine("PaperTodo");',
+    );
+    expect(note.noteCanvasElements.single.width, 230);
+    expect(note.noteCanvasElements.single.height, 116);
+    expect(note.noteCanvasElements.single.zIndex, 10);
+
+    expect(encoded.containsKey('Papers'), false);
+    expect(encoded.containsKey('topBarHeight'), false);
+    expect(encoded.containsKey('showTopBarNewPaperButtons'), false);
+    expect(encoded['startAtLogin'], false);
+    expect(encoded['sync'], isA<Map<String, Object?>>());
+  });
+
+  test('decodes PaperTodo JSON comments and trailing commas', () {
+    const source = '''
+\uFEFF{
+  // PaperTodo's System.Text.Json loader skipped comments.
+  "theme": "dark",
+  "papers": [
+    {
+      "id": "comment-note",
+      "type": "note",
+      "title": "Commented",
+      "content": "https://example.com/path // keep literal URL text /* and markers */",
+      "noteCanvasElements": [
+        {
+          "id": "comment-block",
+          "type": "code",
+          "text": "Console.WriteLine(\\"/* not a comment */\\");",
+        },
+      ],
+    },
+  ],
+  /* Trailing commas also match the original StateStore options. */
+}
+''';
+
+    const codec = AppStateCodec();
+    final state = codec.decode(source);
+
+    expect(state.theme, 'dark');
+    expect(state.papers.single.id, 'comment-note');
+    expect(
+      state.papers.single.content,
+      'https://example.com/path // keep literal URL text /* and markers */',
+    );
+    expect(
+      state.papers.single.noteCanvasElements.single.text,
+      'Console.WriteLine("/* not a comment */");',
+    );
   });
 
   test('migrates legacy PaperTodo PascalCase data before decoding', () {
@@ -186,6 +337,94 @@ void main() {
     expect(state.papers.last.items.single.dueAtLocal, '2026-07-03T09:30:00');
   });
 
+  test('migrates legacy PaperTodo sync history without renaming user ids', () {
+    const source = '''
+{
+  "SYNC": {
+    "ENABLED": true,
+    "PROVIDER": "WEBDAV",
+    "OPERATIONDEVICESEQUENCES": {
+      " Win Device ": "3",
+      "win-device": 5,
+      "Legacy Device Id": 7
+    },
+    "DELETEDPAPERTOMBSTONES": {
+      " Paper-1 ": "2026-07-01T10:00:00+08:00",
+      "Id": "2026-07-01T02:30:00Z"
+    },
+    "DELETEDTODOITEMTOMBSTONES": {
+      " Todo-Paper ": {
+        " Item-1 ": "2026-07-01T11:30:00+08:00"
+      },
+      "Id": {
+        "Text": "2026-07-01T03:45:00Z"
+      }
+    },
+    "WEBDAV": {
+      "PRESETID": "NUTSTORE",
+      "ENDPOINT": "https://dav.jianguoyun.com/dav/",
+      "USERNAME": "paper@example.com",
+      "PASSWORD": "secret",
+      "ROOTPATH": "/PaperTodo/"
+    }
+  }
+}
+''';
+
+    const codec = AppStateCodec();
+    final state = codec.decode(source);
+
+    expect(state.sync.enabled, true);
+    expect(state.sync.provider, SyncProviderIds.webDav);
+    expect(state.sync.webDav.presetId, WebDavPresetIds.jianguoyun);
+    expect(state.sync.operationDeviceSequences, {
+      'win-device': 5,
+      'legacy-device-id': 7,
+    });
+    expect(state.sync.deletedPaperTombstones, {
+      'Paper-1': DateTime.utc(2026, 7, 1, 2).toIso8601String(),
+      'Id': DateTime.utc(2026, 7, 1, 2, 30).toIso8601String(),
+    });
+    expect(state.sync.deletedTodoItemTombstones, {
+      'Todo-Paper': {
+        'Item-1': DateTime.utc(2026, 7, 1, 3, 30).toIso8601String(),
+      },
+      'Id': {
+        'Text': DateTime.utc(2026, 7, 1, 3, 45).toIso8601String(),
+      },
+    });
+  });
+
+  test('migrates legacy WebDAV Chinese preset aliases through app state', () {
+    const source = '''
+{
+  "SYNC": {
+    "ENABLED": true,
+    "PROVIDER": "WEBDAV",
+    "WEBDAV": {
+      "PRESETID": "坚果云 WebDAV",
+      "USERNAME": "paper@example.com",
+      "PASSWORD": "secret",
+      "ENCRYPTIONPASSPHRASE": "sync secret"
+    }
+  }
+}
+''';
+
+    const codec = AppStateCodec();
+    final state = codec.decode(source);
+
+    expect(state.sync.enabled, true);
+    expect(state.sync.provider, SyncProviderIds.webDav);
+    expect(state.sync.webDav.presetId, WebDavPresetIds.jianguoyun);
+    expect(state.sync.webDav.endpoint, WebDavPresets.jianguoyun.endpointText);
+    expect(
+        state.sync.webDav.rootPath, WebDavPresets.jianguoyun.defaultRootPath);
+    expect(state.sync.webDav.username, 'paper@example.com');
+    expect(state.sync.webDav.encryptionPassphrase, 'sync secret');
+    expect(state.sync.webDav.isSecurelyConfigured, true);
+  });
+
   test('keeps modern RePaperTodo keys ahead of duplicate legacy keys', () {
     const source = '''
 {
@@ -310,7 +549,7 @@ void main() {
     expect(state.papers.first.type, PaperTypes.note);
     expect(state.papers.first.capsuleSide, DeepCapsuleSides.left);
     expect(state.papers.first.noteCanvasElements.single.type,
-        NoteCanvasElementTypes.text);
+        NoteCanvasElementTypes.code);
     expect(state.papers.last.type, PaperTypes.todo);
     expect(state.papers.last.items.single.reminderIntervalUnit,
         TodoReminderIntervalUnits.hours);
@@ -358,7 +597,18 @@ void main() {
     expect(
       AppState.fromJson({'externalMarkdownExtension': 'a..b'})
           .externalMarkdownExtension,
-      '.md',
+      '.a..b',
+    );
+    expect(
+      AppState.fromJson({'externalMarkdownExtension': 'notes.todo.md'})
+          .externalMarkdownExtension,
+      '.notes.todo.md',
+    );
+    expect(
+      AppState.fromJson({
+        'externalMarkdownExtension': '.${List.filled(40, 'x').join()}',
+      }).externalMarkdownExtension,
+      '.${List.filled(40, 'x').join()}',
     );
     expect(
       AppState.fromJson({'externalMarkdownExtension': 'm\u007Fd'})
@@ -371,8 +621,18 @@ void main() {
       '.md',
     );
     expect(
+      AppState.fromJson({'externalMarkdownExtension': 'md.'})
+          .externalMarkdownExtension,
+      '.md',
+    );
+    expect(
+      AppState.fromJson({'externalMarkdownExtension': 'md '})
+          .externalMarkdownExtension,
+      '.md',
+    );
+    expect(
       AppState.fromJson({
-        'externalMarkdownExtension': '.${List.filled(40, 'x').join()}',
+        'externalMarkdownExtension': '.${List.filled(121, 'x').join()}',
       }).externalMarkdownExtension,
       '.md',
     );
@@ -606,6 +866,20 @@ Plain item
     expect(beyondLong.text, '9223372036854775808. Read\n');
   });
 
+  test('continues markdown lists with PaperTodo line delimiters', () {
+    var result = _markdownEnter('- Read\r\nNext', caret: '- Read'.length);
+    expect(result.text, '- Read\r\n- \r\nNext');
+    expect(result.selection.baseOffset, '- Read\r\n- '.length);
+
+    result = _markdownEnter('Intro\r\n- Read');
+    expect(result.text, 'Intro\r\n- Read\r\n- ');
+    expect(result.selection.baseOffset, 'Intro\r\n- Read\r\n- '.length);
+
+    result = _markdownEnter('- Read', insertedNewline: '\r\n');
+    expect(result.text, '- Read\r\n- ');
+    expect(result.selection.baseOffset, '- Read\r\n- '.length);
+  });
+
   test('removes empty markdown list markers on enter like PaperTodo', () {
     var result = _markdownEnter('- ');
     expect(result.text, '');
@@ -730,12 +1004,13 @@ Plain item
     expect(state.pinnedNoteHotKey, longHotKey.substring(0, 64));
   });
 
-  test('migrates retired PaperTodo settings', () {
+  test('migrates legacy PaperTodo settings', () {
     final state = AppState.fromJson({
       'showTopBarNewPaperButtons': false,
       'showTopBarNewTodoButton': true,
       'showTopBarNewNoteButton': true,
       'hideDeepCapsulesWhenFullscreen': true,
+      'topBarHeight': 18.5,
       'futureRootField': 'keep-me',
     });
 
@@ -744,13 +1019,15 @@ Plain item
 
     expect(state.showTopBarNewTodoButton, false);
     expect(state.showTopBarNewNoteButton, false);
-    expect(state.hideDeepCapsulesWhenCovered, true);
+    expect(state.hideDeepCapsulesWhenCovered, false);
+    expect(state.hideDeepCapsulesWhenFullscreen, true);
     expect(encoded.containsKey('showTopBarNewPaperButtons'), false);
-    expect(encoded.containsKey('hideDeepCapsulesWhenFullscreen'), false);
+    expect(encoded['hideDeepCapsulesWhenFullscreen'], true);
+    expect(encoded['topBarHeight'], 18.5);
     expect(encoded['futureRootField'], 'keep-me');
   });
 
-  test('migrates legacy PascalCase retired PaperTodo settings', () {
+  test('migrates legacy PascalCase PaperTodo settings', () {
     const source = '''
 {
   "ShowTopBarNewPaperButtons": false,
@@ -769,13 +1046,14 @@ Plain item
 
     expect(state.showTopBarNewTodoButton, false);
     expect(state.showTopBarNewNoteButton, false);
-    expect(state.hideDeepCapsulesWhenCovered, true);
+    expect(state.hideDeepCapsulesWhenCovered, false);
+    expect(state.hideDeepCapsulesWhenFullscreen, true);
     expect(encoded.containsKey('ShowTopBarNewPaperButtons'), false);
     expect(encoded.containsKey('showTopBarNewPaperButtons'), false);
     expect(encoded.containsKey('HideDeepCapsulesWhenFullscreen'), false);
-    expect(encoded.containsKey('hideDeepCapsulesWhenFullscreen'), false);
+    expect(encoded['hideDeepCapsulesWhenFullscreen'], true);
     expect(encoded.containsKey('TopBarHeight'), false);
-    expect(encoded.containsKey('topBarHeight'), false);
+    expect(encoded['topBarHeight'], 19);
     expect(encoded['FuturePascalField'], 'keep-me');
   });
 
@@ -812,6 +1090,70 @@ Plain item
     expect(activeQueue.capsuleCollapseAllActiveQueues, {
       '|left': true,
       'Primary|left': true,
+    });
+  });
+
+  test('canonical collapse all queue values override legacy aliases', () {
+    final state = AppState.fromJson({
+      'useCapsuleMode': true,
+      'useDeepCapsuleMode': true,
+      'useCapsuleCollapseAll': true,
+      'capsuleCollapseAllActive': false,
+      'capsuleCollapseAllActiveQueues': {
+        'left': true,
+        '|left': false,
+        'Primary | right ': false,
+        'Primary|right': true,
+      },
+    });
+
+    expect(state.capsuleCollapseAllActive, true);
+    expect(state.capsuleCollapseAllActiveQueues, {
+      'Primary|right': true,
+    });
+  });
+
+  test('normalizes deep capsule monitor names and drops unsafe queue keys', () {
+    final state = AppState.fromJson({
+      'useCapsuleMode': true,
+      'useDeepCapsuleMode': true,
+      'useCapsuleCollapseAll': true,
+      'capsuleCollapseAllActive': false,
+      'deepCapsuleMonitorDeviceName': ' Primary\u0000 Monitor\u0085 ',
+      'capsuleCollapseAllActiveQueues': {
+        'Primary\u0000|left': true,
+        'Primary|right': true,
+      },
+      'deepCapsuleQueueStartTopMargins': {
+        'Primary\u007F|left': 32,
+        'Primary|right': 64,
+      },
+      'papers': [
+        {
+          'id': 'primary-right',
+          'type': PaperTypes.todo,
+          'isCollapsed': true,
+          'capsuleMonitorDeviceName': 'Primary',
+          'capsuleSide': DeepCapsuleSides.right,
+        },
+        {
+          'id': 'cleaned-left',
+          'type': PaperTypes.note,
+          'isCollapsed': true,
+          'capsuleMonitorDeviceName': ' Paper\u0000 Monitor ',
+          'capsuleSide': DeepCapsuleSides.left,
+        },
+      ],
+    });
+
+    expect(state.deepCapsuleMonitorDeviceName, 'Primary Monitor');
+    expect(state.papers.last.capsuleMonitorDeviceName, 'Paper Monitor');
+    expect(state.capsuleCollapseAllActive, true);
+    expect(state.capsuleCollapseAllActiveQueues, {
+      'Primary|right': true,
+    });
+    expect(state.deepCapsuleQueueStartTopMargins, {
+      'Primary|right': 64,
     });
   });
 
@@ -967,7 +1309,7 @@ Plain item
       useCapsuleMode: false,
       papers: [
         PaperData(
-          id: ' duplicate-paper ',
+          id: ' duplicate\u0000-paper ',
           type: PaperTypes.todo,
           title: '  Long\u0000Title  ',
           x: double.nan,
@@ -977,7 +1319,11 @@ Plain item
           textZoom: 1.26,
           isCollapsed: true,
           items: [
-            PaperItem(id: ' duplicate-item ', text: 'First'),
+            PaperItem(
+              id: ' duplicate\u007F-item ',
+              text: 'First',
+              linkedNoteId: ' note\u0085-paper ',
+            ),
             PaperItem(id: 'duplicate-item', text: 'Second', order: -4),
           ],
         ),
@@ -986,14 +1332,19 @@ Plain item
           type: PaperTypes.note,
           title: 'Note',
           noteCanvasElements: [
-            NoteCanvasElement(id: ' duplicate-element '),
+            NoteCanvasElement(id: ' duplicate\u0085-element '),
             NoteCanvasElement(id: 'duplicate-element'),
           ],
+        ),
+        PaperData(
+          id: ' note\u0085-paper ',
+          type: PaperTypes.note,
+          title: 'Linked note',
         ),
       ],
     )..normalize(storageCompatibility: true);
 
-    expect(state.papers.map((paper) => paper.id).toSet(), hasLength(2));
+    expect(state.papers.map((paper) => paper.id).toSet(), hasLength(3));
     final todo = state.papers.first;
     expect(todo.title, 'LongTi');
     expect(todo.x, 120);
@@ -1006,14 +1357,15 @@ Plain item
     expect(todo.capsuleMonitorDeviceName, 'Primary monitor');
     expect(todo.items.map((item) => item.id).toSet(), hasLength(2));
     expect(todo.items.first.id, 'duplicate-item');
+    expect(todo.items.first.linkedNoteId, 'note-paper');
     expect(todo.items.map((item) => item.order), [0, 1]);
     expect(
-      state.papers.last.noteCanvasElements.map((element) => element.id).toSet(),
+      state.papers[1].noteCanvasElements.map((element) => element.id).toSet(),
       hasLength(2),
     );
-    expect(state.papers.last.noteCanvasElements.first.id, 'duplicate-element');
-    expect(state.papers.last.width, PaperLayoutDefaults.noteDefaultWidth);
-    expect(state.papers.last.height, PaperLayoutDefaults.noteDefaultHeight);
+    expect(state.papers[1].noteCanvasElements.first.id, 'duplicate-element');
+    expect(state.papers[1].width, PaperLayoutDefaults.noteDefaultWidth);
+    expect(state.papers[1].height, PaperLayoutDefaults.noteDefaultHeight);
   });
 
   test('keeps empty todo item lists compatible with PaperTodo storage', () {
@@ -1028,6 +1380,49 @@ Plain item
     });
 
     expect(state.papers.single.items, isEmpty);
+  });
+
+  test('skips malformed non-json objects in state lists', () {
+    final state = AppState.fromJson({
+      'sync': <Object?, Object?>{1: 'not-json-object'},
+      'papers': [
+        <Object?, Object?>{1: 'not-json-object'},
+        {
+          'id': 'todo-paper',
+          'type': PaperTypes.todo,
+          'items': [
+            <Object?, Object?>{1: 'not-json-object'},
+            {
+              'id': 'item-1',
+              'text': 'Keep me',
+            },
+          ],
+        },
+        {
+          'id': 'note-paper',
+          'type': PaperTypes.note,
+          'noteCanvasElements': [
+            <Object?, Object?>{1: 'not-json-object'},
+            {
+              'id': 'element-1',
+              'type': 'text',
+              'text': 'Keep canvas text',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(state.papers.map((paper) => paper.id), [
+      'todo-paper',
+      'note-paper',
+    ]);
+    expect(state.papers.first.items.map((item) => item.id), ['item-1']);
+    expect(state.papers.last.noteCanvasElements.map((element) => element.id), [
+      'element-1',
+    ]);
+    expect(state.sync.enabled, false);
+    expect(state.sync.provider, SyncProviderIds.none);
   });
 
   test('expands hidden linked note capsules like PaperTodo', () {
@@ -1123,6 +1518,10 @@ Plain item
               'id': 'day-first-due',
               'dueAtLocal': '30/6/2026 09:08',
             },
+            {
+              'id': 'dotnet-ticks-due',
+              'dueAtLocal': '2026-06-30T09:08:07.1234567',
+            },
           ],
         },
       ],
@@ -1141,6 +1540,10 @@ Plain item
     expect(itemsById['invalid-due']?.dueAtLocal, isNull);
     expect(itemsById['slash-due']?.dueAtLocal, '2026-06-30T09:08:00');
     expect(itemsById['day-first-due']?.dueAtLocal, '2026-06-30T09:08:00');
+    expect(
+      itemsById['dotnet-ticks-due']?.dueAtLocal,
+      '2026-06-30T09:08:07',
+    );
   });
 
   test('serializes todo column lists as defensive snapshots', () {
@@ -1178,7 +1581,7 @@ Plain item
       for (final element in state.papers.single.noteCanvasElements)
         element.id: element,
     };
-    expect(elementsById['text-block']?.type, NoteCanvasElementTypes.text);
+    expect(elementsById['text-block']?.type, NoteCanvasElementTypes.code);
     expect(elementsById['unknown-block']?.type, NoteCanvasElementTypes.code);
   });
 
@@ -1235,8 +1638,12 @@ Plain item
       'deepCapsuleStartTopMargin': 2,
       'deepCapsuleQueueStartTopMargins': {
         'LEFT': 16,
+        'right': 32,
+        '|right': 4,
         'Primary|right': 4,
         'Secondary|right': 64,
+        'Work | LEFT ': 20,
+        'Work|left': 20000,
         'Tertiary|LEFT': 20000,
       },
     });
@@ -1244,8 +1651,10 @@ Plain item
     expect(state.deepCapsuleStartTopMargin, 8);
     expect(state.deepCapsuleQueueStartTopMargins, {
       '|left': 16,
+      '|right': 8,
       'Primary|right': 8,
       'Secondary|right': 64,
+      'Work|left': 10000,
       'Tertiary|left': 10000,
     });
 
@@ -1318,7 +1727,6 @@ Plain item
     expect(state.sync.extra['futureSyncField'], 'keep-sync');
     expect(state.sync.operationDeviceSequences, {
       'win-device': 4,
-      'phone-device': 2,
     });
     expect(state.sync.deletedPaperTombstones, {
       'old-paper': DateTime.utc(2026, 7, 1, 3).toIso8601String(),
@@ -1505,15 +1913,21 @@ Plain item
   });
 }
 
-TextEditingValue _markdownEnter(String text, {int? caret}) {
+TextEditingValue _markdownEnter(
+  String text, {
+  int? caret,
+  String insertedNewline = '\n',
+}) {
   final offset = caret ?? text.length;
   final oldValue = TextEditingValue(
     text: text,
     selection: TextSelection.collapsed(offset: offset),
   );
   final newValue = TextEditingValue(
-    text: text.replaceRange(offset, offset, '\n'),
-    selection: TextSelection.collapsed(offset: offset + 1),
+    text: text.replaceRange(offset, offset, insertedNewline),
+    selection: TextSelection.collapsed(
+      offset: offset + insertedNewline.length,
+    ),
   );
   return MarkdownListContinuation.formatEnter(oldValue, newValue);
 }

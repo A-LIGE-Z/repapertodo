@@ -10,17 +10,21 @@ class StateStore {
     required this.filePath,
     AppStateCodec codec = const AppStateCodec(),
     Future<void> Function(String encodedState)? beforeWrite,
+    Future<void> Function(File source, String targetPath)? recoveryCopy,
   })  : backupPath = p.join(p.dirname(filePath), 'data.backup.json'),
         tempPath = '$filePath.tmp',
         _codec = codec,
-        _beforeWrite = beforeWrite;
+        _beforeWrite = beforeWrite,
+        _recoveryCopy = recoveryCopy;
 
   final String filePath;
   final String backupPath;
   final String tempPath;
   final AppStateCodec _codec;
   final Future<void> Function(String encodedState)? _beforeWrite;
+  final Future<void> Function(File source, String targetPath)? _recoveryCopy;
   Future<void> _saveQueue = Future<void>.value();
+  bool _skipNextBackupRotationAfterRecovery = false;
 
   Future<DateTime?> lastModifiedUtc() async {
     final primary = File(filePath);
@@ -31,6 +35,7 @@ class StateStore {
   }
 
   Future<AppState> load() async {
+    _skipNextBackupRotationAfterRecovery = false;
     final primary = File(filePath);
     final backup = File(backupPath);
     final temp = File(tempPath);
@@ -56,13 +61,14 @@ class StateStore {
       try {
         final recovered = _codec.decode(await temp.readAsString());
         if (primaryExists) {
-          await _copyRecoverySource(primary, 'failed_load');
+          await _tryCopyRecoverySource(primary, 'failed_load');
+          _skipNextBackupRotationAfterRecovery = true;
         }
-        await _copyRecoverySource(temp, 'used_for_recovery');
+        await _tryCopyRecoverySource(temp, 'used_for_recovery');
         return recovered;
       } catch (error) {
         tempError = error;
-        await _copyRecoverySource(temp, 'failed_load');
+        await _tryCopyRecoverySource(temp, 'failed_load');
         // Fall back to the stable backup if the interrupted write was partial.
       }
     }
@@ -71,9 +77,10 @@ class StateStore {
       try {
         final recovered = _codec.decode(await backup.readAsString());
         if (primaryExists) {
-          await _copyRecoverySource(primary, 'failed_load');
-          await _copyRecoverySource(backup, 'used_for_recovery');
+          await _tryCopyRecoverySource(primary, 'failed_load');
+          _skipNextBackupRotationAfterRecovery = true;
         }
+        await _tryCopyRecoverySource(backup, 'used_for_recovery');
         return recovered;
       } catch (_) {
         // Preserve the original primary error if both files fail.
@@ -104,10 +111,11 @@ class StateStore {
     final primary = File(filePath);
     final backup = File(backupPath);
     final temp = File(tempPath);
+    final skipBackupRotation = _skipNextBackupRotationAfterRecovery;
     await _beforeWrite?.call(encodedState);
-    await temp.writeAsString(encodedState);
+    await temp.writeAsString(encodedState, flush: true);
 
-    if (await primary.exists()) {
+    if (!skipBackupRotation && await primary.exists()) {
       try {
         await primary.copy(backup.path);
       } catch (_) {
@@ -119,6 +127,9 @@ class StateStore {
       await primary.delete();
     }
     await temp.rename(filePath);
+    if (skipBackupRotation) {
+      _skipNextBackupRotationAfterRecovery = false;
+    }
   }
 
   Future<void> _copyRecoverySource(File source, String suffix) async {
@@ -134,9 +145,23 @@ class StateStore {
       final target =
           File(p.join(directory, '$stem.$suffix.$stamp$extra$extension'));
       if (!await target.exists()) {
-        await source.copy(target.path);
+        final recoveryCopy = _recoveryCopy;
+        if (recoveryCopy == null) {
+          await source.copy(target.path);
+        } else {
+          await recoveryCopy(source, target.path);
+        }
         return;
       }
+    }
+  }
+
+  Future<void> _tryCopyRecoverySource(File source, String suffix) async {
+    try {
+      await _copyRecoverySource(source, suffix);
+    } catch (_) {
+      // Recovery audit copies are best-effort; a valid recovered state must
+      // stay loadable even when the local filesystem rejects extra copies.
     }
   }
 }

@@ -43,6 +43,7 @@ class AppState {
     this.showDeepCapsuleWhileExpanded = true,
     this.collapseExpandedDeepCapsuleOnClick = false,
     this.hideDeepCapsulesWhenCovered = false,
+    this.hideDeepCapsulesWhenFullscreen = false,
     this.enableAnimations = true,
     this.enableToolTips = true,
     this.startAtLogin = false,
@@ -119,7 +120,6 @@ class AppState {
     'deepCapsuleQueueStartTopMargins',
     'deepCapsuleSide',
     'deepCapsuleMonitorDeviceName',
-    'topBarHeight',
     'sync',
   };
 
@@ -160,6 +160,7 @@ class AppState {
   bool showDeepCapsuleWhileExpanded;
   bool collapseExpandedDeepCapsuleOnClick;
   bool hideDeepCapsulesWhenCovered;
+  bool hideDeepCapsulesWhenFullscreen;
   bool enableAnimations;
   bool enableToolTips;
   bool startAtLogin;
@@ -178,6 +179,7 @@ class AppState {
 
   factory AppState.fromJson(JsonMap json) {
     final retiredTopBarButtons = json['showTopBarNewPaperButtons'];
+    final syncJson = jsonMapOrNull(json['sync']);
     final topBarNewTodoButton = retiredTopBarButtons is bool
         ? retiredTopBarButtons
         : boolValue(json['showTopBarNewTodoButton'], true);
@@ -185,8 +187,9 @@ class AppState {
         ? retiredTopBarButtons
         : boolValue(json['showTopBarNewNoteButton'], true);
     final hideDeepCapsulesWhenCovered =
-        boolValue(json['hideDeepCapsulesWhenCovered'], false) ||
-            boolValue(json['hideDeepCapsulesWhenFullscreen'], false);
+        boolValue(json['hideDeepCapsulesWhenCovered'], false);
+    final hideDeepCapsulesWhenFullscreen =
+        boolValue(json['hideDeepCapsulesWhenFullscreen'], false);
 
     return AppState(
       papers: jsonMapList(json['papers']).map(PaperData.fromJson).toList(),
@@ -245,6 +248,7 @@ class AppState {
       collapseExpandedDeepCapsuleOnClick:
           boolValue(json['collapseExpandedDeepCapsuleOnClick'], false),
       hideDeepCapsulesWhenCovered: hideDeepCapsulesWhenCovered,
+      hideDeepCapsulesWhenFullscreen: hideDeepCapsulesWhenFullscreen,
       enableAnimations: boolValue(json['enableAnimations'], true),
       enableToolTips: boolValue(json['enableToolTips'], true),
       startAtLogin: boolValue(json['startAtLogin'], false),
@@ -264,10 +268,7 @@ class AppState {
           stringValue(json['deepCapsuleSide'], DeepCapsuleSides.right),
       deepCapsuleMonitorDeviceName:
           stringValue(json['deepCapsuleMonitorDeviceName'], ''),
-      sync: json['sync'] is Map
-          ? SyncSettings.fromJson(
-              Map<String, Object?>.from(json['sync'] as Map))
-          : null,
+      sync: syncJson == null ? null : SyncSettings.fromJson(syncJson),
       extra: preserveUnknown(json, _knownKeys),
     )..normalize(storageCompatibility: true);
   }
@@ -303,6 +304,10 @@ class AppState {
       useDeepCapsuleMode = false;
     }
     if (!useCapsuleMode || !useDeepCapsuleMode) {
+      hideDeepCapsulesWhenCovered = false;
+      hideDeepCapsulesWhenFullscreen = false;
+    }
+    if (!useCapsuleMode || !useDeepCapsuleMode) {
       useCapsuleCollapseAll = false;
     }
     if (!useCapsuleCollapseAll) {
@@ -316,7 +321,8 @@ class AppState {
       }
     }
     deepCapsuleSide = DeepCapsuleSides.normalize(deepCapsuleSide);
-    deepCapsuleMonitorDeviceName = deepCapsuleMonitorDeviceName.trim();
+    deepCapsuleMonitorDeviceName =
+        normalizeCapsuleMonitorDeviceName(deepCapsuleMonitorDeviceName);
     final keepDeepCapsuleStartTopMargins =
         useCapsuleMode && useDeepCapsuleMode && useCapsuleCollapseAll;
     if (storageCompatibility && !keepDeepCapsuleStartTopMargins) {
@@ -332,7 +338,7 @@ class AppState {
     sync.normalize();
     final usedPaperIds = <String>{};
     for (final paper in papers) {
-      paper.id = paper.id.trim();
+      paper.id = normalizeLocalModelId(paper.id);
       if (paper.id.isEmpty || !usedPaperIds.add(paper.id)) {
         paper.id = _newUniqueId(usedPaperIds);
       }
@@ -530,6 +536,7 @@ class AppState {
       'showDeepCapsuleWhileExpanded': showDeepCapsuleWhileExpanded,
       'collapseExpandedDeepCapsuleOnClick': collapseExpandedDeepCapsuleOnClick,
       'hideDeepCapsulesWhenCovered': hideDeepCapsulesWhenCovered,
+      'hideDeepCapsulesWhenFullscreen': hideDeepCapsulesWhenFullscreen,
       'enableAnimations': enableAnimations,
       'enableToolTips': enableToolTips,
       'startAtLogin': startAtLogin,
@@ -630,10 +637,18 @@ String _newUniqueId(Set<String> usedIds) {
 Map<String, bool> _normalizeCollapseAllActiveQueues(Map<String, bool> source) {
   final normalized = <String, bool>{};
   for (final entry in source.entries) {
-    if (!entry.value) {
+    final normalizedKey = _normalizeQueueKey(entry.key);
+    if (normalizedKey == null) {
       continue;
     }
-    normalized.putIfAbsent(_normalizeQueueKey(entry.key), () => true);
+    if (!normalized.containsKey(normalizedKey) || entry.key == normalizedKey) {
+      normalized[normalizedKey] = entry.value;
+    }
+  }
+  for (final entry in [...normalized.entries]) {
+    if (!entry.value) {
+      normalized.remove(entry.key);
+    }
   }
   return normalized;
 }
@@ -642,6 +657,9 @@ Map<String, double> _normalizeQueueStartTopMargins(Map<String, double> source) {
   final normalized = <String, double>{};
   for (final entry in source.entries) {
     final normalizedKey = _normalizeQueueKey(entry.key);
+    if (normalizedKey == null) {
+      continue;
+    }
     if (!normalized.containsKey(normalizedKey) || entry.key == normalizedKey) {
       normalized[normalizedKey] = entry.value.clamp(8, 10000).toDouble();
     }
@@ -649,7 +667,10 @@ Map<String, double> _normalizeQueueStartTopMargins(Map<String, double> source) {
   return normalized;
 }
 
-String _normalizeQueueKey(String? key) {
+String? _normalizeQueueKey(String? key) {
+  if (key != null && hasRawControlCharacter(key)) {
+    return null;
+  }
   final value = (key ?? '').trim();
   final separator = value.lastIndexOf('|');
   if (separator < 0) {
@@ -660,7 +681,7 @@ String _normalizeQueueKey(String? key) {
 }
 
 String _queueKey(String? monitorDeviceName, String? side) {
-  final monitor = (monitorDeviceName ?? '').trim();
+  final monitor = normalizeCapsuleMonitorDeviceName(monitorDeviceName);
   final normalizedSide = DeepCapsuleSides.normalize(side);
   return '$monitor|$normalizedSide';
 }
@@ -677,8 +698,9 @@ String _normalizeExtension(String extension) {
     value = '.$value';
   }
   if (value.length < 2 ||
-      value.length > 32 ||
-      value.contains('..') ||
+      value.length > 120 ||
+      value.endsWith('.') ||
+      value.endsWith(' ') ||
       _hasInvalidFileNameCharacter(value)) {
     return '.md';
   }

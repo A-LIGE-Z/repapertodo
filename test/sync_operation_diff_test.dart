@@ -70,10 +70,171 @@ void main() {
     expect(result.state.papers.single.content, 'New body');
   });
 
+  test('builds well-formed note content operations when content is cleared',
+      () {
+    final before = AppState(
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'Body to clear',
+        ),
+      ],
+    );
+    final after = AppState(
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: '',
+        ),
+      ],
+    );
+
+    final operations = builder.build(
+      before: before,
+      after: after,
+      deviceId: 'device-a',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(operations, hasLength(1));
+    expect(operations.single.kind, SyncOperationKind.updateNoteContent);
+    expect(operations.single.payload, {
+      'paperId': 'note',
+      'content': '',
+    });
+
+    final result = applier.apply(before, operations);
+
+    expect(result.appliedCount, 1);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.papers.single.content, isEmpty);
+  });
+
+  test('normalizes local model ids before building operation payloads', () {
+    final noteBefore = AppState(
+      papers: [
+        PaperData(
+          id: ' note\u0000-paper ',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'Old body',
+        ),
+      ],
+    );
+    final noteAfter = AppState(
+      papers: [
+        PaperData(
+          id: ' note\u0000-paper ',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'New body',
+        ),
+      ],
+    );
+
+    final noteOperations = builder.build(
+      before: noteBefore,
+      after: noteAfter,
+      deviceId: 'device-a',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(noteOperations, hasLength(1));
+    expect(noteOperations.single.kind, SyncOperationKind.updateNoteContent);
+    expect(noteOperations.single.payload, {
+      'paperId': 'note-paper',
+      'content': 'New body',
+    });
+    expect(isSyncOperationPayloadWellFormed(noteOperations.single), true);
+
+    final todoBefore = AppState(
+      papers: [
+        PaperData(
+          id: ' todo\u0000-paper ',
+          type: PaperTypes.todo,
+          items: [
+            PaperItem(
+              id: ' item\u007F-one ',
+              text: 'Delete me',
+              linkedNoteId: ' note\u0085-paper ',
+            ),
+          ],
+        ),
+      ],
+    );
+    final todoAfter = AppState(
+      papers: [
+        PaperData(
+          id: ' todo\u0000-paper ',
+          type: PaperTypes.todo,
+          items: const [],
+        ),
+      ],
+    );
+
+    final todoOperations = builder.build(
+      before: todoBefore,
+      after: todoAfter,
+      deviceId: 'device-a',
+      startSequence: 1,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 11),
+    );
+
+    expect(todoOperations, hasLength(1));
+    expect(todoOperations.single.kind, SyncOperationKind.deleteTodoItem);
+    expect(todoOperations.single.payload, {
+      'paperId': 'todo-paper',
+      'itemId': 'item-one',
+    });
+    expect(isSyncOperationPayloadWellFormed(todoOperations.single), true);
+
+    final upsertOperations = builder.build(
+      before: AppState(),
+      after: AppState(
+        papers: [
+          PaperData(id: ' note\u0085-paper ', type: PaperTypes.note),
+          PaperData(
+            id: ' todo\u0000-paper ',
+            type: PaperTypes.todo,
+            items: [
+              PaperItem(
+                id: ' item\u007F-one ',
+                text: 'Upload me',
+                linkedNoteId: ' note\u0085-paper ',
+              ),
+            ],
+          ),
+        ],
+      ),
+      deviceId: 'device-a',
+      startSequence: 2,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 12),
+    );
+
+    final todoUpsert = upsertOperations.firstWhere(
+      (operation) =>
+          operation.kind == SyncOperationKind.upsertPaper &&
+          (operation.payload['paper'] as Map)['type'] == PaperTypes.todo,
+    );
+    final paper = todoUpsert.payload['paper'] as Map;
+    final item = (paper['items'] as List).single as Map;
+    expect(paper['id'], 'todo-paper');
+    expect(item['id'], 'item-one');
+    expect(item['linkedNoteId'], 'note-paper');
+    expect(isSyncOperationPayloadWellFormed(todoUpsert), true);
+  });
+
   test('excludes local sync and startup settings from settings operations', () {
     final before = AppState(
       theme: 'light',
       startAtLogin: false,
+      extra: {'localExtensionSetting': 'before'},
       sync: SyncSettings(
         enabled: true,
         provider: SyncProviderIds.webDav,
@@ -92,6 +253,7 @@ void main() {
     final syncOnlyAfter = AppState(
       theme: 'light',
       startAtLogin: true,
+      extra: {'localExtensionSetting': 'after'},
       sync: SyncSettings(
         enabled: true,
         provider: SyncProviderIds.webDav,
@@ -129,6 +291,193 @@ void main() {
     expect(settingsOperations, hasLength(1));
     expect(settingsOperations.single.kind, SyncOperationKind.updateSettings);
     expect(settingsOperations.single.payload['settings'], {'theme': 'dark'});
+    expect(isSyncOperationPayloadWellFormed(settingsOperations.single), true);
+  });
+
+  test('normalizes setting diffs before building operations', () {
+    final longHotKey = 'Ctrl+Alt+${List.filled(80, 'A').join()}';
+    final before = AppState(
+      theme: 'dark',
+      colorScheme: ColorSchemes.forest,
+      customThemeColorHex: '#336699',
+      markdownRenderMode: MarkdownRenderModes.basic,
+      todoVisualSize: TodoVisualSizes.extraLarge,
+      uiFontPreset: UiFontPresets.mono,
+      systemFontFamilyName: 'Paper Font',
+      externalMarkdownExtension: '.md',
+      todoDueYearDisplayMode: TodoDueYearDisplayModes.full,
+      todoReminderIntervalUnit: TodoReminderIntervalUnits.hours,
+      todoReminderScope: TodoReminderScopes.nearest,
+      pinnedTodoHotKey: 'Ctrl+Alt+T',
+      pinnedNoteHotKey: longHotKey.substring(0, 64),
+      fullscreenTopmostMode: FullscreenTopmostModes.stayOnTop,
+      deepCapsuleSide: DeepCapsuleSides.left,
+      deepCapsuleMonitorDeviceName: 'Primary',
+      capsuleCollapseAllActiveQueues: {
+        '|left': true,
+        'Primary|right': true,
+      },
+      deepCapsuleQueueStartTopMargins: {
+        '|left': 16.25,
+        'Primary|right': 8.0,
+      },
+    );
+    final after = AppState(
+      theme: ' DARK ',
+      colorScheme: ' FOREST ',
+      customThemeColorHex: '336699',
+      markdownRenderMode: 'BASIC',
+      todoVisualSize: 'EXTRALARGE',
+      uiFontPreset: 'MONO',
+      systemFontFamilyName: ' \u0000Paper Font\u007F ',
+      externalMarkdownExtension: '*.MD',
+      todoDueYearDisplayMode: 'FULL',
+      todoReminderIntervalUnit: 'HOURS',
+      todoReminderScope: 'NEAREST',
+      pinnedTodoHotKey: ' Ctrl+\nAlt+\u007FT ',
+      pinnedNoteHotKey: '$longHotKey\n',
+      fullscreenTopmostMode: 'STAYONTOP',
+      deepCapsuleSide: 'LEFT',
+      deepCapsuleMonitorDeviceName: ' Primary ',
+      capsuleCollapseAllActiveQueues: {
+        'left': true,
+        ' Primary | RIGHT ': true,
+        'Ghost|left': false,
+      },
+      deepCapsuleQueueStartTopMargins: {
+        'left': 16.25,
+        ' Primary | RIGHT ': 2,
+      },
+    );
+
+    final operations = builder.build(
+      before: before,
+      after: after,
+      deviceId: 'device-a',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(operations, isEmpty);
+  });
+
+  test('ignores queue map diffs that only change alias precedence', () {
+    final before = AppState(
+      useCapsuleMode: true,
+      useDeepCapsuleMode: true,
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      capsuleCollapseAllActiveQueues: {
+        'Primary|right': true,
+      },
+      deepCapsuleQueueStartTopMargins: {
+        '|right': 8.0,
+        'Primary|left': 10000.0,
+      },
+    );
+    final after = AppState(
+      useCapsuleMode: true,
+      useDeepCapsuleMode: true,
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: false,
+      capsuleCollapseAllActiveQueues: {
+        'left': true,
+        '|left': false,
+        'Primary | right ': false,
+        'Primary|right': true,
+      },
+      deepCapsuleQueueStartTopMargins: {
+        'right': 32.5,
+        '|right': 4,
+        'Primary | left ': 12,
+        'Primary|left': 12000,
+      },
+    );
+
+    final operations = builder.build(
+      before: before,
+      after: after,
+      deviceId: 'device-a',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(operations, isEmpty);
+  });
+
+  test('drops invalid setting diffs and uploads only canonical values', () {
+    final before = AppState(
+      theme: 'light',
+      enableToolTips: true,
+      externalMarkdownExtension: '.md',
+    );
+    final invalidOnlyAfter = AppState(
+      theme: 'mystery',
+      externalMarkdownExtension: 'md:bad',
+    );
+    final mixedAfter = AppState(
+      theme: 'mystery',
+      enableToolTips: false,
+      externalMarkdownExtension: '*.MARKDOWN',
+    );
+
+    final invalidOnlyOperations = builder.build(
+      before: before,
+      after: invalidOnlyAfter,
+      deviceId: 'device-a',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+    final mixedOperations = builder.build(
+      before: before,
+      after: mixedAfter,
+      deviceId: 'device-a',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(invalidOnlyOperations, isEmpty);
+    expect(mixedOperations, hasLength(1));
+    expect(mixedOperations.single.kind, SyncOperationKind.updateSettings);
+    expect(mixedOperations.single.payload['settings'], {
+      'externalMarkdownExtension': '.markdown',
+      'enableToolTips': false,
+    });
+    expect(isSyncOperationPayloadWellFormed(mixedOperations.single), true);
+  });
+
+  test('does not upload capsule settings that normalize back to local state',
+      () {
+    final normalized = AppState(
+      useCapsuleMode: false,
+      useDeepCapsuleMode: false,
+      useCapsuleCollapseAll: false,
+      capsuleCollapseAllActive: false,
+      deepCapsuleStartTopMargin: 48,
+    );
+    final rawEquivalent = AppState(
+      useCapsuleMode: false,
+      useDeepCapsuleMode: true,
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      capsuleCollapseAllActiveQueues: {
+        'left': true,
+      },
+      deepCapsuleStartTopMargin: 16,
+      deepCapsuleQueueStartTopMargins: {
+        'left': 16,
+      },
+    );
+
+    final operations = builder.build(
+      before: normalized,
+      after: rawEquivalent,
+      deviceId: 'device-a',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(operations, isEmpty);
   });
 
   test('builds paper add delete and todo item operations', () {
@@ -397,6 +746,110 @@ void main() {
       deviceId: 'device-a',
       startSequence: 0,
       createdAtUtc: DateTime.utc(2026, 7, 1, 16),
+    );
+
+    expect(operations, isEmpty);
+  });
+
+  test('ignores note paper diffs that only change model-normalized fields', () {
+    final before = AppState(
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          textZoom: 1.5,
+          noteCanvasElements: [
+            NoteCanvasElement(
+              id: 'block',
+              type: NoteCanvasElementTypes.code,
+              width: 220,
+              height: 110,
+              zIndex: 10,
+            ),
+          ],
+        ),
+      ],
+    );
+    final after = AppState(
+      papers: [
+        PaperData(
+          id: ' note ',
+          type: 'NOTE',
+          title: 'Note',
+          textZoom: 9,
+          noteCanvasElements: [
+            NoteCanvasElement(
+              id: ' block ',
+              type: 'TEXT',
+              width: 12,
+              height: 12,
+              zIndex: 0,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final operations = builder.build(
+      before: before,
+      after: after,
+      deviceId: 'device-a',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 17),
+    );
+
+    expect(operations, isEmpty);
+  });
+
+  test('ignores todo item diffs that only change model-normalized fields', () {
+    final before = AppState(
+      papers: [
+        PaperData(
+          id: 'todo',
+          type: PaperTypes.todo,
+          title: 'Todo',
+          items: [
+            PaperItem(
+              id: 'item',
+              text: 'Task',
+              todoColumnCount: 4,
+              todoExtraColumns: ['A', 'B', 'C'],
+              todoColumnWidths: [1, 1.235, 8, 1],
+              reminderIntervalValue: 240,
+              reminderIntervalUnit: TodoReminderIntervalUnits.hours,
+            ),
+          ],
+        ),
+      ],
+    );
+    final after = AppState(
+      papers: [
+        PaperData(
+          id: ' todo ',
+          type: PaperTypes.todo,
+          title: 'Todo',
+          items: [
+            PaperItem(
+              id: ' item ',
+              text: 'Task',
+              todoColumnCount: 9,
+              todoExtraColumns: ['A', 'B', 'C', 'D'],
+              todoColumnWidths: [0, 1.23456, 99],
+              reminderIntervalValue: 999,
+              reminderIntervalUnit: 'HOURS',
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final operations = builder.build(
+      before: before,
+      after: after,
+      deviceId: 'device-a',
+      startSequence: 0,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 18),
     );
 
     expect(operations, isEmpty);

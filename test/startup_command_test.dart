@@ -69,4 +69,13 @@ void main() {
 
     expect(command.kind, StartupCommandKind.show);
   });
+
+  test('unknown args do not fall back to the empty-args default', () {
+    final command = StartupCommand.parse(
+      const ['--unknown'],
+      defaultWhenEmpty: StartupCommandKind.show,
+    );
+
+    expect(command.kind, StartupCommandKind.none);
+  });
 }

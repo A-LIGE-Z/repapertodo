@@ -22,6 +22,7 @@ class RePaperTodoController {
   AppState state;
   final PlatformServices _platform;
   StartupCommand? _pendingUiStartupCommand;
+  bool _isExiting = false;
   final Set<String> _paperIdsPendingWorkAreaRescue = <String>{};
   final Set<String> _paperIdsPendingDeepCapsuleStripClamp = <String>{};
 
@@ -51,13 +52,17 @@ class RePaperTodoController {
   bool get supportsScriptCapsules =>
       _platform.scriptCapsules.supportsScriptCapsules;
 
+  Future<List<String>> installedFontFamilies() {
+    return _platform.systemIntegration.installedFontFamilies();
+  }
+
   bool get canCreatePaper => state.papers.length < PaperLimits.maxPapers;
 
   Future<void> start(
       {StartupCommand startupCommand =
           const StartupCommand(StartupCommandKind.none)}) async {
     if (startupCommand.kind == StartupCommandKind.exit) {
-      await executeStartupCommand(startupCommand);
+      await _executeStartupCommand(startupCommand, rebuildTrayMenu: false);
       return;
     }
 
@@ -72,7 +77,8 @@ class RePaperTodoController {
     await _rescuePapersIntoWorkAreas();
     await _preparePendingNewPapersForFirstShow();
     await _platform.paperWindows.restoreAll(state);
-    await executeStartupCommand(startupCommand);
+    await _restoreMissingVisiblePaperSurfaces();
+    await _executeStartupCommand(startupCommand, rebuildTrayMenu: false);
     await _platform.tray.rebuildMenu(state);
   }
 
@@ -139,6 +145,7 @@ class RePaperTodoController {
     await _rescuePapersIntoWorkAreas();
     await _preparePendingNewPapersForFirstShow();
     await _platform.paperWindows.restoreAll(state);
+    await _restoreMissingVisiblePaperSurfaces();
     await _platform.tray.rebuildMenu(state);
   }
 
@@ -153,6 +160,7 @@ class RePaperTodoController {
     required bool showDeepCapsuleWhileExpanded,
     required bool collapseExpandedDeepCapsuleOnClick,
     required bool hideDeepCapsulesWhenCovered,
+    required bool hideDeepCapsulesWhenFullscreen,
   }) {
     state
       ..useCapsuleMode = useCapsuleMode
@@ -164,14 +172,16 @@ class RePaperTodoController {
       ..deepCapsuleMonitorDeviceName = deepCapsuleMonitorDeviceName
       ..showDeepCapsuleWhileExpanded = showDeepCapsuleWhileExpanded
       ..collapseExpandedDeepCapsuleOnClick = collapseExpandedDeepCapsuleOnClick
-      ..hideDeepCapsulesWhenCovered = hideDeepCapsulesWhenCovered;
+      ..hideDeepCapsulesWhenCovered = hideDeepCapsulesWhenCovered
+      ..hideDeepCapsulesWhenFullscreen = hideDeepCapsulesWhenFullscreen;
 
     if (!state.useCapsuleMode) {
       state
         ..useDeepCapsuleMode = false
         ..showDeepCapsuleWhileExpanded = false
         ..collapseExpandedDeepCapsuleOnClick = false
-        ..hideDeepCapsulesWhenCovered = false;
+        ..hideDeepCapsulesWhenCovered = false
+        ..hideDeepCapsulesWhenFullscreen = false;
       for (final paper in state.papers) {
         paper.isCollapsed = false;
       }
@@ -180,7 +190,8 @@ class RePaperTodoController {
       state
         ..showDeepCapsuleWhileExpanded = false
         ..collapseExpandedDeepCapsuleOnClick = false
-        ..hideDeepCapsulesWhenCovered = false;
+        ..hideDeepCapsulesWhenCovered = false
+        ..hideDeepCapsulesWhenFullscreen = false;
       _clearDeepCapsuleCollapseAllState();
     }
 
@@ -332,51 +343,112 @@ class RePaperTodoController {
     );
   }
 
-  Future<void> showPaper(PaperData paper) async {
+  Future<void> showPaper(PaperData paper) {
+    return _showPaper(paper, rebuildTrayMenu: true);
+  }
+
+  Future<void> _showPaper(
+    PaperData paper, {
+    required bool rebuildTrayMenu,
+  }) async {
     if (paper.isCollapsed && !_canPaperDisplayAsCapsule(paper)) {
       paper.isCollapsed = false;
     }
     paper.isVisible = true;
+    state.normalize();
     await _prepareNewPaperForFirstShow(paper);
     await _platform.paperWindows.showPaper(paper);
+    if (rebuildTrayMenu) {
+      await _platform.tray.rebuildMenu(state);
+    }
   }
 
-  Future<void> hidePaper(PaperData paper) async {
+  Future<void> openLinkedNote(PaperData note, {PaperData? anchorPaper}) async {
+    if (!note.isNote) {
+      return;
+    }
+    note
+      ..isVisible = true
+      ..isCollapsed = false;
+    await _placeLinkedNoteBesideAnchor(note, anchorPaper);
+    await showPaper(note);
+  }
+
+  Future<void> openReminderPaper(PaperData paper) async {
+    if (!paper.isTodo) {
+      return;
+    }
+    paper
+      ..isVisible = true
+      ..isCollapsed = false;
+    if (paper.isPinnedToDesktop) {
+      await _prepareNewPaperForFirstShow(paper);
+      await _platform.paperWindows.revealPinnedPaper(paper);
+      await _platform.tray.rebuildMenu(state);
+      return;
+    }
+    await showPaper(paper);
+  }
+
+  Future<void> hidePaper(PaperData paper) {
+    return _hidePaper(paper, rebuildTrayMenu: true);
+  }
+
+  Future<void> _hidePaper(
+    PaperData paper, {
+    required bool rebuildTrayMenu,
+  }) async {
     paper
       ..isPinnedToDesktop = false
       ..isVisible = false
       ..isCollapsed = false;
     state.normalize();
     await _platform.paperWindows.hidePaper(paper);
+    if (rebuildTrayMenu) {
+      await _platform.tray.rebuildMenu(state);
+    }
   }
 
-  Future<void> executeStartupCommand(StartupCommand command) async {
+  Future<void> executeStartupCommand(StartupCommand command) {
+    return _executeStartupCommand(command, rebuildTrayMenu: true);
+  }
+
+  Future<void> _executeStartupCommand(
+    StartupCommand command, {
+    required bool rebuildTrayMenu,
+  }) async {
+    var trayMenuNeedsRefresh = false;
     switch (command.kind) {
       case StartupCommandKind.none:
         return;
       case StartupCommandKind.show:
         for (final paper in state.papers) {
-          await showPaper(paper);
+          await _showPaper(paper, rebuildTrayMenu: false);
         }
+        trayMenuNeedsRefresh = state.papers.isNotEmpty;
       case StartupCommandKind.hide:
         for (final paper in state.papers) {
-          await hidePaper(paper);
+          await _hidePaper(paper, rebuildTrayMenu: false);
         }
+        trayMenuNeedsRefresh = state.papers.isNotEmpty;
       case StartupCommandKind.toggle:
         final shouldHide = await _hasVisibleSurfacesForToggle();
-        await executeStartupCommand(
+        await _executeStartupCommand(
           StartupCommand(
               shouldHide ? StartupCommandKind.hide : StartupCommandKind.show),
+          rebuildTrayMenu: rebuildTrayMenu,
         );
       case StartupCommandKind.newTodo:
         final paper = tryCreatePaper(PaperTypes.todo);
         if (paper != null) {
-          await showPaper(paper);
+          await _showPaper(paper, rebuildTrayMenu: false);
+          trayMenuNeedsRefresh = true;
         }
       case StartupCommandKind.newNote:
         final paper = tryCreatePaper(PaperTypes.note);
         if (paper != null) {
-          await showPaper(paper);
+          await _showPaper(paper, rebuildTrayMenu: false);
+          trayMenuNeedsRefresh = true;
         }
       case StartupCommandKind.revealPinnedTodo:
         await _revealPinnedPaper(PaperTypes.todo);
@@ -386,11 +458,18 @@ class RePaperTodoController {
         _pendingUiStartupCommand = command;
         return;
       case StartupCommandKind.exit:
+        if (_isExiting) {
+          return;
+        }
+        _isExiting = true;
         if (_platform.systemIntegration.supportsGlobalHotkeys) {
           await _platform.systemIntegration.unregisterGlobalHotkeys();
         }
         await _platform.tray.dispose();
         await _platform.systemIntegration.exitApplication();
+    }
+    if (trayMenuNeedsRefresh && rebuildTrayMenu) {
+      await _platform.tray.rebuildMenu(state);
     }
   }
 
@@ -399,6 +478,27 @@ class RePaperTodoController {
       return await _platform.paperWindows.hasVisibleSurfaces(state);
     } catch (_) {
       return state.papers.any((paper) => paper.isVisible);
+    }
+  }
+
+  Future<void> _restoreMissingVisiblePaperSurfaces() async {
+    for (final paper in state.papers.toList()) {
+      if (!paper.isVisible) {
+        continue;
+      }
+      final hasVisibleSurface = await _hasVisibleSurface(paper);
+      if (hasVisibleSurface) {
+        continue;
+      }
+      await _showPaper(paper, rebuildTrayMenu: false);
+    }
+  }
+
+  Future<bool> _hasVisibleSurface(PaperData paper) async {
+    try {
+      return await _platform.paperWindows.hasVisibleSurface(paper);
+    } catch (_) {
+      return paper.isVisible;
     }
   }
 
@@ -647,6 +747,63 @@ class RePaperTodoController {
     final maxY = math.max(minY, area.bottom - height - margin);
     paper.x = paper.x.clamp(minX, maxX).roundToDouble();
     paper.y = paper.y.clamp(minY, maxY).roundToDouble();
+  }
+
+  Future<void> _placeLinkedNoteBesideAnchor(
+    PaperData note,
+    PaperData? anchorPaper,
+  ) async {
+    if (anchorPaper == null) {
+      return;
+    }
+    final area = await _workAreaForPaper(anchorPaper);
+    if (area == null || !area.isUsable) {
+      return;
+    }
+
+    const gap = 10.0;
+    const margin = 8.0;
+    final noteWidth = _clampPaperDimension(
+      note.width,
+      PaperLayoutDefaults.noteDefaultWidth,
+      PaperLayoutDefaults.minWidth,
+      math.max(PaperLayoutDefaults.minWidth, area.width - (margin * 2)),
+    );
+    final noteHeight = _clampPaperDimension(
+      note.height,
+      PaperLayoutDefaults.noteDefaultHeight,
+      PaperLayoutDefaults.minHeight,
+      math.max(PaperLayoutDefaults.minHeight, area.height - (margin * 2)),
+    );
+    note
+      ..width = noteWidth
+      ..height = noteHeight;
+
+    final anchorWidth = _validPaperExtent(
+      anchorPaper.width,
+      anchorPaper.isNote
+          ? PaperLayoutDefaults.noteDefaultWidth
+          : PaperLayoutDefaults.todoDefaultWidth,
+    );
+    final rightX = anchorPaper.x + anchorWidth + gap;
+    final leftX = anchorPaper.x - noteWidth - gap;
+    final minX = area.x + margin;
+    final maxX = math.max(minX, area.right - noteWidth - margin);
+    final targetX = rightX <= maxX
+        ? rightX
+        : leftX >= minX
+            ? leftX
+            : rightX.clamp(minX, maxX).toDouble();
+
+    final minY = area.y + margin;
+    final maxY = math.max(minY, area.bottom - noteHeight - margin);
+    note
+      ..x = targetX.roundToDouble()
+      ..y = anchorPaper.y.clamp(minY, maxY).roundToDouble();
+  }
+
+  double _validPaperExtent(double value, double fallback) {
+    return value.isFinite && value > 1 ? value : fallback;
   }
 
   bool _canClampNewPaperAwayFromDeepCapsuleStrip(PaperData paper) {

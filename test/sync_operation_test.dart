@@ -105,7 +105,12 @@ void main() {
   });
 
   test('rejects unknown operation kinds', () {
-    for (final kind in const ['', 'futureOperation']) {
+    for (final kind in const [
+      '',
+      'futureOperation',
+      ' updateSettings',
+      'updateSettings ',
+    ]) {
       expect(
         () => SyncOperation.fromJson({
           'id': 'future-operation',
@@ -132,7 +137,9 @@ void main() {
       null,
       0,
       -1,
+      1.0,
       1.2,
+      '+1',
       '1.2',
       ' 1',
       '1 ',
@@ -166,6 +173,7 @@ void main() {
       null,
       'bad-payload',
       ['bad'],
+      {1: 'not-json-object'},
     ]) {
       expect(
         () => SyncOperation.fromJson({

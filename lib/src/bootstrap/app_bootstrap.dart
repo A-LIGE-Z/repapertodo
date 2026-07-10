@@ -49,11 +49,24 @@ class AppBootstrap {
       initialState: state,
       platform: resolvedPlatform,
     );
-    await controller.start(startupCommand: startupCommand);
     if (startupCommand.kind == StartupCommandKind.exit) {
+      if (_shouldSyncOnExit(controller.state.sync)) {
+        try {
+          final result =
+              await (syncService ?? AppSyncService()).syncAndMergeNow(
+            localState: controller.state,
+            store: resolvedStore,
+          );
+          controller.replaceState(result.state);
+        } catch (_) {
+          // Startup exit must still clean up even when WebDAV is unavailable.
+        }
+      }
       await resolvedStore.save(controller.state);
+      await controller.executeStartupCommand(startupCommand);
       return null;
     }
+    await controller.start(startupCommand: startupCommand);
     if (_shouldAutoSyncOnStart(controller.state.sync)) {
       try {
         final result = await (syncService ?? AppSyncService()).syncAndMergeNow(
@@ -80,6 +93,12 @@ class AppBootstrap {
         sync.webDav.isSecurelyConfigured;
   }
 
+  static bool _shouldSyncOnExit(SyncSettings sync) {
+    return sync.enabled &&
+        sync.provider == SyncProviderIds.webDav &&
+        sync.webDav.isSecurelyConfigured;
+  }
+
   static Future<String> defaultStateFilePath({
     PlatformServices? platform,
     Future<String> Function()? mobileDocumentsDirectoryPath,
@@ -102,11 +121,22 @@ class AppBootstrap {
       if (executablePath.isEmpty) {
         throw StateError('Desktop executable path is unavailable.');
       }
+      if (_hasControlCharacter(desktopExecutablePath)) {
+        throw StateError(
+          'Desktop executable path contains unsupported characters.',
+        );
+      }
       return p.join(p.dirname(executablePath), 'data.json');
     }
-    final directoryPath = (await mobileDocumentsDirectoryPath()).trim();
+    final rawDirectoryPath = await mobileDocumentsDirectoryPath();
+    final directoryPath = rawDirectoryPath.trim();
     if (directoryPath.isEmpty) {
       throw StateError('Mobile documents directory is unavailable.');
+    }
+    if (_hasControlCharacter(rawDirectoryPath)) {
+      throw StateError(
+        'Mobile documents directory contains unsupported characters.',
+      );
     }
     return p.join(directoryPath, 'data.json');
   }
@@ -120,4 +150,10 @@ class AppBootstrap {
     }
     return NoopPlatformServices();
   }
+}
+
+bool _hasControlCharacter(String value) {
+  return value.runes.any(
+    (rune) => rune < 0x20 || (rune >= 0x7F && rune <= 0x9F),
+  );
 }

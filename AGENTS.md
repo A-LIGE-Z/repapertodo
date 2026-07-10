@@ -31,6 +31,10 @@ The original PaperTodo feature set is the baseline:
 
 Feature parity with the existing Windows exe is the first major milestone.
 
+Runtime UI localization is intentionally limited to Chinese and English. New
+user-facing strings must include those two languages only, and unsupported
+system languages should fall back to English.
+
 ## Platform Priority
 
 1. Windows exe first.
@@ -134,4 +138,3 @@ Before public stable release:
 - Verify WebDAV sync with generic WebDAV and at least one domestic provider preset.
 - Verify Android 14-17 compatibility.
 - Verify conflict handling and offline behavior.
-

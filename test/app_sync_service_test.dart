@@ -165,6 +165,128 @@ void main() {
     expect(createdCount, 0);
   });
 
+  test(
+      'round trips Windows and Android edits through shared WebDAV operation logs',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_cross_device_webdav_');
+    addTearDown(() => directory.delete(recursive: true));
+    final remote = _InMemoryWebDavServer();
+    final settings = _configuredSyncSettings(
+      endpoint: 'http://dav.example.test/',
+      rootPath: 'repapertodo',
+    );
+    WebDavStateSyncService realWebDavFactory(
+      WebDavSyncSettings settings, {
+      String? deviceId,
+    }) {
+      return WebDavStateSyncService.fromSettings(
+        settings,
+        httpClient: remote.client,
+        deviceId: deviceId,
+      );
+    }
+
+    final windowsStore = StateStore(
+      filePath: p.join(directory.path, 'windows-data.json'),
+    );
+    final androidStore = StateStore(
+      filePath: p.join(directory.path, 'android-data.json'),
+    );
+    final windowsDeviceIdPath = p.join(directory.path, 'windows-device-id');
+    final androidDeviceIdPath = p.join(directory.path, 'android-device-id');
+    await File(windowsDeviceIdPath).writeAsString('windows-device');
+    await File(androidDeviceIdPath).writeAsString('android-device');
+
+    final windowsService = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: windowsDeviceIdPath),
+      webDavFactory: realWebDavFactory,
+    );
+    final androidService = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: androidDeviceIdPath),
+      webDavFactory: realWebDavFactory,
+    );
+    final windowsState = AppState(
+      sync: settings,
+      papers: [
+        PaperData(
+          id: 'shared-note',
+          type: PaperTypes.note,
+          title: 'Shared',
+          content: 'Windows draft',
+        ),
+      ],
+    );
+
+    final windowsUpload = await windowsService.syncAndMergeNow(
+      localState: windowsState,
+      store: windowsStore,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 3, 9),
+    );
+
+    expect(windowsUpload.syncResult.status, AppSyncStatus.uploaded);
+    expect(windowsUpload.operationAppliedCount, 0);
+    expect(
+      (await windowsStore.load()).sync.operationDeviceSequences,
+      {'windows-device': 1},
+    );
+
+    final androidDownload = await androidService.syncAndMergeNow(
+      localState: AppState(sync: settings),
+      store: androidStore,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 3, 8),
+    );
+
+    expect(androidDownload.syncResult.status, AppSyncStatus.downloaded);
+    expect(androidDownload.state.papers.single.content, 'Windows draft');
+    expect(
+        androidDownload.state.sync.webDav.endpoint, settings.webDav.endpoint);
+    expect(androidDownload.state.sync.operationDeviceSequences, {
+      'windows-device': 1,
+    });
+
+    final androidBeforeEdit = await androidStore.load();
+    final androidAfterEdit = AppState.fromJson(androidBeforeEdit.toJson());
+    androidAfterEdit.papers.single.content = 'Android edit';
+    final androidOperationUpload = await androidService.uploadLocalOperations(
+      beforeState: androidBeforeEdit,
+      afterState: androidAfterEdit,
+      store: androidStore,
+      createdAtUtc: DateTime.utc(2026, 7, 3, 9, 5),
+    );
+
+    expect(androidOperationUpload.generatedCount, 1);
+    expect(androidOperationUpload.uploadedCount, 1);
+    expect(androidOperationUpload.stateChanged, true);
+    expect(androidOperationUpload.deviceSequences, {
+      'windows-device': 1,
+      'android-device': 1,
+    });
+
+    final windowsMerge = await windowsService.mergeRemoteOperations(
+      localState: await windowsStore.load(),
+      store: windowsStore,
+    );
+
+    expect(windowsMerge.appliedCount, 1);
+    expect(windowsMerge.state.papers.single.content, 'Android edit');
+    expect(windowsMerge.deviceSequences, {
+      'windows-device': 1,
+      'android-device': 1,
+    });
+    final storedWindows = await windowsStore.load();
+    expect(storedWindows.papers.single.content, 'Android edit');
+    expect(storedWindows.sync.operationDeviceSequences, {
+      'windows-device': 1,
+      'android-device': 1,
+    });
+    expect(remote.putPaths, contains('repapertodo/manifest.json'));
+    expect(
+      remote.putPaths,
+      contains('repapertodo/ops/android-device-000000000001.jsonl'),
+    );
+  });
+
   test('uploads configured local state', () async {
     final directory =
         await Directory.systemTemp.createTemp('repapertodo_app_sync_upload_');
@@ -448,6 +570,86 @@ void main() {
     expect(pushCalls, 0);
     final stored = await store.load();
     expect(stored.sync.operationDeviceSequences, {'remote-device': 9});
+  });
+
+  test(
+      'does not migrate legacy plain WebDAV payloads with malformed manifest ETags',
+      () async {
+    for (final manifestEtag in const [
+      'bad"etag',
+      '"bad"etag"',
+      '"bad\u007Fetag"',
+      'W/bad',
+    ]) {
+      final directory = await Directory.systemTemp
+          .createTemp('repapertodo_app_sync_legacy_plain_bad_etag_');
+      addTearDown(() => directory.delete(recursive: true));
+      final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+      final remoteState = AppState(
+        papers: [
+          PaperData(id: 'paper-remote', type: PaperTypes.note, title: 'Remote'),
+        ],
+      );
+      var pushCalls = 0;
+      final service = AppSyncService(
+        webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+          onSync: ({required localState, localUpdatedAtUtc}) async {
+            return WebDavStateSyncResult(
+              status: WebDavStateSyncStatus.downloaded,
+              state: remoteState,
+              snapshotPath: 'repapertodo/snapshots/plain.json',
+              snapshotPayloadFormat: WebDavPayloadFormat.plainJson,
+              manifestEtag: manifestEtag,
+              manifest: SyncManifest(
+                schemaVersion: 1,
+                updatedAtUtc: DateTime.utc(2026, 7, 2, 12),
+                latestSnapshotPath: 'repapertodo/snapshots/plain.json',
+                deviceSequences: {'remote-device': 9},
+              ),
+            );
+          },
+          onPush: (
+            state, {
+            updatedAtUtc,
+            expectedManifestEtag,
+            manifestKnownMissing = false,
+            previousDeviceSequences,
+            requireManifestCondition = false,
+          }) async {
+            pushCalls += 1;
+            return const WebDavStateSyncResult(
+              status: WebDavStateSyncStatus.uploaded,
+            );
+          },
+        ),
+      );
+
+      final result = await service.syncNow(
+        localState: AppState(
+          sync: _configuredSyncSettings(
+            encryptionPassphrase: 'shared sync secret',
+          ),
+        ),
+        store: store,
+        localUpdatedAtUtc: DateTime.utc(2026, 7, 2, 11),
+      );
+
+      expect(
+        result.status,
+        AppSyncStatus.downloaded,
+        reason: manifestEtag,
+      );
+      expect(result.legacyPlainPayloadDetected, true, reason: manifestEtag);
+      expect(result.legacyPlainPayloadMigrated, false, reason: manifestEtag);
+      expect(result.message, contains('next successful upload'));
+      expect(pushCalls, 0, reason: manifestEtag);
+      final stored = await store.load();
+      expect(
+        stored.sync.operationDeviceSequences,
+        {'remote-device': 9},
+        reason: manifestEtag,
+      );
+    }
   });
 
   test('migrates legacy plain WebDAV payloads when manifest ETag is available',
@@ -918,6 +1120,14 @@ void main() {
       'local-deleted',
       DateTime.utc(2026, 7, 1, 9),
     );
+    localSync.deletedPaperTombstones['local-bad\u0000deleted'] =
+        DateTime.utc(2026, 7, 1, 9, 30).toIso8601String();
+    localSync.deletedTodoItemTombstones['local-bad\u0085todo'] = {
+      'local-bad-item': DateTime.utc(2026, 7, 1, 9, 45).toIso8601String(),
+    };
+    localSync.deletedTodoItemTombstones['local-todo'] = {
+      'local-bad\u007Fitem': DateTime.utc(2026, 7, 1, 9, 50).toIso8601String(),
+    };
     final remoteSync = SyncSettings(
       enabled: false,
       provider: SyncProviderIds.none,
@@ -934,11 +1144,18 @@ void main() {
       deletedPaperTombstones: {
         'remote-deleted': DateTime.utc(2026, 7, 1, 10).toIso8601String(),
         'overflow-deleted': '2026-13-01T10:00:00Z',
+        'remote-bad\u0000deleted':
+            DateTime.utc(2026, 7, 1, 10, 15).toIso8601String(),
       },
       deletedTodoItemTombstones: {
         'remote-todo': {
           'remote-item': DateTime.utc(2026, 7, 1, 10, 30).toIso8601String(),
           'overflow-item': '2026-07-01T24:00:00Z',
+          'remote-bad\u007Fitem':
+              DateTime.utc(2026, 7, 1, 10, 45).toIso8601String(),
+        },
+        'remote-bad\u0085todo': {
+          'remote-item': DateTime.utc(2026, 7, 1, 10, 50).toIso8601String(),
         },
       },
     );
@@ -1001,11 +1218,25 @@ void main() {
       'snapshot-device': 3,
     });
     expect(stored.sync.isPaperDeleted('local-deleted'), true);
+    expect(stored.sync.isPaperDeleted('local-bad\u0000deleted'), false);
     expect(stored.sync.isPaperDeleted('remote-deleted'), true);
     expect(stored.sync.isPaperDeleted('overflow-deleted'), false);
+    expect(stored.sync.isPaperDeleted('remote-bad\u0000deleted'), false);
+    expect(
+        stored.sync.deletedTodoItemTombstones
+            .containsKey('local-bad\u0085todo'),
+        false);
+    expect(stored.sync.isTodoItemDeleted('local-todo', 'local-bad\u007Fitem'),
+        false);
     expect(stored.sync.isTodoItemDeleted('remote-todo', 'remote-item'), true);
     expect(
         stored.sync.isTodoItemDeleted('remote-todo', 'overflow-item'), false);
+    expect(stored.sync.isTodoItemDeleted('remote-todo', 'remote-bad\u007Fitem'),
+        false);
+    expect(
+        stored.sync.deletedTodoItemTombstones
+            .containsKey('remote-bad\u0085todo'),
+        false);
   });
 
   test('closes configured WebDAV clients after sync and merge', () async {
@@ -1955,6 +2186,182 @@ void main() {
     expect(stored.sync.operationDeviceSequences, {'device-a': 2});
   });
 
+  test('merges remote queue-map settings with canonical app semantics',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_queue_maps_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          return [
+            SyncOperation(
+              id: 'device-a-1',
+              deviceId: 'device-a',
+              sequence: 1,
+              kind: SyncOperationKind.updateSettings,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+              payload: {
+                'settings': {
+                  'useCapsuleMode': true,
+                  'useDeepCapsuleMode': true,
+                  'useCapsuleCollapseAll': true,
+                  'capsuleCollapseAllActive': false,
+                  'capsuleCollapseAllActiveQueues': {
+                    'left': true,
+                    '|left': false,
+                    'Primary | right ': false,
+                    'Primary|right': true,
+                  },
+                  'deepCapsuleQueueStartTopMargins': {
+                    'right': '32.5',
+                    '|right': 4,
+                    'Primary | left ': 12,
+                    'Primary|left': 12000,
+                  },
+                },
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+    );
+
+    expect(result.appliedCount, 1);
+    expect(result.deviceSequences, {'device-a': 1});
+    expect(result.state.useCapsuleMode, true);
+    expect(result.state.useDeepCapsuleMode, true);
+    expect(result.state.useCapsuleCollapseAll, true);
+    expect(result.state.capsuleCollapseAllActive, true);
+    expect(result.state.capsuleCollapseAllActiveQueues, {
+      'Primary|right': true,
+    });
+    expect(result.state.deepCapsuleQueueStartTopMargins, {
+      '|right': 8.0,
+      'Primary|left': 10000.0,
+    });
+
+    final stored = await store.load();
+    expect(stored.sync.operationDeviceSequences, {'device-a': 1});
+    expect(stored.capsuleCollapseAllActiveQueues, {
+      'Primary|right': true,
+    });
+    expect(stored.deepCapsuleQueueStartTopMargins, {
+      '|right': 8.0,
+      'Primary|left': 10000.0,
+    });
+  });
+
+  test('merge saves tombstones for legacy-cased delete payloads', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_legacy_delete_tombstones_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deletedPaperAt = DateTime.utc(2026, 7, 1, 9);
+    final deletedItemAt = DateTime.utc(2026, 7, 1, 9, 1);
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000002.jsonl',
+              deviceId: 'device-a',
+              sequence: 2,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          if (operationLogPath.endsWith('000000000001.jsonl')) {
+            return [
+              SyncOperation(
+                id: 'device-a-1',
+                deviceId: 'device-a',
+                sequence: 1,
+                kind: SyncOperationKind.deletePaper,
+                createdAtUtc: deletedPaperAt,
+                payload: {'PaperID': 'remote-note'},
+              ),
+            ];
+          }
+          return [
+            SyncOperation(
+              id: 'device-a-2',
+              deviceId: 'device-a',
+              sequence: 2,
+              kind: SyncOperationKind.deleteTodoItem,
+              createdAtUtc: deletedItemAt,
+              payload: {'PaperID': 'todo-paper', 'ItemID': 'todo-item'},
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(
+        sync: _configuredSyncSettings(),
+        papers: [
+          PaperData(
+            id: 'remote-note',
+            type: PaperTypes.note,
+            title: 'Delete me',
+          ),
+          PaperData(
+            id: 'todo-paper',
+            type: PaperTypes.todo,
+            title: 'Todo',
+            items: [
+              PaperItem(id: 'todo-item', text: 'Delete row'),
+              PaperItem(id: 'survivor', text: 'Keep row'),
+            ],
+          ),
+        ],
+      ),
+      store: store,
+    );
+
+    expect(result.appliedCount, 2);
+    expect(result.deviceSequences, {'device-a': 2});
+    expect(result.state.papers.map((paper) => paper.id), ['todo-paper']);
+    expect(result.state.papers.single.items.map((item) => item.id), [
+      'survivor',
+    ]);
+    expect(result.state.sync.deletedPaperTombstones, {
+      'remote-note': deletedPaperAt.toIso8601String(),
+    });
+    expect(result.state.sync.deletedTodoItemTombstones, {
+      'todo-paper': {'todo-item': deletedItemAt.toIso8601String()},
+    });
+
+    final stored = await store.load();
+    expect(stored.sync.deletedPaperTombstones, {
+      'remote-note': deletedPaperAt.toIso8601String(),
+    });
+    expect(stored.sync.deletedTodoItemTombstones, {
+      'todo-paper': {'todo-item': deletedItemAt.toIso8601String()},
+    });
+  });
+
   test('merge does not return applied state when saving fails', () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_merge_save_fail_');
@@ -2059,6 +2466,72 @@ void main() {
                   id: 'conflict',
                   type: PaperTypes.note,
                   title: 'Conflict',
+                ).toJson(),
+              },
+            ),
+          ];
+        },
+      ),
+    );
+
+    final result = await service.mergeRemoteOperations(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+    );
+
+    expect(result.appliedCount, 0);
+    expect(result.deviceSequences, isEmpty);
+    expect(result.state.papers, isEmpty);
+    expect(await File(store.filePath).exists(), isFalse);
+  });
+
+  test('merge blocks malformed operation payloads without saving progress',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_merge_malformed_payload_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onListOperationLogs: () async {
+          return const [
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000001.jsonl',
+              deviceId: 'device-a',
+              sequence: 1,
+            ),
+            WebDavOperationLogRecord(
+              path: 'repapertodo/ops/device-a-000000000002.jsonl',
+              deviceId: 'device-a',
+              sequence: 2,
+            ),
+          ];
+        },
+        onDownloadOperationLog: (operationLogPath) async {
+          if (operationLogPath.endsWith('000000000001.jsonl')) {
+            return [
+              SyncOperation(
+                id: 'device-a-1',
+                deviceId: 'device-a',
+                sequence: 1,
+                kind: SyncOperationKind.deletePaper,
+                createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+                payload: const {},
+              ),
+            ];
+          }
+          return [
+            SyncOperation(
+              id: 'device-a-2',
+              deviceId: 'device-a',
+              sequence: 2,
+              kind: SyncOperationKind.upsertPaper,
+              createdAtUtc: DateTime.utc(2026, 7, 1, 9, 1),
+              payload: {
+                'paper': PaperData(
+                  id: 'blocked-note',
+                  type: PaperTypes.note,
+                  title: 'Blocked',
                 ).toJson(),
               },
             ),
@@ -2454,6 +2927,82 @@ void main() {
     expect((await store.load()).sync.operationDeviceSequences, {
       'device-local': 5,
     });
+  });
+
+  test('does not upload operation logs for equivalent queue-map settings',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_upload_ops_equiv_queues_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    await File(p.join(directory.path, 'sync-device-id'))
+        .writeAsString('device-local');
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      useCapsuleMode: true,
+      useDeepCapsuleMode: true,
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      capsuleCollapseAllActiveQueues: {
+        'Primary|right': true,
+      },
+      deepCapsuleQueueStartTopMargins: {
+        '|right': 8.0,
+        'Primary|left': 10000.0,
+      },
+    );
+    final afterState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      useCapsuleMode: true,
+      useDeepCapsuleMode: true,
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: false,
+      capsuleCollapseAllActiveQueues: {
+        'left': true,
+        '|left': false,
+        'Primary | right ': false,
+        'Primary|right': true,
+      },
+      deepCapsuleQueueStartTopMargins: {
+        'right': 32.5,
+        '|right': 4,
+        'Primary | left ': 12,
+        'Primary|left': 12000,
+      },
+    );
+    var createdClient = false;
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'sync-device-id'),
+      ),
+      webDavFactory: (_, {deviceId}) {
+        createdClient = true;
+        return _FakeWebDavStateSyncService(
+          onUploadOperationLogs: (
+            operations, {
+            previousDeviceSequences,
+          }) {
+            fail('Equivalent queue-map settings should not be uploaded.');
+          },
+        );
+      },
+    );
+
+    final result = await service.uploadLocalOperations(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 10),
+    );
+
+    expect(createdClient, true);
+    expect(result.generatedCount, 0);
+    expect(result.uploadedCount, 0);
+    expect(result.stateChanged, false);
+    expect(result.deviceSequences, {'device-local': 4});
+    expect(result.state.sync.operationDeviceSequences, {'device-local': 4});
   });
 
   test('saves advanced device sequences when operation uploads are idempotent',
@@ -3807,6 +4356,52 @@ void main() {
     expect(stored.sync.webDav.requestTimeoutSeconds, 45);
   });
 
+  test('reports legacy plain recovery snapshots without pushing migration',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_restore_legacy_plain_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final snapshotState = AppState(
+      papers: [
+        PaperData(
+          id: 'legacy-plain-snapshot',
+          type: PaperTypes.note,
+          title: 'Legacy plain snapshot',
+          content: 'Restored from plain WebDAV bytes',
+        ),
+      ],
+    );
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onDownloadSnapshot: (snapshotPath) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: snapshotState,
+            snapshotPath: snapshotPath,
+            snapshotPayloadFormat: WebDavPayloadFormat.plainJson,
+          );
+        },
+      ),
+    );
+
+    final result = await service.restoreRecoverySnapshot(
+      localState: AppState(sync: _configuredSyncSettings()),
+      store: store,
+      snapshotPath:
+          'repapertodo/snapshots/snapshot-20260701T090000000Z-device.json',
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(result.legacyPlainPayloadDetected, true);
+    expect(
+      result.message,
+      'Snapshot restored from legacy plain WebDAV data. The next successful upload will write encrypted payloads.',
+    );
+    expect((await store.load()).papers.single.content,
+        'Restored from plain WebDAV bytes');
+  });
+
   test('normalizes recovery snapshot device sequences before saving', () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_restore_normalize_sequences_');
@@ -3886,12 +4481,19 @@ void main() {
           'bad-paper': '2026-13-01T00:00:00.000Z',
           'no-zone': '2026-07-01T00:00:00.000',
           'edge-space-paper': ' ${snapshotPaperDeletedAt.toIso8601String()} ',
+          'bad\u0000paper': snapshotPaperDeletedAt.toIso8601String(),
+          '\nedge-control-paper': snapshotPaperDeletedAt.toIso8601String(),
         },
         deletedTodoItemTombstones: {
           'todo-a': {
             ' item-a ': snapshotItemDeletedAt.toIso8601String(),
             'bad-item': '2026-07-01T00:00:00.000',
             'edge-space-item': ' ${snapshotItemDeletedAt.toIso8601String()} ',
+            'bad\u007Fitem': snapshotItemDeletedAt.toIso8601String(),
+            'edge-control-item\r': snapshotItemDeletedAt.toIso8601String(),
+          },
+          'bad\u0085paper': {
+            'dropped-item': snapshotItemDeletedAt.toIso8601String(),
           },
           'covered-paper': {
             'covered-item': DateTime.utc(2026, 7, 1, 9).toIso8601String(),
@@ -4531,6 +5133,227 @@ typedef _FakeUploadOperationLogs = Future<WebDavOperationLogUploadResult>
 });
 
 typedef _FakeClose = void Function();
+
+class _InMemoryWebDavServer {
+  final _resources = <String, _InMemoryWebDavResource>{};
+  final _collections = <String>{''};
+  var _etagSequence = 0;
+
+  final putPaths = <String>[];
+
+  http.Client get client => MockClient(_handle);
+
+  Future<http.Response> _handle(http.Request request) async {
+    final path = _requestPath(request.url);
+    return switch (request.method) {
+      'MKCOL' => _makeCollection(path),
+      'HEAD' => _head(path),
+      'GET' => _get(path),
+      'PUT' => _put(path, request),
+      'DELETE' => _delete(path),
+      'PROPFIND' => _propFind(path, _header(request, 'depth') ?? '0'),
+      _ => http.Response('unexpected ${request.method}', 500),
+    };
+  }
+
+  http.Response _makeCollection(String path) {
+    if (_collections.contains(path)) {
+      return http.Response('', 405);
+    }
+    _collections.add(path);
+    return http.Response('', 201);
+  }
+
+  http.Response _head(String path) {
+    final resource = _resources[path];
+    if (resource == null) {
+      return http.Response('', 404);
+    }
+    return http.Response('', 200, headers: _resourceHeaders(resource));
+  }
+
+  http.Response _get(String path) {
+    final resource = _resources[path];
+    if (resource == null) {
+      return http.Response('', 404);
+    }
+    return http.Response.bytes(
+      resource.bytes,
+      200,
+      headers: _resourceHeaders(resource),
+    );
+  }
+
+  http.Response _put(String path, http.Request request) {
+    final existing = _resources[path];
+    final ifNoneMatch = _header(request, 'if-none-match');
+    if (ifNoneMatch == '*' && existing != null) {
+      return http.Response('', 412);
+    }
+    final ifMatch = _header(request, 'if-match');
+    if (ifMatch != null && existing?.etag != ifMatch) {
+      return http.Response('', 412);
+    }
+    final parentPath = _parentPath(path);
+    if (!_collections.contains(parentPath)) {
+      return http.Response('', 409);
+    }
+    final resource = _InMemoryWebDavResource(
+      bytes: List<int>.from(request.bodyBytes),
+      etag: _nextEtag(),
+      lastModifiedUtc: DateTime.utc(2026, 7, 3, 9, _etagSequence),
+    );
+    _resources[path] = resource;
+    putPaths.add(path);
+    return http.Response('', 201, headers: _resourceHeaders(resource));
+  }
+
+  http.Response _delete(String path) {
+    _resources.remove(path);
+    return http.Response('', 204);
+  }
+
+  http.Response _propFind(String path, String depth) {
+    if (!_collections.contains(path) && !_resources.containsKey(path)) {
+      return http.Response('', 404);
+    }
+    final entries = <String>[
+      _propFindEntry(
+        path: path,
+        isCollection: _collections.contains(path),
+        resource: _resources[path],
+      ),
+    ];
+    if (depth.trim() == '1' && _collections.contains(path)) {
+      final childPrefix = path.isEmpty ? '' : '$path/';
+      final childPaths = <String>{
+        for (final collection in _collections)
+          if (collection.isNotEmpty &&
+              collection.startsWith(childPrefix) &&
+              !collection.substring(childPrefix.length).contains('/'))
+            collection,
+        for (final resourcePath in _resources.keys)
+          if (resourcePath.startsWith(childPrefix) &&
+              !resourcePath.substring(childPrefix.length).contains('/'))
+            resourcePath,
+      }.toList()
+        ..sort();
+      for (final childPath in childPaths) {
+        entries.add(
+          _propFindEntry(
+            path: childPath,
+            isCollection: _collections.contains(childPath),
+            resource: _resources[childPath],
+          ),
+        );
+      }
+    }
+    return http.Response(
+      '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+${entries.join('\n')}
+</D:multistatus>
+''',
+      207,
+      headers: {'content-type': 'application/xml; charset=utf-8'},
+    );
+  }
+
+  String _propFindEntry({
+    required String path,
+    required bool isCollection,
+    required _InMemoryWebDavResource? resource,
+  }) {
+    final href = _hrefFor(path, isCollection: isCollection);
+    final resourceType = isCollection
+        ? '<D:resourcetype><D:collection /></D:resourcetype>'
+        : '<D:resourcetype />';
+    final etag = resource == null
+        ? ''
+        : '<D:getetag>${_xmlEscape(resource.etag)}</D:getetag>';
+    final contentLength = resource == null
+        ? ''
+        : '<D:getcontentlength>${resource.bytes.length}</D:getcontentlength>';
+    final lastModified = resource == null
+        ? ''
+        : '<D:getlastmodified>${HttpDate.format(resource.lastModifiedUtc)}</D:getlastmodified>';
+    return '''
+  <D:response>
+    <D:href>$href</D:href>
+    <D:propstat>
+      <D:prop>$resourceType$etag$contentLength$lastModified</D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>''';
+  }
+
+  Map<String, String> _resourceHeaders(_InMemoryWebDavResource resource) {
+    return {
+      'etag': resource.etag,
+      'content-length': resource.bytes.length.toString(),
+      'last-modified': HttpDate.format(resource.lastModifiedUtc),
+    };
+  }
+
+  String _nextEtag() {
+    _etagSequence += 1;
+    return '"etag-$_etagSequence"';
+  }
+
+  String _requestPath(Uri uri) {
+    return uri.pathSegments
+        .map(Uri.decodeComponent)
+        .where((segment) => segment.isNotEmpty)
+        .join('/');
+  }
+
+  String _parentPath(String path) {
+    final slash = path.lastIndexOf('/');
+    return slash < 0 ? '' : path.substring(0, slash);
+  }
+
+  String? _header(http.Request request, String name) {
+    final normalizedName = name.toLowerCase();
+    for (final entry in request.headers.entries) {
+      if (entry.key.toLowerCase() == normalizedName) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  String _hrefFor(String path, {required bool isCollection}) {
+    final encoded = path
+        .split('/')
+        .where((segment) => segment.isNotEmpty)
+        .map(Uri.encodeComponent)
+        .join('/');
+    final suffix = isCollection && encoded.isNotEmpty ? '/' : '';
+    return '/$encoded$suffix';
+  }
+
+  String _xmlEscape(String value) {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&apos;');
+  }
+}
+
+class _InMemoryWebDavResource {
+  const _InMemoryWebDavResource({
+    required this.bytes,
+    required this.etag,
+    required this.lastModifiedUtc,
+  });
+
+  final List<int> bytes;
+  final String etag;
+  final DateTime lastModifiedUtc;
+}
 
 class _FailingSaveStateStore extends StateStore {
   _FailingSaveStateStore({

@@ -66,17 +66,33 @@ class FlutterWindow : public Win32Window {
   void SendPaperRequested(const std::string& paper_id);
   void SendPaperDeleteRequested(const std::string& paper_id);
   void SendStartupCommandRequested(const std::string& command);
+  void SendSessionEndingExitRequested();
   void SendWindowEvent(const char* method);
-  void RememberActivePaperId(const flutter::EncodableValue* arguments);
+  bool RememberActivePaperId(const flutter::EncodableValue* arguments);
+  void RememberPaperSurfaceOrder(const std::string& paper_id);
   void RememberActivePaperBounds(HWND window);
   void ApplyActivePaperBounds(HWND window);
   void RememberPaperBounds(const std::string& paper_id, const RECT& bounds);
+  void RememberPaperTitle(const std::string& paper_id,
+                          const std::wstring& title);
   void RememberPaperVisibility(const std::string& paper_id, bool is_visible);
   void RememberPaperPinnedToDesktop(const std::string& paper_id, bool enabled);
   void RememberPaperAlwaysOnTop(const std::string& paper_id, bool enabled);
+  void RememberPaperCapsuleState(const std::string& paper_id,
+                                 const std::string& capsule_side,
+                                 const std::string& monitor_device_name);
   void RefreshActivePaperZOrder(HWND window);
   bool ActivePaperPinnedToDesktop() const;
   bool ActivePaperAlwaysOnTop() const;
+  bool HasAnyVisibleSurface(HWND window) const;
+  bool HasVisibleSurfaceForPaper(HWND window,
+                                 const std::string& paper_id) const;
+  bool RetargetActivePaperToVisibleSurface(HWND window,
+                                           const std::string& hidden_paper_id);
+  void ApplyPaperSurfaceRegistry(const flutter::EncodableList& papers,
+                                 bool rebuild_tray_items);
+  std::string CachedMonitorDeviceNameForPaper(
+      const std::string& paper_id) const;
   flutter::EncodableValue BoundsValueForPaper(
       HWND window, const std::string& paper_id) const;
   flutter::EncodableValue WindowEventArguments() const;
@@ -103,6 +119,7 @@ class FlutterWindow : public Win32Window {
   bool z_order_fullscreen_blocked_ = false;
   bool todo_hotkey_registered_ = false;
   bool note_hotkey_registered_ = false;
+  bool session_ending_exit_requested_ = false;
   std::string active_paper_id_;
   std::atomic<bool> single_instance_listener_running_ = false;
   std::thread single_instance_listener_thread_;
@@ -113,12 +130,16 @@ class FlutterWindow : public Win32Window {
   };
   std::vector<TrayPaperMenuItem> tray_papers_;
   TrayMenuLabels tray_labels_;
+  std::vector<std::string> paper_surface_order_;
   struct PaperSurfaceState {
     RECT bounds = {};
+    std::wstring title;
     bool has_bounds = false;
     bool is_visible = false;
     bool pinned_to_desktop = false;
     bool always_on_top = false;
+    std::string capsule_side;
+    std::string monitor_device_name;
   };
   std::map<std::string, PaperSurfaceState> paper_surfaces_;
 };

@@ -27,6 +27,92 @@ concurrency:
 jobs:
   package:
     name: Validate and package
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.publishRelease != true }}
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Android API 37
+        shell: pwsh
+        run: |
+          function Invoke-Native {
+            param(
+              [string]$Name,
+              [scriptblock]$Action
+            )
+
+            & $Action
+            if ($LASTEXITCODE -ne 0) {
+              throw "$Name failed with exit code $LASTEXITCODE."
+            }
+          }
+
+          foreach ($name in @("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")) {
+            Remove-Item -LiteralPath "Env:\$name" -ErrorAction SilentlyContinue
+          }
+          $sdkManager = Get-ChildItem -LiteralPath $env:ANDROID_HOME -Recurse -Filter sdkmanager.bat |
+            Select-Object -First 1
+          if (-not $sdkManager) {
+            throw "Android sdkmanager.bat was not found under ANDROID_HOME."
+          }
+          $licenses = ("y`n" * 200)
+          Invoke-Native "sdkmanager --licenses" {
+            $licenses | & $sdkManager.FullName --licenses
+          }
+          Invoke-Native "sdkmanager install Android API 37" {
+            & $sdkManager.FullName "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+          }
+
+      - name: Configure Android release signing
+        shell: pwsh
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: .\scripts\configure_android_signing.ps1
+
+      - name: Verify Flutter toolchain
+        shell: pwsh
+        run: flutter doctor -v
+
+      - name: Validate, build, and package
+        shell: pwsh
+        run: |
+          $releaseArgs = @()
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.offlinePubGet }}" -eq "true") {
+            $releaseArgs += "-OfflinePubGet"
+          }
+          .\scripts\release.ps1 @releaseArgs
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: repapertodo-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Validate, package, and publish
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publishRelease == true }}
     runs-on: windows-latest
     permissions:
       contents: write
@@ -80,7 +166,7 @@ jobs:
             $licenses | & $sdkManager.FullName --licenses
           }
           Invoke-Native "sdkmanager install Android API 37" {
-            & $sdkManager.FullName "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+            & $sdkManager.FullName "platform-tools" "platforms;android-37" "build-tools;37.0.0"
           }
 
       - name: Configure Android release signing
@@ -90,51 +176,22 @@ jobs:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_BASE64)) {
-            Write-Host "Android release signing secrets are not configured; release packaging will use debug fallback unless publishing is requested."
-            return
-          }
-
-          $missing = @()
-          foreach ($name in @("ANDROID_STORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD")) {
-            if ([string]::IsNullOrWhiteSpace((Get-Item -LiteralPath "Env:\$name").Value)) {
-              $missing += $name
-            }
-          }
-          if ($missing.Count -gt 0) {
-            throw "Android release signing secrets are incomplete: $($missing -join ', ')."
-          }
-
-          $keystorePath = Join-Path $PWD "android\repapertodo-release.jks"
-          [IO.File]::WriteAllBytes(
-            $keystorePath,
-            [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64)
-          )
-          @"
-storeFile=repapertodo-release.jks
-storePassword=$env:ANDROID_STORE_PASSWORD
-keyAlias=$env:ANDROID_KEY_ALIAS
-keyPassword=$env:ANDROID_KEY_PASSWORD
-"@ | Set-Content -LiteralPath "android\key.properties" -Encoding ascii
+        run: .\scripts\configure_android_signing.ps1
 
       - name: Verify Flutter toolchain
         shell: pwsh
         run: flutter doctor -v
 
-      - name: Validate, build, and package
+      - name: Validate, build, package, and publish
         shell: pwsh
         run: |
-          $releaseArgs = @()
-          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.offlinePubGet }}" -eq "true") {
+          $releaseArgs = @("-PublishGitHubRelease")
+          if ("${{ inputs.offlinePubGet }}" -eq "true") {
             $releaseArgs += "-OfflinePubGet"
-          }
-          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.publishRelease }}" -eq "true") {
-            $releaseArgs += "-PublishGitHubRelease"
           }
           .\scripts\release.ps1 @releaseArgs
 
-      - name: Upload packaged artifacts
+      - name: Upload published artifacts
         uses: actions/upload-artifact@v4
         with:
           name: repapertodo-${{ github.sha }}

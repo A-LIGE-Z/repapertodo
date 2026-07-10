@@ -52,6 +52,13 @@ class AndroidUriOpenHost implements UriOpenHost {
     if (trimmedUri.isEmpty) {
       throw ArgumentError.value(uri, 'uri', 'Android URI must not be blank.');
     }
+    if (hasRawExternalUriControlCharacter(uri)) {
+      throw ArgumentError.value(
+        uri,
+        'uri',
+        'Android URI must not contain control characters.',
+      );
+    }
     if (hasUnsafeExternalUriCharacter(trimmedUri)) {
       throw ArgumentError.value(
         uri,
@@ -113,6 +120,13 @@ class AndroidExternalFileHost implements ExternalFileHost {
         'Android external file path must not contain control characters.',
       );
     }
+    if (!trimmedPath.startsWith('/')) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'Android external file path must be absolute.',
+      );
+    }
     await _channel.invokeMethod<void>('openExternalFile', trimmedPath);
   }
 }
@@ -128,6 +142,14 @@ class AndroidAppStorageHost implements AppStorageHost {
     final trimmedPath = path?.trim();
     if (trimmedPath == null || trimmedPath.isEmpty) {
       throw StateError('Android files directory is unavailable.');
+    }
+    if (_hasUnsafeExternalFilePathCharacter(path ?? '')) {
+      throw StateError(
+        'Android files directory contains unsupported characters.',
+      );
+    }
+    if (!trimmedPath.startsWith('/')) {
+      throw StateError('Android files directory must be an absolute path.');
     }
     return trimmedPath;
   }

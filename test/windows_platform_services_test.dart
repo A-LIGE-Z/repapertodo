@@ -48,6 +48,8 @@ void main() {
       width: 320,
       height: 260,
       isPinnedToDesktop: true,
+      capsuleSide: DeepCapsuleSides.left,
+      capsuleMonitorDeviceName: r'\\.\DISPLAY2',
     );
 
     await services.paperWindows.showPaper(paper);
@@ -154,8 +156,9 @@ void main() {
     );
     await services.scriptCapsules.stopPersistentProcesses();
 
+    final platformCalls = _withoutQueueMonitorNormalization(calls);
     expect(
-      calls.map((call) => call.method),
+      platformCalls.map((call) => call.method),
       [
         'setBounds',
         'setPinnedToDesktop',
@@ -183,42 +186,46 @@ void main() {
     );
     expect(foregroundFullscreen, true);
     expect((await startupCommand).kind, StartupCommandKind.newTodo);
-    expect(calls[0].arguments, {
+    expect(platformCalls[0].arguments, {
       'paperId': 'paper-1',
       'x': 10.0,
       'y': 20.0,
       'width': 320.0,
       'height': 260.0,
     });
-    expect(calls[1].arguments, {
+    expect(platformCalls[1].arguments, {
       'paperId': 'paper-1',
       'enabled': true,
     });
-    expect(calls[2].arguments, {
+    expect(platformCalls[2].arguments, {
       'paperId': 'paper-1',
       'isPinnedToDesktop': true,
       'alwaysOnTop': false,
+      'capsuleSide': DeepCapsuleSides.left,
+      'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
     });
-    expect(calls[3].arguments, {
+    expect(platformCalls[3].arguments, {
       'paperId': 'paper-1',
       'title': 'RePaperTodo - Inbox',
     });
-    expect(calls[4].arguments, {
+    expect(platformCalls[4].arguments, {
       'paperId': 'paper-1',
       'enabled': false,
     });
-    expect(calls[5].arguments, 'paper-1');
-    expect(calls[6].arguments, {
+    expect(platformCalls[5].arguments, 'paper-1');
+    expect(platformCalls[6].arguments, {
       'paperId': 'paper-1',
       'isPinnedToDesktop': true,
       'alwaysOnTop': false,
+      'capsuleSide': DeepCapsuleSides.left,
+      'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
     });
     expect(paper.x, 55);
     expect(paper.y, 66);
     expect(paper.width, 520);
     expect(paper.height, 460);
     expect(paper.isVisible, false);
-    expect(calls[7].arguments, [
+    expect(platformCalls[7].arguments, [
       {
         'id': 'paper-1',
         'title': 'Inbox',
@@ -229,27 +236,29 @@ void main() {
         'height': 460.0,
         'isVisible': false,
         'isCollapsed': false,
+        'capsuleSide': DeepCapsuleSides.left,
+        'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
         'alwaysOnTop': false,
         'isPinnedToDesktop': true,
         'isScriptCapsule': false,
       },
     ]);
     expect(acquiredSingleInstance, true);
-    expect(calls[8].arguments, isNull);
-    expect(calls[9].arguments, ['--new-note']);
-    expect(calls[10].arguments, true);
-    expect(calls[11].arguments, true);
-    expect(calls[12].arguments, FullscreenTopmostModes.stayOnTop);
-    expect(calls[13].arguments, {
+    expect(platformCalls[8].arguments, isNull);
+    expect(platformCalls[9].arguments, ['--new-note']);
+    expect(platformCalls[10].arguments, true);
+    expect(platformCalls[11].arguments, true);
+    expect(platformCalls[12].arguments, FullscreenTopmostModes.stayOnTop);
+    expect(platformCalls[13].arguments, {
       'todo': 'Ctrl+Alt+T',
       'note': 'Ctrl+Alt+N',
     });
-    expect(calls[14].arguments, isNull);
-    expect(calls[15].arguments, isNull);
-    expect(calls[16].arguments, isNull);
-    expect(calls[17].arguments, 'C:\\Temp\\note.md');
-    expect(calls[18].arguments, 'https://example.com/paper');
-    expect(calls[19].arguments, {
+    expect(platformCalls[14].arguments, isNull);
+    expect(platformCalls[15].arguments, isNull);
+    expect(platformCalls[16].arguments, isNull);
+    expect(platformCalls[17].arguments, 'C:\\Temp\\note.md');
+    expect(platformCalls[18].arguments, 'https://example.com/paper');
+    expect(platformCalls[19].arguments, {
       'engine': 'pwsh',
       'script': 'Write-Output ok',
       'usePersistentProcess': true,
@@ -257,11 +266,11 @@ void main() {
       'preferPowerShell7': true,
       'hideScriptRunWindow': true,
     });
-    expect(calls[20].arguments, {
+    expect(platformCalls[20].arguments, {
       'preferPowerShell7': false,
       'hideScriptRunWindow': false,
     });
-    expect(calls.last.arguments, isNull);
+    expect(platformCalls.last.arguments, isNull);
   });
 
   test('paper host reveals pinned papers without ordinary show', () async {
@@ -293,7 +302,13 @@ void main() {
 
     expect(
       calls.map((call) => call.method),
-      ['setBounds', 'revealPinnedPaper', 'setTitle'],
+      [
+        'setBounds',
+        'setPinnedToDesktop',
+        'setAlwaysOnTop',
+        'revealPinnedPaper',
+        'setTitle',
+      ],
     );
     expect(calls[0].arguments, {
       'paperId': 'pinned-paper',
@@ -304,14 +319,86 @@ void main() {
     });
     expect(calls[1].arguments, {
       'paperId': 'pinned-paper',
-      'isPinnedToDesktop': true,
-      'alwaysOnTop': false,
+      'enabled': true,
     });
     expect(calls[2].arguments, {
+      'paperId': 'pinned-paper',
+      'enabled': false,
+    });
+    expect(calls[3].arguments, {
+      'paperId': 'pinned-paper',
+      'isPinnedToDesktop': true,
+      'alwaysOnTop': false,
+      'capsuleSide': '',
+      'capsuleMonitorDeviceName': '',
+    });
+    expect(calls[4].arguments, {
       'paperId': 'pinned-paper',
       'title': 'RePaperTodo - Pinned',
     });
     expect(calls.map((call) => call.method), isNot(contains('show')));
+  });
+
+  test('Windows global hotkeys are normalized before channel registration',
+      () async {
+    const channel = MethodChannel('repapertodo/window_hotkey_boundary_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final longHotKey = 'Ctrl+Alt+${List.filled(80, 'N').join()}';
+
+    await services.systemIntegration.registerGlobalHotkeys(
+      AppState(
+        pinnedTodoHotKey: '  Ctrl+\nAlt+\u007FT  ',
+        pinnedNoteHotKey: '$longHotKey\u0085',
+      ),
+    );
+
+    expect(calls.single.method, 'registerGlobalHotkeys');
+    expect(calls.single.arguments, {
+      'todo': 'Ctrl+Alt+T',
+      'note': longHotKey.substring(0, 64),
+    });
+  });
+
+  test('Windows platform services normalize installed font families', () async {
+    const channel = MethodChannel('repapertodo/window_fonts_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'listInstalledFontFamilies') {
+        return [
+          'Paper Sans',
+          'paper sans',
+          ' \u0000Beta Font\u007F ',
+          '',
+          7,
+          'Alpha',
+        ];
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final services = WindowsPlatformServices(channel: channel);
+
+    expect(
+      await services.systemIntegration.installedFontFamilies(),
+      ['Alpha', 'Beta Font', 'Paper Sans'],
+    );
+    expect(calls.map((call) => call.method), ['listInstalledFontFamilies']);
   });
 
   test('Windows platform services reject blank channel arguments locally',
@@ -344,6 +431,14 @@ void main() {
     );
     await expectLater(
       services.uriOpener.openUri('https://example.com/\npath'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.uriOpener.openUri('\nhttps://example.com/paper'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      services.uriOpener.openUri('https://example.com/paper\t'),
       throwsA(isA<ArgumentError>()),
     );
     await expectLater(
@@ -397,8 +492,9 @@ void main() {
     expect(workArea?.y, 0);
     expect(workArea?.width, 1440);
     expect(workArea?.height, 860);
-    expect(calls.single.method, 'getWorkArea');
-    expect(calls.single.arguments, {
+    final platformCalls = _withoutQueueMonitorNormalization(calls);
+    expect(platformCalls.single.method, 'getWorkArea');
+    expect(platformCalls.single.arguments, {
       'paperId': 'paper-1',
       'x': 10.0,
       'y': 20.0,
@@ -408,6 +504,83 @@ void main() {
     });
   });
 
+  test('paper host normalizes primary monitor queue names like PaperTodo',
+      () async {
+    const channel = MethodChannel('repapertodo/window_monitor_queue_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'normalizeQueueMonitorDeviceName') {
+        final arguments = call.arguments as Map<Object?, Object?>;
+        final monitor = arguments['monitorDeviceName'];
+        return monitor == r'\\.\DISPLAY1' ? '' : monitor;
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final primaryPaper = PaperData(
+      id: 'primary-paper',
+      type: PaperTypes.todo,
+      title: 'Primary',
+      capsuleSide: DeepCapsuleSides.left,
+      capsuleMonitorDeviceName: r'\\.\DISPLAY1',
+    );
+    final secondaryPaper = PaperData(
+      id: 'secondary-paper',
+      type: PaperTypes.note,
+      title: 'Secondary',
+      isVisible: false,
+      capsuleSide: DeepCapsuleSides.right,
+      capsuleMonitorDeviceName: r'\\.\DISPLAY2',
+    );
+
+    await services.paperWindows.restoreAll(
+      AppState(papers: [primaryPaper, secondaryPaper]),
+    );
+
+    expect(primaryPaper.capsuleMonitorDeviceName, '');
+    expect(secondaryPaper.capsuleMonitorDeviceName, r'\\.\DISPLAY2');
+    final restoreSurfacesCall =
+        calls.firstWhere((call) => call.method == 'setPaperSurfaces');
+    final restorePapers = restoreSurfacesCall.arguments as List<Object?>;
+    expect(
+      (restorePapers[0] as Map<Object?, Object?>)['capsuleMonitorDeviceName'],
+      '',
+    );
+    expect(
+      (restorePapers[1] as Map<Object?, Object?>)['capsuleMonitorDeviceName'],
+      r'\\.\DISPLAY2',
+    );
+
+    primaryPaper.capsuleMonitorDeviceName = r'\\.\DISPLAY1';
+    await services.tray.rebuildMenu(AppState(papers: [primaryPaper]));
+
+    expect(primaryPaper.capsuleMonitorDeviceName, '');
+    final rebuildTrayMenuCall =
+        calls.lastWhere((call) => call.method == 'setTrayMenu');
+    final rebuildPapers = rebuildTrayMenuCall.arguments as List<Object?>;
+    expect(
+      (rebuildPapers.single
+          as Map<Object?, Object?>)['capsuleMonitorDeviceName'],
+      '',
+    );
+
+    primaryPaper.capsuleMonitorDeviceName = r'\\.\DISPLAY1';
+    await services.paperWindows.showPaper(primaryPaper);
+
+    expect(primaryPaper.capsuleMonitorDeviceName, '');
+    final showCall = calls.lastWhere((call) => call.method == 'show');
+    expect(
+      (showCall.arguments as Map<Object?, Object?>)['capsuleMonitorDeviceName'],
+      '',
+    );
+  });
+
   test('paper host asks Windows for actual visible surfaces', () async {
     const channel = MethodChannel('repapertodo/window_visible_surface_test');
     final calls = <MethodCall>[];
@@ -415,6 +588,9 @@ void main() {
         .setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
       if (call.method == 'hasVisibleSurfaces') {
+        return false;
+      }
+      if (call.method == 'hasVisibleSurface') {
         return false;
       }
       return null;
@@ -432,8 +608,107 @@ void main() {
 
     expect(await services.paperWindows.hasVisibleSurfaces(state), false);
 
-    expect(calls.single.method, 'hasVisibleSurfaces');
-    expect(calls.single.arguments, isNull);
+    final platformCalls = _withoutQueueMonitorNormalization(calls);
+    expect(platformCalls.map((call) => call.method), [
+      'hasVisibleSurfaces',
+      'hasVisibleSurface',
+    ]);
+    expect(platformCalls[0].arguments, isNull);
+    expect(platformCalls[1].arguments, {
+      'paperId': 'paper-1',
+      'isPinnedToDesktop': false,
+      'alwaysOnTop': false,
+      'capsuleSide': '',
+      'capsuleMonitorDeviceName': '',
+    });
+  });
+
+  test('paper host checks individual surfaces when aggregate is hidden',
+      () async {
+    const channel = MethodChannel('repapertodo/window_visible_any_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'hasVisibleSurfaces') {
+        return false;
+      }
+      if (call.method == 'hasVisibleSurface') {
+        final arguments = call.arguments as Map<Object?, Object?>;
+        return arguments['paperId'] == 'paper-2';
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final state = AppState(
+      papers: [
+        PaperData(
+          id: 'paper-1',
+          type: PaperTypes.todo,
+          title: 'Hidden',
+          isVisible: false,
+        ),
+        PaperData(id: 'paper-2', type: PaperTypes.note, title: 'Visible'),
+      ],
+    );
+
+    expect(await services.paperWindows.hasVisibleSurfaces(state), true);
+
+    final platformCalls = _withoutQueueMonitorNormalization(calls);
+    expect(platformCalls.map((call) => call.method), [
+      'hasVisibleSurfaces',
+      'hasVisibleSurface',
+    ]);
+    expect(platformCalls[1].arguments, {
+      'paperId': 'paper-2',
+      'isPinnedToDesktop': false,
+      'alwaysOnTop': false,
+      'capsuleSide': '',
+      'capsuleMonitorDeviceName': '',
+    });
+  });
+
+  test('paper host asks Windows for a specific visible surface', () async {
+    const channel = MethodChannel('repapertodo/window_visible_paper_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'hasVisibleSurface') {
+        return false;
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final paper = PaperData(
+      id: 'paper-1',
+      type: PaperTypes.todo,
+      title: 'First',
+      isPinnedToDesktop: true,
+      alwaysOnTop: true,
+      capsuleSide: DeepCapsuleSides.left,
+      capsuleMonitorDeviceName: r'\\.\DISPLAY2',
+    );
+
+    expect(await services.paperWindows.hasVisibleSurface(paper), false);
+
+    final platformCalls = _withoutQueueMonitorNormalization(calls);
+    expect(platformCalls.single.method, 'hasVisibleSurface');
+    expect(platformCalls.single.arguments, {
+      'paperId': 'paper-1',
+      'isPinnedToDesktop': true,
+      'alwaysOnTop': true,
+      'capsuleSide': DeepCapsuleSides.left,
+      'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
+    });
   });
 
   test('Windows script capsule host rejects invalid requests locally',
@@ -515,15 +790,18 @@ void main() {
       height: 360,
       alwaysOnTop: true,
       isCollapsed: true,
+      capsuleSide: DeepCapsuleSides.left,
+      capsuleMonitorDeviceName: r'\\.\DISPLAY2',
     );
 
     await services.paperWindows.restoreAll(
       AppState(papers: [firstPaper, secondPaper]),
     );
+    final platformCalls = _withoutQueueMonitorNormalization(calls);
     expect(
-      calls.map((call) => call.method),
+      platformCalls.map((call) => call.method),
       [
-        'setTrayMenu',
+        'setPaperSurfaces',
         'setBounds',
         'setPinnedToDesktop',
         'show',
@@ -531,9 +809,9 @@ void main() {
         'setAlwaysOnTop',
       ],
     );
-    final initialTrayMenuCall =
-        calls.firstWhere((call) => call.method == 'setTrayMenu');
-    expect(initialTrayMenuCall.arguments, [
+    final initialSurfacesCall =
+        platformCalls.firstWhere((call) => call.method == 'setPaperSurfaces');
+    expect(initialSurfacesCall.arguments, [
       {
         'id': 'paper-1',
         'title': 'First',
@@ -544,6 +822,8 @@ void main() {
         'height': 260.0,
         'isVisible': true,
         'isCollapsed': false,
+        'capsuleSide': '',
+        'capsuleMonitorDeviceName': '',
         'alwaysOnTop': false,
         'isPinnedToDesktop': false,
         'isScriptCapsule': false,
@@ -558,32 +838,36 @@ void main() {
         'height': 360.0,
         'isVisible': true,
         'isCollapsed': true,
+        'capsuleSide': DeepCapsuleSides.left,
+        'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
         'alwaysOnTop': true,
         'isPinnedToDesktop': false,
         'isScriptCapsule': true,
       },
     ]);
-    expect(calls[1].arguments, {
+    expect(platformCalls[1].arguments, {
       'paperId': 'paper-1',
       'x': 10.0,
       'y': 20.0,
       'width': 320.0,
       'height': 260.0,
     });
-    expect(calls[2].arguments, {
+    expect(platformCalls[2].arguments, {
       'paperId': 'paper-1',
       'enabled': false,
     });
-    expect(calls[3].arguments, {
+    expect(platformCalls[3].arguments, {
       'paperId': 'paper-1',
       'isPinnedToDesktop': false,
       'alwaysOnTop': false,
+      'capsuleSide': '',
+      'capsuleMonitorDeviceName': '',
     });
-    expect(calls[4].arguments, {
+    expect(platformCalls[4].arguments, {
       'paperId': 'paper-1',
       'title': 'RePaperTodo - First',
     });
-    expect(calls[5].arguments, {
+    expect(platformCalls[5].arguments, {
       'paperId': 'paper-1',
       'enabled': false,
     });
@@ -662,6 +946,8 @@ void main() {
         'height': 260.0,
         'isVisible': true,
         'isCollapsed': false,
+        'capsuleSide': '',
+        'capsuleMonitorDeviceName': '',
         'alwaysOnTop': false,
         'isPinnedToDesktop': false,
         'isScriptCapsule': false,
@@ -676,11 +962,353 @@ void main() {
         'height': 480.0,
         'isVisible': false,
         'isCollapsed': true,
+        'capsuleSide': DeepCapsuleSides.left,
+        'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
         'alwaysOnTop': true,
         'isPinnedToDesktop': false,
         'isScriptCapsule': true,
       },
     ]);
+  });
+
+  test('paper host keeps active routing for non-active hide and close events',
+      () async {
+    const channel = MethodChannel('repapertodo/window_non_active_hide_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final firstPaper = PaperData(
+      id: 'paper-1',
+      type: PaperTypes.todo,
+      title: 'First',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+    );
+    final secondPaper = PaperData(
+      id: 'paper-2',
+      type: PaperTypes.note,
+      title: 'Second',
+      x: 30,
+      y: 40,
+      width: 420,
+      height: 360,
+    );
+
+    await services.paperWindows.restoreAll(
+      AppState(papers: [firstPaper, secondPaper]),
+    );
+
+    Future<void> send(MethodCall call) async {
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(call),
+        (_) {},
+      );
+    }
+
+    final explicitHideUpdate = services.paperWindows.surfaceUpdates.first;
+    await send(
+      const MethodCall('hideRequested', {'paperId': 'paper-2'}),
+    );
+    expect((await explicitHideUpdate).id, 'paper-2');
+    expect(firstPaper.isVisible, true);
+    expect(secondPaper.isVisible, false);
+
+    final legacyBoundsUpdate = services.paperWindows.surfaceUpdates.first;
+    await send(
+      const MethodCall('boundsChanged', {
+        'x': 111,
+        'y': 222,
+        'width': 333,
+        'height': 444,
+      }),
+    );
+    expect((await legacyBoundsUpdate).id, 'paper-1');
+    expect(firstPaper.x, 111);
+    expect(firstPaper.y, 222);
+    expect(secondPaper.x, 30);
+    expect(secondPaper.y, 40);
+
+    secondPaper.isVisible = true;
+    final explicitCloseUpdate = services.paperWindows.surfaceUpdates.first;
+    await send(
+      const MethodCall('closeRequested', {'paperId': 'paper-2'}),
+    );
+    expect((await explicitCloseUpdate).id, 'paper-2');
+    expect(firstPaper.isVisible, true);
+    expect(secondPaper.isVisible, false);
+
+    final legacyCloseUpdate = services.paperWindows.surfaceUpdates.first;
+    await send(const MethodCall('closeRequested'));
+    expect((await legacyCloseUpdate).id, 'paper-1');
+    expect(firstPaper.isVisible, false);
+  });
+
+  test('paper host retargets active routing after active paper is hidden',
+      () async {
+    const channel = MethodChannel('repapertodo/window_active_retarget_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final firstPaper = PaperData(
+      id: 'paper-1',
+      type: PaperTypes.todo,
+      title: 'First',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+    );
+    final secondPaper = PaperData(
+      id: 'paper-2',
+      type: PaperTypes.note,
+      title: 'Second',
+      x: 30,
+      y: 40,
+      width: 420,
+      height: 360,
+    );
+
+    await services.paperWindows.restoreAll(
+      AppState(papers: [firstPaper, secondPaper]),
+    );
+    await services.paperWindows.showPaper(secondPaper);
+
+    Future<void> send(MethodCall call) async {
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(call),
+        (_) {},
+      );
+    }
+
+    final explicitCloseUpdate = services.paperWindows.surfaceUpdates.first;
+    await send(
+      const MethodCall('closeRequested', {'paperId': 'paper-2'}),
+    );
+    expect((await explicitCloseUpdate).id, 'paper-2');
+    expect(firstPaper.isVisible, true);
+    expect(secondPaper.isVisible, false);
+
+    final legacyBoundsUpdate = services.paperWindows.surfaceUpdates.first;
+    await send(
+      const MethodCall('boundsChanged', {
+        'x': 111,
+        'y': 222,
+        'width': 333,
+        'height': 444,
+      }),
+    );
+    expect((await legacyBoundsUpdate).id, 'paper-1');
+    expect(firstPaper.x, 111);
+    expect(firstPaper.y, 222);
+    expect(firstPaper.width, 333);
+    expect(firstPaper.height, 444);
+    expect(secondPaper.x, 30);
+    expect(secondPaper.y, 40);
+    expect(secondPaper.width, 420);
+    expect(secondPaper.height, 360);
+  });
+
+  test('paper host retargets active routing after local active hide', () async {
+    const channel =
+        MethodChannel('repapertodo/window_local_hide_retarget_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final firstPaper = PaperData(
+      id: 'paper-1',
+      type: PaperTypes.todo,
+      title: 'First',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+    );
+    final secondPaper = PaperData(
+      id: 'paper-2',
+      type: PaperTypes.note,
+      title: 'Second',
+      x: 30,
+      y: 40,
+      width: 420,
+      height: 360,
+    );
+
+    await services.paperWindows.restoreAll(
+      AppState(papers: [firstPaper, secondPaper]),
+    );
+    await services.paperWindows.showPaper(secondPaper);
+    await services.paperWindows.hidePaper(secondPaper);
+
+    final legacyBoundsUpdate = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('boundsChanged', {
+          'x': 111,
+          'y': 222,
+          'width': 333,
+          'height': 444,
+        }),
+      ),
+      (_) {},
+    );
+
+    expect(secondPaper.isVisible, false);
+    expect((await legacyBoundsUpdate).id, 'paper-1');
+    expect(firstPaper.x, 111);
+    expect(firstPaper.y, 222);
+    expect(firstPaper.width, 333);
+    expect(firstPaper.height, 444);
+    expect(secondPaper.x, 30);
+    expect(secondPaper.y, 40);
+    expect(secondPaper.width, 420);
+    expect(secondPaper.height, 360);
+  });
+
+  test('paper host retargets active routing after hidden surface update',
+      () async {
+    const channel =
+        MethodChannel('repapertodo/window_hidden_update_retarget_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final firstPaper = PaperData(
+      id: 'paper-1',
+      type: PaperTypes.todo,
+      title: 'First',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+    );
+    final secondPaper = PaperData(
+      id: 'paper-2',
+      type: PaperTypes.note,
+      title: 'Second',
+      x: 30,
+      y: 40,
+      width: 420,
+      height: 360,
+    );
+
+    await services.paperWindows.restoreAll(
+      AppState(papers: [firstPaper, secondPaper]),
+    );
+    await services.paperWindows.showPaper(secondPaper);
+    secondPaper.isVisible = false;
+    await services.paperWindows.updatePaperSurface(secondPaper);
+
+    final legacyBoundsUpdate = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('boundsChanged', {
+          'x': 111,
+          'y': 222,
+          'width': 333,
+          'height': 444,
+        }),
+      ),
+      (_) {},
+    );
+
+    expect((await legacyBoundsUpdate).id, 'paper-1');
+    expect(firstPaper.x, 111);
+    expect(firstPaper.y, 222);
+    expect(firstPaper.width, 333);
+    expect(firstPaper.height, 444);
+    expect(secondPaper.x, 30);
+    expect(secondPaper.y, 40);
+    expect(secondPaper.width, 420);
+    expect(secondPaper.height, 360);
+  });
+
+  test('paper host retargets active routing after state refresh hides active',
+      () async {
+    const channel =
+        MethodChannel('repapertodo/window_state_refresh_retarget_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final firstPaper = PaperData(
+      id: 'paper-1',
+      type: PaperTypes.todo,
+      title: 'First',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+    );
+    final secondPaper = PaperData(
+      id: 'paper-2',
+      type: PaperTypes.note,
+      title: 'Second',
+      x: 30,
+      y: 40,
+      width: 420,
+      height: 360,
+    );
+
+    await services.paperWindows.restoreAll(
+      AppState(papers: [firstPaper, secondPaper]),
+    );
+    await services.paperWindows.showPaper(secondPaper);
+    secondPaper.isVisible = false;
+    await services.tray
+        .rebuildMenu(AppState(papers: [firstPaper, secondPaper]));
+
+    final legacyBoundsUpdate = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('boundsChanged', {
+          'x': 111,
+          'y': 222,
+          'width': 333,
+          'height': 444,
+        }),
+      ),
+      (_) {},
+    );
+
+    expect((await legacyBoundsUpdate).id, 'paper-1');
+    expect(firstPaper.x, 111);
+    expect(firstPaper.y, 222);
+    expect(firstPaper.width, 333);
+    expect(firstPaper.height, 444);
+    expect(secondPaper.x, 30);
+    expect(secondPaper.y, 40);
+    expect(secondPaper.width, 420);
+    expect(secondPaper.height, 360);
   });
 
   test('tray rebuild can send localized labels with paper menu text', () async {
@@ -887,6 +1515,88 @@ void main() {
     expect(activePaper.isVisible, false);
   });
 
+  test('paper host rejects unnormalized explicit paper-id events', () async {
+    const channel = MethodChannel('repapertodo/window_unsafe_event_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final activePaper = PaperData(
+      id: 'active-paper',
+      type: PaperTypes.todo,
+      title: 'Active',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 260,
+    );
+
+    await services.paperWindows.showPaper(activePaper);
+    var updateEmitted = false;
+    var openRequestEmitted = false;
+    var deleteRequestEmitted = false;
+    final updateSubscription = services.paperWindows.surfaceUpdates.listen((_) {
+      updateEmitted = true;
+    });
+    final openSubscription =
+        services.paperWindows.paperOpenRequests.listen((_) {
+      openRequestEmitted = true;
+    });
+    final deleteSubscription =
+        services.paperWindows.paperDeleteRequests.listen((_) {
+      deleteRequestEmitted = true;
+    });
+    addTearDown(updateSubscription.cancel);
+    addTearDown(openSubscription.cancel);
+    addTearDown(deleteSubscription.cancel);
+
+    Future<void> send(MethodCall call) async {
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(call),
+        (_) {},
+      );
+    }
+
+    await send(
+      const MethodCall('paperRequested', {'paperId': ' active-paper'}),
+    );
+    await send(
+      const MethodCall('paperDeleteRequested', {'paperId': 'active-paper '}),
+    );
+    await send(
+      const MethodCall('boundsChanged', {
+        'paperId': 'active-paper\n',
+        'bounds': {
+          'x': 700,
+          'y': 800,
+          'width': 900,
+          'height': 1000,
+        },
+      }),
+    );
+    await send(
+      const MethodCall('closeRequested', {'paperId': 'active-paper\u0000'}),
+    );
+    await send(
+      const MethodCall('hideRequested', ' active-paper'),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(updateEmitted, false);
+    expect(openRequestEmitted, false);
+    expect(deleteRequestEmitted, false);
+    expect(activePaper.x, 10);
+    expect(activePaper.y, 20);
+    expect(activePaper.width, 320);
+    expect(activePaper.height, 260);
+    expect(activePaper.isVisible, true);
+  });
+
   test('tray rebuild prunes stale paper-id event targets', () async {
     const channel = MethodChannel('repapertodo/window_pruned_event_test');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -1043,6 +1753,37 @@ void main() {
     ]);
   });
 
+  test('startup command events are buffered until the app subscribes',
+      () async {
+    const channel = MethodChannel('repapertodo/window_startup_buffer_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('startupCommandRequested', '--new-note'),
+      ),
+      (_) {},
+    );
+    await pumpEventQueue();
+
+    final commands = <StartupCommandKind>[];
+    final subscription = services.startup.commands.listen(
+      (command) => commands.add(command.kind),
+    );
+    addTearDown(subscription.cancel);
+    await pumpEventQueue();
+
+    expect(commands, [StartupCommandKind.newNote]);
+  });
+
   test('paper host ignores minimized bounds events', () async {
     const channel = MethodChannel('repapertodo/window_minimized_bounds_test');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -1094,6 +1835,73 @@ void main() {
     expect(updateEmitted, false);
   });
 
+  test('paper host ignores unusable native bounds events', () async {
+    const channel = MethodChannel('repapertodo/window_unusable_bounds_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final paper = PaperData(
+      id: 'paper-1',
+      type: PaperTypes.note,
+      title: 'Stable bounds',
+      x: 10,
+      y: 20,
+      width: 320,
+      height: 360,
+    );
+
+    await services.paperWindows.showPaper(paper);
+    var updateCount = 0;
+    final subscription = services.paperWindows.surfaceUpdates.listen((_) {
+      updateCount++;
+    });
+    addTearDown(subscription.cancel);
+
+    Future<void> sendBounds(Map<String, Object?> bounds) async {
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('boundsChanged', {
+            'paperId': 'paper-1',
+            'bounds': bounds,
+          }),
+        ),
+        (_) {},
+      );
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    await sendBounds({
+      'x': -32000,
+      'y': -32000,
+      'width': 320,
+      'height': 360,
+    });
+    await sendBounds({
+      'x': 40,
+      'y': 50,
+      'width': PaperLayoutDefaults.capsuleWidth,
+      'height': PaperLayoutDefaults.capsuleHeight,
+    });
+    await sendBounds({
+      'x': 40,
+      'y': 50,
+      'width': 0,
+      'height': 0,
+    });
+
+    expect(updateCount, 0);
+    expect(paper.x, 10);
+    expect(paper.y, 20);
+    expect(paper.width, 320);
+    expect(paper.height, 360);
+  });
+
   test('Windows storage host uses the executable directory', () async {
     final host = WindowsAppStorageHost(
       executablePath:
@@ -1110,7 +1918,21 @@ void main() {
           .documentsDirectoryPath(),
       throwsA(isA<StateError>()),
     );
+
+    await expectLater(
+      const WindowsAppStorageHost(
+        executablePath: 'C:\\Tools\\RePaperTodo\\bad\u0000name.exe',
+      ).documentsDirectoryPath(),
+      throwsA(isA<StateError>()),
+    );
   });
+}
+
+List<MethodCall> _withoutQueueMonitorNormalization(List<MethodCall> calls) {
+  return [
+    for (final call in calls)
+      if (call.method != 'normalizeQueueMonitorDeviceName') call,
+  ];
 }
 
 const _localizedTrayLabels = TrayMenuLabels(

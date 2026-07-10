@@ -61,13 +61,12 @@ class SyncOperation {
 }
 
 SyncOperationKind _kindFromWire(String value) {
-  final normalizedValue = value.trim();
   for (final kind in SyncOperationKind.values) {
-    if (_kindToWire(kind) == normalizedValue) {
+    if (_kindToWire(kind) == value) {
       return kind;
     }
   }
-  final lowerValue = normalizedValue.toLowerCase();
+  final lowerValue = value.toLowerCase();
   for (final kind in SyncOperationKind.values) {
     if (_kindToWire(kind).toLowerCase() == lowerValue) {
       return kind;
@@ -90,16 +89,15 @@ Object? _wireValue(JsonMap json, String key) {
 }
 
 int _sequenceFromWire(Object? value) {
-  if (value is String && value.trim() == value) {
+  if (value is String && _unsignedIntegerStringPattern.hasMatch(value)) {
     final sequence = int.tryParse(value);
     if (sequence != null && isSyncDeviceSequenceInRange(sequence)) {
       return sequence;
     }
   }
-  if (value is num && value.isFinite && value % 1 == 0) {
-    final sequence = value.toInt();
-    if (isSyncDeviceSequenceInRange(sequence)) {
-      return sequence;
+  if (value is int) {
+    if (isSyncDeviceSequenceInRange(value)) {
+      return value;
     }
   }
   throw FormatException(
@@ -108,13 +106,16 @@ int _sequenceFromWire(Object? value) {
   );
 }
 
+final _unsignedIntegerStringPattern = RegExp(r'^[0-9]+$');
+
 JsonMap _payloadFromWire(Object? value) {
-  if (value is! Map) {
+  final payload = jsonMapOrNull(value);
+  if (payload == null) {
     throw const FormatException(
       'Sync operation payload must be a JSON object.',
     );
   }
-  return Map<String, Object?>.from(value);
+  return payload;
 }
 
 DateTime _createdAtUtcFromWire(String value) {
