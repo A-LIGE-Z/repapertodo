@@ -1397,17 +1397,47 @@ function Assert-WebDavLiveSmokeRecord {
   }
 }
 
+function Resolve-ReleaseQaJsonPath {
+  param(
+    [string]$Path,
+    [string]$Context
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    throw "$Context result JSON path was not provided."
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "$Context result JSON path must not contain control characters."
+  }
+  if ($Path -match "[*?]") {
+    throw "$Context result JSON path must not contain wildcard characters."
+  }
+  try {
+    $fullPath = [IO.Path]::GetFullPath($Path)
+  } catch {
+    throw "$Context result JSON path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($fullPath))) {
+    throw "$Context result JSON path must include a file name."
+  }
+  if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -ne ".json") {
+    throw "$Context result JSON path must use the .json extension."
+  }
+  return $fullPath
+}
+
 function Read-ReleaseQaRecord {
   param(
     [string]$Path,
     [string]$Context
   )
 
+  $fullPath = Resolve-ReleaseQaJsonPath -Path $Path -Context $Context
   Assert-FileExists `
-    -Path $Path `
-    -Message "$Context result JSON was not found: $Path"
+    -Path $fullPath `
+    -Message "$Context result JSON was not found: $fullPath"
   try {
-    $result = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+    $result = Get-Content -Raw -LiteralPath $fullPath | ConvertFrom-Json
   } catch {
     throw "$Context result JSON could not be parsed: $($_.Exception.Message)"
   }

@@ -414,6 +414,86 @@ void _writeReleaseChecksums({
 }
 
 void main() {
+  test('readiness audit rejects unsafe result JSON paths before writing',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for readiness audit tests.');
+      return;
+    }
+
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_readiness_result_path_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final resultJson = File(p.join(temp.path, 'release-readiness-audit.json'));
+    final unsafeResultPath = p.join(temp.path, 'release-readiness-audit.txt');
+
+    final result = await Process.run(
+      powerShell,
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        'scripts/release_readiness_audit.ps1',
+        '-ResultJson',
+        unsafeResultPath,
+      ],
+      workingDirectory: Directory.current.path,
+    );
+
+    expect(result.exitCode, isNot(0));
+    expect(resultJson.existsSync(), false);
+    expect(File(unsafeResultPath).existsSync(), false);
+    expect(
+      result.stderr.toString(),
+      contains(
+        'Release readiness audit result JSON path must use the .json extension.',
+      ),
+    );
+  });
+
+  test('readiness audit rejects unsafe input JSON evidence paths', () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for readiness audit tests.');
+      return;
+    }
+
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_readiness_input_path_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final unsafeInputPath = p.join(temp.path, 'windows-manual-qa.txt');
+
+    final result = await Process.run(
+      powerShell,
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        'scripts/release_readiness_audit.ps1',
+        '-WindowsManualQaResultJson',
+        unsafeInputPath,
+      ],
+      workingDirectory: Directory.current.path,
+    );
+
+    expect(result.exitCode, 0, reason: result.stderr.toString());
+    expect(
+      result.stdout.toString(),
+      contains('Windows manual QA JSON path must use the .json extension.'),
+    );
+    expect(
+      result.stdout.toString(),
+      isNot(contains('Windows manual QA JSON was not found')),
+    );
+  });
+
   test('readiness audit writes result JSON before failing blocked CI gate',
       () async {
     final powerShell = _findPowerShellExecutable();

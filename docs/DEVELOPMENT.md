@@ -142,6 +142,13 @@ paths, device serial, API level, package name, APK application ID, APK file
 name, APK byte count, APK SHA-256, launch wait, observed process ID, and UTC
 check time. Release packaging revalidates that this APK file name, byte count,
 and SHA-256 match the packaged Android APK when the device smoke runs.
+Release evidence scripts that write `-ResultJson` require a `.json` file path
+without wildcard or control characters. Android device smoke validates this
+before installing or launching the APK, and live WebDAV smoke validates it
+before reading provider credentials.
+Release packaging and readiness audit use the same input JSON path checks when
+they consume existing Windows manual QA, WebDAV live smoke, Android device
+smoke, or release metadata evidence.
 Readiness audit also requires the Android device smoke expected APK file name
 and path to match the current `pubspec.yaml` artifact version before accepting
 the APK hash evidence.

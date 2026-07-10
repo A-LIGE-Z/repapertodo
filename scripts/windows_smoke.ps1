@@ -151,6 +151,33 @@ function Remove-SmokeRoot {
   throw $lastError
 }
 
+function Resolve-ResultJsonPath {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return ""
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "Windows release smoke result JSON path must not contain control characters."
+  }
+  if ($Path -match "[*?]") {
+    throw "Windows release smoke result JSON path must not contain wildcard characters."
+  }
+  try {
+    $fullPath = [IO.Path]::GetFullPath($Path)
+  } catch {
+    throw "Windows release smoke result JSON path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($fullPath))) {
+    throw "Windows release smoke result JSON path must include a file name."
+  }
+  if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -ne ".json") {
+    throw "Windows release smoke result JSON path must use the .json extension."
+  }
+  return $fullPath
+}
+
+$resultJsonFullPath = Resolve-ResultJsonPath -Path $ResultJson
 Assert-WindowsHost
 Assert-NoExistingRePaperTodoProcess
 
@@ -249,8 +276,7 @@ try {
     throw "Windows release smoke --new-todo did not increase the persisted todo paper count."
   }
   if (-not [string]::IsNullOrWhiteSpace($ResultJson)) {
-    $resultPath = [IO.Path]::GetFullPath($ResultJson)
-    $resultDirectory = Split-Path -Parent $resultPath
+    $resultDirectory = Split-Path -Parent $resultJsonFullPath
     if (-not [string]::IsNullOrWhiteSpace($resultDirectory)) {
       New-Item -ItemType Directory -Force -Path $resultDirectory | Out-Null
     }
@@ -270,7 +296,7 @@ try {
       exitTimeoutSeconds = $ExitTimeoutSeconds
     } |
       ConvertTo-Json -Depth 4 |
-      Set-Content -LiteralPath $resultPath -Encoding ascii
+      Set-Content -LiteralPath $resultJsonFullPath -Encoding ascii
   }
   Write-Host "Windows release smoke passed with $paperCount persisted papers."
 } catch {

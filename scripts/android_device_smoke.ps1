@@ -206,9 +206,36 @@ function Stop-AndroidPackageQuietly {
   }
 }
 
+function Resolve-ResultJsonPath {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return ""
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "Android device smoke result JSON path must not contain control characters."
+  }
+  if ($Path -match "[*?]") {
+    throw "Android device smoke result JSON path must not contain wildcard characters."
+  }
+  try {
+    $fullPath = [IO.Path]::GetFullPath($Path)
+  } catch {
+    throw "Android device smoke result JSON path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($fullPath))) {
+    throw "Android device smoke result JSON path must include a file name."
+  }
+  if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -ne ".json") {
+    throw "Android device smoke result JSON path must use the .json extension."
+  }
+  return $fullPath
+}
+
 if ($LaunchWaitSeconds -lt 1 -or $LaunchWaitSeconds -gt 60) {
   throw "Android launch wait must be between 1 and 60 seconds."
 }
+$resultJsonFullPath = Resolve-ResultJsonPath -Path $ResultJson
 
 $apkFullPath = [IO.Path]::GetFullPath($ApkPath)
 if (-not (Test-Path -LiteralPath $apkFullPath -PathType Leaf)) {
@@ -310,7 +337,6 @@ try {
   Stop-AndroidPackageQuietly -PackageName $ExpectedApplicationId
 }
 if (-not [string]::IsNullOrWhiteSpace($ResultJson)) {
-  $resultJsonFullPath = [IO.Path]::GetFullPath($ResultJson)
   $resultJsonDirectory = [IO.Path]::GetDirectoryName($resultJsonFullPath)
   if (-not [string]::IsNullOrWhiteSpace($resultJsonDirectory)) {
     New-Item -ItemType Directory -Force -Path $resultJsonDirectory | Out-Null

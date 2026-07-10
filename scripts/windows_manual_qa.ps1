@@ -57,6 +57,33 @@ function Get-WindowsVersionText {
   }
 }
 
+function Resolve-ResultJsonPath {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return ""
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "Windows manual QA result JSON path must not contain control characters."
+  }
+  if ($Path -match "[*?]") {
+    throw "Windows manual QA result JSON path must not contain wildcard characters."
+  }
+  try {
+    $fullPath = [IO.Path]::GetFullPath($Path)
+  } catch {
+    throw "Windows manual QA result JSON path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($fullPath))) {
+    throw "Windows manual QA result JSON path must include a file name."
+  }
+  if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -ne ".json") {
+    throw "Windows manual QA result JSON path must use the .json extension."
+  }
+  return $fullPath
+}
+
+$resultJsonFullPath = Resolve-ResultJsonPath -Path $ResultJson
 $exeFullPath = [IO.Path]::GetFullPath($ExePath)
 if (-not (Test-Path -LiteralPath $exeFullPath -PathType Leaf)) {
   throw "Windows manual QA exe was not found: $exeFullPath"
@@ -148,14 +175,13 @@ $record = [ordered]@{
 }
 
 if (-not [string]::IsNullOrWhiteSpace($ResultJson)) {
-  $resultPath = [IO.Path]::GetFullPath($ResultJson)
-  $resultDirectory = Split-Path -Parent $resultPath
+  $resultDirectory = Split-Path -Parent $resultJsonFullPath
   if (-not [string]::IsNullOrWhiteSpace($resultDirectory)) {
     New-Item -ItemType Directory -Force -Path $resultDirectory | Out-Null
   }
   $record |
     ConvertTo-Json -Depth 5 |
-    Set-Content -LiteralPath $resultPath -Encoding ascii
+    Set-Content -LiteralPath $resultJsonFullPath -Encoding ascii
 }
 
 if ($recordStatus -eq "failed") {

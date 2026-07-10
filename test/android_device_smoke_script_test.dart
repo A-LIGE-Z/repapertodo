@@ -152,6 +152,7 @@ Future<ProcessResult> _runDeviceSmoke({
   required File adb,
   required File apkAnalyzer,
   required File resultJson,
+  String? resultJsonPath,
 }) {
   return Process.run(
     powerShell,
@@ -173,7 +174,7 @@ Future<ProcessResult> _runDeviceSmoke({
       '-LaunchWaitSeconds',
       '1',
       '-ResultJson',
-      resultJson.path,
+      resultJsonPath ?? resultJson.path,
     ],
     workingDirectory: Directory.current.path,
   );
@@ -252,6 +253,84 @@ void main() {
     expect(
       result.stderr.toString(),
       contains('Android device smoke observed process ID must be a positive'),
+    );
+  });
+
+  test('Android device smoke wrapper rejects non-json result evidence paths',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped(
+        'PowerShell is unavailable for Android device smoke script tests.',
+      );
+      return;
+    }
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_android_device_smoke_result_extension_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final apk = File(p.join(temp.path, 'repapertodo-test.apk'));
+    await apk.writeAsString('fake APK bytes for result path validation');
+    final adb = await _writeFakeAdb(temp);
+    final apkAnalyzer = await _writeFakeApkAnalyzer(temp);
+    final resultJson = File(p.join(temp.path, 'android-device-smoke.json'));
+    final unsafeResultPath = p.join(temp.path, 'android-device-smoke.txt');
+
+    final result = await _runDeviceSmoke(
+      powerShell: powerShell,
+      apk: apk,
+      adb: adb,
+      apkAnalyzer: apkAnalyzer,
+      resultJson: resultJson,
+      resultJsonPath: unsafeResultPath,
+    );
+
+    expect(result.exitCode, isNot(0));
+    expect(resultJson.existsSync(), false);
+    expect(File(unsafeResultPath).existsSync(), false);
+    expect(
+      result.stderr.toString(),
+      contains(
+        'Android device smoke result JSON path must use the .json extension.',
+      ),
+    );
+  });
+
+  test('Android device smoke wrapper rejects wildcard result evidence paths',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped(
+        'PowerShell is unavailable for Android device smoke script tests.',
+      );
+      return;
+    }
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_android_device_smoke_result_wildcard_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final apk = File(p.join(temp.path, 'repapertodo-test.apk'));
+    await apk.writeAsString('fake APK bytes for wildcard result path');
+    final adb = await _writeFakeAdb(temp);
+    final apkAnalyzer = await _writeFakeApkAnalyzer(temp);
+    final resultJson = File(p.join(temp.path, 'android-device-smoke.json'));
+
+    final result = await _runDeviceSmoke(
+      powerShell: powerShell,
+      apk: apk,
+      adb: adb,
+      apkAnalyzer: apkAnalyzer,
+      resultJson: resultJson,
+      resultJsonPath: p.join(temp.path, 'android-device-*.json'),
+    );
+
+    expect(result.exitCode, isNot(0));
+    expect(resultJson.existsSync(), false);
+    expect(
+      result.stderr.toString(),
+      contains(
+        'Android device smoke result JSON path must not contain wildcard characters.',
+      ),
     );
   });
 }

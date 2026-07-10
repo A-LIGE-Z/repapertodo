@@ -486,6 +486,87 @@ try {
     );
   });
 
+  test('release packaging rejects unsafe QA result JSON paths before reading',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for release QA testing.');
+      return;
+    }
+
+    final result = await Process.run(
+      powerShell,
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        r'''
+$ErrorActionPreference = 'Stop'
+$content = Get-Content -Raw -LiteralPath 'scripts/release.ps1'
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseInput(
+  $content,
+  [ref]$tokens,
+  [ref]$errors
+)
+if ($errors.Count -gt 0) {
+  throw "scripts/release.ps1 could not be parsed."
+}
+foreach ($functionName in @(
+  'Assert-FileExists',
+  'Resolve-ReleaseQaJsonPath',
+  'Read-ReleaseQaRecord'
+)) {
+  $function = $ast.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -eq $functionName
+  }, $true)
+  if ($null -eq $function) {
+    throw "$functionName was not found."
+  }
+  Invoke-Expression $function.Extent.Text
+}
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) "repapertodo-release-qa-input-path-test-$([Guid]::NewGuid().ToString('N'))"
+try {
+  New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+  $unsafeInputPath = Join-Path $tempRoot 'windows-manual-qa.txt'
+  [IO.File]::WriteAllText($unsafeInputPath, '{"status":"passed"}', [Text.Encoding]::ASCII)
+  try {
+    Read-ReleaseQaRecord -Path $unsafeInputPath -Context 'Windows manual QA'
+    throw 'Expected unsafe QA result JSON input path to fail.'
+  } catch {
+    if ($_.Exception.Message -notlike '*Windows manual QA result JSON path must use the .json extension.*') {
+      throw
+    }
+    if ($_.Exception.Message -like '*result JSON was not found*') {
+      throw 'Release QA input path validation must run before file existence checks.'
+    }
+  }
+} finally {
+  if (Test-Path -LiteralPath $tempRoot) {
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force
+  }
+}
+''',
+      ],
+      workingDirectory: Directory.current.path,
+    );
+
+    expect(
+      result.exitCode,
+      0,
+      reason: [
+        'Release packaging must reject unsafe QA result JSON paths before reading them.',
+        if (result.stdout.toString().trim().isNotEmpty)
+          'stdout: ${result.stdout}',
+        if (result.stderr.toString().trim().isNotEmpty)
+          'stderr: ${result.stderr}',
+      ].join('\n'),
+    );
+  });
+
   test('release packaging rejects Windows QA from another release directory',
       () async {
     final powerShell = _findPowerShellExecutable();

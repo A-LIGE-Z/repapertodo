@@ -28,6 +28,32 @@ function Find-DartTool {
   throw "Dart was not found. Pass -Dart or install the Flutter/Dart toolchain."
 }
 
+function Resolve-ResultJsonPath {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return ""
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "Live WebDAV smoke result JSON path must not contain control characters."
+  }
+  if ($Path -match "[*?]") {
+    throw "Live WebDAV smoke result JSON path must not contain wildcard characters."
+  }
+  try {
+    $fullPath = [IO.Path]::GetFullPath($Path)
+  } catch {
+    throw "Live WebDAV smoke result JSON path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($fullPath))) {
+    throw "Live WebDAV smoke result JSON path must include a file name."
+  }
+  if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -ne ".json") {
+    throw "Live WebDAV smoke result JSON path must use the .json extension."
+  }
+  return $fullPath
+}
+
 function Assert-RequiredEnvironment {
   param([string]$Name)
 
@@ -134,6 +160,7 @@ function Assert-LiveSmokeRecord {
   Assert-LiveSmokeDeviceSequences -Record $Record
 }
 
+$resultJsonFullPath = Resolve-ResultJsonPath -Path $ResultJson
 foreach ($name in @(
   "REPAPERTODO_WEBDAV_ENDPOINT",
   "REPAPERTODO_WEBDAV_USERNAME",
@@ -162,12 +189,11 @@ $record = $jsonText | ConvertFrom-Json
 Assert-LiveSmokeRecord -Record $record
 
 if (-not [string]::IsNullOrWhiteSpace($ResultJson)) {
-  $resultPath = [IO.Path]::GetFullPath($ResultJson)
-  $resultDirectory = Split-Path -Parent $resultPath
+  $resultDirectory = Split-Path -Parent $resultJsonFullPath
   if (-not [string]::IsNullOrWhiteSpace($resultDirectory)) {
     New-Item -ItemType Directory -Force -Path $resultDirectory | Out-Null
   }
-  $jsonText | Set-Content -LiteralPath $resultPath -Encoding ascii
+  $jsonText | Set-Content -LiteralPath $resultJsonFullPath -Encoding ascii
 }
 
 Write-Host "Live WebDAV smoke passed for $($record.endpointHost) with root $($record.rootPath)."

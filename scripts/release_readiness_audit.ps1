@@ -15,6 +15,61 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-ResultJsonPath {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return ""
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "Release readiness audit result JSON path must not contain control characters."
+  }
+  if ($Path -match "[*?]") {
+    throw "Release readiness audit result JSON path must not contain wildcard characters."
+  }
+  try {
+    $fullPath = [IO.Path]::GetFullPath($Path)
+  } catch {
+    throw "Release readiness audit result JSON path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($fullPath))) {
+    throw "Release readiness audit result JSON path must include a file name."
+  }
+  if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -ne ".json") {
+    throw "Release readiness audit result JSON path must use the .json extension."
+  }
+  return $fullPath
+}
+
+function Resolve-InputJsonPath {
+  param(
+    [string]$Path,
+    [string]$Context
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    throw "$Context JSON path was not provided."
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "$Context JSON path must not contain control characters."
+  }
+  if ($Path -match "[*?]") {
+    throw "$Context JSON path must not contain wildcard characters."
+  }
+  try {
+    $fullPath = [IO.Path]::GetFullPath($Path)
+  } catch {
+    throw "$Context JSON path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($fullPath))) {
+    throw "$Context JSON path must include a file name."
+  }
+  if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -ne ".json") {
+    throw "$Context JSON path must use the .json extension."
+  }
+  return $fullPath
+}
+
 function New-Check {
   param(
     [string]$Id,
@@ -68,7 +123,7 @@ function Read-JsonRecord {
   if ([string]::IsNullOrWhiteSpace($Path)) {
     throw "$Context JSON path was not provided."
   }
-  $fullPath = [IO.Path]::GetFullPath($Path)
+  $fullPath = Resolve-InputJsonPath -Path $Path -Context $Context
   if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
     throw "$Context JSON was not found: $fullPath"
   }
@@ -1016,6 +1071,7 @@ function Test-ReleaseChecksumsFile {
   return ""
 }
 
+$resultJsonFullPath = Resolve-ResultJsonPath -Path $ResultJson
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $checks = New-Object System.Collections.Generic.List[object]
 $blockers = New-Object System.Collections.Generic.List[string]
@@ -1171,12 +1227,11 @@ $record = [ordered]@{
 
 $json = $record | ConvertTo-Json -Depth 6
 if (-not [string]::IsNullOrWhiteSpace($ResultJson)) {
-  $resultPath = [IO.Path]::GetFullPath($ResultJson)
-  $resultDirectory = Split-Path -Parent $resultPath
+  $resultDirectory = Split-Path -Parent $resultJsonFullPath
   if (-not [string]::IsNullOrWhiteSpace($resultDirectory)) {
     New-Item -ItemType Directory -Force -Path $resultDirectory | Out-Null
   }
-  $json | Set-Content -LiteralPath $resultPath -Encoding ascii
+  $json | Set-Content -LiteralPath $resultJsonFullPath -Encoding ascii
 }
 
 Write-Output $json

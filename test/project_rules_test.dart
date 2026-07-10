@@ -21,6 +21,18 @@ String _extractConstMapBody(String source, String mapName) {
   return source.substring(bodyStart, end);
 }
 
+String _sliceBetween(String source, String startMarker, String endMarker) {
+  final start = source.indexOf(startMarker);
+  if (start < 0) {
+    throw StateError('$startMarker was not found.');
+  }
+  final end = source.indexOf(endMarker, start + startMarker.length);
+  if (end < 0) {
+    throw StateError('$endMarker was not found after $startMarker.');
+  }
+  return source.substring(start, end);
+}
+
 Set<String> _declaredStringKeys(String source) {
   final keysClassStart =
       source.indexOf('abstract final class PaperTodoStringKeys');
@@ -88,6 +100,62 @@ void main() {
       roadmap,
       isNot(contains('Status: Done for full PaperTodo replacement')),
     );
+  });
+
+  test('PowerShell ResultJson outputs are validated before writing', () {
+    final resultJsonScripts = Directory('scripts')
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.toLowerCase().endsWith('.ps1'))
+        .where((file) =>
+            _readProjectText(file.path).contains(r'[string]$ResultJson'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    final resultJsonScriptPaths = resultJsonScripts
+        .map((file) => file.path.replaceAll(r'\', '/'))
+        .toList();
+
+    expect(
+      resultJsonScriptPaths,
+      containsAll(<String>[
+        'scripts/android_device_smoke.ps1',
+        'scripts/android_smoke.ps1',
+        'scripts/release_readiness_audit.ps1',
+        'scripts/webdav_live_smoke.ps1',
+        'scripts/webdav_smoke.ps1',
+        'scripts/windows_manual_qa.ps1',
+        'scripts/windows_smoke.ps1',
+      ]),
+    );
+
+    for (final script in resultJsonScripts) {
+      final source = _readProjectText(script.path);
+      expect(
+        source,
+        contains('function Resolve-ResultJsonPath'),
+        reason: '${script.path} must validate ResultJson before writing.',
+      );
+      expect(
+        source,
+        contains('result JSON path must not contain control characters.'),
+        reason: '${script.path} must reject unsafe ResultJson characters.',
+      );
+      expect(
+        source,
+        contains('result JSON path must not contain wildcard characters.'),
+        reason: '${script.path} must reject wildcard ResultJson paths.',
+      );
+      expect(
+        source,
+        contains('result JSON path must include a file name.'),
+        reason: '${script.path} must reject directory-only ResultJson paths.',
+      );
+      expect(
+        source,
+        contains('result JSON path must use the .json extension.'),
+        reason: '${script.path} must keep reusable evidence as JSON.',
+      );
+    }
   });
 
   test('runtime localization is scoped to Chinese and English', () {
@@ -3154,9 +3222,64 @@ void main() {
         _readProjectText('scripts/webdav_live_smoke.ps1');
     final webDavLiveSmokeDart = _readProjectText('tool/webdav_live_smoke.dart');
     final workflow = _readProjectText('.github/workflows/release.yml');
+    final releaseAssetVerificationTest =
+        _readProjectText('test/release_asset_verification_test.dart');
     final readme = _readProjectText('README.md');
     final development = _readProjectText('docs/DEVELOPMENT.md');
+    final readinessReadJsonRecord = _sliceBetween(
+      releaseReadinessAudit,
+      'function Read-JsonRecord',
+      'function Test-UtcTimestamp',
+    );
+    final releaseReadQaRecord = _sliceBetween(
+      script,
+      'function Read-ReleaseQaRecord',
+      'function Assert-WindowsSmokeReleaseDirectory',
+    );
 
+    expect(
+      releaseReadinessAudit,
+      contains(
+          'Release readiness audit result JSON path must use the .json extension.'),
+    );
+    expect(
+      releaseReadinessAudit,
+      contains(
+        'Release readiness audit result JSON path must not contain wildcard characters.',
+      ),
+    );
+    expect(releaseReadinessAudit, contains('function Resolve-InputJsonPath'));
+    expect(
+      releaseReadinessAudit,
+      contains(r'$Context JSON path must use the .json extension.'),
+    );
+    expect(
+      readinessReadJsonRecord,
+      contains(r'Resolve-InputJsonPath -Path $Path -Context $Context'),
+    );
+    expect(
+      readinessReadJsonRecord,
+      isNot(contains(r'[IO.Path]::GetFullPath($Path)')),
+    );
+    expect(script, contains('function Resolve-ReleaseQaJsonPath'));
+    expect(
+      script,
+      contains(r'$Context result JSON path must use the .json extension.'),
+    );
+    expect(
+      releaseReadQaRecord,
+      contains(r'Resolve-ReleaseQaJsonPath -Path $Path -Context $Context'),
+    );
+    expect(
+      releaseReadQaRecord,
+      isNot(contains(r'Get-Content -Raw -LiteralPath $Path')),
+    );
+    expect(
+      releaseAssetVerificationTest,
+      contains(
+        'release packaging rejects unsafe QA result JSON paths before reading',
+      ),
+    );
     expect(script, contains('function Clear-ProxyEnvironment'));
     expect(script, contains(r'Remove-Item -LiteralPath "Env:\$name"'));
     expect(script, contains('Android SDK tools parse empty proxy variables'));
@@ -4604,6 +4727,18 @@ void main() {
     expect(androidSmokeScript, contains('apkanalyzer manifest debuggable'));
     expect(androidSmokeScript, contains(r'[string]$Aapt2 = ""'));
     expect(androidSmokeScript, contains(r'[string]$ResultJson = ""'));
+    expect(androidSmokeScript, contains('function Resolve-ResultJsonPath'));
+    expect(
+      androidSmokeScript,
+      contains(
+          'Android APK smoke result JSON path must use the .json extension.'),
+    );
+    expect(
+      androidSmokeScript,
+      contains(
+        'Android APK smoke result JSON path must not contain wildcard characters.',
+      ),
+    );
     expect(androidSmokeScript, contains('checkedAtUtc'));
     expect(androidSmokeScript, contains('apkFileName'));
     expect(androidSmokeScript, contains('applicationId'));
@@ -4718,6 +4853,22 @@ void main() {
     expect(androidSmokeScript, contains('android:mimeType="*/*"'));
     expect(androidDeviceSmokeScript, contains('adb.exe'));
     expect(androidDeviceSmokeScript, contains(r'[string]$ResultJson = ""'));
+    expect(
+      androidDeviceSmokeScript,
+      contains('function Resolve-ResultJsonPath'),
+    );
+    expect(
+      androidDeviceSmokeScript,
+      contains(
+        'Android device smoke result JSON path must use the .json extension.',
+      ),
+    );
+    expect(
+      androidDeviceSmokeScript,
+      contains(
+        'Android device smoke result JSON path must not contain wildcard characters.',
+      ),
+    );
     expect(
         androidDeviceSmokeScript, contains('function Get-AndroidDeviceSerial'));
     expect(androidDeviceSmokeScript, contains('No online Android device'));
@@ -4907,6 +5058,18 @@ void main() {
     expect(development, contains('REPAPERTODO_WEBDAV_ENDPOINT'));
     expect(development, contains('REPAPERTODO_WEBDAV_KEEP_REMOTE=true'));
     expect(webDavSmokeScript, contains(r'[string]$ResultJson = ""'));
+    expect(webDavSmokeScript, contains('function Resolve-ResultJsonPath'));
+    expect(
+      webDavSmokeScript,
+      contains(
+          'WebDAV static smoke result JSON path must use the .json extension.'),
+    );
+    expect(
+      webDavSmokeScript,
+      contains(
+        'WebDAV static smoke result JSON path must not contain wildcard characters.',
+      ),
+    );
     expect(webDavSmokeScript, contains('function Assert-RepoEvidenceFile'));
     expect(
       webDavSmokeScript,
@@ -5004,6 +5167,18 @@ void main() {
     expect(webDavLiveSmokeScript, contains('tool\\webdav_live_smoke.dart'));
     expect(webDavLiveSmokeScript, contains('ConvertFrom-Json'));
     expect(webDavLiveSmokeScript, contains(r'[string]$ResultJson = ""'));
+    expect(webDavLiveSmokeScript, contains('function Resolve-ResultJsonPath'));
+    expect(
+      webDavLiveSmokeScript,
+      contains(
+          'Live WebDAV smoke result JSON path must use the .json extension.'),
+    );
+    expect(
+      webDavLiveSmokeScript,
+      contains(
+        'Live WebDAV smoke result JSON path must not contain wildcard characters.',
+      ),
+    );
     expect(
       webDavLiveSmokeScript,
       contains('function Assert-LiveSmokeDeviceSequences'),
@@ -5062,6 +5237,27 @@ void main() {
     expect(development, contains('runtime language\nset (`zh` and `en`)'));
     final androidDeviceSmokeTest =
         _readProjectText('test/android_device_smoke_script_test.dart');
+    final androidSmokeTest =
+        _readProjectText('test/android_smoke_script_test.dart');
+    final releaseResultJsonPathTest =
+        _readProjectText('test/release_result_json_path_script_test.dart');
+    expect(
+      androidSmokeTest,
+      contains(
+          'Android APK smoke rejects unsafe result paths before reading APK'),
+    );
+    expect(
+      releaseResultJsonPathTest,
+      contains(
+        'release evidence scripts reject unsafe result paths before side effects',
+      ),
+    );
+    expect(releaseResultJsonPathTest, contains('scripts/windows_smoke.ps1'));
+    expect(releaseResultJsonPathTest, contains('scripts/webdav_smoke.ps1'));
+    expect(
+      releaseResultJsonPathTest,
+      contains('scripts/webdav_live_smoke.ps1'),
+    );
     expect(
       androidDeviceSmokeTest,
       contains(
@@ -5072,10 +5268,34 @@ void main() {
       androidDeviceSmokeTest,
       contains('Android device smoke wrapper rejects invalid process evidence'),
     );
+    expect(
+      androidDeviceSmokeTest,
+      contains(
+        'Android device smoke wrapper rejects non-json result evidence paths',
+      ),
+    );
+    expect(
+      androidDeviceSmokeTest,
+      contains(
+        'Android device smoke wrapper rejects wildcard result evidence paths',
+      ),
+    );
     expect(androidDeviceSmokeTest, contains('fake-adb'));
     expect(androidDeviceSmokeTest, contains('fake-apkanalyzer'));
     expect(windowsSmokeScript, contains('repapertodo.exe'));
     expect(windowsSmokeScript, contains(r'[string]$ResultJson = ""'));
+    expect(windowsSmokeScript, contains('function Resolve-ResultJsonPath'));
+    expect(
+      windowsSmokeScript,
+      contains(
+          'Windows release smoke result JSON path must use the .json extension.'),
+    );
+    expect(
+      windowsSmokeScript,
+      contains(
+        'Windows release smoke result JSON path must not contain wildcard characters.',
+      ),
+    );
     expect(windowsSmokeScript, contains('checkedAtUtc'));
     expect(windowsSmokeScript, contains('initialPaperCount'));
     expect(windowsSmokeScript, contains('finalPaperCount'));
@@ -5128,6 +5348,21 @@ void main() {
         windowsManualQaScript,
         contains(
             "Windows manual QA item '\$Name' must be pass, fail, or skip."));
+    expect(
+      windowsManualQaScript,
+      contains('function Resolve-ResultJsonPath'),
+    );
+    expect(
+      windowsManualQaScript,
+      contains(
+          'Windows manual QA result JSON path must use the .json extension.'),
+    );
+    expect(
+      windowsManualQaScript,
+      contains(
+        'Windows manual QA result JSON path must not contain wildcard characters.',
+      ),
+    );
     expect(windowsManualQaScript,
         contains('Windows manual QA contains skipped items.'));
     expect(
@@ -5172,6 +5407,10 @@ void main() {
     expect(
       windowsManualQaTest,
       contains('Windows manual QA script rejects skipped items by default'),
+    );
+    expect(
+      windowsManualQaTest,
+      contains('Windows manual QA script rejects unsafe result evidence paths'),
     );
     expect(windowsManualQaTest, contains('fake repapertodo exe bytes'));
     expect(windowsManualQaTest, contains('appSoSha256'));
@@ -6073,6 +6312,15 @@ try {
     );
     expect(development, contains('`pubspec.lock` byte/hash'));
     expect(development, contains('Android 14-17/API 34-37 device smoke'));
+    expect(
+      auditTest,
+      contains(
+          'readiness audit rejects unsafe result JSON paths before writing'),
+    );
+    expect(
+      auditTest,
+      contains('readiness audit rejects unsafe input JSON evidence paths'),
+    );
     expect(
       auditTest,
       contains(

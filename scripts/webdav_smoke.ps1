@@ -16,6 +16,32 @@ function Assert-TextContains {
   }
 }
 
+function Resolve-ResultJsonPath {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return ""
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "WebDAV static smoke result JSON path must not contain control characters."
+  }
+  if ($Path -match "[*?]") {
+    throw "WebDAV static smoke result JSON path must not contain wildcard characters."
+  }
+  try {
+    $fullPath = [IO.Path]::GetFullPath($Path)
+  } catch {
+    throw "WebDAV static smoke result JSON path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($fullPath))) {
+    throw "WebDAV static smoke result JSON path must include a file name."
+  }
+  if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -ne ".json") {
+    throw "WebDAV static smoke result JSON path must use the .json extension."
+  }
+  return $fullPath
+}
+
 function Read-RepoText {
   param([string]$RelativePath)
 
@@ -61,6 +87,7 @@ function Assert-RepoEvidenceFile {
   }
 }
 
+$resultJsonFullPath = Resolve-ResultJsonPath -Path $ResultJson
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 
 $evidenceFiles = @(
@@ -283,14 +310,13 @@ $result = [ordered]@{
 }
 
 if (-not [string]::IsNullOrWhiteSpace($ResultJson)) {
-  $resultPath = [IO.Path]::GetFullPath($ResultJson)
-  $resultDirectory = Split-Path -Parent $resultPath
+  $resultDirectory = Split-Path -Parent $resultJsonFullPath
   if (-not [string]::IsNullOrWhiteSpace($resultDirectory)) {
     New-Item -ItemType Directory -Force -Path $resultDirectory | Out-Null
   }
   $result |
     ConvertTo-Json -Depth 4 |
-    Set-Content -LiteralPath $resultPath -Encoding ascii
+    Set-Content -LiteralPath $resultJsonFullPath -Encoding ascii
 }
 
 Write-Host "WebDAV static smoke passed for generic WebDAV, Jianguoyun preset, encrypted payloads, local HTTP protocol round trip, operation logs, and Android background sync evidence."

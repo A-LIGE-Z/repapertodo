@@ -18,6 +18,10 @@
   setup script, Gradle build, release packaging, and readiness audit.
 - Required Windows manual QA release evidence to include a Windows version
   string and exactly the expected desktop parity checklist.
+- Rejected unsafe release evidence `-ResultJson` paths before smoke scripts,
+  manual QA, or readiness audit write reusable release records.
+- Rejected unsafe external QA/smoke JSON input paths before release packaging
+  or readiness audit reads reusable evidence.
 - Allowed release packaging to consume a previously recorded Android device
   smoke JSON result while still rejecting mixed live/result smoke sources.
 - Required passed Windows manual QA, live WebDAV smoke, and Android device

@@ -44,6 +44,7 @@ Future<ProcessResult> _runManualQa({
   required String fullscreenAvoidance,
   String tester = ' qa-tester ',
   bool allowSkipped = false,
+  String? resultJsonPath,
 }) {
   final arguments = [
     '-NoProfile',
@@ -71,7 +72,7 @@ Future<ProcessResult> _runManualQa({
     '-ExePath',
     exe.path,
     '-ResultJson',
-    resultJson.path,
+    resultJsonPath ?? resultJson.path,
   ];
   if (allowSkipped) {
     arguments.add('-AllowSkipped');
@@ -150,6 +151,40 @@ void main() {
     expect(
       result.stderr.toString(),
       contains('Windows manual QA contains skipped items.'),
+    );
+  });
+
+  test('Windows manual QA script rejects unsafe result evidence paths',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for Windows manual QA tests.');
+      return;
+    }
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_windows_manual_qa_result_path_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final (:exe, :appSo) = await _writeReleaseFiles(temp);
+    final resultJson = File(p.join(temp.path, 'windows-manual-qa.json'));
+    final unsafeResultPath = p.join(temp.path, 'windows-manual-qa.txt');
+
+    final result = await _runManualQa(
+      powerShell: powerShell,
+      exe: exe,
+      resultJson: resultJson,
+      fullscreenAvoidance: 'pass',
+      resultJsonPath: unsafeResultPath,
+    );
+
+    expect(appSo.existsSync(), true);
+    expect(result.exitCode, isNot(0));
+    expect(resultJson.existsSync(), false);
+    expect(File(unsafeResultPath).existsSync(), false);
+    expect(
+      result.stderr.toString(),
+      contains(
+          'Windows manual QA result JSON path must use the .json extension.'),
     );
   });
 }

@@ -139,6 +139,12 @@ file name, byte count, and SHA-256 match the packaged Android APK and that the
 foreground package matches the launched package. When it is skipped, metadata
 still records the UTC skip time and the
 `-RunAndroidDeviceSmoke` recovery hint.
+Release evidence scripts that write `-ResultJson` validate the result path
+before doing the expensive or credentialed work: it must be a `.json` file path
+without wildcard or control characters, so smoke and QA evidence is captured
+before it can be reused by release packaging.
+Release packaging and readiness audit apply the same `.json` path rules when
+they read external QA or smoke evidence files.
 Readiness audit also requires the Android device smoke expected APK file name
 and path to match the current `pubspec.yaml` artifact version before the APK
 hash evidence is accepted.

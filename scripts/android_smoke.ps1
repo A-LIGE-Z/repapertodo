@@ -25,6 +25,32 @@ function Invoke-NativeText {
   return (($output -join "`n").Trim())
 }
 
+function Resolve-ResultJsonPath {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return ""
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "Android APK smoke result JSON path must not contain control characters."
+  }
+  if ($Path -match "[*?]") {
+    throw "Android APK smoke result JSON path must not contain wildcard characters."
+  }
+  try {
+    $fullPath = [IO.Path]::GetFullPath($Path)
+  } catch {
+    throw "Android APK smoke result JSON path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($fullPath))) {
+    throw "Android APK smoke result JSON path must include a file name."
+  }
+  if ([IO.Path]::GetExtension($fullPath).ToLowerInvariant() -ne ".json") {
+    throw "Android APK smoke result JSON path must use the .json extension."
+  }
+  return $fullPath
+}
+
 function Find-AndroidSdkTool {
   param(
     [string]$ToolName,
@@ -365,6 +391,7 @@ function Assert-AndroidResourceLanguages {
   }
 }
 
+$resultJsonFullPath = Resolve-ResultJsonPath -Path $ResultJson
 $apkFullPath = [IO.Path]::GetFullPath($ApkPath)
 if (-not (Test-Path -LiteralPath $apkFullPath -PathType Leaf)) {
   throw "Android release APK was not found: $apkFullPath"
@@ -545,8 +572,7 @@ Assert-AndroidResourceLanguages `
   -ExpectedLanguages $ExpectedResourceLanguages
 
 if (-not [string]::IsNullOrWhiteSpace($ResultJson)) {
-  $resultPath = [IO.Path]::GetFullPath($ResultJson)
-  $resultDirectory = [IO.Path]::GetDirectoryName($resultPath)
+  $resultDirectory = [IO.Path]::GetDirectoryName($resultJsonFullPath)
   if (-not [string]::IsNullOrWhiteSpace($resultDirectory) -and
       -not (Test-Path -LiteralPath $resultDirectory -PathType Container)) {
     New-Item -ItemType Directory -Path $resultDirectory | Out-Null
@@ -597,7 +623,7 @@ if (-not [string]::IsNullOrWhiteSpace($ResultJson)) {
     forbiddenLocalizedResourceConfigurationsAbsent = $true
   } |
     ConvertTo-Json -Depth 4 |
-    Set-Content -LiteralPath $resultPath -Encoding ascii
+    Set-Content -LiteralPath $resultJsonFullPath -Encoding ascii
 }
 
 Write-Host "Android APK smoke passed for $apkFullPath."
