@@ -29,11 +29,19 @@ class RePaperTodoController {
   Stream<PaperData> get paperSurfaceUpdates =>
       _platform.paperWindows.surfaceUpdates;
 
+  Stream<PaperData> get paperEdits => _platform.paperWindows.paperEdits;
+
+  Stream<PaperWindowActionRequest> get paperWindowActionRequests =>
+      _platform.paperWindows.actionRequests;
+
   Stream<String> get paperOpenRequests =>
       _platform.paperWindows.paperOpenRequests;
 
   Stream<String> get paperDeleteRequests =>
       _platform.paperWindows.paperDeleteRequests;
+
+  Stream<void> get coordinatorCloseRequests =>
+      _platform.paperWindows.coordinatorCloseRequests;
 
   Stream<StartupCommand> get startupCommands => _platform.startup.commands;
 
@@ -54,6 +62,10 @@ class RePaperTodoController {
 
   Future<List<String>> installedFontFamilies() {
     return _platform.systemIntegration.installedFontFamilies();
+  }
+
+  Future<void> hideCoordinatorWindow() {
+    return _platform.paperWindows.hideCoordinatorWindow();
   }
 
   bool get canCreatePaper => state.papers.length < PaperLimits.maxPapers;

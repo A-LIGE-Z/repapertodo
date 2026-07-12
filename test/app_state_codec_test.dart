@@ -48,6 +48,64 @@ void main() {
     expect(item['order'], 0);
   });
 
+  test('keeps pending sync batches local and out of remote snapshots', () {
+    final state = AppState(
+      startAtLogin: true,
+      sync: SyncSettings(
+        enabled: true,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/dav/',
+          username: 'private-user',
+          password: 'private-password',
+          encryptionPassphrase: 'private-sync-secret',
+          rootPath: 'PrivateRoot',
+        ),
+        pendingOperationBatch: PendingSyncOperationBatch(
+          baseState: {
+            'papers': [
+              {'id': 'pending-paper'},
+            ],
+          },
+          deviceId: 'windows-device',
+          startSequence: 7,
+          createdAtUtc: DateTime.utc(2026, 7, 11, 9, 30),
+        ),
+      ),
+    );
+    const codec = AppStateCodec();
+
+    final local = jsonDecode(codec.encode(state)) as Map<String, Object?>;
+    final localSync = local['sync'] as Map<String, Object?>;
+    expect(localSync['pendingOperationBatch'], {
+      'baseState': {
+        'papers': [
+          {'id': 'pending-paper'},
+        ],
+      },
+      'deviceId': 'windows-device',
+      'startSequence': 7,
+      'createdAtUtc': '2026-07-11T09:30:00.000Z',
+    });
+
+    final remoteSource = codec.encodeRemoteSnapshot(state);
+    final remote = jsonDecode(remoteSource) as Map<String, Object?>;
+    final remoteSync = remote['sync'] as Map<String, Object?>;
+    final remoteWebDav = remoteSync['webDav'] as Map<String, Object?>;
+
+    expect(remote.containsKey('startAtLogin'), false);
+    expect(remoteSync.containsKey('pendingOperationBatch'), false);
+    expect(remoteSource, isNot(contains('pending-paper')));
+    expect(remoteSource, isNot(contains('windows-device')));
+    expect(remoteWebDav['endpoint'], '');
+    expect(remoteWebDav['username'], '');
+    expect(remoteWebDav['password'], '');
+    expect(remoteWebDav['encryptionPassphrase'], '');
+    expect(remoteSource, isNot(contains('private-user')));
+    expect(remoteSource, isNot(contains('private-password')));
+    expect(remoteSource, isNot(contains('private-sync-secret')));
+  });
+
   test('decodes representative original PaperTodo camelCase data', () {
     final source =
         File('test/fixtures/papertodo_original_data.json').readAsStringSync();

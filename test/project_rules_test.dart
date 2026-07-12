@@ -89,11 +89,14 @@ void main() {
       contains('does not by itself prove full Windows feature parity'),
     );
     expect(roadmap, contains('Status: In progress.'));
-    expect(roadmap, contains('Full PaperTodo-grade independent native window'));
-    expect(roadmap, contains('manual QA and further implementation'));
+    expect(roadmap, contains('one top-level HWND and one Flutter engine'));
+    expect(roadmap, contains('one visible HWND per visible\n  paper'));
+    expect(roadmap, contains('Remaining native-window parity work'));
     expect(roadmap, contains('live WebDAV QA against generic\n  WebDAV'));
     expect(roadmap, contains('at least one domestic provider account'));
-    expect(roadmap, contains('runtime smoke on an Android\n  14-17/API 34-37'));
+    expect(roadmap, contains('Android 15/API 35 AOSP ATD emulator'));
+    expect(roadmap, contains('real WorkManager background Dart'));
+    expect(roadmap, contains('credentialed external WebDAV providers'));
     expect(roadmap, contains('signed Android release configuration'));
     expect(roadmap, contains('manual Windows parity QA'));
     expect(
@@ -346,6 +349,10 @@ void main() {
     expect(gradle, contains('compileSdk = 37'));
     expect(gradle, contains('minSdk = 34'));
     expect(gradle, contains('targetSdk = 37'));
+    expect(gradle, contains('"proguard-rules.pro"'));
+    final proguard = _readProjectText('android/app/proguard-rules.pro');
+    expect(proguard, contains('androidx.work.impl.WorkDatabase_Impl'));
+    expect(proguard, contains('<init>();'));
     expect(gradle, contains('resourceConfigurations += listOf("zh", "en")'));
     expect(manifest, contains('android:localeConfig="@xml/locales_config"'));
     expect(localeConfig, contains('<locale android:name="zh" />'));
@@ -648,6 +655,16 @@ void main() {
         _readProjectText('lib/src/core/model/note_canvas_element.dart');
 
     expect(syncDesign, contains('earliest `createdAtUtc` first'));
+    expect(syncDesign, contains('Durable Local Outbox'));
+    expect(syncDesign, contains('same operation IDs and timestamps'));
+    expect(syncDesign, contains('never included in remote snapshots'));
+    expect(syncDesign, contains('cleared only after'));
+    expect(syncDesign, contains('replayed over it'));
+    expect(syncDesign, contains('Android WorkManager'));
+    expect(syncSettingsSource, contains('pendingOperationBatch'));
+    expect(appSyncServiceSource, contains('_uploadPendingSyncBatch'));
+    expect(appSyncServiceSource, contains('_replayPendingSyncBatch'));
+    expect(appSyncServiceSource, contains('_completePendingSyncBatch'));
     expect(syncDesign, contains('Tombstone timestamps only move forward'));
     expect(
         syncDesign, contains('Settings operations are intentionally limited'));
@@ -1015,6 +1032,10 @@ void main() {
     expect(syncDesign, contains('after the new StateStore contents'));
     expect(syncDesign, contains('does not wait for the next app launch'));
     expect(pubspec, contains('workmanager:'));
+    expect(
+      _readProjectText('tool/local_webdav_server.dart'),
+      contains("case 'PROPFIND':"),
+    );
     expect(mainDart, contains('initializeRePaperTodoAndroidBackgroundSync'));
     expect(mainDart, contains('configureRePaperTodoAndroidBackgroundSync'));
     expect(app, contains('AndroidBackgroundSyncConfigurator'));
@@ -1513,18 +1534,27 @@ void main() {
     expect(utils, contains('find_first_of("=:", segment_start)'));
     expect(utils, contains('CreatedPaperStartupCommand'));
     expect(utilsHeader, contains('StartupCommandFromArgs'));
+    expect(runner, contains('class ScopedComInitializer'));
+    expect(runner, contains('class ScopedHandle'));
+    expect(runner, contains('~ScopedComInitializer()'));
+    expect(runner, contains('~ScopedHandle()'));
     expect(runner, contains('IsExplicitExitStartupCommand'));
     expect(runner, contains('OpenMutexW(SYNCHRONIZE'));
+    expect(runner, contains('existing_instance.is_valid()'));
     expect(utils, contains('if (normalized_args.empty())'));
     expect(utils, contains('return "show";'));
     expect(utils, contains('return std::string();'));
-    expect(runner, contains('if (command.empty())'));
+    expect(utils, contains('if (command.empty())'));
     expect(runner, isNot(contains('CreatedPaperStartupCommand')));
     expect(design, contains('return before creating the'));
     expect(design, contains('only unknown arguments'));
     expect(
       runner.indexOf('if (IsExplicitExitStartupCommand'),
       lessThan(runner.indexOf('flutter::DartProject project')),
+    );
+    expect(
+      runner.indexOf('ScopedComInitializer com_initializer'),
+      lessThan(runner.indexOf('return EXIT_FAILURE')),
     );
     expect(dartParser, contains("RegExp(r'[=:]+')"));
     expect(dartParser, contains('_createdPaperKind'));
@@ -1534,6 +1564,7 @@ void main() {
     final entrypoint = _readProjectText('windows/runner/main.cpp');
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final utils = _readProjectText('windows/runner/utils.cpp');
+    final utilsHeader = _readProjectText('windows/runner/utils.h');
     final windowsPlatform =
         _readProjectText('lib/src/platform/windows_platform_services.dart');
     final dartParser =
@@ -1545,28 +1576,61 @@ void main() {
     expect(entrypoint, contains('CreateMutexW'));
     expect(entrypoint, contains('ERROR_ALREADY_EXISTS'));
     expect(entrypoint, contains('StartupCommandFromArgs'));
+    expect(utilsHeader, contains('SignalStartupCommandPipe'));
+    expect(utilsHeader, contains('SignalPipeWake'));
+    expect(utils, contains('WriteStartupCommandToPipe'));
+    expect(utils, contains('WritePipeWake'));
+    expect(utils, contains('bytes_written != static_cast<DWORD>'));
+    expect(utils, contains('ScopedHandle pipe(CreateFileW'));
+    expect(utils, contains('pipe.is_valid()'));
+    expect(runner, contains('class ScopedWinHandle'));
+    expect(runner, contains('~ScopedWinHandle()'));
     expect(utils, contains('reveal-pinned-todo'));
     expect(utils, contains('reveal-pinned-note'));
     expect(dartParser, contains('reveal-pinned-todo'));
     expect(dartParser, contains('reveal-pinned-note'));
     expect(
         entrypoint, contains('SignalPrimaryInstance(command_line_arguments)'));
-    expect(entrypoint, contains('CreateFileW(kSingleInstancePipeName'));
-    expect(entrypoint, contains('WriteFile(pipe, command.data()'));
+    expect(
+      entrypoint,
+      contains('SignalStartupCommandPipe(kSingleInstancePipeName'),
+    );
     expect(runner, contains('SignalPrimaryInstanceFromChannel'));
     expect(runner, contains('GetStringListArgumentValue(call.arguments())'));
-    expect(runner, contains('StartupCommandFromArgs(args)'));
-    expect(runner, contains('CreateFileW(kSingleInstancePipeName'));
-    expect(runner, contains('WriteFile(pipe, command.data()'));
+    expect(
+      runner,
+      contains('SignalStartupCommandPipe(kSingleInstancePipeName'),
+    );
     expect(runner, contains('forward_to_primary_failed'));
     expect(
       runner,
       isNot(contains(
           'if (method == "forwardToPrimary") {\n          result->Success();')),
     );
-    expect(entrypoint, contains('WaitNamedPipeW(kSingleInstancePipeName'));
+    expect(utils, contains('WaitNamedPipeW(pipe_name'));
     expect(runner, contains('StartSingleInstanceListener();'));
-    expect(runner, contains('CreateNamedPipeW'));
+    expect(runner, contains('ScopedWinHandle pipe(CreateNamedPipeW'));
+    expect(runner, contains('ConnectNamedPipe(pipe.get(), nullptr)'));
+    expect(runner, contains('ReadFile(pipe.get(), buffer'));
+    expect(runner, contains('DisconnectNamedPipe(pipe.get())'));
+    expect(runner, contains('kMaxSingleInstanceCommandBytes = 4096'));
+    expect(runner, contains('FirstStartupCommandLine'));
+    expect(runner, contains('CanonicalStartupCommandLine'));
+    expect(runner, contains("const size_t newline = command.find('\\n')"));
+    expect(runner, contains('command = command.substr(0, newline)'));
+    expect(runner, contains('command = FirstStartupCommandLine(command)'));
+    expect(
+      runner,
+      contains('command.empty() || HasAsciiControlCharacter(command)'),
+    );
+    expect(
+      runner,
+      contains('StartupCommandFromArgs(std::vector<std::string>{command})'),
+    );
+    expect(runner, contains('command = CanonicalStartupCommandLine(command)'));
+    expect(runner, contains('bytes_to_append < bytes_read'));
+    expect(
+        runner, contains('command.size() >= kMaxSingleInstanceCommandBytes'));
     expect(
         runner, contains('PostMessageW(window, kSingleInstanceCommandMessage'));
     expect(runner, contains('auto command_message = std::make_unique'));
@@ -1575,7 +1639,20 @@ void main() {
     expect(runner, isNot(contains('new std::string(command)')));
     expect(runner, contains('case kSingleInstanceCommandMessage'));
     expect(runner, contains('SendStartupCommandRequested(*command)'));
+    expect(runner, contains('const std::string canonical_command'));
+    expect(
+      runner,
+      contains('StartupCommandFromArgs(std::vector<std::string>{command})'),
+    );
+    expect(runner, contains('HasAsciiControlCharacter(canonical_command)'));
+    expect(runner, contains('flutter::EncodableValue>(canonical_command)'));
     expect(runner, contains('StopSingleInstanceListener();'));
+    expect(runner, contains('SignalPipeWake(kSingleInstancePipeName'));
+    expect(
+      runner,
+      isNot(contains('CreateFileW(kSingleInstancePipeName, GENERIC_WRITE')),
+    );
+    expect(runner, isNot(contains('CloseHandle(pipe)')));
     expect(runner, contains('single_instance_listener_thread_.join()'));
     expect(windowsPlatform, contains('_pendingCommands'));
     expect(windowsPlatform, contains('onListen: _flushPendingCommands'));
@@ -2771,6 +2848,41 @@ void main() {
     expect(settingsCase, contains('SetForegroundWindow(window);'));
   });
 
+  test('Windows forwarded settings command reveals the coordinator window', () {
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final forwardedCommandStart =
+        runner.indexOf('case kSingleInstanceCommandMessage:');
+    final forwardedCommandEnd =
+        runner.indexOf('case kTrayIconMessage:', forwardedCommandStart);
+
+    expect(forwardedCommandStart, isNonNegative);
+    expect(forwardedCommandEnd, greaterThan(forwardedCommandStart));
+    final forwardedCommand =
+        runner.substring(forwardedCommandStart, forwardedCommandEnd);
+    expect(
+        forwardedCommand, contains('SendStartupCommandRequested(*command);'));
+    expect(forwardedCommand, contains('if (*command == "settings")'));
+    expect(forwardedCommand, contains('ShowWindow(hwnd, SW_SHOWNORMAL);'));
+    expect(forwardedCommand, contains('SetForegroundWindow(hwnd);'));
+  });
+
+  test('Windows coordinator closes without becoming a duplicate paper window',
+      () {
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final closeStart = runner.indexOf('case WM_CLOSE:');
+    final closeEnd = runner.indexOf('case WM_HOTKEY:', closeStart);
+
+    expect(closeStart, isNonNegative);
+    expect(closeEnd, greaterThan(closeStart));
+    final closeCase = runner.substring(closeStart, closeEnd);
+    expect(closeCase, contains('if (!paper_windows_.empty())'));
+    expect(closeCase, contains('SendWindowEvent("coordinatorCloseRequested")'));
+    expect(closeCase, contains('ShowWindow(hwnd, SW_HIDE);'));
+    expect(closeCase.indexOf('if (!paper_windows_.empty())'),
+        lessThan(closeCase.indexOf('RetargetActivePaperToVisibleSurface')));
+    expect(runner, contains('if (method == "hideCoordinator")'));
+  });
+
   test('Windows tray paper command lets Dart toggle the selected paper', () {
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final app = _readProjectText('lib/src/app.dart');
@@ -3037,6 +3149,54 @@ void main() {
     expect(closeBlock, contains('RetargetActivePaperToVisibleSurface'));
   });
 
+  test('Windows runner owns one Flutter engine and HWND per visible paper', () {
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final roadmap = _readProjectText('docs/ROADMAP.md');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final runnerHeader = _readProjectText('windows/runner/flutter_window.h');
+    final paperWindow =
+        _readProjectText('windows/runner/paper_flutter_window.cpp');
+    final paperWindowHeader =
+        _readProjectText('windows/runner/paper_flutter_window.h');
+    final cmake = _readProjectText('windows/runner/CMakeLists.txt');
+    final mainDart = _readProjectText('lib/main.dart');
+    final paperWindowApp =
+        _readProjectText('lib/src/windows/paper_window_app.dart');
+    final windowsSmoke = _readProjectText('scripts/windows_smoke.ps1');
+
+    expect(design, contains('one child Flutter engine and one top-level HWND'));
+    expect(design, contains('return only their own'));
+    expect(roadmap, contains('one visible HWND per visible'));
+    expect(runnerHeader,
+        contains('std::map<std::string, std::unique_ptr<PaperFlutterWindow>>'));
+    expect(runner, contains('ReconcilePaperWindows(*papers)'));
+    expect(runner, contains('child_project.set_dart_entrypoint_arguments'));
+    expect(runner, contains('ShowWindow(GetHandle(), SW_HIDE)'));
+    expect(paperWindowHeader, contains('class PaperFlutterWindow'));
+    expect(paperWindow,
+        contains('std::make_unique<flutter::FlutterViewController>'));
+    expect(paperWindow, contains('"repapertodo/paper_window"'));
+    expect(paperWindow, contains('collapsed_ ? 92.0'));
+    expect(paperWindow, contains('collapsed_ ? 46.0'));
+    expect(paperWindow, contains('FindDesktopWorkerWindow'));
+    expect(paperWindow, contains('SetHideFromWindowSwitcher'));
+    expect(paperWindow, contains('IsExternalFullscreenWindow'));
+    expect(paperWindow, contains('IsCoveredByAnotherWindow'));
+    expect(cmake, contains('"paper_flutter_window.cpp"'));
+    expect(mainDart, contains('PaperWindowArguments.tryParse(args)'));
+    expect(paperWindowApp, contains("'paperChanged'"));
+    expect(paperWindowApp, contains('paperWindowMode: true'));
+    expect(windowsSmoke, contains('CountVisibleTopLevelWindows'));
+    expect(windowsSmoke, contains('independentPaperSurfaces = \$true'));
+    expect(windowsSmoke, contains('settingsCoordinatorLifecycle = \$true'));
+    expect(windowsSmoke, contains('settingsStartupCommands'));
+    expect(windowsSmoke, contains('Close-CoordinatorWindow'));
+    expect(
+      _readProjectText('scripts/release_readiness_audit.ps1'),
+      contains('must prove independent visible paper HWNDs'),
+    );
+  });
+
   test('Windows startup toggle checks the actual native surface visibility',
       () {
     final controller = _readProjectText('lib/src/app_controller.dart');
@@ -3247,6 +3407,8 @@ void main() {
         _readProjectText('scripts/webdav_live_smoke.ps1');
     final webDavLiveSmokeDart = _readProjectText('tool/webdav_live_smoke.dart');
     final workflow = _readProjectText('.github/workflows/release.yml');
+    final qaEvidenceWorkflow =
+        _readProjectText('.github/workflows/qa-evidence.yml');
     final releaseAssetVerificationTest =
         _readProjectText('test/release_asset_verification_test.dart');
     final readme = _readProjectText('README.md');
@@ -4547,6 +4709,10 @@ void main() {
     expect(signingScript, contains('function Convert-AndroidKeystoreSecret'));
     expect(
       signingScript,
+      contains('function Resolve-AndroidSigningOutputPath'),
+    );
+    expect(
+      signingScript,
       contains("Android release signing secret '\$Name'"),
     );
     expect(signingScript, contains('must not contain control characters'));
@@ -4573,6 +4739,30 @@ void main() {
     expect(gradle, contains('File(storeFile).isAbsolute'));
     expect(gradle, contains('Android signing storeFile must be relative'));
     expect(signingScript, contains('must be valid base64'));
+    expect(
+      signingScript,
+      contains(r'Android signing $Description path must not be blank.'),
+    );
+    expect(
+      signingScript,
+      contains(
+          r'Android signing $Description path must not contain wildcard characters.'),
+    );
+    expect(
+      signingScript,
+      contains(
+        r'Android signing $Description path must include a file name.',
+      ),
+    );
+    expect(
+      signingScript,
+      contains(r'$resolvedKeystorePath = Resolve-AndroidSigningOutputPath `'),
+    );
+    expect(
+      signingScript,
+      contains(
+          r'$resolvedKeyPropertiesPath = Resolve-AndroidSigningOutputPath `'),
+    );
     expect(
       signingScript,
       contains('Assert-AndroidSigningSecret -Name "ANDROID_KEYSTORE_BASE64"'),
@@ -4635,6 +4825,10 @@ void main() {
       signingScriptTest,
       contains('Android signing script rejects absolute storeFile values'),
     );
+    expect(
+      signingScriptTest,
+      contains('Android signing script rejects unsafe output paths'),
+    );
     expect(signingScript, contains('} finally {'));
     expect(
       readme,
@@ -4655,8 +4849,54 @@ void main() {
     expect(workflow, isNot(contains('HTTP_PROXY: ""')));
     expect(workflow, isNot(contains('HTTPS_PROXY: ""')));
     expect(workflow, isNot(contains('ALL_PROXY: ""')));
+    expect(
+      RegExp(
+        RegExp.escape(
+          r'& $sdkManager.FullName --channel=3 "platform-tools" "platforms;android-37" "build-tools;37.0.0"',
+        ),
+      ).allMatches(workflow).length,
+      2,
+    );
     expect(workflow, contains(r'.\scripts\release.ps1 @releaseArgs'));
     expect(workflow, contains('-PublishGitHubRelease'));
+    expect(workflow, contains('qaEvidenceRunId'));
+    expect(workflow, contains('actions/download-artifact@v4'));
+    expect(workflow, contains(r'run-id: ${{ inputs.qaEvidenceRunId }}'));
+    expect(workflow, contains('name: repapertodo-qa-evidence'));
+    expect(
+        qaEvidenceWorkflow, contains('runs-on: [self-hosted, Windows, X64]'));
+    expect(qaEvidenceWorkflow, contains('candidateRunId'));
+    expect(qaEvidenceWorkflow, contains('actions/download-artifact@v4'));
+    expect(qaEvidenceWorkflow, contains('scripts\\windows_manual_qa.ps1'));
+    expect(qaEvidenceWorkflow, contains('scripts\\webdav_live_smoke.ps1'));
+    expect(qaEvidenceWorkflow,
+        contains('REPAPERTODO_WEBDAV_PROVIDER: jianguoyun'));
+    expect(qaEvidenceWorkflow, contains('scripts\\android_device_smoke.ps1'));
+    expect(qaEvidenceWorkflow, contains('name: repapertodo-qa-evidence'));
+    expect(
+      workflow,
+      contains(
+        r'$releaseArgs += @("-WindowsManualQaResultJson", "dist\qa\windows-manual-qa.json")',
+      ),
+    );
+    expect(
+      workflow,
+      contains(
+        r'$releaseArgs += @("-WebDavLiveSmokeResultJson", "dist\qa\webdav-live-smoke.json")',
+      ),
+    );
+    expect(
+      workflow,
+      contains(
+        r'$releaseArgs += @("-WebDavDomesticLiveSmokeResultJson", "dist\qa\webdav-domestic-live-smoke.json")',
+      ),
+    );
+    expect(
+      workflow,
+      contains(
+        r'$releaseArgs += @("-AndroidDeviceSmokeResultJson", "dist\qa\android-device-smoke.json")',
+      ),
+    );
     expect(workflow, contains('actions/upload-artifact@v4'));
     expect(workflow, contains('Upload published artifacts'));
     expect(workflow, contains('path: dist/*'));

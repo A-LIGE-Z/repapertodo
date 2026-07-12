@@ -45,6 +45,9 @@ class NoopPlatformServices implements PlatformServices {
 
 class NoopPaperWindowHost implements PaperWindowHost {
   @override
+  Stream<void> get coordinatorCloseRequests => const Stream.empty();
+
+  @override
   Stream<String> get paperDeleteRequests => const Stream.empty();
 
   @override
@@ -52,6 +55,12 @@ class NoopPaperWindowHost implements PaperWindowHost {
 
   @override
   Stream<PaperData> get surfaceUpdates => const Stream.empty();
+
+  @override
+  Stream<PaperData> get paperEdits => const Stream.empty();
+
+  @override
+  Stream<PaperWindowActionRequest> get actionRequests => const Stream.empty();
 
   @override
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async => null;
@@ -64,6 +73,9 @@ class NoopPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<void> hidePaper(PaperData paper) async {}
+
+  @override
+  Future<void> hideCoordinatorWindow() async {}
 
   @override
   Future<void> revealPinnedPaper(PaperData paper) async {}

@@ -34,10 +34,24 @@ The interface should stay close to PaperTodo's "sheets of paper" metaphor:
 
 Windows is not a scaled-up mobile app. The first Windows milestone must feel like independent desktop papers, not a single Flutter dashboard pretending to contain papers.
 
-The Windows platform channel should treat each paper as an addressable surface.
+The Windows platform channel treats each paper as an addressable surface. The
+custom runner owns one child Flutter engine and one top-level HWND per visible
+paper; the primary coordinator HWND stays hidden during normal paper use and
+remains responsible for the tray, startup commands, persistence, and sync.
+Child engines receive canonical state for rendering but return only their own
+normalized `PaperData`, so concurrent paper edits cannot overwrite global state
+from a stale child snapshot. The release smoke enumerates visible top-level
+process windows and requires the count to match visible papers.
+Each child HWND independently applies always-on-top, Alt+Tab visibility,
+desktop-worker pinning, fullscreen topmost avoidance, and covered/fullscreen
+deep-capsule hiding. Collapsed child windows use the PaperTodo 92x46 capsule
+size while retaining expanded dimensions in `PaperData` for restoration.
+
+The compatibility registry described below remains the routing and fallback
+boundary for tray state, early startup events, and legacy native calls.
 Window and tray events may include a `paperId` so Dart can route bounds,
 show/hide, close, and open requests to the correct `PaperData` even while the
-current runner still hosts one Flutter window. The native runner should
+native runner manages multiple Flutter windows. The native runner should
 preserve that `paperId` in follow-up window events after Dart sends it through
 show, hide, bounds, or tray commands.
 Events that explicitly name an unknown `paperId` should be ignored instead of

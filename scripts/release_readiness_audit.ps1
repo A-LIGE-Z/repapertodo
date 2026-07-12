@@ -918,6 +918,25 @@ function Test-ReleaseMetadataRecord {
       [int]$Record.windows.smoke.visiblePaperCountAfterIgnoredCommand -ne 0) {
     return "Release metadata Windows smoke must prove unknown secondary startup commands do not restore hidden papers."
   }
+  if ([bool]$Record.windows.smoke.independentPaperSurfaces -ne $true -or
+      [int]$Record.windows.smoke.initialVisibleTopLevelWindowCount -lt
+        [int]$Record.windows.smoke.initialPaperCount -or
+      [int]$Record.windows.smoke.finalVisibleTopLevelWindowCount -lt 2) {
+    return "Release metadata Windows smoke must prove independent visible paper HWNDs."
+  }
+  $visiblePaperCountBeforeSettings =
+    [int]$Record.windows.smoke.visiblePaperCountBeforeSettings
+  if ([bool]$Record.windows.smoke.settingsCoordinatorLifecycle -ne $true -or
+      -not (Test-StringSequence `
+        -Actual $Record.windows.smoke.settingsStartupCommands `
+        -Expected @("--settings")) -or
+      $visiblePaperCountBeforeSettings -lt 2 -or
+      [int]$Record.windows.smoke.visibleTopLevelWindowCountWhileSettingsOpen -lt
+        ($visiblePaperCountBeforeSettings + 1) -or
+      [int]$Record.windows.smoke.visibleTopLevelWindowCountAfterSettingsClose -ne
+        $visiblePaperCountBeforeSettings) {
+    return "Release metadata Windows smoke must prove the settings coordinator lifecycle preserves independent paper HWNDs."
+  }
   if ($null -eq $Record.webDav -or
       $null -eq $Record.webDav.staticSmoke -or
       [string]$Record.webDav.staticSmoke.status -ne "passed") {

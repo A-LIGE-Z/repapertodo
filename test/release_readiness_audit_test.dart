@@ -254,8 +254,8 @@ Map<String, dynamic> _releaseMetadataRecord({
   required File windowsZip,
   required File androidApk,
   File? releaseNotes,
-  String version = '0.1.1+3',
-  String tagName = 'v0.1.1+3',
+  String version = '0.1.1+4',
+  String tagName = 'v0.1.1+4',
   List<String> supportedLanguages = const ['zh', 'en'],
   List<String> expectedResourceLanguages = const ['zh', 'en'],
   String? androidApkSha256Override,
@@ -266,7 +266,7 @@ Map<String, dynamic> _releaseMetadataRecord({
   final releaseNotesFile = releaseNotes ??
       (File(p.join(
         windowsZip.parent.path,
-        'repapertodo-0.1.1-3-release-notes.md',
+        'repapertodo-0.1.1-4-release-notes.md',
       ))
         ..writeAsStringSync('Release notes'));
   return {
@@ -284,6 +284,14 @@ Map<String, dynamic> _releaseMetadataRecord({
         'exeFileName': 'repapertodo.exe',
         'initialPaperCount': 1,
         'finalPaperCount': 3,
+        'initialVisibleTopLevelWindowCount': 1,
+        'finalVisibleTopLevelWindowCount': 2,
+        'independentPaperSurfaces': true,
+        'settingsCoordinatorLifecycle': true,
+        'settingsStartupCommands': ['--settings'],
+        'visiblePaperCountBeforeSettings': 2,
+        'visibleTopLevelWindowCountWhileSettingsOpen': 3,
+        'visibleTopLevelWindowCountAfterSettingsClose': 2,
         'initialTodoPaperCount': 1,
         'finalTodoPaperCount': 2,
         'initialNotePaperCount': 0,
@@ -552,7 +560,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -595,13 +603,13 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     _writeJson(
       releaseMetadataJson,
       _releaseMetadataRecord(windowsZip: windowsZip, androidApk: androidApk),
@@ -641,13 +649,13 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     final metadata =
         _releaseMetadataRecord(windowsZip: windowsZip, androidApk: androidApk);
     final windows = metadata['windows'] as Map<String, dynamic>;
@@ -696,13 +704,13 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     final metadata =
         _releaseMetadataRecord(windowsZip: windowsZip, androidApk: androidApk);
     final windows = metadata['windows'] as Map<String, dynamic>;
@@ -737,6 +745,57 @@ void main() {
     );
   });
 
+  test('readiness audit rejects missing independent paper HWND evidence',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for readiness audit tests.');
+      return;
+    }
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_readiness_independent_hwnd_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final windowsZip =
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
+          ..writeAsStringSync('windows package');
+    final androidApk =
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
+          ..writeAsStringSync('android package');
+    final releaseMetadataJson =
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
+    final metadata =
+        _releaseMetadataRecord(windowsZip: windowsZip, androidApk: androidApk);
+    final windows = metadata['windows'] as Map<String, dynamic>;
+    final smoke = windows['smoke'] as Map<String, dynamic>;
+    smoke['independentPaperSurfaces'] = false;
+    _writeJson(releaseMetadataJson, metadata);
+
+    final audit = _decodeAudit(
+      await Process.run(
+        powerShell,
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          'scripts/release_readiness_audit.ps1',
+          '-ReleaseMetadataJson',
+          releaseMetadataJson.path,
+        ],
+        workingDirectory: Directory.current.path,
+      ),
+    );
+
+    final metadataCheck = _checkById(audit, 'releaseMetadata');
+    expect(metadataCheck['status'], 'blocked');
+    expect(
+      metadataCheck['summary'],
+      contains('must prove independent visible paper HWNDs'),
+    );
+  });
+
   test('readiness audit rejects release metadata with extra runtime language',
       () async {
     final powerShell = _findPowerShellExecutable();
@@ -750,13 +809,13 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     _writeJson(
       releaseMetadataJson,
       _releaseMetadataRecord(
@@ -806,13 +865,13 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     _writeJson(
       releaseMetadataJson,
       _releaseMetadataRecord(
@@ -861,10 +920,10 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseMetadataJson =
         File(p.join(temp.path, 'repapertodo-wrong-release.json'));
@@ -913,13 +972,13 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     final staleToolchain = _currentFlutterToolchain()
       ..['dartSdkVersion'] = '0.0.0-stale';
     _writeJson(
@@ -971,13 +1030,13 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     _writeJson(
       releaseMetadataJson,
       _releaseMetadataRecord(
@@ -1009,7 +1068,7 @@ void main() {
     expect(
       metadataCheck['summary'],
       contains(
-        "Release metadata artifact 'repapertodo-android-0.1.1-3.apk' SHA-256 must match the file.",
+        "Release metadata artifact 'repapertodo-android-0.1.1-4.apk' SHA-256 must match the file.",
       ),
     );
   });
@@ -1027,13 +1086,13 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     _writeJson(
       releaseMetadataJson,
       _releaseMetadataRecord(
@@ -1083,16 +1142,16 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseNotes =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release-notes.md'))
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release-notes.md'))
           ..writeAsStringSync('Release notes');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     _writeJson(
       releaseMetadataJson,
       _releaseMetadataRecord(
@@ -1141,18 +1200,18 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseNotes =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release-notes.md'))
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release-notes.md'))
           ..writeAsStringSync('Release notes');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     final releaseChecksumsFile =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-sha256.txt'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-sha256.txt'));
     _writeJson(
       releaseMetadataJson,
       _releaseMetadataRecord(
@@ -1204,18 +1263,18 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseNotes =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release-notes.md'))
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release-notes.md'))
           ..writeAsStringSync('Release notes');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     final releaseChecksumsFile =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-sha256.txt'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-sha256.txt'));
     _writeJson(
       releaseMetadataJson,
       _releaseMetadataRecord(
@@ -1268,16 +1327,16 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseNotes =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release-notes.md'))
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release-notes.md'))
           ..writeAsStringSync('Release notes');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     final releaseChecksumsFile =
         File(p.join(temp.path, 'repapertodo-wrong-sha256.txt'));
     _writeJson(
@@ -1338,18 +1397,18 @@ void main() {
     );
     addTearDown(() => temp.delete(recursive: true));
     final windowsZip =
-        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-3.zip'))
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
           ..writeAsStringSync('windows package');
     final androidApk =
-        File(p.join(temp.path, 'repapertodo-android-0.1.1-3.apk'))
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
           ..writeAsStringSync('android package');
     final releaseNotes =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release-notes.md'))
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release-notes.md'))
           ..writeAsStringSync('Release notes');
     final releaseMetadataJson =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-release.json'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
     final releaseChecksumsFile =
-        File(p.join(temp.path, 'repapertodo-0.1.1-3-sha256.txt'));
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-sha256.txt'));
     _writeJson(
       releaseMetadataJson,
       _releaseMetadataRecord(
@@ -1406,7 +1465,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1462,7 +1521,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1517,7 +1576,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1566,7 +1625,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1618,7 +1677,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1672,7 +1731,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1727,7 +1786,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1790,7 +1849,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1854,7 +1913,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1907,7 +1966,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -1961,7 +2020,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;
@@ -2015,7 +2074,7 @@ void main() {
     );
     final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
     final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
-    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-3.apk'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
     if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
       markTestSkipped('Release artifacts are unavailable for hash matching.');
       return;

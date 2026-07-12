@@ -63,6 +63,15 @@ rejects skipped Windows manual QA, skipped generic WebDAV live smoke, skipped
 domestic WebDAV live smoke, and skipped Android device smoke records on the
 public GitHub Release path, and it rejects using both Android smoke sources in
 the same release run.
+For GitHub Actions publishing, first run the normal package job, then dispatch
+`.github/workflows/qa-evidence.yml` on a self-hosted Windows x64 QA runner with
+that package run ID. The QA workflow downloads the exact candidate, binds the
+Windows manual QA record to its extracted `repapertodo.exe` and `data/app.so`,
+runs generic and Jianguoyun live WebDAV checks, runs the connected Android
+device smoke, and uploads a `repapertodo-qa-evidence` artifact. Finally dispatch
+the release workflow with `publishRelease: true` and `qaEvidenceRunId` set to
+the QA workflow run ID. The publish job downloads all four JSON files and
+passes them explicitly to `scripts/release.ps1`.
 The script also reads `PaperTodoStrings.supportedLocales` before packaging and
 fails if the runtime language list drifts away from Chinese and English.
 Use `scripts/release_readiness_audit.ps1` when you want the same release
@@ -142,6 +151,20 @@ paths, device serial, API level, package name, APK application ID, APK file
 name, APK byte count, APK SHA-256, launch wait, observed process ID, and UTC
 check time. Release packaging revalidates that this APK file name, byte count,
 and SHA-256 match the packaged Android APK when the device smoke runs.
+
+The release build includes an explicit R8 keep rule for
+`androidx.work.impl.WorkDatabase_Impl`. WorkManager constructs this generated
+Room database class reflectively during Android startup; removing its
+no-argument constructor makes the release APK crash before Flutter renders, so
+device smoke is required in addition to manifest/static APK inspection.
+
+`tool/local_webdav_server.dart` provides a repository-local authenticated
+WebDAV endpoint for emulator protocol QA. It implements the HEAD, GET, PUT,
+DELETE, MKCOL, and PROPFIND methods used by RePaperTodo and writes a JSON-lines
+request log. An Android emulator reaches a host instance through
+`http://10.0.2.2:<port>/`. Passing this local protocol test proves the real
+WorkManager/headless-Dart/network/storage path, but it does not replace live
+compatibility checks against generic or domestic WebDAV providers.
 Release evidence scripts that write `-ResultJson` require a `.json` file path
 without wildcard or control characters. Android device smoke validates this
 before installing or launching the APK, and live WebDAV smoke validates it
@@ -171,18 +194,23 @@ use:
 .\scripts\windows_smoke.ps1
 ```
 
-The smoke script copies `build/windows/x64/runner/Release` to a system temp
-directory, starts that isolated `repapertodo.exe`, verifies a primary instance
+The smoke script copies `build/windows/x64/runner/Release` to an ignored
+workspace `.tmp/` directory, starts that isolated `repapertodo.exe`, verifies a primary instance
 can create its initial `data.json`, forwards secondary `--hide` and an unknown
 startup command to confirm unknown-only arguments do not restore hidden papers,
 forwards secondary `--new-note` and `--new-todo` startup commands to the primary
-instance, waits for those papers to persist, then forwards `--exit` and removes
-the temp copy. This keeps smoke-test state out of the build output while still
-exercising the real packaged Windows runner. When run with `-ResultJson`, it
+instance, waits for those papers to persist, requires one visible top-level HWND
+per visible paper, forwards `--settings`, requires one additional visible
+coordinator HWND while settings is open, closes it, and proves the independent
+paper HWND count and persisted visibility are unchanged before forwarding
+`--exit` and removing the temp copy. This keeps
+smoke-test state out of the build output while still exercising the real
+packaged Windows runner. When run with `-ResultJson`, it
 writes a structured smoke result with the checked EXE file name, source release
 directory, initial/final persisted paper counts, note/todo type count increases
 from forwarded startup commands, the ignored unknown startup command evidence,
-timeout settings, and UTC check time. Release packaging records this Windows smoke result in metadata by
+the settings coordinator lifecycle counts, timeout settings, and UTC check time.
+Release packaging records this Windows smoke result in metadata by
 default and revalidates that the recorded source release directory is the current
 Windows build output with `repapertodo.exe`, `flutter_windows.dll`, and `data`.
 

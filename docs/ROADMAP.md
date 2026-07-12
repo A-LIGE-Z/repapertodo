@@ -44,10 +44,17 @@ Status: In progress.
   capsules, and global hotkeys are implemented behind platform boundaries.
 - Todo and note editing are implemented in the Flutter UI and covered by widget
   and controller tests.
-- Current Windows native surface handling uses a registered paper-surface model
-  around the Windows runner. Full PaperTodo-grade independent native window
-  parity still needs manual QA and further implementation if one HWND per paper
-  is required.
+- The Windows runner now creates one top-level HWND and one Flutter engine per
+  visible paper, while the hidden primary engine remains authoritative for
+  persistence, tray, startup commands, and sync. Automated runtime smoke
+  enumerates the process windows and requires one visible HWND per visible
+  paper; it also opens and closes the settings coordinator and requires the
+  independent paper HWND count and persisted visibility to remain unchanged.
+- Per-HWND always-on-top, task-switcher policy, desktop pinning,
+  fullscreen/covered deep-capsule avoidance, and 92x46 collapsed capsule chrome
+  are implemented in the runner.
+- Remaining native-window parity work is real multi-monitor queue QA,
+  transparency/drag-resize polish, and sustained desktop-session validation.
 
 ## Phase 3: Windows Feature Parity
 
@@ -71,6 +78,11 @@ Status: Done for the local-first core, with continued hardening.
 
 - Stable device IDs, snapshots, per-device operation logs, canonical operation
   payloads, delete tombstones, and merge application are implemented.
+- Local edits persist a deterministic durable outbox in `data.json`; restart,
+  manual, debounced, startup, and Android background sync retry the same
+  operation IDs until snapshot sync and operation-log merge both finish.
+- Downloaded snapshots replay the durable local batch before merge, and the
+  batch is removed only after the final merged state is saved.
 - Sync avoids last-writer-wins whole-file replacement by using snapshots plus
   operation logs.
 - Operation-log diffs normalize local model IDs before upload.
@@ -107,9 +119,16 @@ Status: In progress.
 - Release configuration targets Android 14-17/API 34-37 and static APK smoke
   checks validate the manifest, permissions, FileProvider scope, cleartext
   WebDAV support, package visibility, and language resource set.
-- Required before stable replacement claim: runtime smoke on an Android
-  14-17/API 34-37 device or emulator, plus Android-specific sync foreground and
-  background behavior checks.
+- The release APK now passes install, launch, process, and foreground-package
+  smoke on an Android 15/API 35 AOSP ATD emulator. This runtime check also
+  guards the WorkManager Room database constructor from R8 removal before
+  Flutter starts.
+- The same API 35 emulator has completed a real WorkManager background Dart
+  run against the repository-local HTTP WebDAV server: the worker returned
+  success, uploaded encrypted snapshot/operation/manifest files, and persisted
+  its device sequence back to Android `data.json`.
+- Required before stable replacement claim: repeat Android foreground and
+  background sync against credentialed external WebDAV providers.
 
 ## Phase 7: Release Readiness
 

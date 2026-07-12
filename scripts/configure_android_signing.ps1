@@ -67,6 +67,39 @@ function Convert-AndroidKeystoreSecret {
   }
 }
 
+function Resolve-AndroidSigningOutputPath {
+  param(
+    [string]$Path,
+    [string]$Description
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    throw "Android signing $Description path must not be blank."
+  }
+  if ($Path -match "[\x00-\x1F\x7F-\x9F]") {
+    throw "Android signing $Description path must not contain control characters."
+  }
+  if ($Path.Contains("*") -or $Path.Contains("?")) {
+    throw "Android signing $Description path must not contain wildcard characters."
+  }
+  try {
+    $resolvedPath = if ([IO.Path]::IsPathRooted($Path)) {
+      [IO.Path]::GetFullPath($Path)
+    } else {
+      [IO.Path]::GetFullPath((Join-Path $PWD $Path))
+    }
+  } catch {
+    throw "Android signing $Description path is invalid: $($_.Exception.Message)"
+  }
+  if ([string]::IsNullOrWhiteSpace([IO.Path]::GetFileName($resolvedPath))) {
+    throw "Android signing $Description path must include a file name."
+  }
+  if (Test-Path -LiteralPath $resolvedPath -PathType Container) {
+    throw "Android signing $Description path must include a file name."
+  }
+  return $resolvedPath
+}
+
 try {
   $androidSigningSecrets = [ordered]@{}
   foreach ($name in $androidSigningSecretNames) {
@@ -103,16 +136,12 @@ try {
   $keystoreSecret = $androidSigningSecrets["ANDROID_KEYSTORE_BASE64"]
   $keystoreBytes = Convert-AndroidKeystoreSecret -Value $keystoreSecret
   Assert-AndroidStoreFile -Value $StoreFile
-  $resolvedKeystorePath = if ([IO.Path]::IsPathRooted($KeystorePath)) {
-    [IO.Path]::GetFullPath($KeystorePath)
-  } else {
-    [IO.Path]::GetFullPath((Join-Path $PWD $KeystorePath))
-  }
-  $resolvedKeyPropertiesPath = if ([IO.Path]::IsPathRooted($KeyPropertiesPath)) {
-    [IO.Path]::GetFullPath($KeyPropertiesPath)
-  } else {
-    [IO.Path]::GetFullPath((Join-Path $PWD $KeyPropertiesPath))
-  }
+  $resolvedKeystorePath = Resolve-AndroidSigningOutputPath `
+    -Path $KeystorePath `
+    -Description "keystore"
+  $resolvedKeyPropertiesPath = Resolve-AndroidSigningOutputPath `
+    -Path $KeyPropertiesPath `
+    -Description "key.properties"
 
   $keystoreParent = [IO.Path]::GetDirectoryName($resolvedKeystorePath)
   $keyPropertiesParent = [IO.Path]::GetDirectoryName($resolvedKeyPropertiesPath)

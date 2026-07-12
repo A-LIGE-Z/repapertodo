@@ -1,11 +1,15 @@
 # Flutter/Dart
 .dart_tool/
+.tmp/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
 build/
 dist/
 android/.kotlin/
+.android-home/
+.android-sdk/
+.android-avd/
 
 # IDE
 .idea/

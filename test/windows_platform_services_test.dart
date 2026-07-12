@@ -160,6 +160,7 @@ void main() {
     expect(
       platformCalls.map((call) => call.method),
       [
+        'updatePaperWindow',
         'setBounds',
         'setPinnedToDesktop',
         'show',
@@ -167,6 +168,7 @@ void main() {
         'setAlwaysOnTop',
         'getBounds',
         'hide',
+        'setPaperWindowState',
         'setTrayMenu',
         'acquireSingleInstance',
         'forwardToPrimary',
@@ -184,36 +186,41 @@ void main() {
         'stopPersistentScriptCapsules',
       ],
     );
+    final legacyCalls = platformCalls
+        .where((call) =>
+            call.method != 'updatePaperWindow' &&
+            call.method != 'setPaperWindowState')
+        .toList();
     expect(foregroundFullscreen, true);
     expect((await startupCommand).kind, StartupCommandKind.newTodo);
-    expect(platformCalls[0].arguments, {
+    expect(legacyCalls[0].arguments, {
       'paperId': 'paper-1',
       'x': 10.0,
       'y': 20.0,
       'width': 320.0,
       'height': 260.0,
     });
-    expect(platformCalls[1].arguments, {
+    expect(legacyCalls[1].arguments, {
       'paperId': 'paper-1',
       'enabled': true,
     });
-    expect(platformCalls[2].arguments, {
+    expect(legacyCalls[2].arguments, {
       'paperId': 'paper-1',
       'isPinnedToDesktop': true,
       'alwaysOnTop': false,
       'capsuleSide': DeepCapsuleSides.left,
       'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
     });
-    expect(platformCalls[3].arguments, {
+    expect(legacyCalls[3].arguments, {
       'paperId': 'paper-1',
       'title': 'RePaperTodo - Inbox',
     });
-    expect(platformCalls[4].arguments, {
+    expect(legacyCalls[4].arguments, {
       'paperId': 'paper-1',
       'enabled': false,
     });
-    expect(platformCalls[5].arguments, 'paper-1');
-    expect(platformCalls[6].arguments, {
+    expect(legacyCalls[5].arguments, 'paper-1');
+    expect(legacyCalls[6].arguments, {
       'paperId': 'paper-1',
       'isPinnedToDesktop': true,
       'alwaysOnTop': false,
@@ -225,7 +232,7 @@ void main() {
     expect(paper.width, 520);
     expect(paper.height, 460);
     expect(paper.isVisible, false);
-    expect(platformCalls[7].arguments, [
+    expect(legacyCalls[7].arguments, [
       {
         'id': 'paper-1',
         'title': 'Inbox',
@@ -240,25 +247,28 @@ void main() {
         'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
         'alwaysOnTop': false,
         'isPinnedToDesktop': true,
+        'hideFromWindowSwitcher': false,
+        'hideWhenCovered': false,
+        'hideWhenFullscreen': false,
         'isScriptCapsule': false,
       },
     ]);
     expect(acquiredSingleInstance, true);
-    expect(platformCalls[8].arguments, isNull);
-    expect(platformCalls[9].arguments, ['--new-note']);
-    expect(platformCalls[10].arguments, true);
-    expect(platformCalls[11].arguments, true);
-    expect(platformCalls[12].arguments, FullscreenTopmostModes.stayOnTop);
-    expect(platformCalls[13].arguments, {
+    expect(legacyCalls[8].arguments, isNull);
+    expect(legacyCalls[9].arguments, ['--new-note']);
+    expect(legacyCalls[10].arguments, true);
+    expect(legacyCalls[11].arguments, true);
+    expect(legacyCalls[12].arguments, FullscreenTopmostModes.stayOnTop);
+    expect(legacyCalls[13].arguments, {
       'todo': 'Ctrl+Alt+T',
       'note': 'Ctrl+Alt+N',
     });
-    expect(platformCalls[14].arguments, isNull);
-    expect(platformCalls[15].arguments, isNull);
-    expect(platformCalls[16].arguments, isNull);
-    expect(platformCalls[17].arguments, 'C:\\Temp\\note.md');
-    expect(platformCalls[18].arguments, 'https://example.com/paper');
-    expect(platformCalls[19].arguments, {
+    expect(legacyCalls[14].arguments, isNull);
+    expect(legacyCalls[15].arguments, isNull);
+    expect(legacyCalls[16].arguments, isNull);
+    expect(legacyCalls[17].arguments, 'C:\\Temp\\note.md');
+    expect(legacyCalls[18].arguments, 'https://example.com/paper');
+    expect(legacyCalls[19].arguments, {
       'engine': 'pwsh',
       'script': 'Write-Output ok',
       'usePersistentProcess': true,
@@ -266,11 +276,11 @@ void main() {
       'preferPowerShell7': true,
       'hideScriptRunWindow': true,
     });
-    expect(platformCalls[20].arguments, {
+    expect(legacyCalls[20].arguments, {
       'preferPowerShell7': false,
       'hideScriptRunWindow': false,
     });
-    expect(platformCalls.last.arguments, isNull);
+    expect(legacyCalls.last.arguments, isNull);
   });
 
   test('paper host reveals pinned papers without ordinary show', () async {
@@ -303,6 +313,7 @@ void main() {
     expect(
       calls.map((call) => call.method),
       [
+        'updatePaperWindow',
         'setBounds',
         'setPinnedToDesktop',
         'setAlwaysOnTop',
@@ -310,29 +321,30 @@ void main() {
         'setTitle',
       ],
     );
-    expect(calls[0].arguments, {
+    final legacyCalls = calls.skip(1).toList();
+    expect(legacyCalls[0].arguments, {
       'paperId': 'pinned-paper',
       'x': 12.0,
       'y': 24.0,
       'width': 320.0,
       'height': 240.0,
     });
-    expect(calls[1].arguments, {
+    expect(legacyCalls[1].arguments, {
       'paperId': 'pinned-paper',
       'enabled': true,
     });
-    expect(calls[2].arguments, {
+    expect(legacyCalls[2].arguments, {
       'paperId': 'pinned-paper',
       'enabled': false,
     });
-    expect(calls[3].arguments, {
+    expect(legacyCalls[3].arguments, {
       'paperId': 'pinned-paper',
       'isPinnedToDesktop': true,
       'alwaysOnTop': false,
       'capsuleSide': '',
       'capsuleMonitorDeviceName': '',
     });
-    expect(calls[4].arguments, {
+    expect(legacyCalls[4].arguments, {
       'paperId': 'pinned-paper',
       'title': 'RePaperTodo - Pinned',
     });
@@ -886,6 +898,7 @@ void main() {
     expect(
       platformCalls.map((call) => call.method),
       [
+        'setPaperWindowState',
         'setPaperSurfaces',
         'setBounds',
         'setPinnedToDesktop',
@@ -911,6 +924,9 @@ void main() {
         'capsuleMonitorDeviceName': '',
         'alwaysOnTop': false,
         'isPinnedToDesktop': false,
+        'hideFromWindowSwitcher': false,
+        'hideWhenCovered': false,
+        'hideWhenFullscreen': false,
         'isScriptCapsule': false,
       },
       {
@@ -927,32 +943,36 @@ void main() {
         'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
         'alwaysOnTop': true,
         'isPinnedToDesktop': false,
+        'hideFromWindowSwitcher': false,
+        'hideWhenCovered': false,
+        'hideWhenFullscreen': false,
         'isScriptCapsule': true,
       },
     ]);
-    expect(platformCalls[1].arguments, {
+    final activeSurfaceCalls = platformCalls.skip(2).toList();
+    expect(activeSurfaceCalls[0].arguments, {
       'paperId': 'paper-1',
       'x': 10.0,
       'y': 20.0,
       'width': 320.0,
       'height': 260.0,
     });
-    expect(platformCalls[2].arguments, {
+    expect(activeSurfaceCalls[1].arguments, {
       'paperId': 'paper-1',
       'enabled': false,
     });
-    expect(platformCalls[3].arguments, {
+    expect(activeSurfaceCalls[2].arguments, {
       'paperId': 'paper-1',
       'isPinnedToDesktop': false,
       'alwaysOnTop': false,
       'capsuleSide': '',
       'capsuleMonitorDeviceName': '',
     });
-    expect(platformCalls[4].arguments, {
+    expect(activeSurfaceCalls[3].arguments, {
       'paperId': 'paper-1',
       'title': 'RePaperTodo - First',
     });
-    expect(platformCalls[5].arguments, {
+    expect(activeSurfaceCalls[4].arguments, {
       'paperId': 'paper-1',
       'enabled': false,
     });
@@ -1035,6 +1055,9 @@ void main() {
         'capsuleMonitorDeviceName': '',
         'alwaysOnTop': false,
         'isPinnedToDesktop': false,
+        'hideFromWindowSwitcher': false,
+        'hideWhenCovered': false,
+        'hideWhenFullscreen': false,
         'isScriptCapsule': false,
       },
       {
@@ -1051,9 +1074,88 @@ void main() {
         'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
         'alwaysOnTop': true,
         'isPinnedToDesktop': false,
+        'hideFromWindowSwitcher': false,
+        'hideWhenCovered': false,
+        'hideWhenFullscreen': false,
         'isScriptCapsule': true,
       },
     ]);
+  });
+
+  test('paper host accepts normalized edits from an independent paper engine',
+      () async {
+    const channel = MethodChannel('repapertodo/window_child_edit_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final paper = PaperData(
+      id: 'child-note',
+      type: PaperTypes.note,
+      title: 'Before',
+      content: 'Before body',
+    );
+    await services.paperWindows.restoreAll(AppState(papers: [paper]));
+    final update = services.paperWindows.paperEdits.first;
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        MethodCall('paperSurfaceChanged', {
+          'id': 'child-note',
+          'type': PaperTypes.note,
+          'title': 'After',
+          'content': 'Edited in its own Flutter engine',
+          'items': <Object?>[],
+          'noteCanvasElements': <Object?>[],
+        }),
+      ),
+      (_) {},
+    );
+
+    final changedPaper = await update;
+    expect(changedPaper.id, 'child-note');
+    expect(changedPaper.title, 'After');
+    expect(changedPaper.content, 'Edited in its own Flutter engine');
+    expect(paper.title, 'After');
+    expect(paper.content, 'Edited in its own Flutter engine');
+  });
+
+  test('paper host routes validated independent window actions', () async {
+    const channel = MethodChannel('repapertodo/window_child_action_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    await services.paperWindows.restoreAll(AppState(papers: [
+      PaperData(id: 'action-note', type: PaperTypes.note),
+    ]));
+    final action = services.paperWindows.actionRequests.first;
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        MethodCall('paperActionRequested', {
+          'paperId': 'action-note',
+          'kind': PaperWindowActionKinds.openUri,
+          'value': 'https://example.com/from-child',
+        }),
+      ),
+      (_) {},
+    );
+
+    final request = await action;
+    expect(request.paperId, 'action-note');
+    expect(request.kind, PaperWindowActionKinds.openUri);
+    expect(request.value, 'https://example.com/from-child');
   });
 
   test('paper host keeps active routing for non-active hide and close events',
@@ -1867,6 +1969,40 @@ void main() {
     await pumpEventQueue();
 
     expect(commands, [StartupCommandKind.newNote]);
+  });
+
+  test('paper host forwards coordinator close and hide requests', () async {
+    const channel = MethodChannel('repapertodo/window_coordinator_close_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    var closeRequests = 0;
+    final subscription = services.paperWindows.coordinatorCloseRequests.listen(
+      (_) => closeRequests += 1,
+    );
+    addTearDown(subscription.cancel);
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('coordinatorCloseRequested'),
+      ),
+      (_) {},
+    );
+    await pumpEventQueue();
+    await services.paperWindows.hideCoordinatorWindow();
+
+    expect(closeRequests, 1);
+    expect(calls.last.method, 'hideCoordinator');
   });
 
   test('paper host ignores minimized bounds events', () async {

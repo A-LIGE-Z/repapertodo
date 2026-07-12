@@ -2,6 +2,32 @@
 
 RePaperTodo sync is local-first. The app must remain useful without network access.
 
+## Durable Local Outbox
+
+Every syncable local edit is saved together with a local-only
+`pendingOperationBatch` descriptor in the same `data.json` write. The descriptor
+captures the pre-edit remote snapshot, device ID, starting device sequence, and
+UTC creation time. Rebuilding operations from that descriptor is deterministic,
+so a restart or retry produces the same operation IDs and timestamps.
+
+The pending batch is never included in remote snapshots and contains no WebDAV
+credentials. A valid batch remains on disk through operation upload, snapshot
+upload or download, and remote operation-log merge. It is cleared only after
+all three stages succeed and the final merged state is durably saved. Upload,
+snapshot, merge, or persistence failures retain the batch for retry. Partial
+remote acceptance and WebDAV `409` or `412` retries resend the deterministic
+batch with the same operation IDs, making accepted operations idempotent.
+
+When a newer remote snapshot is downloaded, local pending operations are
+replayed over it and the replayed state plus the still-pending batch are saved
+before remote operation logs are merged. This prevents a crash or merge failure
+from replacing unsynced local edits with the downloaded snapshot. Local delete
+tombstones are also persisted before later network steps can fail. Startup
+auto-sync, manual sync, the five-second edit debounce, and Android WorkManager
+all use the same batch-aware combined sync path. The legacy immediate operation
+upload path remains only as a compatibility fallback when no durable batch is
+present.
+
 ## Transport
 
 The required transport is WebDAV.

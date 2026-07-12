@@ -19,6 +19,11 @@ on:
         required: true
         default: false
         type: boolean
+      qaEvidenceRunId:
+        description: Workflow run ID containing the repapertodo-qa-evidence artifact required for publishing.
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: repapertodo-release-${{ github.ref }}
@@ -78,7 +83,7 @@ jobs:
             $licenses | & $sdkManager.FullName --licenses
           }
           Invoke-Native "sdkmanager install Android API 37" {
-            & $sdkManager.FullName "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+            & $sdkManager.FullName --channel=3 "platform-tools" "platforms;android-37" "build-tools;37.0.0"
           }
 
       - name: Configure Android release signing
@@ -166,7 +171,7 @@ jobs:
             $licenses | & $sdkManager.FullName --licenses
           }
           Invoke-Native "sdkmanager install Android API 37" {
-            & $sdkManager.FullName "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+            & $sdkManager.FullName --channel=3 "platform-tools" "platforms;android-37" "build-tools;37.0.0"
           }
 
       - name: Configure Android release signing
@@ -182,10 +187,29 @@ jobs:
         shell: pwsh
         run: flutter doctor -v
 
+      - name: Require QA evidence run
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace("${{ inputs.qaEvidenceRunId }}")) {
+            throw "Publishing requires qaEvidenceRunId from a completed QA evidence workflow run."
+          }
+
+      - name: Download QA evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: repapertodo-qa-evidence
+          path: dist/qa
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.qaEvidenceRunId }}
+
       - name: Validate, build, package, and publish
         shell: pwsh
         run: |
           $releaseArgs = @("-PublishGitHubRelease")
+          $releaseArgs += @("-WindowsManualQaResultJson", "dist\qa\windows-manual-qa.json")
+          $releaseArgs += @("-WebDavLiveSmokeResultJson", "dist\qa\webdav-live-smoke.json")
+          $releaseArgs += @("-WebDavDomesticLiveSmokeResultJson", "dist\qa\webdav-domestic-live-smoke.json")
+          $releaseArgs += @("-AndroidDeviceSmokeResultJson", "dist\qa\android-device-smoke.json")
           if ("${{ inputs.offlinePubGet }}" -eq "true") {
             $releaseArgs += "-OfflinePubGet"
           }

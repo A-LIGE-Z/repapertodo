@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:collection/collection.dart';
 
 import '../core/model/app_state.dart';
 import '../core/model/sync_settings.dart';
 import '../core/model/sync_wire_datetime.dart';
+import '../core/state/app_state_codec.dart';
 import '../core/storage/state_store.dart';
 import 'sync_device_id.dart';
 import 'sync_device_id_store.dart';
@@ -108,11 +111,217 @@ class AppSyncService {
   final SyncOperationApplier _operationApplier;
   final SyncOperationDiffBuilder _operationDiffBuilder;
 
+  Future<AppState> preparePendingLocalOperationBatch({
+    required AppState beforeState,
+    required AppState afterState,
+    required StateStore store,
+    DateTime? createdAtUtc,
+  }) async {
+    final beforeBatch = beforeState.sync.pendingOperationBatch;
+    final afterBatch = afterState.sync.pendingOperationBatch;
+    final normalizedBeforeState = _deepCloneAppStateForPreparation(beforeState);
+    final preparedState = _deepCloneAppStateForPreparation(afterState);
+    final existingBatch = beforeBatch ?? afterBatch;
+    if (existingBatch != null) {
+      preparedState.sync.pendingOperationBatch =
+          _copyPendingOperationBatchOrSame(existingBatch);
+      _pendingLocalOperationsEvaluation(preparedState);
+      return preparedState;
+    }
+
+    final settings = preparedState.sync;
+    if (!settings.enabled ||
+        settings.provider != SyncProviderIds.webDav ||
+        !settings.webDav.isSecurelyConfigured) {
+      return preparedState;
+    }
+
+    final deviceId =
+        await (_deviceIdStore ?? SyncDeviceIdStore.forStateStore(store))
+            .loadOrCreate();
+    final stamp = (createdAtUtc ?? DateTime.now().toUtc()).toUtc();
+    const codec = AppStateCodec();
+    preparedState.sync.pendingOperationBatch = PendingSyncOperationBatch(
+      baseState: decodeJsonObject(
+        codec.encodeRemoteSnapshot(normalizedBeforeState),
+      ),
+      deviceId: deviceId,
+      startSequence: preparedState.sync.operationDeviceSequences[deviceId] ?? 0,
+      createdAtUtc: stamp,
+    );
+    preparedState.normalize();
+    final evaluation = _pendingLocalOperationsEvaluation(preparedState);
+    if (evaluation.isValid && evaluation.operations.isEmpty) {
+      preparedState.sync.pendingOperationBatch = null;
+      preparedState.normalize();
+    }
+    return preparedState;
+  }
+
+  List<SyncOperation> pendingLocalOperationsFor(AppState state) {
+    return _pendingLocalOperationsEvaluation(state).operations;
+  }
+
+  _PendingLocalOperationsEvaluation _pendingLocalOperationsEvaluation(
+    AppState state,
+  ) {
+    late final AppState normalizedState;
+    late final PendingSyncOperationBatch batch;
+    late final AppState baseState;
+    try {
+      normalizedState = _deepCloneAppState(state);
+      final candidate = normalizedState.sync.pendingOperationBatch;
+      if (candidate == null || !candidate.isValid) {
+        return const _PendingLocalOperationsEvaluation.invalid();
+      }
+      batch = candidate;
+      baseState = _deepCloneAppState(AppState.fromJson(batch.baseState));
+    } on FormatException {
+      return const _PendingLocalOperationsEvaluation.invalid();
+    } on JsonUnsupportedObjectError {
+      return const _PendingLocalOperationsEvaluation.invalid();
+    } on TypeError {
+      return const _PendingLocalOperationsEvaluation.invalid();
+    }
+
+    try {
+      return _PendingLocalOperationsEvaluation.valid(
+        _operationDiffBuilder.build(
+          before: baseState,
+          after: normalizedState,
+          deviceId: batch.deviceId,
+          startSequence: batch.startSequence,
+          createdAtUtc: batch.createdAtUtc,
+        ),
+      );
+    } on RangeError catch (error) {
+      throw WebDavSyncConfigurationException(_rangeErrorMessage(error));
+    }
+  }
+
+  _PendingSyncBatchCapture _capturePendingSyncBatch(AppState state) {
+    if (state.sync.pendingOperationBatch == null) {
+      return const _PendingSyncBatchCapture.none();
+    }
+    final evaluation = _pendingLocalOperationsEvaluation(state);
+    if (!evaluation.isValid) {
+      return const _PendingSyncBatchCapture.invalid();
+    }
+    return _PendingSyncBatchCapture.valid(
+      batch: state.sync.pendingOperationBatch!.copy(),
+      operations: evaluation.operations,
+    );
+  }
+
+  AppState _replayPendingSyncBatch(
+    AppState remoteState,
+    _PendingSyncBatchCapture pendingBatch,
+  ) {
+    final batch = pendingBatch.batch!;
+    final remoteSequences = normalizeSyncDeviceSequences(
+      remoteState.sync.operationDeviceSequences,
+    );
+    final replaySequences = Map<String, int>.from(remoteSequences);
+    if (batch.startSequence == 0) {
+      replaySequences.remove(batch.deviceId);
+    } else {
+      replaySequences[batch.deviceId] = batch.startSequence;
+    }
+    final replayResult = _operationApplier.apply(
+      remoteState,
+      pendingBatch.operations,
+      deviceSequences: replaySequences,
+    );
+    replayResult.state.sync.operationDeviceSequences = _mergeDeviceSequences(
+      remoteSequences,
+      replayResult.deviceSequences,
+      {
+        batch.deviceId: pendingBatch.lastSequence,
+      },
+    );
+    replayResult.state.sync.pendingOperationBatch = batch.copy();
+    replayResult.state.normalize();
+    return replayResult.state;
+  }
+
+  Future<AppState> _uploadPendingSyncBatch({
+    required AppState localState,
+    required StateStore store,
+    required _PendingSyncBatchCapture pendingBatch,
+  }) async {
+    final uploadState = _deepCloneAppState(localState);
+    final tombstonesChanged = _markLocalDeleteTombstones(
+      uploadState,
+      pendingBatch.operations,
+    );
+    if (tombstonesChanged) {
+      await store.save(uploadState);
+    }
+    final context = await _configuredClientContextOrNull(
+      localState: uploadState,
+      store: store,
+    );
+    if (context == null) {
+      return uploadState;
+    }
+    final batch = pendingBatch.batch!;
+    final previousSequences = normalizeSyncDeviceSequences(
+      uploadState.sync.operationDeviceSequences,
+    );
+    previousSequences[batch.deviceId] = batch.startSequence;
+    try {
+      await context.client.uploadOperationLogs(
+        pendingBatch.operations,
+        previousDeviceSequences: previousSequences,
+      );
+      return uploadState;
+    } finally {
+      context.client.close();
+    }
+  }
+
+  Future<AppState> _completePendingSyncBatch({
+    required AppState state,
+    required StateStore store,
+    required _PendingSyncBatchCapture pendingBatch,
+  }) async {
+    final completedState = _deepCloneAppState(state);
+    final batch = pendingBatch.batch!;
+    completedState.sync.operationDeviceSequences = _mergeDeviceSequences(
+      completedState.sync.operationDeviceSequences,
+      {
+        batch.deviceId: pendingBatch.lastSequence,
+      },
+      const <String, int>{},
+    );
+    completedState.sync.pendingOperationBatch = null;
+    completedState.normalize();
+    await store.save(completedState);
+    return completedState;
+  }
+
   Future<AppSyncResult> syncNow({
     required AppState localState,
     required StateStore store,
     DateTime? localUpdatedAtUtc,
   }) async {
+    late final _PendingSyncBatchCapture pendingBatch;
+    try {
+      pendingBatch = _capturePendingSyncBatch(localState);
+    } on WebDavSyncConfigurationException catch (error) {
+      return AppSyncResult(
+        status: AppSyncStatus.payloadUnreadable,
+        state: localState,
+        message: error.message,
+      );
+    }
+    if (!pendingBatch.isValid) {
+      return AppSyncResult(
+        status: AppSyncStatus.payloadUnreadable,
+        state: localState,
+        message: 'The pending local sync operation batch is not readable.',
+      );
+    }
     final syncState = AppState.fromJson(localState.toJson())..normalize();
     final settings = syncState.sync;
     if (!settings.enabled) {
@@ -162,9 +371,15 @@ class AppSyncService {
               message: 'Remote snapshot is empty.',
             );
           }
-          final remoteState = AppState.fromJson(downloadedState.toJson());
+          var remoteState = AppState.fromJson(downloadedState.toJson());
           _preserveLocalDeviceState(remoteState, syncState);
           _applyManifestDeviceSequences(remoteState, result);
+          if (pendingBatch.hasBatch) {
+            remoteState = _replayPendingSyncBatch(
+              remoteState,
+              pendingBatch,
+            );
+          }
           await store.save(remoteState);
           final legacyPlainPayloadDetected =
               _isLegacyPlainPayloadDownload(settings.webDav, result);
@@ -223,8 +438,32 @@ class AppSyncService {
     required StateStore store,
     DateTime? localUpdatedAtUtc,
   }) async {
+    late final _PendingSyncBatchCapture pendingBatch;
+    try {
+      pendingBatch = _capturePendingSyncBatch(localState);
+    } on WebDavSyncConfigurationException {
+      final syncResult = await syncNow(
+        localState: localState,
+        store: store,
+        localUpdatedAtUtc: localUpdatedAtUtc,
+      );
+      return AppSyncRunResult(
+        syncResult: syncResult,
+        state: syncResult.state ?? localState,
+      );
+    }
+    var syncInputState = localState;
+    if (pendingBatch.isValid &&
+        pendingBatch.hasBatch &&
+        pendingBatch.operations.isNotEmpty) {
+      syncInputState = await _uploadPendingSyncBatch(
+        localState: localState,
+        store: store,
+        pendingBatch: pendingBatch,
+      );
+    }
     final syncResult = await syncNow(
-      localState: localState,
+      localState: syncInputState,
       store: store,
       localUpdatedAtUtc: localUpdatedAtUtc,
     );
@@ -240,6 +479,22 @@ class AppSyncService {
             store: store,
           );
           state = operationMergeResult.state;
+          if (pendingBatch.isValid && pendingBatch.hasBatch) {
+            state = await _completePendingSyncBatch(
+              state: state,
+              store: store,
+              pendingBatch: pendingBatch,
+            );
+            operationMergeResult = AppSyncOperationMergeResult(
+              state: state,
+              deviceSequences: state.sync.operationDeviceSequences,
+              appliedCount: operationMergeResult.appliedCount,
+              legacyPlainOperationLogCount:
+                  operationMergeResult.legacyPlainOperationLogCount,
+              legacyPlainOperationLogMigratedCount:
+                  operationMergeResult.legacyPlainOperationLogMigratedCount,
+            );
+          }
         } on WebDavPayloadDecryptionException catch (error) {
           return AppSyncRunResult(
             syncResult: AppSyncResult(
@@ -680,6 +935,89 @@ class AppSyncService {
     }
     return changed;
   }
+}
+
+AppState _deepCloneAppState(AppState state) {
+  return AppState.fromJson(
+    decodeJsonObject(jsonEncode(state.toJson())),
+  )..normalize();
+}
+
+AppState _deepCloneAppStateForPreparation(AppState state) {
+  try {
+    return _deepCloneAppState(state);
+  } on FormatException {
+    return _deepCloneAppStateWithoutPendingBatch(state);
+  } on JsonUnsupportedObjectError {
+    return _deepCloneAppStateWithoutPendingBatch(state);
+  } on TypeError {
+    return _deepCloneAppStateWithoutPendingBatch(state);
+  }
+}
+
+AppState _deepCloneAppStateWithoutPendingBatch(AppState state) {
+  final batch = state.sync.pendingOperationBatch;
+  if (batch == null) {
+    return _deepCloneAppState(state);
+  }
+  state.sync.pendingOperationBatch = null;
+  try {
+    return _deepCloneAppState(state);
+  } finally {
+    state.sync.pendingOperationBatch = batch;
+  }
+}
+
+PendingSyncOperationBatch _copyPendingOperationBatchOrSame(
+  PendingSyncOperationBatch batch,
+) {
+  try {
+    return batch.copy();
+  } on FormatException {
+    return batch;
+  } on JsonUnsupportedObjectError {
+    return batch;
+  } on TypeError {
+    return batch;
+  }
+}
+
+class _PendingLocalOperationsEvaluation {
+  const _PendingLocalOperationsEvaluation.valid(this.operations)
+      : isValid = true;
+
+  const _PendingLocalOperationsEvaluation.invalid()
+      : operations = const [],
+        isValid = false;
+
+  final List<SyncOperation> operations;
+  final bool isValid;
+}
+
+class _PendingSyncBatchCapture {
+  const _PendingSyncBatchCapture.none()
+      : batch = null,
+        operations = const [],
+        isValid = true;
+
+  const _PendingSyncBatchCapture.invalid()
+      : batch = null,
+        operations = const [],
+        isValid = false;
+
+  const _PendingSyncBatchCapture.valid({
+    required this.batch,
+    required this.operations,
+  }) : isValid = true;
+
+  final PendingSyncOperationBatch? batch;
+  final List<SyncOperation> operations;
+  final bool isValid;
+
+  bool get hasBatch => batch != null;
+
+  int get lastSequence =>
+      operations.isEmpty ? batch!.startSequence : operations.last.sequence;
 }
 
 String _payloadString(Map<String, Object?> payload, String key) {

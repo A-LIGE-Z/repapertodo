@@ -72,6 +72,32 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string) {
 
 namespace {
 
+class ScopedHandle {
+ public:
+  explicit ScopedHandle(HANDLE handle) : handle_(handle) {}
+
+  ~ScopedHandle() { Reset(); }
+
+  ScopedHandle(const ScopedHandle&) = delete;
+  ScopedHandle& operator=(const ScopedHandle&) = delete;
+
+  bool is_valid() const {
+    return handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE;
+  }
+
+  HANDLE get() const { return handle_; }
+
+ private:
+  void Reset() {
+    if (is_valid()) {
+      CloseHandle(handle_);
+      handle_ = nullptr;
+    }
+  }
+
+  HANDLE handle_ = nullptr;
+};
+
 std::string NormalizeStartupArgument(std::string arg) {
   const auto begin = std::find_if_not(
       arg.begin(), arg.end(),
@@ -161,6 +187,32 @@ std::string CreatedPaperStartupCommand(const std::string& normalized) {
   return std::string();
 }
 
+bool WriteStartupCommandToPipe(HANDLE pipe, const std::string& command) {
+  if (!pipe || pipe == INVALID_HANDLE_VALUE || command.empty()) {
+    return false;
+  }
+  DWORD bytes_written = 0;
+  if (!WriteFile(pipe, command.data(), static_cast<DWORD>(command.size()),
+                 &bytes_written, nullptr) ||
+      bytes_written != static_cast<DWORD>(command.size())) {
+    return false;
+  }
+  const char newline = '\n';
+  bytes_written = 0;
+  return WriteFile(pipe, &newline, 1, &bytes_written, nullptr) &&
+         bytes_written == 1;
+}
+
+bool WritePipeWake(HANDLE pipe) {
+  if (!pipe || pipe == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+  DWORD bytes_written = 0;
+  const char newline = '\n';
+  return WriteFile(pipe, &newline, 1, &bytes_written, nullptr) &&
+         bytes_written == 1;
+}
+
 }  // namespace
 
 std::string StartupCommandFromArgs(const std::vector<std::string>& args) {
@@ -200,4 +252,47 @@ std::string StartupCommandFromArgs(const std::vector<std::string>& args) {
     return "show";
   }
   return std::string();
+}
+
+bool SignalStartupCommandPipe(const wchar_t* pipe_name,
+                              const std::vector<std::string>& args,
+                              int attempts,
+                              unsigned long wait_milliseconds,
+                              unsigned long sleep_milliseconds) {
+  const std::string command = StartupCommandFromArgs(args);
+  if (command.empty()) {
+    return true;
+  }
+  if (!pipe_name || attempts <= 0) {
+    return false;
+  }
+  for (int attempt = 0; attempt < attempts; attempt++) {
+    ScopedHandle pipe(CreateFileW(pipe_name, GENERIC_WRITE, 0, nullptr,
+                                  OPEN_EXISTING, 0, nullptr));
+    if (pipe.is_valid() && WriteStartupCommandToPipe(pipe.get(), command)) {
+      return true;
+    }
+    WaitNamedPipeW(pipe_name, wait_milliseconds);
+    Sleep(sleep_milliseconds);
+  }
+  return false;
+}
+
+bool SignalPipeWake(const wchar_t* pipe_name,
+                    int attempts,
+                    unsigned long wait_milliseconds,
+                    unsigned long sleep_milliseconds) {
+  if (!pipe_name || attempts <= 0) {
+    return false;
+  }
+  for (int attempt = 0; attempt < attempts; attempt++) {
+    ScopedHandle pipe(CreateFileW(pipe_name, GENERIC_WRITE, 0, nullptr,
+                                  OPEN_EXISTING, 0, nullptr));
+    if (pipe.is_valid() && WritePipeWake(pipe.get())) {
+      return true;
+    }
+    WaitNamedPipeW(pipe_name, wait_milliseconds);
+    Sleep(sleep_milliseconds);
+  }
+  return false;
 }

@@ -18,8 +18,11 @@ abstract interface class PlatformServices {
 
 abstract interface class PaperWindowHost {
   Stream<PaperData> get surfaceUpdates;
+  Stream<PaperData> get paperEdits;
+  Stream<PaperWindowActionRequest> get actionRequests;
   Stream<String> get paperOpenRequests;
   Stream<String> get paperDeleteRequests;
+  Stream<void> get coordinatorCloseRequests;
 
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper);
   Future<void> showPaper(PaperData paper);
@@ -31,6 +34,37 @@ abstract interface class PaperWindowHost {
   Future<void> updatePaperSurface(PaperData paper);
   Future<void> capturePaperSurfaceBounds(PaperData paper);
   Future<void> restoreAll(AppState state);
+  Future<void> hideCoordinatorWindow();
+}
+
+class PaperWindowActionRequest {
+  const PaperWindowActionRequest({
+    required this.kind,
+    required this.paperId,
+    this.value = '',
+  });
+
+  final String kind;
+  final String paperId;
+  final String value;
+}
+
+abstract final class PaperWindowActionKinds {
+  static const openPaper = 'openPaper';
+  static const createTodo = 'createTodo';
+  static const createNote = 'createNote';
+  static const openExternalMarkdown = 'openExternalMarkdown';
+  static const runScriptCapsule = 'runScriptCapsule';
+  static const openUri = 'openUri';
+
+  static const values = {
+    openPaper,
+    createTodo,
+    createNote,
+    openExternalMarkdown,
+    runScriptCapsule,
+    openUri,
+  };
 }
 
 class PaperWorkArea {

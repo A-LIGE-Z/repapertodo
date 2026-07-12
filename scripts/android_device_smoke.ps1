@@ -6,7 +6,7 @@ param(
   [string]$ExpectedApplicationId = "com.aligez.repapertodo",
   [int]$MinSupportedApi = 34,
   [int]$MaxSupportedApi = 37,
-  [int]$LaunchWaitSeconds = 8,
+  [int]$LaunchWaitSeconds = 15,
   [string]$ResultJson = ""
 )
 

@@ -1529,6 +1529,32 @@ function Assert-WindowsSmokeRecord {
   if ([int](Get-RecordPropertyValue -Record $Record -Name "finalPaperCount") -lt 3) {
     throw "Windows smoke record finalPaperCount must be at least 3."
   }
+  $initialVisibleTopLevelWindowCount =
+    [int](Get-RecordPropertyValue -Record $Record -Name "initialVisibleTopLevelWindowCount")
+  if ($initialVisibleTopLevelWindowCount -lt
+      [int](Get-RecordPropertyValue -Record $Record -Name "initialPaperCount")) {
+    throw "Windows smoke record initialVisibleTopLevelWindowCount must cover every initial paper."
+  }
+  $finalVisibleTopLevelWindowCount =
+    [int](Get-RecordPropertyValue -Record $Record -Name "finalVisibleTopLevelWindowCount")
+  if ($finalVisibleTopLevelWindowCount -lt 2) {
+    throw "Windows smoke record finalVisibleTopLevelWindowCount must prove multiple visible paper HWNDs."
+  }
+  if ((Get-RecordPropertyValue -Record $Record -Name "independentPaperSurfaces") -ne $true) {
+    throw "Windows smoke record independentPaperSurfaces must be true."
+  }
+  if ((Get-RecordPropertyValue -Record $Record -Name "settingsCoordinatorLifecycle") -ne $true) {
+    throw "Windows smoke record settingsCoordinatorLifecycle must be true."
+  }
+  $visiblePaperCountBeforeSettings =
+    [int](Get-RecordPropertyValue -Record $Record -Name "visiblePaperCountBeforeSettings")
+  if ($visiblePaperCountBeforeSettings -lt 2 -or
+      [int](Get-RecordPropertyValue -Record $Record -Name "visibleTopLevelWindowCountWhileSettingsOpen") -lt
+        ($visiblePaperCountBeforeSettings + 1) -or
+      [int](Get-RecordPropertyValue -Record $Record -Name "visibleTopLevelWindowCountAfterSettingsClose") -ne
+        $visiblePaperCountBeforeSettings) {
+    throw "Windows smoke record must prove the settings coordinator opens and closes without changing independent paper HWNDs."
+  }
   if ([int](Get-RecordPropertyValue -Record $Record -Name "finalNotePaperCount") -le
       [int](Get-RecordPropertyValue -Record $Record -Name "initialNotePaperCount")) {
     throw "Windows smoke record finalNotePaperCount must be greater than initialNotePaperCount after --new-note."
@@ -1548,6 +1574,10 @@ function Assert-WindowsSmokeRecord {
   if ([int](Get-RecordPropertyValue -Record $Record -Name "visiblePaperCountAfterIgnoredCommand") -ne 0) {
     throw "Windows smoke record visiblePaperCountAfterIgnoredCommand must remain 0 after an unknown secondary startup command."
   }
+  Assert-ReleaseMetadataStringSequence `
+    -Name "windows.smoke.settingsStartupCommands" `
+    -Actual (Get-RecordPropertyValue -Record $Record -Name "settingsStartupCommands") `
+    -Expected @("--settings")
   Assert-ReleaseMetadataStringSequence `
     -Name "windows.smoke.secondaryStartupCommands" `
     -Actual (Get-RecordPropertyValue -Record $Record -Name "secondaryStartupCommands") `
@@ -2380,7 +2410,7 @@ Runtime UI languages: $($supportedRuntimeLanguages -join ', ').
 Flutter toolchain: Flutter $flutterFrameworkVersion ($flutterChannel), Dart $dartSdkVersion.
 
 Verification summary:
-- Windows smoke: $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "status")); exe $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "exeFileName")); persisted papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalPaperCount")); todo papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialTodoPaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalTodoPaperCount")); note papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialNotePaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalNotePaperCount")).
+- Windows smoke: $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "status")); exe $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "exeFileName")); persisted papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalPaperCount")); independent visible HWNDs $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalVisibleTopLevelWindowCount")); todo papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialTodoPaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalTodoPaperCount")); note papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialNotePaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalNotePaperCount")).
 - Windows manual QA: $windowsManualQaSummary.
 - WebDAV static smoke: $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "status")); generic WebDAV $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "genericWebDavSupported")); Jianguoyun preset $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "jianguoyunPresetSupported")); operation logs $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "operationLogsSupported")); Windows/Android round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "crossDeviceOperationRoundTripCovered")); local HTTP WebDAV protocol round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "localHttpWebDavRoundTripCovered")); Android background shared Dart sync path $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncSharedDartPath")); Android background absolute state path gate $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncAbsoluteStatePathCovered")); Android background data.json state path gate $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncDataJsonStatePathCovered")).
 - WebDAV generic live smoke: $webDavLiveSmokeSummary.

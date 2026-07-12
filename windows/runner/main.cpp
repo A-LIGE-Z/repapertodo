@@ -15,30 +15,55 @@ constexpr wchar_t kSingleInstanceMutexName[] =
 constexpr wchar_t kSingleInstancePipeName[] =
     L"\\\\.\\pipe\\RePaperTodo-SingleInstance-Activate";
 
+class ScopedComInitializer {
+ public:
+  ScopedComInitializer()
+      : initialized_(SUCCEEDED(
+            ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {}
+
+  ~ScopedComInitializer() {
+    if (initialized_) {
+      ::CoUninitialize();
+    }
+  }
+
+  ScopedComInitializer(const ScopedComInitializer&) = delete;
+  ScopedComInitializer& operator=(const ScopedComInitializer&) = delete;
+
+ private:
+  bool initialized_ = false;
+};
+
+class ScopedHandle {
+ public:
+  explicit ScopedHandle(HANDLE handle) : handle_(handle) {}
+
+  ~ScopedHandle() { Reset(); }
+
+  ScopedHandle(const ScopedHandle&) = delete;
+  ScopedHandle& operator=(const ScopedHandle&) = delete;
+
+  bool is_valid() const {
+    return handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE;
+  }
+
+ private:
+  void Reset() {
+    if (is_valid()) {
+      CloseHandle(handle_);
+      handle_ = nullptr;
+    }
+  }
+
+  HANDLE handle_ = nullptr;
+};
+
 bool IsExplicitExitStartupCommand(const std::vector<std::string>& args) {
   return StartupCommandFromArgs(args) == "exit";
 }
 
 void SignalPrimaryInstance(const std::vector<std::string>& args) {
-  const std::string command = StartupCommandFromArgs(args);
-  if (command.empty()) {
-    return;
-  }
-  for (int attempt = 0; attempt < 6; attempt++) {
-    HANDLE pipe = CreateFileW(kSingleInstancePipeName, GENERIC_WRITE, 0,
-                              nullptr, OPEN_EXISTING, 0, nullptr);
-    if (pipe != INVALID_HANDLE_VALUE) {
-      DWORD bytes_written = 0;
-      WriteFile(pipe, command.data(), static_cast<DWORD>(command.size()),
-                &bytes_written, nullptr);
-      const char newline = '\n';
-      WriteFile(pipe, &newline, 1, &bytes_written, nullptr);
-      CloseHandle(pipe);
-      return;
-    }
-    WaitNamedPipeW(kSingleInstancePipeName, 180);
-    Sleep(70);
-  }
+  SignalStartupCommandPipe(kSingleInstancePipeName, args, 6, 180, 70);
 }
 
 }  // namespace
@@ -53,29 +78,25 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
-  ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  ScopedComInitializer com_initializer;
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
   if (IsExplicitExitStartupCommand(command_line_arguments)) {
-    HANDLE existing_instance =
-        OpenMutexW(SYNCHRONIZE, FALSE, kSingleInstanceMutexName);
-    if (!existing_instance) {
-      ::CoUninitialize();
+    ScopedHandle existing_instance(
+        OpenMutexW(SYNCHRONIZE, FALSE, kSingleInstanceMutexName));
+    if (!existing_instance.is_valid()) {
       return EXIT_SUCCESS;
     }
-    CloseHandle(existing_instance);
   }
 
-  HANDLE single_instance_mutex =
+  HANDLE single_instance_mutex_handle =
       CreateMutexW(nullptr, TRUE, kSingleInstanceMutexName);
-  if (!single_instance_mutex ||
-      GetLastError() == ERROR_ALREADY_EXISTS) {
+  const DWORD single_instance_mutex_error = GetLastError();
+  ScopedHandle single_instance_mutex(single_instance_mutex_handle);
+  if (!single_instance_mutex.is_valid() ||
+      single_instance_mutex_error == ERROR_ALREADY_EXISTS) {
     SignalPrimaryInstance(command_line_arguments);
-    if (single_instance_mutex) {
-      CloseHandle(single_instance_mutex);
-    }
-    ::CoUninitialize();
     return EXIT_SUCCESS;
   }
 
@@ -96,7 +117,5 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
-  ::CoUninitialize();
-  CloseHandle(single_instance_mutex);
   return EXIT_SUCCESS;
 }

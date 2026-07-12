@@ -22,6 +22,7 @@ import 'package:repapertodo/src/core/startup/startup_command.dart';
 import 'package:repapertodo/src/platform/noop_platform_services.dart';
 import 'package:repapertodo/src/platform/platform_services.dart';
 import 'package:repapertodo/src/sync/app_sync_service.dart';
+import 'package:repapertodo/src/sync/sync_device_id_store.dart';
 import 'package:repapertodo/src/sync/webdav/webdav_client.dart';
 import 'package:repapertodo/src/sync/webdav/webdav_payload_codec.dart';
 import 'package:repapertodo/src/sync/webdav/webdav_state_sync_service.dart';
@@ -269,6 +270,83 @@ void main() {
     expect(find.text('WebDAV sync'), findsOneWidget);
     expect(find.text('坚果云'), findsOneWidget);
     expect(find.text('Generic'), findsOneWidget);
+  });
+
+  testWidgets('paper window mode renders only its independent paper surface',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final state = AppState(
+      maxTitleLength: 64,
+      papers: [
+        PaperData(
+          id: 'independent-paper',
+          type: PaperTypes.note,
+          title: 'Independent paper',
+          content: 'Rendered in its own Flutter engine.',
+        ),
+        PaperData(
+          id: 'other-paper',
+          type: PaperTypes.note,
+          title: 'Other paper',
+          content: 'Must stay in another HWND.',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(state);
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        initialSurfacePaperId: 'independent-paper',
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.map((paper) => paper.id),
+        ['independent-paper', 'other-paper']);
+    expect(controller.state.papers.first.isVisible, true);
+    expect(controller.state.papers.first.isCollapsed, false);
+    final paperBoard = tester.widget<PaperBoardScreen>(
+      find.byType(PaperBoardScreen),
+    );
+    expect(paperBoard.paperWindowMode, true);
+    expect(paperBoard.initialSurfacePaperId, 'independent-paper');
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is EditableText &&
+            widget.controller.text == 'Independent paper',
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is EditableText &&
+            widget.controller.text == 'Rendered in its own Flutter engine.',
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is EditableText && widget.controller.text == 'Other paper',
+        skipOffstage: false,
+      ),
+      findsNothing,
+    );
+    expect(find.byTooltip('Sync now'), findsNothing);
+    expect(find.byType(AppBar), findsNothing);
   });
 
   testWidgets('settings can choose an installed system font family',
@@ -6013,6 +6091,77 @@ void main() {
     expect(find.text('Remote data downloaded.'), findsOneWidget);
   });
 
+  testWidgets('manual sync flushes a durable batch without legacy upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      maxTitleLength: 64,
+      papers: [
+        PaperData(
+          id: 'manual-durable-note',
+          type: PaperTypes.note,
+          title: 'Local',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncedState = AppState.fromJson(initialState.toJson())
+      ..papers.single.title = 'Synced';
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      prepareDurableBatch: true,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('manual-durable-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byTooltip('Sync now'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(syncService.events, ['sync']);
+    expect(syncService.localUploadCalls, 0);
+    expect(syncService.syncPendingBatchDeviceIds, ['device-widget-test']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
+  });
+
   testWidgets(
       'idempotent local edit upload reapplies platform before silent sync',
       (tester) async {
@@ -6975,6 +7124,370 @@ void main() {
     expect(syncService.events, ['upload', 'sync']);
   });
 
+  testWidgets('local save durably persists content and pending sync batch',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final testDirectory =
+        Directory('build/test-widget-durable-sync-outbox-create');
+    if (testDirectory.existsSync()) {
+      testDirectory.deleteSync(recursive: true);
+    }
+    testDirectory.createSync(recursive: true);
+    addTearDown(() {
+      if (testDirectory.existsSync()) {
+        testDirectory.deleteSync(recursive: true);
+      }
+    });
+    final statePath = '${testDirectory.path}/state.json';
+    final deviceIdPath = '${testDirectory.path}/sync-device-id';
+    const deviceId = 'device-widget-durable-outbox';
+    File(deviceIdPath).writeAsStringSync(deviceId);
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings,
+      maxTitleLength: 64,
+      papers: [
+        PaperData(
+          id: 'durable-outbox-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState.fromJson(initialState.toJson()),
+      platform: platform,
+    );
+    final store = StateStore(filePath: statePath);
+    await tester.runAsync(() => store.save(initialState));
+    final syncService = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) {
+        throw StateError('WebDAV must not run before the debounce expires.');
+      },
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('durable-outbox-note-title')),
+      'Durable draft',
+    );
+    await _waitForSavedTrayTitle(tester, platform, 'Durable draft');
+
+    final reloaded = (await tester.runAsync(
+      () => StateStore(filePath: statePath).load(),
+    ))!;
+    final pendingBatch = reloaded.sync.pendingOperationBatch;
+    expect(reloaded.papers.single.title, 'Durable draft');
+    expect(pendingBatch, isNotNull);
+    expect(pendingBatch!.deviceId, deviceId);
+    expect(
+      AppState.fromJson(pendingBatch.baseState).papers.single.title,
+      'Local',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('local save preserves disk batch when pending preparation fails',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final testDirectory =
+        Directory('build/test-widget-durable-sync-outbox-prepare-failure');
+    if (testDirectory.existsSync()) {
+      testDirectory.deleteSync(recursive: true);
+    }
+    testDirectory.createSync(recursive: true);
+    addTearDown(() {
+      if (testDirectory.existsSync()) {
+        testDirectory.deleteSync(recursive: true);
+      }
+    });
+    final statePath = '${testDirectory.path}/state.json';
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final batchBaseState = AppState(
+      sync: syncSettings.copy(),
+      maxTitleLength: 64,
+      papers: [
+        PaperData(
+          id: 'durable-outbox-failure-note',
+          type: PaperTypes.note,
+          title: 'Batch base',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final existingBatch = PendingSyncOperationBatch(
+      baseState: batchBaseState.toJson(),
+      deviceId: 'device-existing-batch',
+      startSequence: 7,
+      createdAtUtc: DateTime.utc(2026, 7, 11, 8, 30),
+    );
+    final diskState = AppState(
+      sync: syncSettings.copy()..pendingOperationBatch = existingBatch,
+      maxTitleLength: 64,
+      papers: [
+        PaperData(
+          id: 'durable-outbox-failure-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controllerState = AppState.fromJson(diskState.toJson());
+    controllerState.sync.pendingOperationBatch = null;
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: controllerState,
+      platform: platform,
+    );
+    final store = StateStore(filePath: statePath);
+    await tester.runAsync(() => store.save(diskState));
+    final syncService = _ThrowingPendingPreparationSyncService();
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('durable-outbox-failure-note-title')),
+      'Saved after failure',
+    );
+    await _waitForSavedTrayTitle(
+      tester,
+      platform,
+      'Saved after failure',
+    );
+
+    final reloaded = (await tester.runAsync(
+      () => StateStore(filePath: statePath).load(),
+    ))!;
+    final pendingBatch = reloaded.sync.pendingOperationBatch;
+    expect(syncService.prepareCalls, 1);
+    expect(reloaded.papers.single.title, 'Saved after failure');
+    expect(pendingBatch, isNotNull);
+    expect(pendingBatch!.deviceId, existingBatch.deviceId);
+    expect(pendingBatch.startSequence, existingBatch.startSequence);
+    expect(pendingBatch.createdAtUtc, existingBatch.createdAtUtc);
+    expect(pendingBatch.baseState, existingBatch.baseState);
+    expect(identical(pendingBatch, existingBatch), isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('local save keeps the disk batch when sync is not configured',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final diskBatch = _pendingSyncBatchForTest(
+      deviceId: 'device-disk-authoritative',
+      title: 'Disk base',
+      startSequence: 11,
+    );
+    final memoryBatch = _pendingSyncBatchForTest(
+      deviceId: 'device-memory-stale',
+      title: 'Memory base',
+      startSequence: 3,
+    );
+    final diskState = AppState(
+      sync: SyncSettings(pendingOperationBatch: diskBatch),
+      maxTitleLength: 20,
+      papers: [
+        PaperData(
+          id: 'unconfigured-disk-batch-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controllerState = AppState.fromJson(diskState.toJson());
+    controllerState.sync.pendingOperationBatch = memoryBatch;
+    final controller = RePaperTodoController(
+      initialState: controllerState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(diskState);
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('unconfigured-disk-batch-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final controllerBatch = controller.state.sync.pendingOperationBatch;
+    final savedBatch = store.savedState.sync.pendingOperationBatch;
+    expect(controller.state.papers.single.title, 'Draft');
+    expect(store.savedState.papers.single.title, 'Draft');
+    expect(controllerBatch, isNotNull);
+    expect(savedBatch, isNotNull);
+    expect(controllerBatch!.deviceId, diskBatch.deviceId);
+    expect(savedBatch!.deviceId, diskBatch.deviceId);
+    expect(controllerBatch.startSequence, diskBatch.startSequence);
+    expect(savedBatch.startSequence, diskBatch.startSequence);
+    expect(identical(controllerBatch, diskBatch), isFalse);
+  });
+
+  testWidgets('local save treats a null disk batch as authoritative',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final staleMemoryBatch = _pendingSyncBatchForTest(
+      deviceId: 'device-memory-stale-null-disk',
+      title: 'Stale memory base',
+      startSequence: 3,
+    );
+    final diskState = AppState(
+      maxTitleLength: 20,
+      papers: [
+        PaperData(
+          id: 'null-disk-batch-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controllerState = AppState.fromJson(diskState.toJson());
+    controllerState.sync.pendingOperationBatch = staleMemoryBatch;
+    final controller = RePaperTodoController(
+      initialState: controllerState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(diskState);
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('null-disk-batch-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(controller.state.papers.single.title, 'Draft');
+    expect(store.savedState.papers.single.title, 'Draft');
+    expect(controller.state.sync.pendingOperationBatch, isNull);
+    expect(store.savedState.sync.pendingOperationBatch, isNull);
+  });
+
+  testWidgets('failed pending preparation does not revive a stale memory batch',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+      ),
+    );
+    final diskState = AppState(
+      sync: syncSettings,
+      papers: [
+        PaperData(
+          id: 'null-disk-prepare-failure-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controllerState = AppState.fromJson(diskState.toJson());
+    controllerState.sync.pendingOperationBatch = _pendingSyncBatchForTest(
+      deviceId: 'device-memory-stale-prepare-failure',
+      title: 'Stale memory base',
+      startSequence: 4,
+    );
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: controllerState,
+      platform: platform,
+    );
+    final store = _MemoryStateStore();
+    await store.save(diskState);
+    final syncService = _ThrowingPendingPreparationSyncService();
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('null-disk-prepare-failure-note-title')),
+      'Saved after failure',
+    );
+    await _waitForSavedTrayTitle(tester, platform, 'Saved after failure');
+
+    expect(syncService.prepareCalls, 1);
+    expect(controller.state.sync.pendingOperationBatch, isNull);
+    expect(store.savedState.sync.pendingOperationBatch, isNull);
+  });
+
   testWidgets('local edits schedule one debounced silent sync', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -7077,6 +7590,79 @@ void main() {
     expect(syncService.calls, 1);
     expect(controller.state.papers.single.title, 'Synced');
     expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
+  testWidgets('debounced durable batch sync skips legacy operation upload',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+      ),
+    );
+    final initialState = AppState(
+      sync: syncSettings.copy(),
+      maxTitleLength: 64,
+      papers: [
+        PaperData(
+          id: 'debounce-durable-note',
+          type: PaperTypes.note,
+          title: 'Local',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+    final syncedState = AppState.fromJson(initialState.toJson())
+      ..papers.single.title = 'Synced';
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+      prepareDurableBatch: true,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('debounce-durable-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 4));
+    expect(syncService.events, isEmpty);
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(syncService.events, ['sync']);
+    expect(syncService.localUploadCalls, 0);
+    expect(syncService.syncPendingBatchDeviceIds, ['device-widget-test']);
+    expect(syncService.calls, 1);
+    expect(controller.state.papers.single.title, 'Synced');
   });
 
   testWidgets('local edits retry after silent upload failure', (tester) async {
@@ -8539,6 +9125,186 @@ void main() {
     expect(syncService.calls, 1);
     expect(controller.state.papers.single.title, 'Synced');
     expect(find.text('Local data uploaded.'), findsNothing);
+  });
+
+  testWidgets(
+      'settings save preserves runtime sync metadata and latest disk batch',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final initialDiskBatch = _pendingSyncBatchForTest(
+      deviceId: 'device-settings-disk-initial',
+      title: 'Initial disk base',
+      startSequence: 5,
+    );
+    final staleMemoryBatch = _pendingSyncBatchForTest(
+      deviceId: 'device-settings-memory-stale',
+      title: 'Stale memory base',
+      startSequence: 2,
+    );
+    final latestDiskBatch = _pendingSyncBatchForTest(
+      deviceId: 'device-settings-disk-latest',
+      title: 'Latest disk base',
+      startSequence: 9,
+    );
+    final runtimeExtra = <String, Object?>{
+      'runtimeUnknown': <String, Object?>{
+        'nested': <Object?>[
+          'keep',
+          <String, Object?>{'value': 7},
+        ],
+      },
+    };
+    final webDavExtra = <String, Object?>{
+      'forwardCompatible': <String, Object?>{
+        'nested': <Object?>[
+          'keep',
+          <String, Object?>{'value': 11},
+        ],
+      },
+    };
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: 'https://dav.example.test/',
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: 'repapertodo',
+        autoSyncIntervalMinutes: 15,
+        extra: webDavExtra,
+      ),
+    );
+    final diskState = AppState(
+      sync: syncSettings.copy()..pendingOperationBatch = initialDiskBatch,
+      papers: [
+        PaperData(
+          id: 'settings-runtime-metadata-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controllerState = AppState.fromJson(diskState.toJson());
+    controllerState.sync
+      ..operationDeviceSequences = const {'device-runtime': 4}
+      ..pendingOperationBatch = staleMemoryBatch
+      ..deletedPaperTombstones = const {
+        'deleted-paper': '2026-07-11T08:00:00.000Z',
+      }
+      ..deletedTodoItemTombstones = const {
+        'todo-paper': {
+          'deleted-item': '2026-07-11T08:05:00.000Z',
+        },
+      }
+      ..extra = runtimeExtra;
+    final controller = RePaperTodoController(
+      initialState: controllerState,
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(diskState);
+    final syncedState = AppState.fromJson(controllerState.toJson());
+    syncedState.papers.single.title = 'Synced';
+    final syncService = _ManualSyncService(
+      result: AppSyncRunResult(
+        syncResult: AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          state: syncedState,
+          message: 'Local data uploaded.',
+        ),
+        state: syncedState,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        syncService: syncService,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-runtime-metadata-note-title')),
+      'Draft',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      controller.state.sync.pendingOperationBatch!.deviceId,
+      initialDiskBatch.deviceId,
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    store.savedState.sync.pendingOperationBatch = latestDiskBatch.copy();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    final savedSync = store.savedState.sync;
+    expect(controller.state.sync.operationDeviceSequences,
+        const {'device-runtime': 4});
+    expect(savedSync.operationDeviceSequences, const {'device-runtime': 4});
+    expect(controller.state.sync.pendingOperationBatch!.deviceId,
+        latestDiskBatch.deviceId);
+    expect(savedSync.pendingOperationBatch!.deviceId, latestDiskBatch.deviceId);
+    expect(controller.state.sync.deletedPaperTombstones, const {
+      'deleted-paper': '2026-07-11T08:00:00.000Z',
+    });
+    expect(savedSync.deletedPaperTombstones, const {
+      'deleted-paper': '2026-07-11T08:00:00.000Z',
+    });
+    expect(controller.state.sync.deletedTodoItemTombstones, const {
+      'todo-paper': {
+        'deleted-item': '2026-07-11T08:05:00.000Z',
+      },
+    });
+    expect(savedSync.deletedTodoItemTombstones, const {
+      'todo-paper': {
+        'deleted-item': '2026-07-11T08:05:00.000Z',
+      },
+    });
+    expect(controller.state.sync.extra, runtimeExtra);
+    expect(savedSync.extra, runtimeExtra);
+    expect(
+      identical(
+        controller.state.sync.extra['runtimeUnknown'],
+        runtimeExtra['runtimeUnknown'],
+      ),
+      isFalse,
+    );
+    expect(controller.state.sync.webDav.extra, webDavExtra);
+    expect(savedSync.webDav.extra, webDavExtra);
+    expect(
+      identical(
+        controller.state.sync.webDav.extra['forwardCompatible'],
+        webDavExtra['forwardCompatible'],
+      ),
+      isFalse,
+    );
+    expect(
+      identical(
+        savedSync.webDav.extra['forwardCompatible'],
+        controller.state.sync.webDav.extra['forwardCompatible'],
+      ),
+      isFalse,
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(syncService.events, ['sync']);
+    expect(syncService.localUploadBeforeTitles, isEmpty);
+    expect(syncService.localUploadAfterTitles, isEmpty);
+    expect(
+      syncService.syncPendingBatchDeviceIds,
+      [latestDiskBatch.deviceId],
+    );
   });
 
   testWidgets('unchanged sync settings save restores pending local edit upload',
@@ -14659,6 +15425,87 @@ void main() {
     });
   });
 
+  testWidgets('persists independent paper engine edits through coordinator',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final initialState = AppState(
+      maxTitleLength: 64,
+      papers: [
+        PaperData(
+          id: 'independent-edit-note',
+          type: PaperTypes.note,
+          title: 'Before',
+          content: 'Before body',
+        ),
+      ],
+    );
+    await store.save(initialState);
+    final controller = RePaperTodoController(
+      initialState: AppState.fromJson(initialState.toJson()),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    platform.paperWindows.emitPaperEdit(
+      PaperData(
+        id: 'independent-edit-note',
+        type: PaperTypes.note,
+        title: 'After',
+        content: 'Edited in child engine',
+        isCollapsed: true,
+      ),
+    );
+    await _waitForSavedTrayTitle(tester, platform, 'After');
+
+    expect(controller.state.papers.single.title, 'After');
+    expect(controller.state.papers.single.content, 'Edited in child engine');
+    expect(controller.state.papers.single.isCollapsed, true);
+    expect(store.savedState.papers.single.title, 'After');
+    expect(store.savedState.papers.single.content, 'Edited in child engine');
+    expect(platform.paperWindows.updatedTitles, contains('After'));
+  });
+
+  testWidgets('routes independent paper actions through primary services',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final state = AppState(papers: [
+      PaperData(
+        id: 'independent-action-note',
+        type: PaperTypes.note,
+        title: 'Action note',
+      ),
+    ]);
+    await store.save(state);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+
+    platform.paperWindows.emitAction(
+      const PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.openUri,
+        paperId: 'independent-action-note',
+        value: 'https://example.com/from-independent-paper',
+      ),
+    );
+    await tester.pump();
+
+    expect(platform.uriOpener.openedUris,
+        ['https://example.com/from-independent-paper']);
+  });
+
   testWidgets('keeps local geometry when copied platform surface is invalid',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -15791,7 +16638,7 @@ class _RecoverySnapshotSyncService extends AppSyncService {
     this.restoreStatus = AppSyncStatus.downloaded,
     this.restoreMessage = 'Snapshot restored.',
     this.includeRestoredState = true,
-  });
+  }) : super(deviceIdStore: const _FixedSyncDeviceIdStore());
 
   final List<WebDavSnapshotRecord> snapshots;
   final AppState restoredState;
@@ -15872,7 +16719,8 @@ class _ManualSyncService extends AppSyncService {
     this.localUploadUploadedCount = 1,
     this.localUploadStateChanged = false,
     this.recoverySnapshots = const <WebDavSnapshotRecord>[],
-  });
+    this.prepareDurableBatch = false,
+  }) : super(deviceIdStore: const _FixedSyncDeviceIdStore());
 
   final AppSyncRunResult result;
   final Future<void>? firstSyncGate;
@@ -15883,6 +16731,7 @@ class _ManualSyncService extends AppSyncService {
   final int localUploadUploadedCount;
   final bool localUploadStateChanged;
   final List<WebDavSnapshotRecord> recoverySnapshots;
+  final bool prepareDurableBatch;
   var calls = 0;
   var localUploadCalls = 0;
   var listRecoveryCalls = 0;
@@ -15890,6 +16739,25 @@ class _ManualSyncService extends AppSyncService {
   final localUploadBeforeTitles = <String>[];
   final localUploadAfterTitles = <String>[];
   final syncLocalDeviceSequences = <Map<String, int>>[];
+  final syncPendingBatchDeviceIds = <String?>[];
+
+  @override
+  Future<AppState> preparePendingLocalOperationBatch({
+    required AppState beforeState,
+    required AppState afterState,
+    required StateStore store,
+    DateTime? createdAtUtc,
+  }) {
+    if (!prepareDurableBatch) {
+      return Future.value(AppState.fromJson(afterState.toJson()));
+    }
+    return super.preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: createdAtUtc,
+    );
+  }
 
   @override
   Future<AppSyncRunResult> syncAndMergeNow({
@@ -15901,6 +16769,9 @@ class _ManualSyncService extends AppSyncService {
     events.add('sync');
     syncLocalDeviceSequences.add(
       Map<String, int>.from(localState.sync.operationDeviceSequences),
+    );
+    syncPendingBatchDeviceIds.add(
+      localState.sync.pendingOperationBatch?.deviceId,
     );
     final gate = firstSyncGate;
     if (calls == 1 && gate != null) {
@@ -15951,6 +16822,69 @@ class _ManualSyncService extends AppSyncService {
     listRecoveryCalls += 1;
     return recoverySnapshots;
   }
+}
+
+class _ThrowingPendingPreparationSyncService extends AppSyncService {
+  var prepareCalls = 0;
+
+  @override
+  Future<AppState> preparePendingLocalOperationBatch({
+    required AppState beforeState,
+    required AppState afterState,
+    required StateStore store,
+    DateTime? createdAtUtc,
+  }) async {
+    prepareCalls += 1;
+    throw StateError('Unable to prepare the pending operation batch.');
+  }
+}
+
+PendingSyncOperationBatch _pendingSyncBatchForTest({
+  required String deviceId,
+  required String title,
+  required int startSequence,
+}) {
+  return PendingSyncOperationBatch(
+    baseState: AppState(
+      papers: [
+        PaperData(
+          id: 'pending-batch-base-note',
+          type: PaperTypes.note,
+          title: title,
+          content: 'Batch base body',
+        ),
+      ],
+    ).toJson(),
+    deviceId: deviceId,
+    startSequence: startSequence,
+    createdAtUtc: DateTime.utc(2026, 7, 11, 8, startSequence),
+  );
+}
+
+class _FixedSyncDeviceIdStore extends SyncDeviceIdStore {
+  const _FixedSyncDeviceIdStore()
+      : super(filePath: 'build/test-widget-fixed-sync-device-id');
+
+  @override
+  Future<String> loadOrCreate() async => 'device-widget-test';
+}
+
+Future<void> _waitForSavedTrayTitle(
+  WidgetTester tester,
+  _RecordingPlatformServices platform,
+  String title,
+) async {
+  for (var attempt = 0; attempt < 100; attempt += 1) {
+    await tester.pump();
+    if (platform.tray.rebuildTitleSnapshots.isNotEmpty &&
+        platform.tray.rebuildTitleSnapshots.last.single == title) {
+      return;
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+  }
+  fail('Timed out waiting for the local state save to finish.');
 }
 
 class _MemoryStateStore extends StateStore {
@@ -16069,12 +17003,21 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final hiddenTitles = <String>[];
   final workAreaRequestIds = <String>[];
   final _surfaceUpdates = StreamController<PaperData>.broadcast();
+  final _paperEdits = StreamController<PaperData>.broadcast();
+  final _actionRequests =
+      StreamController<PaperWindowActionRequest>.broadcast();
   final _paperOpenRequests = StreamController<String>.broadcast();
   final _paperDeleteRequests = StreamController<String>.broadcast();
   PaperWorkArea? workArea;
 
   @override
   Stream<PaperData> get surfaceUpdates => _surfaceUpdates.stream;
+
+  @override
+  Stream<PaperData> get paperEdits => _paperEdits.stream;
+
+  @override
+  Stream<PaperWindowActionRequest> get actionRequests => _actionRequests.stream;
 
   @override
   Stream<String> get paperOpenRequests => _paperOpenRequests.stream;
@@ -16084,6 +17027,14 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
 
   void emitSurfaceUpdate(PaperData paper) {
     _surfaceUpdates.add(paper);
+  }
+
+  void emitPaperEdit(PaperData paper) {
+    _paperEdits.add(paper);
+  }
+
+  void emitAction(PaperWindowActionRequest request) {
+    _actionRequests.add(request);
   }
 
   void emitPaperOpenRequest(String paperId) {

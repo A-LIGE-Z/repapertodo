@@ -21,4 +21,18 @@ std::vector<std::string> GetCommandLineArguments();
 // arguments containing only unknown commands return an empty string.
 std::string StartupCommandFromArgs(const std::vector<std::string>& args);
 
+// Sends a canonical startup command to the primary-instance named pipe.
+// Unknown-only arguments are treated as a successful no-op.
+bool SignalStartupCommandPipe(const wchar_t* pipe_name,
+                              const std::vector<std::string>& args,
+                              int attempts,
+                              unsigned long wait_milliseconds,
+                              unsigned long sleep_milliseconds);
+
+// Opens a named pipe and writes a single newline to wake a blocking reader.
+bool SignalPipeWake(const wchar_t* pipe_name,
+                    int attempts,
+                    unsigned long wait_milliseconds,
+                    unsigned long sleep_milliseconds);
+
 #endif  // RUNNER_UTILS_H_

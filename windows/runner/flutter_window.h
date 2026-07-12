@@ -17,6 +17,8 @@
 
 #include "win32_window.h"
 
+class PaperFlutterWindow;
+
 struct TrayMenuLabels {
   std::wstring new_todo = L"+ New todo paper";
   std::wstring new_note = L"+ New note paper";
@@ -96,6 +98,16 @@ class FlutterWindow : public Win32Window {
   flutter::EncodableValue BoundsValueForPaper(
       HWND window, const std::string& paper_id) const;
   flutter::EncodableValue WindowEventArguments() const;
+  void ApplyPaperWindowState(const flutter::EncodableValue& state);
+  void ApplyPaperWindowUpdate(const flutter::EncodableValue& paper);
+  void ReconcilePaperWindows(const flutter::EncodableList& papers);
+  PaperFlutterWindow* EnsurePaperWindow(
+      const std::string& paper_id,
+      const flutter::EncodableMap* surface = nullptr);
+  PaperFlutterWindow* PaperWindowForId(const std::string& paper_id) const;
+  void SendPaperWindowEvent(const std::string& method,
+                            const flutter::EncodableValue& arguments);
+  void DestroyPaperWindows();
 
   // The project to run.
   flutter::DartProject project_;
@@ -112,6 +124,7 @@ class FlutterWindow : public Win32Window {
   bool tray_icon_added_ = false;
   UINT taskbar_created_message_ = 0;
   bool avoid_fullscreen_topmost_ = true;
+  bool hide_papers_from_window_switcher_ = false;
   bool pinned_to_desktop_ = false;
   bool z_order_state_initialized_ = false;
   bool z_order_pinned_to_desktop_ = false;
@@ -142,6 +155,9 @@ class FlutterWindow : public Win32Window {
     std::string monitor_device_name;
   };
   std::map<std::string, PaperSurfaceState> paper_surfaces_;
+  flutter::EncodableValue paper_window_state_;
+  std::map<std::string, flutter::EncodableMap> paper_window_surfaces_;
+  std::map<std::string, std::unique_ptr<PaperFlutterWindow>> paper_windows_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

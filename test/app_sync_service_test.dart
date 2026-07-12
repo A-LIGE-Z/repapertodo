@@ -2929,6 +2929,1180 @@ void main() {
     });
   });
 
+  test('prepares the first durable pending local operation batch', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_prepare_pending_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    await File(deviceIdPath).writeAsString(' Device Local ');
+    final beforeState = AppState(
+      startAtLogin: true,
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'Before',
+          capsuleSide: 'right',
+        ),
+      ],
+    );
+    final afterState = AppState.fromJson(beforeState.toJson())
+      ..papers.single.content = 'After';
+    final originalBeforeJson = beforeState.toJson();
+    final originalAfterJson = afterState.toJson();
+    final createdAtUtc = DateTime.utc(2026, 7, 11, 8, 30);
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+    );
+
+    final prepared = await service.preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: createdAtUtc,
+    );
+
+    final batch = prepared.sync.pendingOperationBatch;
+    expect(prepared, isNot(same(afterState)));
+    expect(batch, isNotNull);
+    expect(batch?.deviceId, 'device-local');
+    expect(batch?.startSequence, 4);
+    expect(batch?.createdAtUtc, createdAtUtc);
+    expect(
+      batch?.baseState,
+      decodeJsonObject(const AppStateCodec().encodeRemoteSnapshot(beforeState)),
+    );
+    expect(batch?.baseState.containsKey('startAtLogin'), false);
+    expect(
+      (batch?.baseState['sync']
+          as Map<String, Object?>)['pendingOperationBatch'],
+      isNull,
+    );
+    expect(service.pendingLocalOperationsFor(prepared), hasLength(1));
+    expect(
+      service.pendingLocalOperationsFor(prepared).single.toJson(),
+      {
+        'id': 'device-local-5',
+        'deviceId': 'device-local',
+        'sequence': 5,
+        'kind': 'updateNoteContent',
+        'createdAtUtc': createdAtUtc.toIso8601String(),
+        'payload': {'paperId': 'note', 'content': 'After'},
+      },
+    );
+    expect(beforeState.toJson(), originalBeforeJson);
+    expect(afterState.toJson(), originalAfterJson);
+  });
+
+  test('keeps an existing durable pending batch across later edits', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_keep_pending_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final baseState = AppState(
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'Base',
+        ),
+      ],
+    );
+    final existingBatch = PendingSyncOperationBatch(
+      baseState: decodeJsonObject(
+          const AppStateCodec().encodeRemoteSnapshot(baseState)),
+      deviceId: 'original-device',
+      startSequence: 9,
+      createdAtUtc: DateTime.utc(2026, 7, 10, 7),
+    );
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..pendingOperationBatch = existingBatch.copy(),
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'First edit',
+        ),
+      ],
+    );
+    final afterState = AppState.fromJson(beforeState.toJson())
+      ..papers.single.content = 'Second edit';
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'must-not-be-created'),
+      ),
+    );
+
+    final prepared = await service.preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2030),
+    );
+
+    expect(
+        prepared.sync.pendingOperationBatch?.toJson(), existingBatch.toJson());
+    expect(prepared.sync.pendingOperationBatch, isNot(same(existingBatch)));
+    expect(await File(p.join(directory.path, 'must-not-be-created')).exists(),
+        false);
+    final operations = service.pendingLocalOperationsFor(prepared);
+    expect(operations, hasLength(1));
+    expect(operations.single.id, 'original-device-10');
+    expect(operations.single.payload['content'], 'Second edit');
+    expect(operations.single.createdAtUtc, DateTime.utc(2026, 7, 10, 7));
+  });
+
+  test('configuration gates only new durable pending batches', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_gate_pending_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(
+        filePath: p.join(directory.path, 'must-not-be-created'),
+      ),
+    );
+    final basePaper = PaperData(
+      id: 'note',
+      type: PaperTypes.note,
+      title: 'Note',
+      content: 'Before',
+    );
+
+    for (final settings in [
+      SyncSettings(),
+      _configuredSyncSettings(encryptionPassphrase: ''),
+    ]) {
+      final beforeState = AppState(
+        sync: settings,
+        papers: [PaperData.fromJson(basePaper.toJson())],
+      );
+      final afterState = AppState.fromJson(beforeState.toJson())
+        ..papers.single.content = 'After';
+      final prepared = await service.preparePendingLocalOperationBatch(
+        beforeState: beforeState,
+        afterState: afterState,
+        store: store,
+      );
+      expect(prepared.sync.pendingOperationBatch, isNull);
+    }
+
+    final preservedBatch = PendingSyncOperationBatch(
+      baseState: decodeJsonObject(
+        const AppStateCodec().encodeRemoteSnapshot(AppState()),
+      ),
+      deviceId: 'device-existing',
+      startSequence: 2,
+      createdAtUtc: DateTime.utc(2026, 7, 9),
+    );
+    final disabledBefore = AppState(
+      sync: SyncSettings()..pendingOperationBatch = preservedBatch.copy(),
+    );
+    final disabledAfter = AppState.fromJson(disabledBefore.toJson())
+      ..theme = 'dark';
+    final preparedDisabled = await service.preparePendingLocalOperationBatch(
+      beforeState: disabledBefore,
+      afterState: disabledAfter,
+      store: store,
+    );
+    expect(preparedDisabled.sync.pendingOperationBatch?.toJson(),
+        preservedBatch.toJson());
+    expect(await File(p.join(directory.path, 'must-not-be-created')).exists(),
+        false);
+  });
+
+  test('does not create a durable pending batch without a sync operation diff',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_no_pending_diff_');
+    addTearDown(() => directory.delete(recursive: true));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    await File(deviceIdPath).writeAsString('device-local');
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final beforeState = AppState(
+      startAtLogin: false,
+      sync: _configuredSyncSettings(),
+    );
+    final afterState = AppState.fromJson(beforeState.toJson())
+      ..startAtLogin = true;
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+    );
+
+    final prepared = await service.preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 11),
+    );
+
+    expect(prepared.startAtLogin, true);
+    expect(prepared.sync.pendingOperationBatch, isNull);
+    expect(service.pendingLocalOperationsFor(prepared), isEmpty);
+  });
+
+  test('rebuilds durable pending operations identically after serialization',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_restart_pending_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    await File(deviceIdPath).writeAsString('device-local');
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 12},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Note',
+          content: 'Before',
+        ),
+      ],
+    );
+    final afterState = AppState.fromJson(beforeState.toJson())
+      ..papers.single.content = 'After';
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+    );
+    final prepared = await service.preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 11, 9, 45, 30),
+    );
+    final beforeRestart = service
+        .pendingLocalOperationsFor(prepared)
+        .map((operation) => operation.toJson())
+        .toList();
+
+    await store.save(prepared);
+    final reloaded = await store.load();
+    final afterRestart = AppSyncService()
+        .pendingLocalOperationsFor(reloaded)
+        .map((operation) => operation.toJson())
+        .toList();
+
+    expect(afterRestart, beforeRestart);
+    expect(afterRestart.single, {
+      'id': 'device-local-13',
+      'deviceId': 'device-local',
+      'sequence': 13,
+      'kind': 'updateNoteContent',
+      'createdAtUtc': DateTime.utc(2026, 7, 11, 9, 45, 30).toIso8601String(),
+      'payload': {'paperId': 'note', 'content': 'After'},
+    });
+
+    final invalid = AppState.fromJson(reloaded.toJson());
+    invalid.sync.pendingOperationBatch?.deviceId = '';
+    expect(service.pendingLocalOperationsFor(invalid), isEmpty);
+  });
+
+  test('preparing a pending batch deeply clones nested unknown extras',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_deep_clone_pending_ops_');
+    addTearDown(() => directory.delete(recursive: true));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    await File(deviceIdPath).writeAsString('device-local');
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final afterState = AppState(
+      extra: {
+        'futureApp': {
+          'nested': [
+            {'value': 'app-original'},
+          ],
+        },
+      },
+      sync: _configuredSyncSettings()
+        ..webDav.extra = {
+          'futureWebDav': {
+            'nested': [
+              {'value': 'webdav-original'},
+            ],
+          },
+        },
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          content: 'After',
+          extra: {
+            'futurePaper': {
+              'nested': [
+                {'value': 'paper-original'},
+              ],
+            },
+          },
+        ),
+      ],
+    );
+    final beforeState = AppState.fromJson(afterState.toJson())
+      ..papers.single.content = 'Before';
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+    );
+
+    final prepared = await service.preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 11, 12),
+    );
+
+    (((prepared.extra['futureApp'] as Map<String, Object?>)['nested'] as List)
+        .single as Map<String, Object?>)['value'] = 'app-prepared';
+    (((prepared.papers.single.extra['futurePaper']
+            as Map<String, Object?>)['nested'] as List)
+        .single as Map<String, Object?>)['value'] = 'paper-prepared';
+    (((prepared.sync.webDav.extra['futureWebDav']
+            as Map<String, Object?>)['nested'] as List)
+        .single as Map<String, Object?>)['value'] = 'webdav-prepared';
+
+    expect(
+      (((afterState.extra['futureApp'] as Map<String, Object?>)['nested']
+              as List)
+          .single as Map<String, Object?>)['value'],
+      'app-original',
+    );
+    expect(
+      (((afterState.papers.single.extra['futurePaper']
+              as Map<String, Object?>)['nested'] as List)
+          .single as Map<String, Object?>)['value'],
+      'paper-original',
+    );
+    expect(
+      (((afterState.sync.webDav.extra['futureWebDav']
+              as Map<String, Object?>)['nested'] as List)
+          .single as Map<String, Object?>)['value'],
+      'webdav-original',
+    );
+  });
+
+  test('returns no pending operations for non-JSON batch pollution', () {
+    AppState pollutedState() {
+      return AppState(
+        sync: _configuredSyncSettings()
+          ..pendingOperationBatch = PendingSyncOperationBatch(
+            baseState: decodeJsonObject(
+              const AppStateCodec().encodeRemoteSnapshot(AppState()),
+            ),
+            deviceId: 'device-local',
+            startSequence: 0,
+            createdAtUtc: DateTime.utc(2026, 7, 11),
+          ),
+      );
+    }
+
+    final nanState = pollutedState();
+    nanState.sync.pendingOperationBatch?.baseState['bad'] = double.nan;
+    final nonStringKeyState = pollutedState();
+    nonStringKeyState.sync.pendingOperationBatch?.baseState =
+        <Object?, Object?>{7: 'bad'}.cast<String, Object?>();
+    final objectState = pollutedState();
+    objectState.sync.pendingOperationBatch?.baseState['bad'] = Object();
+    final service = AppSyncService();
+
+    for (final state in [nanState, nonStringKeyState, objectState]) {
+      expect(() => service.pendingLocalOperationsFor(state), returnsNormally);
+      expect(service.pendingLocalOperationsFor(state), isEmpty);
+    }
+  });
+
+  test('prefers the disk-authoritative before-state pending batch', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_disk_pending_batch_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    PendingSyncOperationBatch batch(String deviceId, int sequence) {
+      return PendingSyncOperationBatch(
+        baseState: decodeJsonObject(
+          const AppStateCodec().encodeRemoteSnapshot(AppState()),
+        ),
+        deviceId: deviceId,
+        startSequence: sequence,
+        createdAtUtc: DateTime.utc(2026, 7, sequence),
+      );
+    }
+
+    final diskBatch = batch('disk-device', 3);
+    final staleMemoryBatch = batch('memory-device', 8);
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()..pendingOperationBatch = diskBatch.copy(),
+    );
+    final afterState = AppState.fromJson(beforeState.toJson())
+      ..sync.pendingOperationBatch = staleMemoryBatch.copy()
+      ..theme = 'dark';
+
+    final prepared = await AppSyncService().preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+    );
+
+    expect(prepared.sync.pendingOperationBatch?.toJson(), diskBatch.toJson());
+  });
+
+  test('converts exhausted new pending batch sequences to configuration errors',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_new_pending_exhausted_');
+    addTearDown(() => directory.delete(recursive: true));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    await File(deviceIdPath).writeAsString('device-local');
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {
+          'device-local': maxSyncDeviceSequence,
+        },
+      papers: [
+        PaperData(id: 'note', type: PaperTypes.note, content: 'Before'),
+      ],
+    );
+    final afterState = AppState.fromJson(beforeState.toJson())
+      ..papers.single.content = 'After';
+
+    await expectLater(
+      AppSyncService(
+        deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      ).preparePendingLocalOperationBatch(
+        beforeState: beforeState,
+        afterState: afterState,
+        store: store,
+      ),
+      throwsA(
+        isA<WebDavSyncConfigurationException>().having(
+          (error) => error.message,
+          'message',
+          contains('between 1 and'),
+        ),
+      ),
+    );
+  });
+
+  test(
+      'converts exhausted existing pending batch sequences to configuration errors',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_existing_pending_exhausted_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final baseState = AppState(
+      papers: [
+        PaperData(id: 'note', type: PaperTypes.note, content: 'Before'),
+      ],
+    );
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..pendingOperationBatch = PendingSyncOperationBatch(
+          baseState: decodeJsonObject(
+            const AppStateCodec().encodeRemoteSnapshot(baseState),
+          ),
+          deviceId: 'device-local',
+          startSequence: maxSyncDeviceSequence,
+          createdAtUtc: DateTime.utc(2026, 7, 11),
+        ),
+      papers: [
+        PaperData(id: 'note', type: PaperTypes.note, content: 'After'),
+      ],
+    );
+    final afterState = AppState.fromJson(beforeState.toJson());
+
+    await expectLater(
+      AppSyncService().preparePendingLocalOperationBatch(
+        beforeState: beforeState,
+        afterState: afterState,
+        store: store,
+      ),
+      throwsA(isA<WebDavSyncConfigurationException>()),
+    );
+  });
+
+  test('preserves a polluted existing pending batch while preparing state',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_preserve_polluted_pending_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..pendingOperationBatch = PendingSyncOperationBatch(
+          baseState: decodeJsonObject(
+            const AppStateCodec().encodeRemoteSnapshot(AppState()),
+          ),
+          deviceId: 'device-local',
+          startSequence: 2,
+          createdAtUtc: DateTime.utc(2026, 7, 11),
+        ),
+    );
+    beforeState.sync.pendingOperationBatch?.baseState['bad'] = double.nan;
+    final afterState = AppState(sync: _configuredSyncSettings())
+      ..theme = 'dark';
+
+    final prepared = await AppSyncService().preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+    );
+
+    expect(prepared.sync.pendingOperationBatch, isNotNull);
+    expect(prepared.sync.pendingOperationBatch?.deviceId, 'device-local');
+    expect(
+      prepared.sync.pendingOperationBatch?.baseState['bad'],
+      isA<double>().having((value) => value.isNaN, 'isNaN', true),
+    );
+  });
+
+  test('does not swallow TypeError thrown by the operation diff builder', () {
+    final state = AppState(
+      sync: _configuredSyncSettings()
+        ..pendingOperationBatch = PendingSyncOperationBatch(
+          baseState: decodeJsonObject(
+            const AppStateCodec().encodeRemoteSnapshot(AppState()),
+          ),
+          deviceId: 'device-local',
+          startSequence: 0,
+          createdAtUtc: DateTime.utc(2026, 7, 11),
+        ),
+    );
+    final service = AppSyncService(
+      operationDiffBuilder: const _TypeErrorSyncOperationDiffBuilder(),
+    );
+
+    expect(
+      () => service.pendingLocalOperationsFor(state),
+      throwsA(isA<TypeError>()),
+    );
+  });
+
+  test('syncAndMergeNow uploads a persisted pending batch and clears it',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_persisted_batch_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    final localState = await _persistPendingNoteEdit(
+      store: store,
+      deviceIdPath: deviceIdPath,
+    );
+    final uploadedOperations = <SyncOperation>[];
+    Map<String, int>? uploadedPreviousSequences;
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onUploadOperationLogs: (
+          operations, {
+          previousDeviceSequences,
+        }) async {
+          uploadedOperations.addAll(operations);
+          uploadedPreviousSequences = previousDeviceSequences;
+          return const WebDavOperationLogUploadResult(
+            deviceSequences: {'device-local': 5},
+            uploadedCount: 1,
+            acceptedDeviceSequences: {'device-local': 5},
+          );
+        },
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 7, 11, 10),
+              latestSnapshotPath: 'repapertodo/snapshots/local.json',
+              deviceSequences: const {'device-local': 5},
+            ),
+          );
+        },
+        onListOperationLogs: () async => const [],
+      ),
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: localState,
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 11, 10),
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.uploaded);
+    expect(uploadedOperations, hasLength(1));
+    expect(uploadedOperations.single.id, 'device-local-5');
+    expect(uploadedOperations.single.payload['content'], 'After');
+    expect(uploadedPreviousSequences, {'device-local': 4});
+    final stored = await store.load();
+    expect(stored.papers.single.content, 'After');
+    expect(stored.sync.pendingOperationBatch, isNull);
+    expect(stored.sync.operationDeviceSequences, {'device-local': 5});
+  });
+
+  test('syncAndMergeNow retains a persisted batch when operation upload fails',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_upload_failure_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    final localState = await _persistPendingPaperDelete(
+      store: store,
+      deviceIdPath: deviceIdPath,
+    );
+    var syncCalled = false;
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onUploadOperationLogs: (
+          operations, {
+          previousDeviceSequences,
+        }) async {
+          expect(operations.single.kind, SyncOperationKind.deletePaper);
+          throw const WebDavException(
+            'WebDAV request failed: offline',
+            statusCode: 0,
+          );
+        },
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          syncCalled = true;
+          return const WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+          );
+        },
+      ),
+    );
+
+    await expectLater(
+      service.syncAndMergeNow(localState: localState, store: store),
+      throwsA(isA<WebDavException>()),
+    );
+
+    expect(syncCalled, false);
+    final stored = await store.load();
+    expect(stored.papers, isEmpty);
+    expect(stored.sync.pendingOperationBatch, isNotNull);
+    expect(stored.sync.operationDeviceSequences, {'device-local': 4});
+    expect(
+      stored.sync.deletedPaperTombstones,
+      {'note': DateTime.utc(2026, 7, 11, 9).toIso8601String()},
+    );
+  });
+
+  test('downloaded snapshots replay pending local edits before batch cleanup',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_downloaded_snapshot_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    final localState = await _persistPendingNoteEdit(
+      store: store,
+      deviceIdPath: deviceIdPath,
+    );
+    final remoteState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {
+          'device-local': 9,
+          'remote-device': 3,
+        },
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          title: 'Remote title',
+          content: 'Remote newer snapshot',
+        ),
+        PaperData(
+          id: 'remote-only',
+          type: PaperTypes.note,
+          title: 'Remote only',
+        ),
+      ],
+    );
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onUploadOperationLogs: (
+          operations, {
+          previousDeviceSequences,
+        }) async {
+          return const WebDavOperationLogUploadResult(
+            deviceSequences: {'device-local': 5},
+            uploadedCount: 1,
+            acceptedDeviceSequences: {'device-local': 5},
+          );
+        },
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: remoteState,
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 7, 11, 11),
+              latestSnapshotPath: 'repapertodo/snapshots/remote.json',
+              deviceSequences: const {
+                'device-local': 9,
+                'remote-device': 3,
+              },
+            ),
+          );
+        },
+        onListOperationLogs: () async => const [],
+      ),
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: localState,
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 11, 10),
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.downloaded);
+    expect(
+      result.state.papers.singleWhere((paper) => paper.id == 'note').content,
+      'After',
+    );
+    expect(result.state.papers.any((paper) => paper.id == 'remote-only'), true);
+    expect(result.state.sync.pendingOperationBatch, isNull);
+    expect(result.state.sync.operationDeviceSequences, {
+      'device-local': 9,
+      'remote-device': 3,
+    });
+    final stored = await store.load();
+    expect(
+      stored.papers.singleWhere((paper) => paper.id == 'note').content,
+      'After',
+    );
+    expect(stored.sync.pendingOperationBatch, isNull);
+  });
+
+  test('merge failure leaves replayed local content and its batch on disk',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_merge_failure_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    final localState = await _persistPendingNoteEdit(
+      store: store,
+      deviceIdPath: deviceIdPath,
+    );
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onUploadOperationLogs: (
+          operations, {
+          previousDeviceSequences,
+        }) async {
+          return const WebDavOperationLogUploadResult(
+            deviceSequences: {'device-local': 5},
+            uploadedCount: 1,
+            acceptedDeviceSequences: {'device-local': 5},
+          );
+        },
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: AppState(
+              sync: _configuredSyncSettings(),
+              papers: [
+                PaperData(
+                  id: 'note',
+                  type: PaperTypes.note,
+                  content: 'Remote snapshot',
+                ),
+              ],
+            ),
+          );
+        },
+        onListOperationLogs: () async => const [
+          WebDavOperationLogRecord(
+            path: 'repapertodo/ops/remote-device-000000000001.jsonl',
+            deviceId: 'remote-device',
+            sequence: 1,
+          ),
+        ],
+        onDownloadOperationLog: (_) async {
+          throw const FormatException('malformed remote operation log');
+        },
+      ),
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: localState,
+      store: store,
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.payloadUnreadable);
+    final stored = await store.load();
+    expect(stored.papers.single.content, 'After');
+    expect(stored.sync.pendingOperationBatch, isNotNull);
+    expect(
+      stored.sync.pendingOperationBatch?.deviceId,
+      'device-local',
+    );
+  });
+
+  test('partially accepted pending batch retry reuses every operation id',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_accepted_retry_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    await File(deviceIdPath).writeAsString('device-local');
+    final beforeState = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      papers: [
+        PaperData(
+          id: 'first-note',
+          type: PaperTypes.note,
+          title: 'First',
+          content: 'First before',
+        ),
+        PaperData(
+          id: 'second-note',
+          type: PaperTypes.note,
+          title: 'Second',
+          content: 'Second before',
+        ),
+      ],
+    );
+    final afterState = AppState.fromJson(beforeState.toJson());
+    afterState.papers[0].content = 'First after';
+    afterState.papers[1].content = 'Second after';
+    final preparationService = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+    );
+    final localState =
+        await preparationService.preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 11, 9),
+    );
+    expect(
+      preparationService
+          .pendingLocalOperationsFor(localState)
+          .map((operation) => operation.id),
+      ['device-local-5', 'device-local-6'],
+    );
+    await store.save(localState);
+    final attemptedOperationIds = <List<String>>[];
+    final attemptedPreviousSequences = <Map<String, int>>[];
+    var uploadCalls = 0;
+    var syncCalls = 0;
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onUploadOperationLogs: (
+          operations, {
+          previousDeviceSequences,
+        }) async {
+          uploadCalls += 1;
+          attemptedOperationIds.add([
+            for (final operation in operations) operation.id,
+          ]);
+          attemptedPreviousSequences.add(
+            Map<String, int>.from(previousDeviceSequences ?? const {}),
+          );
+          return WebDavOperationLogUploadResult(
+            deviceSequences: {
+              'device-local': uploadCalls == 1 ? 5 : 6,
+            },
+            uploadedCount: uploadCalls == 1 ? 1 : 0,
+            acceptedDeviceSequences: {
+              'device-local': uploadCalls == 1 ? 5 : 6,
+            },
+          );
+        },
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          syncCalls += 1;
+          if (syncCalls == 1) {
+            throw const WebDavException(
+              'snapshot upload failed after operation acceptance',
+              statusCode: 503,
+            );
+          }
+          return const WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+          );
+        },
+        onListOperationLogs: () async => const [],
+      ),
+    );
+
+    await expectLater(
+      service.syncAndMergeNow(localState: localState, store: store),
+      throwsA(isA<WebDavException>()),
+    );
+    expect((await store.load()).sync.pendingOperationBatch, isNotNull);
+
+    final retryResult = await service.syncAndMergeNow(
+      localState: await store.load(),
+      store: store,
+    );
+
+    expect(retryResult.syncResult.status, AppSyncStatus.uploaded);
+    expect(attemptedOperationIds, [
+      ['device-local-5', 'device-local-6'],
+      ['device-local-5', 'device-local-6'],
+    ]);
+    expect(attemptedPreviousSequences, [
+      {'device-local': 4},
+      {'device-local': 4},
+    ]);
+    expect((await store.load()).sync.pendingOperationBatch, isNull);
+  });
+
+  test('syncNow uploaded result retains pending batch in state and on disk',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_sync_now_uploaded_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    final localState = await _persistPendingNoteEdit(
+      store: store,
+      deviceIdPath: deviceIdPath,
+    );
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          expect(localState.sync.pendingOperationBatch, isNotNull);
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 7, 11, 10),
+              latestSnapshotPath: 'repapertodo/snapshots/local.json',
+              deviceSequences: const {'device-local': 5},
+            ),
+          );
+        },
+      ),
+    );
+
+    final result = await service.syncNow(
+      localState: localState,
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 11, 10),
+    );
+
+    expect(result.status, AppSyncStatus.uploaded);
+    expect(result.state?.papers.single.content, 'After');
+    expect(result.state?.sync.pendingOperationBatch, isNotNull);
+    final stored = await store.load();
+    expect(stored.papers.single.content, 'After');
+    expect(stored.sync.pendingOperationBatch, isNotNull);
+  });
+
+  test('syncNow downloaded result saves replayed content with pending batch',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_sync_now_downloaded_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    final localState = await _persistPendingNoteEdit(
+      store: store,
+      deviceIdPath: deviceIdPath,
+    );
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.downloaded,
+            state: AppState(
+              sync: _configuredSyncSettings()
+                ..operationDeviceSequences = {
+                  'device-local': 9,
+                  'remote-device': 3,
+                },
+              papers: [
+                PaperData(
+                  id: 'note',
+                  type: PaperTypes.note,
+                  content: 'Remote snapshot',
+                ),
+                PaperData(
+                  id: 'remote-only',
+                  type: PaperTypes.note,
+                  title: 'Remote only',
+                ),
+              ],
+            ),
+            manifest: SyncManifest(
+              schemaVersion: 1,
+              updatedAtUtc: DateTime.utc(2026, 7, 11, 11),
+              latestSnapshotPath: 'repapertodo/snapshots/remote.json',
+              deviceSequences: const {
+                'device-local': 9,
+                'remote-device': 3,
+              },
+            ),
+          );
+        },
+      ),
+    );
+
+    final result = await service.syncNow(
+      localState: localState,
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 11, 10),
+    );
+
+    expect(result.status, AppSyncStatus.downloaded);
+    expect(
+      result.state?.papers.singleWhere((paper) => paper.id == 'note').content,
+      'After',
+    );
+    expect(
+        result.state?.papers.any((paper) => paper.id == 'remote-only'), true);
+    expect(result.state?.sync.pendingOperationBatch, isNotNull);
+    final stored = await store.load();
+    expect(stored.papers.singleWhere((paper) => paper.id == 'note').content,
+        'After');
+    expect(stored.papers.any((paper) => paper.id == 'remote-only'), true);
+    expect(stored.sync.pendingOperationBatch, isNotNull);
+  });
+
+  test('syncNow reports an invalid pending batch without replacing disk state',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_invalid_batch_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    final persistedState = await _persistPendingNoteEdit(
+      store: store,
+      deviceIdPath: deviceIdPath,
+    );
+    final invalidState = AppState.fromJson(persistedState.toJson());
+    invalidState.sync.pendingOperationBatch?.deviceId = '';
+    var createdCount = 0;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) {
+        createdCount += 1;
+        throw StateError('WebDAV should not be created');
+      },
+    );
+
+    final result = await service.syncNow(
+      localState: invalidState,
+      store: store,
+    );
+
+    expect(result.status, AppSyncStatus.payloadUnreadable);
+    expect(result.message, contains('pending'));
+    expect(createdCount, 0);
+    final stored = await store.load();
+    expect(stored.sync.pendingOperationBatch, isNotNull);
+    expect(stored.sync.pendingOperationBatch?.deviceId, 'device-local');
+    expect(stored.papers.single.content, 'After');
+  });
+
+  test('missing configuration never uploads or clears a pending batch',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_missing_configuration_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    final localState = await _persistPendingNoteEdit(
+      store: store,
+      deviceIdPath: deviceIdPath,
+    );
+    localState.sync.webDav.encryptionPassphrase = '';
+    await store.save(localState);
+    var createdCount = 0;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) {
+        createdCount += 1;
+        throw StateError('WebDAV should not be created');
+      },
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: await store.load(),
+      store: store,
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.configurationMissing);
+    expect(createdCount, 0);
+    final stored = await store.load();
+    expect(stored.sync.pendingOperationBatch, isNotNull);
+    expect(stored.papers.single.content, 'After');
+  });
+
+  test('successful sync and merge clears a valid empty pending batch',
+      () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_replay_empty_batch_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final state = AppState(
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-local': 4},
+      papers: [
+        PaperData(
+          id: 'note',
+          type: PaperTypes.note,
+          content: 'Unchanged',
+        ),
+      ],
+    );
+    state.sync.pendingOperationBatch = PendingSyncOperationBatch(
+      baseState: decodeJsonObject(
+        const AppStateCodec().encodeRemoteSnapshot(state),
+      ),
+      deviceId: 'device-local',
+      startSequence: 4,
+      createdAtUtc: DateTime.utc(2026, 7, 11, 9),
+    );
+    await store.save(state);
+    var operationUploadCalls = 0;
+    final service = AppSyncService(
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onUploadOperationLogs: (
+          operations, {
+          previousDeviceSequences,
+        }) async {
+          operationUploadCalls += 1;
+          return const WebDavOperationLogUploadResult(
+            deviceSequences: {'device-local': 4},
+            uploadedCount: 0,
+          );
+        },
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          return const WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+          );
+        },
+        onListOperationLogs: () async => const [],
+      ),
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: await store.load(),
+      store: store,
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.uploaded);
+    expect(operationUploadCalls, 0);
+    expect(result.state.sync.pendingOperationBatch, isNull);
+    expect((await store.load()).sync.pendingOperationBatch, isNull);
+  });
+
   test('does not upload operation logs for equivalent queue-map settings',
       () async {
     final directory = await Directory.systemTemp
@@ -5045,6 +6219,66 @@ void main() {
   });
 }
 
+Future<AppState> _persistPendingNoteEdit({
+  required StateStore store,
+  required String deviceIdPath,
+}) async {
+  await File(deviceIdPath).writeAsString('device-local');
+  final beforeState = AppState(
+    sync: _configuredSyncSettings()
+      ..operationDeviceSequences = {'device-local': 4},
+    papers: [
+      PaperData(
+        id: 'note',
+        type: PaperTypes.note,
+        title: 'Note',
+        content: 'Before',
+      ),
+    ],
+  );
+  final afterState = AppState.fromJson(beforeState.toJson())
+    ..papers.single.content = 'After';
+  final prepared = await AppSyncService(
+    deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+  ).preparePendingLocalOperationBatch(
+    beforeState: beforeState,
+    afterState: afterState,
+    store: store,
+    createdAtUtc: DateTime.utc(2026, 7, 11, 9),
+  );
+  await store.save(prepared);
+  return store.load();
+}
+
+Future<AppState> _persistPendingPaperDelete({
+  required StateStore store,
+  required String deviceIdPath,
+}) async {
+  await File(deviceIdPath).writeAsString('device-local');
+  final beforeState = AppState(
+    sync: _configuredSyncSettings()
+      ..operationDeviceSequences = {'device-local': 4},
+    papers: [
+      PaperData(
+        id: 'note',
+        type: PaperTypes.note,
+        title: 'Delete me',
+      ),
+    ],
+  );
+  final afterState = AppState.fromJson(beforeState.toJson())..papers.clear();
+  final prepared = await AppSyncService(
+    deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+  ).preparePendingLocalOperationBatch(
+    beforeState: beforeState,
+    afterState: afterState,
+    store: store,
+    createdAtUtc: DateTime.utc(2026, 7, 11, 9),
+  );
+  await store.save(prepared);
+  return store.load();
+}
+
 SyncSettings _configuredSyncSettings({
   String endpoint = 'https://dav.example.test/',
   String username = 'user',
@@ -5093,6 +6327,21 @@ typedef _FakeSync = Future<WebDavStateSyncResult> Function({
   required AppState localState,
   DateTime? localUpdatedAtUtc,
 });
+
+class _TypeErrorSyncOperationDiffBuilder extends SyncOperationDiffBuilder {
+  const _TypeErrorSyncOperationDiffBuilder();
+
+  @override
+  List<SyncOperation> build({
+    required AppState before,
+    required AppState after,
+    required String deviceId,
+    required int startSequence,
+    DateTime? createdAtUtc,
+  }) {
+    throw TypeError();
+  }
+}
 
 typedef _FakePush = Future<WebDavStateSyncResult> Function(
   AppState state, {

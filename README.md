@@ -20,7 +20,10 @@ The goal is to reproduce PaperTodo's full feature set and product philosophy, st
 This repository now contains a Flutter Windows/Android codebase with the shared
 PaperTodo-compatible data model, desktop-first paper UI, local persistence,
 platform-service boundaries, startup command handling, and WebDAV snapshot plus
-operation-log sync foundations.
+operation-log sync foundations. Syncable edits are persisted with a local-only
+durable outbox, so manual, debounced, startup, and Android background sync can
+retry deterministic operation IDs after restart without losing local changes;
+the outbox clears only after snapshot sync and remote operation merge succeed.
 
 See [AGENTS.md](AGENTS.md) for project rules and [docs/ROADMAP.md](docs/ROADMAP.md) for the staged implementation plan.
 
@@ -89,11 +92,14 @@ that the static smoke APK path is the packaged Android APK in `dist/`.
 The Windows release output is smoke-tested before packaging by copying the
 built runner to a temporary directory, launching the isolated
 `repapertodo.exe`, forwarding secondary `--new-note`, `--new-todo`, and
-`--exit` startup commands, and confirming the expected papers are persisted.
+`--settings` startup commands, confirming the expected papers are persisted,
+opening and closing the settings coordinator without changing paper visibility,
+and enumerating the process top-level windows to prove every visible paper owns
+an independent HWND before finally forwarding `--exit`.
 The Windows smoke script writes the same evidence into structured metadata so
 release packages record and revalidate the checked build output directory, EXE
 name, initial/final paper and note/todo type counts, forwarded startup commands, timeout settings,
-and UTC check time.
+settings coordinator open/close HWND counts, and UTC check time.
 The WebDAV static smoke script also runs during release packaging and records
 that generic WebDAV remains present, the Jianguoyun preset is still available,
 encrypted payloads are required for configured sync, operation logs remain
@@ -139,6 +145,13 @@ file name, byte count, and SHA-256 match the packaged Android APK and that the
 foreground package matches the launched package. When it is skipped, metadata
 still records the UTC skip time and the
 `-RunAndroidDeviceSmoke` recovery hint.
+
+For emulator-only background protocol QA, `tool/local_webdav_server.dart` can
+serve an authenticated WebDAV root from the repository. The API 35 release
+runtime has been verified through a real WorkManager background Dart isolate,
+including encrypted snapshot and operation-log uploads. This local endpoint is
+test evidence for the Android background path, not evidence of compatibility
+with a third-party WebDAV provider.
 Release evidence scripts that write `-ResultJson` validate the result path
 before doing the expensive or credentialed work: it must be a `.json` file path
 without wildcard or control characters, so smoke and QA evidence is captured
@@ -168,7 +181,23 @@ to `main` run the full validation, build, and package flow, then upload the
 packaged `dist/` files as workflow artifacts from a read-only `contents`
 permission job. Manual `workflow_dispatch` runs with `publishRelease: true`
 use a separate write-permission job that reruns the full validation, build,
-package, and GitHub Release publish path.
+package, and GitHub Release publish path. Publishing also requires a
+`qaEvidenceRunId`: the run ID from `.github/workflows/qa-evidence.yml` whose
+`repapertodo-qa-evidence` artifact contains the four build-bound QA records.
+That evidence workflow runs on a self-hosted Windows x64 runner because it
+needs a real desktop session, an Android API 34-37 device or emulator, and
+generic plus Jianguoyun WebDAV credentials. It downloads the packaged
+candidate identified by `candidateRunId`, records the seven Windows manual QA
+results against the extracted exe, runs both live WebDAV checks and the Android
+device smoke, then uploads the JSON evidence consumed by the publish job.
+
+The GitHub Actions release sequence is therefore:
+
+1. Run the package workflow for the intended commit and retain its run ID.
+2. Manually verify that candidate, then dispatch `Collect Release QA Evidence`
+   with the package run ID on the configured self-hosted QA runner.
+3. Dispatch `Build and Release` with `publishRelease: true` and
+   `qaEvidenceRunId` set to the completed QA evidence run ID.
 
 ```powershell
 .\scripts\release.ps1
@@ -240,6 +269,9 @@ Android runtime smoke evidence may come from `-RunAndroidDeviceSmoke` on a
 connected device/emulator or from a previously generated
 `-AndroidDeviceSmokeResultJson` record; the script rejects using both sources
 in the same release run.
+The publish workflow downloads those four JSON files from the explicitly
+selected QA evidence run and passes every path to `release.ps1`; missing or
+stale evidence therefore fails before any GitHub Release assets are replaced.
 
 To inspect those publish gates without building, uploading, or touching remote
 services, run the release readiness audit:

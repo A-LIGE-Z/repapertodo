@@ -83,6 +83,106 @@ function Get-VisiblePaperCount {
   }
 }
 
+function Initialize-WindowEnumerator {
+  if ("RePaperTodoSmokeWindowEnumerator" -as [type]) {
+    return
+  }
+  Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class RePaperTodoSmokeWindowEnumerator {
+  public delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
+
+  [DllImport("user32.dll")]
+  private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+
+  [DllImport("user32.dll")]
+  private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+  [DllImport("user32.dll")]
+  private static extern bool IsWindowVisible(IntPtr window);
+
+  [DllImport("user32.dll")]
+  private static extern bool GetWindowRect(IntPtr window, out RECT bounds);
+
+  [DllImport("user32.dll")]
+  private static extern bool PostMessage(IntPtr window, uint message,
+                                         IntPtr wParam, IntPtr lParam);
+
+  private struct RECT {
+    public int Left;
+    public int Top;
+    public int Right;
+    public int Bottom;
+  }
+
+  public static int CountVisibleTopLevelWindows(uint expectedProcessId) {
+    var count = 0;
+    EnumWindows((window, parameter) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId == expectedProcessId && IsWindowVisible(window)) {
+        count += 1;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return count;
+  }
+
+  public static long FindVisibleCoordinatorWindow(uint expectedProcessId) {
+    IntPtr result = IntPtr.Zero;
+    EnumWindows((window, parameter) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId != expectedProcessId || !IsWindowVisible(window)) {
+        return true;
+      }
+      RECT bounds;
+      if (GetWindowRect(window, out bounds) &&
+          bounds.Right - bounds.Left >= 800 &&
+          bounds.Bottom - bounds.Top >= 500) {
+        result = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return result.ToInt64();
+  }
+
+  public static bool CloseWindow(long window) {
+    return window != 0 && PostMessage(new IntPtr(window), 0x0010,
+                                      IntPtr.Zero, IntPtr.Zero);
+  }
+}
+"@ | Out-Null
+}
+
+function Get-VisibleTopLevelWindowCount {
+  param([int]$ProcessId)
+
+  Initialize-WindowEnumerator
+  return [RePaperTodoSmokeWindowEnumerator]::CountVisibleTopLevelWindows(
+    [uint32]$ProcessId)
+}
+
+function Get-VisibleCoordinatorWindow {
+  param([int]$ProcessId)
+
+  Initialize-WindowEnumerator
+  return [RePaperTodoSmokeWindowEnumerator]::FindVisibleCoordinatorWindow(
+    [uint32]$ProcessId)
+}
+
+function Close-CoordinatorWindow {
+  param([long]$WindowHandle)
+
+  Initialize-WindowEnumerator
+  if (-not [RePaperTodoSmokeWindowEnumerator]::CloseWindow($WindowHandle)) {
+    throw "Windows release smoke could not close the settings coordinator window."
+  }
+}
+
 function Get-PaperTypeCounts {
   param([string]$StateFile)
 
@@ -216,7 +316,8 @@ foreach ($requiredPath in @($sourceExe, $sourceFlutterDll, $sourceDataDirectory)
   }
 }
 
-$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$tempRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot ".tmp"))
+New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 $smokeRoot = Join-Path $tempRoot "repapertodo-windows-smoke-$([Guid]::NewGuid().ToString("N"))"
 $smokeReleaseDirectory = Join-Path $smokeRoot "Release"
 $smokeExe = Join-Path $smokeReleaseDirectory "repapertodo.exe"
@@ -226,8 +327,14 @@ $smokeFailure = $null
 $hiddenStartupCommands = @("--hide")
 $ignoredSecondaryStartupCommands = @("--unknown-startup-command")
 $secondaryStartupCommands = @("--new-note", "--new-todo", "--exit")
+$settingsStartupCommands = @("--settings")
 $initialPaperCount = 0
+$initialVisibleWindowCount = 0
+$finalVisibleWindowCount = 0
 $visiblePaperCountAfterIgnoredCommand = 0
+$visiblePaperCountBeforeSettings = 0
+$visibleTopLevelWindowCountWhileSettingsOpen = 0
+$visibleTopLevelWindowCountAfterSettingsClose = 0
 $initialPaperTypeCounts = [ordered]@{
   total = 0
   todo = 0
@@ -260,6 +367,16 @@ try {
 
   $initialPaperTypeCounts = Get-PaperTypeCounts -StateFile $smokeStateFile
   $initialPaperCount = [int]$initialPaperTypeCounts.total
+  Start-Sleep -Milliseconds 1000
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke did not create one visible top-level window per initial paper." `
+    -Condition {
+      $visibleWindowCount = Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+      $visibleWindowCount -ge $initialPaperCount
+    }
+  $initialVisibleWindowCount =
+    Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
 
   Invoke-SecondaryStartupCommand `
     -Executable $smokeExe `
@@ -272,6 +389,12 @@ try {
     -Condition {
       -not $primaryProcess.HasExited -and
         (Get-VisiblePaperCount -StateFile $smokeStateFile) -eq 0
+    }
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke did not hide every independent paper window." `
+    -Condition {
+      (Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id) -eq 0
     }
 
   Invoke-SecondaryStartupCommand `
@@ -290,6 +413,13 @@ try {
     -Executable $smokeExe `
     -WorkingDirectory $smokeReleaseDirectory `
     -Command $secondaryStartupCommands[0]
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke app did not persist the secondary --new-note paper in time." `
+    -Condition {
+      -not $primaryProcess.HasExited -and
+        (Get-PaperCount -StateFile $smokeStateFile) -ge ($initialPaperCount + 1)
+    }
   Invoke-SecondaryStartupCommand `
     -Executable $smokeExe `
     -WorkingDirectory $smokeReleaseDirectory `
@@ -302,6 +432,48 @@ try {
       -not $primaryProcess.HasExited -and
         (Get-PaperCount -StateFile $smokeStateFile) -ge 3
     }
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke did not create one visible top-level HWND per visible paper." `
+    -Condition {
+      $visiblePapers = Get-VisiblePaperCount -StateFile $smokeStateFile
+      $visibleWindows = Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+      $visiblePapers -ge 2 -and $visibleWindows -ge $visiblePapers
+    }
+  $finalVisibleWindowCount =
+    Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+
+  $visiblePaperCountBeforeSettings =
+    Get-VisiblePaperCount -StateFile $smokeStateFile
+  Invoke-SecondaryStartupCommand `
+    -Executable $smokeExe `
+    -WorkingDirectory $smokeReleaseDirectory `
+    -Command $settingsStartupCommands[0]
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke forwarded --settings command did not reveal the coordinator window." `
+    -Condition {
+      (Get-VisibleCoordinatorWindow -ProcessId $primaryProcess.Id) -ne 0 -and
+        (Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id) -ge
+          ($visiblePaperCountBeforeSettings + 1)
+    }
+  $visibleTopLevelWindowCountWhileSettingsOpen =
+    Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+  $coordinatorWindow =
+    Get-VisibleCoordinatorWindow -ProcessId $primaryProcess.Id
+  Close-CoordinatorWindow -WindowHandle $coordinatorWindow
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke settings coordinator did not close without changing independent papers." `
+    -Condition {
+      (Get-VisibleCoordinatorWindow -ProcessId $primaryProcess.Id) -eq 0 -and
+        (Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id) -eq
+          $visiblePaperCountBeforeSettings -and
+        (Get-VisiblePaperCount -StateFile $smokeStateFile) -eq
+          $visiblePaperCountBeforeSettings
+    }
+  $visibleTopLevelWindowCountAfterSettingsClose =
+    Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
 
   Invoke-SecondaryStartupCommand `
     -Executable $smokeExe `
@@ -339,6 +511,16 @@ try {
       finalTodoPaperCount = [int]$finalPaperTypeCounts.todo
       initialNotePaperCount = [int]$initialPaperTypeCounts.note
       finalNotePaperCount = [int]$finalPaperTypeCounts.note
+      initialVisibleTopLevelWindowCount = $initialVisibleWindowCount
+      finalVisibleTopLevelWindowCount = $finalVisibleWindowCount
+      independentPaperSurfaces = $true
+      settingsCoordinatorLifecycle = $true
+      settingsStartupCommands = $settingsStartupCommands
+      visiblePaperCountBeforeSettings = $visiblePaperCountBeforeSettings
+      visibleTopLevelWindowCountWhileSettingsOpen =
+        $visibleTopLevelWindowCountWhileSettingsOpen
+      visibleTopLevelWindowCountAfterSettingsClose =
+        $visibleTopLevelWindowCountAfterSettingsClose
       hiddenStartupCommands = $hiddenStartupCommands
       ignoredSecondaryStartupCommands = $ignoredSecondaryStartupCommands
       visiblePaperCountAfterIgnoredCommand = $visiblePaperCountAfterIgnoredCommand
@@ -349,7 +531,7 @@ try {
       ConvertTo-Json -Depth 4 |
       Set-Content -LiteralPath $resultJsonFullPath -Encoding ascii
   }
-  Write-Host "Windows release smoke passed with $paperCount persisted papers."
+  Write-Host "Windows release smoke passed with $paperCount persisted papers and $finalVisibleWindowCount independent visible HWNDs."
 } catch {
   $smokeFailure = $_
   throw

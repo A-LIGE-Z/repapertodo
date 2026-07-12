@@ -245,4 +245,66 @@ void main() {
     expect(File(keyProperties).existsSync(), false);
     expect(File(keystore).existsSync(), false);
   });
+
+  test('Android signing script rejects unsafe output paths', () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for signing script tests.');
+      return;
+    }
+
+    for (final caseData in const [
+      (
+        keyPropertiesPath: 'key*.properties',
+        keystorePath: 'release.jks',
+        expected:
+            'Android signing key.properties path must not contain wildcard characters',
+      ),
+      (
+        keyPropertiesPath: 'key.properties',
+        keystorePath: 'release?.jks',
+        expected:
+            'Android signing keystore path must not contain wildcard characters',
+      ),
+      (
+        keyPropertiesPath: '.',
+        keystorePath: 'release.jks',
+        expected: 'Android signing key.properties path must include a file name',
+      ),
+      (
+        keyPropertiesPath: 'key.properties',
+        keystorePath: '.',
+        expected: 'Android signing keystore path must include a file name',
+      ),
+    ]) {
+      final temp = await Directory.systemTemp.createTemp(
+        'repapertodo_signing_output_path_',
+      );
+      addTearDown(() => temp.delete(recursive: true));
+
+      final result = await _runSigningScript(
+        powerShell: powerShell,
+        keyPropertiesPath:
+            '${temp.path}${Platform.pathSeparator}${caseData.keyPropertiesPath}',
+        keystorePath:
+            '${temp.path}${Platform.pathSeparator}${caseData.keystorePath}',
+        secrets: {
+          'ANDROID_KEYSTORE_BASE64': base64Encode([0x52, 0x50, 0x54, 0x44]),
+          'ANDROID_STORE_PASSWORD': 'store-password',
+          'ANDROID_KEY_ALIAS': 'repapertodo',
+          'ANDROID_KEY_PASSWORD': 'key-password',
+        },
+      );
+
+      expect(result.exitCode, isNot(0));
+      expect('${result.stdout}\n${result.stderr}', contains(caseData.expected));
+      expect(
+        Directory(temp.path)
+            .listSync(recursive: true)
+            .whereType<File>()
+            .toList(),
+        isEmpty,
+      );
+    }
+  });
 }

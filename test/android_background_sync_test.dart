@@ -163,6 +163,80 @@ void main() {
         'Synced in Android background');
   });
 
+  test('Android background sync flushes a persisted durable operation batch',
+      () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'repapertodo_background_sync_durable_outbox_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    await File(deviceIdPath).writeAsString('device-android');
+    final beforeState = AppState(
+      papers: [
+        PaperData(
+          id: 'background-note',
+          type: PaperTypes.note,
+          content: 'Before background edit',
+        ),
+      ],
+      sync: _configuredSyncSettings()
+        ..operationDeviceSequences = {'device-android': 7},
+    );
+    final afterState = AppState.fromJson(beforeState.toJson())
+      ..papers.single.content = 'Saved before background worker';
+    final preparationService = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+    );
+    final prepared = await preparationService.preparePendingLocalOperationBatch(
+      beforeState: beforeState,
+      afterState: afterState,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 11, 12, 30),
+    );
+    await store.save(prepared);
+    final uploadedIds = <String>[];
+    final syncService = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) => _BackgroundWebDavStateSyncService(
+        onUploadOperationLogs: (
+          operations, {
+          previousDeviceSequences,
+        }) async {
+          uploadedIds.addAll(operations.map((operation) => operation.id));
+          expect(previousDeviceSequences, {'device-android': 7});
+          return const WebDavOperationLogUploadResult(
+            deviceSequences: {'device-android': 8},
+            uploadedCount: 1,
+            acceptedDeviceSequences: {'device-android': 8},
+          );
+        },
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          expect(
+            localState.papers.single.content,
+            'Saved before background worker',
+          );
+          expect(localState.sync.pendingOperationBatch, isNotNull);
+          return const WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.uploaded,
+          );
+        },
+      ),
+    );
+
+    final success = await runRePaperTodoBackgroundSync(
+      {androidBackgroundSyncStateFilePathKey: store.filePath},
+      syncService: syncService,
+    );
+
+    expect(success, true);
+    expect(uploadedIds, ['device-android-8']);
+    final stored = await store.load();
+    expect(stored.papers.single.content, 'Saved before background worker');
+    expect(stored.sync.pendingOperationBatch, isNull);
+    expect(stored.sync.operationDeviceSequences, {'device-android': 8});
+  });
+
   test('Android background sync skips incomplete WebDAV settings', () async {
     final directory = await Directory.systemTemp.createTemp(
       'repapertodo_background_sync_disabled_',
@@ -348,6 +422,60 @@ class _RecordingBackgroundSyncService extends AppSyncService {
       state: resultState,
     );
   }
+}
+
+typedef _BackgroundSync = Future<WebDavStateSyncResult> Function({
+  required AppState localState,
+  DateTime? localUpdatedAtUtc,
+});
+
+typedef _BackgroundUploadOperationLogs = Future<WebDavOperationLogUploadResult>
+    Function(
+  Iterable<SyncOperation> operations, {
+  Map<String, int>? previousDeviceSequences,
+});
+
+class _BackgroundWebDavStateSyncService extends WebDavStateSyncService {
+  _BackgroundWebDavStateSyncService({
+    required _BackgroundSync onSync,
+    required _BackgroundUploadOperationLogs onUploadOperationLogs,
+  })  : _onSync = onSync,
+        _onUploadOperationLogs = onUploadOperationLogs,
+        super(
+          client: WebDavClient(
+            baseUri: Uri.parse('https://unused.example.test/'),
+            credentials:
+                const WebDavCredentials(username: 'unused', password: 'unused'),
+          ),
+        );
+
+  final _BackgroundSync _onSync;
+  final _BackgroundUploadOperationLogs _onUploadOperationLogs;
+
+  @override
+  Future<WebDavStateSyncResult> sync({
+    required AppState localState,
+    DateTime? localUpdatedAtUtc,
+  }) {
+    return _onSync(
+      localState: localState,
+      localUpdatedAtUtc: localUpdatedAtUtc,
+    );
+  }
+
+  @override
+  Future<WebDavOperationLogUploadResult> uploadOperationLogs(
+    Iterable<SyncOperation> operations, {
+    Map<String, int>? previousDeviceSequences,
+  }) {
+    return _onUploadOperationLogs(
+      operations,
+      previousDeviceSequences: previousDeviceSequences,
+    );
+  }
+
+  @override
+  Future<List<WebDavOperationLogRecord>> listOperationLogs() async => const [];
 }
 
 class _RecordingBackgroundScheduler

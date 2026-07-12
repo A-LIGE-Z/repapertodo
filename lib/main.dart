@@ -7,6 +7,8 @@ import 'src/app.dart';
 import 'src/bootstrap/app_bootstrap.dart';
 import 'src/bootstrap/crash_recovery.dart';
 import 'src/sync/android_background_sync.dart';
+import 'src/windows/paper_window_app.dart';
+import 'src/windows/paper_window_arguments.dart';
 
 Future<void> main(List<String> args) async {
   BootstrappedApp? activeBootstrap;
@@ -32,6 +34,12 @@ Future<void> main(List<String> args) async {
   await runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      final paperWindowArguments = PaperWindowArguments.tryParse(args);
+      if (paperWindowArguments != null) {
+        await runRePaperTodoPaperWindow(paperWindowArguments.paperId);
+        return;
+      }
 
       final bootstrap = await AppBootstrap.load(args);
       if (bootstrap == null) {

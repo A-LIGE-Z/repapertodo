@@ -76,10 +76,16 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   final WindowsStartupHost _startupHost;
   final StreamController<PaperData> _surfaceUpdates =
       StreamController<PaperData>.broadcast();
+  final StreamController<PaperData> _paperEdits =
+      StreamController<PaperData>.broadcast();
+  final StreamController<PaperWindowActionRequest> _actionRequests =
+      StreamController<PaperWindowActionRequest>.broadcast();
   final StreamController<String> _paperOpenRequests =
       StreamController<String>.broadcast();
   final StreamController<String> _paperDeleteRequests =
       StreamController<String>.broadcast();
+  final StreamController<void> _coordinatorCloseRequests =
+      StreamController<void>.broadcast();
   final Map<String, PaperData> _knownPapers = <String, PaperData>{};
   PaperData? _activePaper;
 
@@ -87,10 +93,19 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   Stream<PaperData> get surfaceUpdates => _surfaceUpdates.stream;
 
   @override
+  Stream<PaperData> get paperEdits => _paperEdits.stream;
+
+  @override
+  Stream<PaperWindowActionRequest> get actionRequests => _actionRequests.stream;
+
+  @override
   Stream<String> get paperOpenRequests => _paperOpenRequests.stream;
 
   @override
   Stream<String> get paperDeleteRequests => _paperDeleteRequests.stream;
+
+  @override
+  Stream<void> get coordinatorCloseRequests => _coordinatorCloseRequests.stream;
 
   @override
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async {
@@ -125,6 +140,8 @@ class WindowsPaperWindowHost implements PaperWindowHost {
         if (paperId != null) {
           _paperDeleteRequests.add(paperId);
         }
+      case 'coordinatorCloseRequested':
+        _coordinatorCloseRequests.add(null);
       case 'boundsChanged':
         final paper = _paperFromEventArguments(call.arguments);
         if (paper == null) {
@@ -138,6 +155,46 @@ class WindowsPaperWindowHost implements PaperWindowHost {
           _applyBoundsToPaper(paper, bounds);
           _surfaceUpdates.add(paper);
         }
+      case 'paperSurfaceChanged':
+        final map = _argumentMap(call.arguments);
+        if (map == null) {
+          return;
+        }
+        final changedPaper = PaperData.fromJson({
+          for (final entry in map.entries)
+            if (entry.key is String) entry.key as String: entry.value,
+        });
+        final paperId = normalizeLocalModelId(changedPaper.id);
+        if (paperId.isEmpty || !_knownPapers.containsKey(paperId)) {
+          return;
+        }
+        changedPaper.id = paperId;
+        final knownPaper = _knownPapers[paperId]!;
+        _copyPaperData(changedPaper, knownPaper);
+        if (normalizeLocalModelId(_activePaper?.id) == paperId) {
+          _activePaper = knownPaper;
+        }
+        _paperEdits.add(knownPaper);
+      case 'paperActionRequested':
+        final map = _argumentMap(call.arguments);
+        final kind = map?['kind'];
+        final paperId = map?['paperId'];
+        final value = map?['value'];
+        if (kind is! String ||
+            !PaperWindowActionKinds.values.contains(kind) ||
+            paperId is! String) {
+          return;
+        }
+        final normalizedPaperId = _validatedEventPaperId(paperId);
+        if (normalizedPaperId == null ||
+            !_knownPapers.containsKey(normalizedPaperId)) {
+          return;
+        }
+        _actionRequests.add(PaperWindowActionRequest(
+          kind: kind,
+          paperId: normalizedPaperId,
+          value: value is String ? value : '',
+        ));
       case 'closeRequested':
         final paper = _paperFromEventArguments(call.arguments);
         if (paper == null) {
@@ -202,6 +259,11 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     _rememberPaper(paper);
     _retargetActivePaperAfterLocalHide(paper);
     await _channel.invokeMethod<void>('hide', _paperSurfaceArguments(paper));
+  }
+
+  @override
+  Future<void> hideCoordinatorWindow() async {
+    await _channel.invokeMethod<void>('hideCoordinator');
   }
 
   @override
@@ -282,6 +344,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     _activePaper = paper;
+    await _channel.invokeMethod<void>('updatePaperWindow', paper.toJson());
     await _applyBounds(paper);
     await _channel.invokeMethod<void>(
       'setPinnedToDesktop',
@@ -301,6 +364,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     await _normalizePaperForPlatform(paper);
     _rememberPaper(paper);
     _activePaper = paper;
+    await _channel.invokeMethod<void>('updatePaperWindow', paper.toJson());
     await _applyBounds(paper);
     await _channel.invokeMethod<void>(
       'setPinnedToDesktop',
@@ -325,6 +389,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       _retargetActivePaperAfterLocalHide(paper);
       return;
     }
+    await _channel.invokeMethod<void>('updatePaperWindow', paper.toJson());
     await _applyBounds(paper);
     await _channel.invokeMethod<void>(
       'setPinnedToDesktop',
@@ -373,6 +438,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   }
 
   Future<void> _syncPaperSurfaceRegistry(AppState state) async {
+    await _channel.invokeMethod<void>('setPaperWindowState', state.toJson());
     await _channel.invokeMethod<void>(
       'setPaperSurfaces',
       _paperSurfaceRegistryEntries(state),
@@ -422,6 +488,29 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     }
     paper.id = paperId;
     _knownPapers[paperId] = paper;
+  }
+
+  void _copyPaperData(PaperData source, PaperData target) {
+    final copy = PaperData.fromJson(source.toJson());
+    target
+      ..id = copy.id
+      ..type = copy.type
+      ..title = copy.title
+      ..x = copy.x
+      ..y = copy.y
+      ..width = copy.width
+      ..height = copy.height
+      ..isVisible = copy.isVisible
+      ..alwaysOnTop = copy.alwaysOnTop
+      ..isCollapsed = copy.isCollapsed
+      ..isPinnedToDesktop = copy.isPinnedToDesktop
+      ..textZoom = copy.textZoom
+      ..capsuleSide = copy.capsuleSide
+      ..capsuleMonitorDeviceName = copy.capsuleMonitorDeviceName
+      ..items = copy.items
+      ..content = copy.content
+      ..noteCanvasElements = copy.noteCanvasElements
+      ..extra = copy.extra;
   }
 
   void _syncKnownPapers(AppState state) {
@@ -651,6 +740,7 @@ class WindowsTrayHost implements TrayHost {
   Future<void> rebuildMenu(AppState state, {TrayMenuLabels? labels}) async {
     await _paperWindows._normalizeStateForPlatform(state);
     _paperWindows._syncKnownPapers(state);
+    await _channel.invokeMethod<void>('setPaperWindowState', state.toJson());
     await _channel.invokeMethod<void>(
       'setTrayMenu',
       _trayMenuPayload(state, labels),
@@ -678,6 +768,7 @@ List<Map<String, Object?>> _paperSurfaceRegistryEntries(
     for (final paper in state.papers)
       _paperSurfaceRegistryEntry(
         paper,
+        state: state,
         labels: labels,
         fallbackNumber: typeCounts.update(
           PaperTypes.normalize(paper.type),
@@ -690,6 +781,7 @@ List<Map<String, Object?>> _paperSurfaceRegistryEntries(
 
 Map<String, Object?> _paperSurfaceRegistryEntry(
   PaperData paper, {
+  required AppState state,
   TrayMenuLabels? labels,
   required int fallbackNumber,
 }) {
@@ -712,6 +804,9 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
     'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
     'alwaysOnTop': paper.alwaysOnTop,
     'isPinnedToDesktop': paper.isPinnedToDesktop,
+    'hideFromWindowSwitcher': state.hidePapersFromWindowSwitcher,
+    'hideWhenCovered': state.hideDeepCapsulesWhenCovered,
+    'hideWhenFullscreen': state.hideDeepCapsulesWhenFullscreen,
     'isScriptCapsule':
         paper.isNote && ScriptCapsuleSpec.isScriptCapsuleContent(paper.content),
     if (labels != null) 'trayLabel': _trayPaperLabel(paper, title, labels),

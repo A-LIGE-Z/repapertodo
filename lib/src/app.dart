@@ -80,6 +80,35 @@ typedef AndroidBackgroundSyncConfigurator = Future<void> Function({
   required String stateFilePath,
 });
 
+typedef PaperWindowActionSender = Future<void> Function(
+  String kind, {
+  String value,
+});
+
+String _syncUserConfigurationJson(SyncSettings settings) {
+  return jsonEncode(<String, Object?>{
+    'enabled': settings.enabled,
+    'provider': settings.provider,
+    'webDav': settings.webDav.toJson(),
+  });
+}
+
+void _copySyncRuntimeMetadata({
+  required SyncSettings source,
+  required SyncSettings target,
+}) {
+  final decoded =
+      jsonDecode(jsonEncode(source.toJson())) as Map<String, dynamic>;
+  final runtimeCopy = SyncSettings.fromJson(decoded);
+  target
+    ..operationDeviceSequences = runtimeCopy.operationDeviceSequences
+    ..pendingOperationBatch = runtimeCopy.pendingOperationBatch
+    ..deletedPaperTombstones = runtimeCopy.deletedPaperTombstones
+    ..deletedTodoItemTombstones = runtimeCopy.deletedTodoItemTombstones
+    ..extra = runtimeCopy.extra;
+  target.webDav.extra = runtimeCopy.webDav.extra;
+}
+
 final _paperTodoMarkdownExtensionSet = md.ExtensionSet(
   md.ExtensionSet.commonMark.blockSyntaxes,
   <md.InlineSyntax>[
@@ -116,6 +145,10 @@ class RePaperTodoApp extends StatefulWidget {
     this.configureAndroidBackgroundSync =
         configureRePaperTodoAndroidBackgroundSync,
     this.customFontLoader,
+    this.initialSurfacePaperId,
+    this.paperWindowMode = false,
+    this.paperWindowActionSender,
+    this.paperWindowDragStarter,
     super.key,
   });
 
@@ -124,6 +157,10 @@ class RePaperTodoApp extends StatefulWidget {
   final AppSyncService? syncService;
   final AndroidBackgroundSyncConfigurator configureAndroidBackgroundSync;
   final PaperTodoRuntimeCustomFontLoader? customFontLoader;
+  final String? initialSurfacePaperId;
+  final bool paperWindowMode;
+  final PaperWindowActionSender? paperWindowActionSender;
+  final Future<void> Function()? paperWindowDragStarter;
 
   @override
   State<RePaperTodoApp> createState() => _RePaperTodoAppState();
@@ -174,6 +211,10 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
         syncService: widget.syncService ?? AppSyncService(),
         configureAndroidBackgroundSync: widget.configureAndroidBackgroundSync,
         onAppThemeChanged: () => setState(() {}),
+        initialSurfacePaperId: widget.initialSurfacePaperId,
+        paperWindowMode: widget.paperWindowMode,
+        paperWindowActionSender: widget.paperWindowActionSender,
+        paperWindowDragStarter: widget.paperWindowDragStarter,
       ),
     );
   }
@@ -524,6 +565,10 @@ class PaperBoardScreen extends StatefulWidget {
     required this.syncService,
     required this.configureAndroidBackgroundSync,
     this.onAppThemeChanged,
+    this.initialSurfacePaperId,
+    this.paperWindowMode = false,
+    this.paperWindowActionSender,
+    this.paperWindowDragStarter,
     super.key,
   });
 
@@ -532,6 +577,10 @@ class PaperBoardScreen extends StatefulWidget {
   final AppSyncService syncService;
   final AndroidBackgroundSyncConfigurator configureAndroidBackgroundSync;
   final VoidCallback? onAppThemeChanged;
+  final String? initialSurfacePaperId;
+  final bool paperWindowMode;
+  final PaperWindowActionSender? paperWindowActionSender;
+  final Future<void> Function()? paperWindowDragStarter;
 
   @override
   State<PaperBoardScreen> createState() => _PaperBoardScreenState();
@@ -547,8 +596,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   Future<void>? _activeSyncFuture;
   Future<void>? _exitCommandFuture;
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
+  StreamSubscription<PaperData>? _paperEditSubscription;
+  StreamSubscription<PaperWindowActionRequest>? _paperActionSubscription;
   StreamSubscription<String>? _paperOpenSubscription;
   StreamSubscription<String>? _paperDeleteSubscription;
+  StreamSubscription<void>? _coordinatorCloseSubscription;
   StreamSubscription<StartupCommand>? _startupCommandSubscription;
   Timer? _autoSyncTimer;
   Timer? _settingsDeferredAutoSyncTimer;
@@ -579,14 +631,24 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   @override
   void initState() {
     super.initState();
+    _surfacePaperId = widget.initialSurfacePaperId;
     WidgetsBinding.instance.addObserver(this);
     _surfaceUpdateSubscription =
         controller.paperSurfaceUpdates.listen(_handleSurfaceUpdate);
+    _paperEditSubscription = controller.paperEdits.listen(_handlePaperEdit);
+    _paperActionSubscription =
+        controller.paperWindowActionRequests.listen(_handlePaperWindowAction);
     _paperOpenSubscription = controller.paperOpenRequests.listen((paperId) {
       unawaited(_handlePaperOpenRequest(paperId));
     });
     _paperDeleteSubscription = controller.paperDeleteRequests.listen((paperId) {
       unawaited(_handlePaperDeleteRequest(paperId));
+    });
+    _coordinatorCloseSubscription =
+        controller.coordinatorCloseRequests.listen((_) {
+      if (_isSettingsOpen && mounted) {
+        unawaited(Navigator.of(context, rootNavigator: true).maybePop());
+      }
     });
     _startupCommandSubscription = controller.startupCommands.listen((command) {
       unawaited(_handleStartupCommand(command));
@@ -632,8 +694,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _todoReminderTimer?.cancel();
     _cancelTodoReminderSnackBarDismissTimer();
     unawaited(_surfaceUpdateSubscription?.cancel());
+    unawaited(_paperEditSubscription?.cancel());
+    unawaited(_paperActionSubscription?.cancel());
     unawaited(_paperOpenSubscription?.cancel());
     unawaited(_paperDeleteSubscription?.cancel());
+    unawaited(_coordinatorCloseSubscription?.cancel());
     unawaited(_startupCommandSubscription?.cancel());
     super.dispose();
   }
@@ -669,6 +734,33 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final notePapers =
         controller.state.papers.where((paper) => paper.isNote).toList();
     final surfacePaper = _surfacePaper();
+    if (widget.paperWindowMode) {
+      if (surfacePaper == null) {
+        return const SizedBox.shrink();
+      }
+      if (surfacePaper.isCollapsed) {
+        return _paperWindowCapsule(surfacePaper);
+      }
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: ColoredBox(
+                color: colorScheme.surface,
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    _paperPreview(surfacePaper, notePapers),
+                  ],
+                ),
+              ),
+            ),
+            _paperWindowDragStrip(),
+          ],
+        ),
+      );
+    }
     final useCompactAppBar = MediaQuery.sizeOf(context).width < 600;
     return PopScope<Object?>(
       canPop: surfacePaper == null,
@@ -720,6 +812,76 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                     _paperPreview(surfacePaper, notePapers),
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+
+  Widget _paperWindowCapsule(PaperData paper) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Material(
+              color: colorScheme.surfaceContainerLowest,
+              child: InkWell(
+                onTap: () {
+                  setState(() => paper.isCollapsed = false);
+                  unawaited(_saveState());
+                  unawaited(controller.updatePaperSurface(paper));
+                },
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          paper.isTodo
+                              ? Icons.check_box_outlined
+                              : Icons.notes_outlined,
+                          size: 16,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            _displayTitle(paper),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _paperWindowDragStrip(),
+        ],
+      ),
+    );
+  }
+
+  Widget _paperWindowDragStrip() {
+    final dragStarter = widget.paperWindowDragStarter;
+    if (dragStarter == null) {
+      return const SizedBox.shrink();
+    }
+    return Positioned(
+      left: 8,
+      right: 8,
+      top: 0,
+      height: 6,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.move,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => unawaited(dragStarter()),
         ),
       ),
     );
@@ -951,7 +1113,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   PaperData? _surfacePaper() {
-    final surfacePaperId = _surfacePaperId;
+    final surfacePaperId =
+        widget.paperWindowMode ? widget.initialSurfacePaperId : _surfacePaperId;
     if (surfacePaperId == null) {
       return null;
     }
@@ -977,6 +1140,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   PaperPreview _paperPreview(PaperData paper, List<PaperData> notePapers) {
+    final actionSender = widget.paperWindowActionSender;
     return PaperPreview(
       paper: paper,
       notePapers: notePapers,
@@ -1005,12 +1169,37 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       noteLineSpacing: controller.state.noteLineSpacing,
       onChanged: _refreshAndSaveState,
       onTitleChanged: _updatePaperTitle,
-      onCreatePaper: _createPaper,
-      onOpen: _openPaper,
-      onOpenLinkedNote: _openLinkedNote,
-      onRunScriptCapsule: _runScriptCapsule,
-      onOpenExternalMarkdown: _openNoteMarkdownExternally,
-      onOpenUri: _openUri,
+      onCreatePaper: actionSender == null
+          ? _createPaper
+          : (type, {sourcePaper}) => actionSender(
+                type == PaperTypes.note
+                    ? PaperWindowActionKinds.createNote
+                    : PaperWindowActionKinds.createTodo,
+              ),
+      onOpen: actionSender == null
+          ? _openPaper
+          : (target) => actionSender(
+                PaperWindowActionKinds.openPaper,
+                value: target.id,
+              ),
+      onOpenLinkedNote: actionSender == null
+          ? _openLinkedNote
+          : (note, anchorPaper) => actionSender(
+                PaperWindowActionKinds.openPaper,
+                value: note.id,
+              ),
+      onRunScriptCapsule: actionSender == null
+          ? _runScriptCapsule
+          : (_) => actionSender(PaperWindowActionKinds.runScriptCapsule),
+      onOpenExternalMarkdown: actionSender == null
+          ? _openNoteMarkdownExternally
+          : (_) => actionSender(PaperWindowActionKinds.openExternalMarkdown),
+      onOpenUri: actionSender == null
+          ? _openUri
+          : (uri) => actionSender(
+                PaperWindowActionKinds.openUri,
+                value: uri,
+              ),
       onHide: _hidePaper,
       onDelete: (paper) => _deletePaper(paper),
       onTodoItemDeleted: _markTodoItemDeleted,
@@ -1076,6 +1265,25 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         beforeState = _stateSnapshot(loadedState);
       } catch (_) {
         beforeState = null;
+      }
+      final localBeforeState = beforeState;
+      if (localBeforeState != null) {
+        final existingBatch = localBeforeState.sync.pendingOperationBatch;
+        controller.state.sync.pendingOperationBatch = existingBatch?.copy();
+        if (scheduleLocalEditSync && !_isSettingsOpen && _canRunAutoSync()) {
+          try {
+            final preparedState =
+                await widget.syncService.preparePendingLocalOperationBatch(
+              beforeState: localBeforeState,
+              afterState: controller.state,
+              store: widget.store,
+            );
+            controller.state.sync.pendingOperationBatch =
+                preparedState.sync.pendingOperationBatch?.copy();
+          } catch (_) {
+            controller.state.sync.pendingOperationBatch = existingBatch?.copy();
+          }
+        }
       }
       await widget.store.save(controller.state);
       if (rebuildTrayMenu) {
@@ -1624,6 +1832,67 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     });
   }
 
+  void _handlePaperEdit(PaperData paper) {
+    if (!mounted || _exitCommandFuture != null) {
+      return;
+    }
+    final paperIndex = controller.state.papers.indexWhere(
+      (candidate) => candidate.id == paper.id,
+    );
+    if (paperIndex < 0) {
+      return;
+    }
+    final wasVisible = controller.state.papers[paperIndex].isVisible;
+    final changedPaper = PaperData.fromJson(paper.toJson());
+    setState(() => controller.state.papers[paperIndex] = changedPaper);
+    if (wasVisible && !changedPaper.isVisible) {
+      unawaited(controller.hidePaper(changedPaper));
+    } else if (!wasVisible && changedPaper.isVisible) {
+      unawaited(controller.showPaper(changedPaper));
+    } else {
+      unawaited(controller.updatePaperSurface(changedPaper));
+    }
+    unawaited(_rebuildTrayMenu());
+    unawaited(_saveState(rebuildTrayMenu: false));
+  }
+
+  void _handlePaperWindowAction(PaperWindowActionRequest request) {
+    if (!mounted || _exitCommandFuture != null) {
+      return;
+    }
+    final paper = controller.state.papers
+        .where((candidate) => candidate.id == request.paperId)
+        .firstOrNull;
+    if (paper == null) {
+      return;
+    }
+    switch (request.kind) {
+      case PaperWindowActionKinds.openPaper:
+        final target = controller.state.papers
+            .where((candidate) => candidate.id == request.value)
+            .firstOrNull;
+        if (target != null) {
+          unawaited(_openPaper(target));
+        }
+      case PaperWindowActionKinds.createTodo:
+        unawaited(_createPaper(PaperTypes.todo, sourcePaper: paper));
+      case PaperWindowActionKinds.createNote:
+        unawaited(_createPaper(PaperTypes.note, sourcePaper: paper));
+      case PaperWindowActionKinds.openExternalMarkdown:
+        if (paper.isNote) {
+          unawaited(_openNoteMarkdownExternally(paper));
+        }
+      case PaperWindowActionKinds.runScriptCapsule:
+        final spec =
+            paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
+        if (spec != null) {
+          unawaited(_runScriptCapsule(spec));
+        }
+      case PaperWindowActionKinds.openUri:
+        unawaited(_openUri(request.value));
+    }
+  }
+
   void _applyPlatformSurfaceUpdate(PaperData target, PaperData source) {
     target
       ..x = _platformSurfaceCoordinate(source.x, fallback: target.x)
@@ -1933,7 +2202,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _autoSyncTimer?.cancel();
     _autoSyncTimer = null;
     _startSettingsDeferredAutoSyncTimer();
-    final previousSyncJson = jsonEncode(controller.state.sync.toJson());
+    final previousSyncJson = _syncUserConfigurationJson(controller.state.sync);
     _isSettingsOpen = true;
     final previousUsePersistentPowerShellProcess =
         controller.state.usePersistentPowerShellProcess;
@@ -2038,6 +2307,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           controller.state.hideLinkedNotesFromCapsules,
       loadInstalledFontFamilies: controller.installedFontFamilies,
     );
+    try {
+      await controller.hideCoordinatorWindow();
+    } catch (_) {
+      // The settings result is still valid if the native coordinator was
+      // already hidden or is being torn down.
+    }
     if (result == null) {
       _isSettingsOpen = false;
       _settingsDeferredAutoSyncTimer?.cancel();
@@ -2051,8 +2326,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       _runDeferredSettingsSyncIfNeeded();
       return;
     }
+    _copySyncRuntimeMetadata(
+      source: controller.state.sync,
+      target: result.sync,
+    );
     final syncSettingsChanged =
-        jsonEncode(result.sync.toJson()) != previousSyncJson;
+        _syncUserConfigurationJson(result.sync) != previousSyncJson;
     if (syncSettingsChanged) {
       _localEditSyncGeneration += 1;
       _clearPendingLocalEditSync();
@@ -2597,6 +2876,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       return true;
     }
     if (generation != _localEditSyncGeneration) {
+      return true;
+    }
+    if (afterState.sync.pendingOperationBatch != null) {
       return true;
     }
     try {

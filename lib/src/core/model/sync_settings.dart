@@ -12,18 +12,92 @@ abstract final class SyncProviderIds {
   }
 }
 
+class PendingSyncOperationBatch {
+  PendingSyncOperationBatch({
+    required JsonMap baseState,
+    required String deviceId,
+    required this.startSequence,
+    required DateTime createdAtUtc,
+  })  : baseState = _deepCopyJsonMap(baseState),
+        deviceId = normalizeSyncDeviceId(deviceId, fallback: ''),
+        createdAtUtc = createdAtUtc.toUtc();
+
+  factory PendingSyncOperationBatch.fromJson(JsonMap json) {
+    final baseState = jsonMapOrNull(json['baseState']);
+    final deviceId = json['deviceId'];
+    final startSequence = json['startSequence'];
+    final createdAtUtc = json['createdAtUtc'];
+    if (baseState == null ||
+        deviceId is! String ||
+        startSequence is! int ||
+        createdAtUtc is! String) {
+      throw const FormatException('Pending sync operation batch is invalid.');
+    }
+    final batch = PendingSyncOperationBatch(
+      baseState: baseState,
+      deviceId: deviceId,
+      startSequence: startSequence,
+      createdAtUtc: parseStrictSyncWireDateTimeUtc(
+        createdAtUtc,
+        fieldName: 'Pending sync operation batch createdAtUtc',
+      ),
+    );
+    if (!batch.isValid) {
+      throw const FormatException('Pending sync operation batch is invalid.');
+    }
+    return batch;
+  }
+
+  JsonMap baseState;
+  String deviceId;
+  int startSequence;
+  DateTime createdAtUtc;
+
+  bool get isValid =>
+      deviceId.isNotEmpty &&
+      startSequence >= 0 &&
+      startSequence <= maxSyncDeviceSequence;
+
+  void normalize() {
+    baseState = _deepCopyJsonMap(baseState);
+    deviceId = normalizeSyncDeviceId(deviceId, fallback: '');
+    createdAtUtc = createdAtUtc.toUtc();
+  }
+
+  PendingSyncOperationBatch copy() {
+    return PendingSyncOperationBatch(
+      baseState: baseState,
+      deviceId: deviceId,
+      startSequence: startSequence,
+      createdAtUtc: createdAtUtc,
+    );
+  }
+
+  JsonMap toJson() {
+    return {
+      'baseState': _deepCopyJsonMap(baseState),
+      'deviceId': deviceId,
+      'startSequence': startSequence,
+      'createdAtUtc': createdAtUtc.toUtc().toIso8601String(),
+    };
+  }
+}
+
 class SyncSettings {
   SyncSettings({
     this.enabled = false,
     this.provider = SyncProviderIds.none,
     WebDavSyncSettings? webDav,
     Map<String, int>? operationDeviceSequences,
+    PendingSyncOperationBatch? pendingOperationBatch,
     Map<String, String>? deletedPaperTombstones,
     Map<String, Map<String, String>>? deletedTodoItemTombstones,
     JsonMap? extra,
   })  : webDav = webDav ?? WebDavSyncSettings(),
         operationDeviceSequences =
             normalizeSyncDeviceSequences(operationDeviceSequences),
+        pendingOperationBatch =
+            _normalizePendingOperationBatch(pendingOperationBatch),
         deletedPaperTombstones = deletedPaperTombstones ?? <String, String>{},
         deletedTodoItemTombstones =
             deletedTodoItemTombstones ?? <String, Map<String, String>>{},
@@ -34,6 +108,7 @@ class SyncSettings {
     'provider',
     'webDav',
     'operationDeviceSequences',
+    'pendingOperationBatch',
     'deletedPaperTombstones',
     'deletedTodoItemTombstones',
   };
@@ -42,6 +117,7 @@ class SyncSettings {
   String provider;
   WebDavSyncSettings webDav;
   Map<String, int> operationDeviceSequences;
+  PendingSyncOperationBatch? pendingOperationBatch;
   Map<String, String> deletedPaperTombstones;
   Map<String, Map<String, String>> deletedTodoItemTombstones;
   JsonMap extra;
@@ -55,6 +131,8 @@ class SyncSettings {
           webDavJson == null ? null : WebDavSyncSettings.fromJson(webDavJson),
       operationDeviceSequences:
           _syncDeviceSequencesFromWire(json['operationDeviceSequences']),
+      pendingOperationBatch:
+          _pendingOperationBatchFromWire(json['pendingOperationBatch']),
       deletedPaperTombstones:
           _normalizeTombstoneMap(json['deletedPaperTombstones']),
       deletedTodoItemTombstones:
@@ -69,6 +147,8 @@ class SyncSettings {
     operationDeviceSequences = normalizeSyncDeviceSequences(
       operationDeviceSequences,
     );
+    pendingOperationBatch =
+        _normalizePendingOperationBatch(pendingOperationBatch);
     deletedPaperTombstones = _normalizeTombstoneMap(deletedPaperTombstones);
     deletedTodoItemTombstones =
         _normalizeNestedTombstoneMap(deletedTodoItemTombstones);
@@ -220,6 +300,7 @@ class SyncSettings {
       provider: provider,
       webDav: webDav.copy(),
       operationDeviceSequences: Map<String, int>.from(operationDeviceSequences),
+      pendingOperationBatch: pendingOperationBatch?.copy(),
       deletedPaperTombstones: Map<String, String>.from(
         deletedPaperTombstones,
       ),
@@ -238,6 +319,8 @@ class SyncSettings {
       'provider': provider,
       'webDav': webDav.toJson(),
       'operationDeviceSequences': operationDeviceSequences,
+      if (pendingOperationBatch != null)
+        'pendingOperationBatch': pendingOperationBatch!.toJson(),
       'deletedPaperTombstones': deletedPaperTombstones,
       'deletedTodoItemTombstones': deletedTodoItemTombstones,
     };
@@ -601,6 +684,71 @@ bool _hasControlCharacter(String value) {
   return value.runes.any(
     (rune) => rune <= 0x1F || (rune >= 0x7F && rune <= 0x9F),
   );
+}
+
+PendingSyncOperationBatch? _pendingOperationBatchFromWire(Object? value) {
+  final json = jsonMapOrNull(value);
+  if (json == null) {
+    return null;
+  }
+  try {
+    return PendingSyncOperationBatch.fromJson(json);
+  } on FormatException {
+    return null;
+  }
+}
+
+PendingSyncOperationBatch? _normalizePendingOperationBatch(
+  PendingSyncOperationBatch? value,
+) {
+  if (value == null) {
+    return null;
+  }
+  try {
+    final normalized = value.copy()..normalize();
+    return normalized.isValid ? normalized : null;
+  } on FormatException {
+    return null;
+  }
+}
+
+JsonMap _deepCopyJsonMap(JsonMap source) {
+  return {
+    for (final entry in source.entries)
+      entry.key: _deepCopyJsonValue(entry.value),
+  };
+}
+
+Object? _deepCopyJsonValue(Object? value) {
+  if (value == null || value is String || value is bool) {
+    return value;
+  }
+  if (value is int) {
+    return value;
+  }
+  if (value is double) {
+    if (!value.isFinite) {
+      throw const FormatException('JSON numbers must be finite.');
+    }
+    return value;
+  }
+  if (value is List) {
+    return <Object?>[
+      for (final item in value) _deepCopyJsonValue(item),
+    ];
+  }
+  if (value is Map) {
+    final copy = <String, Object?>{};
+    for (final entry in value.entries) {
+      final key = entry.key;
+      if (key is! String) {
+        throw const FormatException('JSON object keys must be strings.');
+      }
+      copy[key] = _deepCopyJsonValue(entry.value);
+    }
+    return copy;
+  }
+  throw const FormatException('Pending batch baseState must contain JSON.');
 }
 
 Map<String, String> _normalizeTombstoneMap(Object? value) {

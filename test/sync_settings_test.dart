@@ -2,6 +2,229 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/repapertodo.dart';
 
 void main() {
+  test('round-trips normalized pending sync operation batches', () {
+    final settings = SyncSettings.fromJson({
+      'enabled': true,
+      'provider': SyncProviderIds.webDav,
+      'pendingOperationBatch': {
+        'baseState': {
+          'papers': [
+            {
+              'id': 'paper-1',
+              'items': [
+                {'id': 'item-1', 'text': 'Draft'},
+              ],
+            },
+          ],
+        },
+        'deviceId': ' Device A ',
+        'startSequence': 0,
+        'createdAtUtc': '2026-07-01T09:30:00Z',
+      },
+    });
+
+    final batch = settings.pendingOperationBatch;
+    expect(batch, isNotNull);
+    expect(batch!.deviceId, 'device-a');
+    expect(batch.startSequence, 0);
+    expect(batch.createdAtUtc, DateTime.utc(2026, 7, 1, 9, 30));
+    expect(batch.createdAtUtc.isUtc, true);
+    expect(batch.baseState, {
+      'papers': [
+        {
+          'id': 'paper-1',
+          'items': [
+            {'id': 'item-1', 'text': 'Draft'},
+          ],
+        },
+      ],
+    });
+
+    final wire = settings.toJson();
+    expect(wire['pendingOperationBatch'], {
+      'baseState': {
+        'papers': [
+          {
+            'id': 'paper-1',
+            'items': [
+              {'id': 'item-1', 'text': 'Draft'},
+            ],
+          },
+        ],
+      },
+      'deviceId': 'device-a',
+      'startSequence': 0,
+      'createdAtUtc': DateTime.utc(2026, 7, 1, 9, 30).toIso8601String(),
+    });
+
+    final roundTripped = SyncSettings.fromJson(wire).pendingOperationBatch;
+    expect(roundTripped, isNotNull);
+    expect(roundTripped!.toJson(), batch.toJson());
+  });
+
+  test('deep-copies pending batch base state at every model boundary', () {
+    final source = <String, Object?>{
+      'papers': <Object?>[
+        <String, Object?>{
+          'id': 'paper-1',
+          'metadata': <String, Object?>{
+            'tags': <Object?>['draft'],
+          },
+        },
+      ],
+    };
+    final batch = PendingSyncOperationBatch(
+      baseState: source,
+      deviceId: 'device-a',
+      startSequence: 7,
+      createdAtUtc: DateTime.utc(2026, 7, 1, 9),
+    );
+
+    final sourcePapers = source['papers']! as List<Object?>;
+    final sourcePaper = sourcePapers.single! as Map<String, Object?>;
+    final sourceMetadata = sourcePaper['metadata']! as Map<String, Object?>;
+    final sourceTags = sourceMetadata['tags']! as List<Object?>;
+    sourcePaper['id'] = 'changed-at-source';
+    sourceTags.add('source-only');
+
+    final batchPapers = batch.baseState['papers']! as List<Object?>;
+    final batchPaper = batchPapers.single! as Map<String, Object?>;
+    final batchMetadata = batchPaper['metadata']! as Map<String, Object?>;
+    final batchTags = batchMetadata['tags']! as List<Object?>;
+    expect(batchPaper['id'], 'paper-1');
+    expect(batchTags, ['draft']);
+    expect(identical(sourcePapers, batchPapers), false);
+    expect(identical(sourceMetadata, batchMetadata), false);
+    expect(identical(sourceTags, batchTags), false);
+
+    final copied = batch.copy();
+    final encoded = batch.toJson();
+    batchPaper['id'] = 'changed-at-batch';
+    batchTags.add('batch-only');
+
+    final copiedPaper = (copied.baseState['papers']! as List<Object?>).single!
+        as Map<String, Object?>;
+    final copiedTags = (copiedPaper['metadata']!
+        as Map<String, Object?>)['tags']! as List<Object?>;
+    final encodedBaseState = encoded['baseState']! as Map<String, Object?>;
+    final encodedPaper = (encodedBaseState['papers']! as List<Object?>).single!
+        as Map<String, Object?>;
+    final encodedTags = (encodedPaper['metadata']!
+        as Map<String, Object?>)['tags']! as List<Object?>;
+    expect(copiedPaper['id'], 'paper-1');
+    expect(copiedTags, ['draft']);
+    expect(encodedPaper['id'], 'paper-1');
+    expect(encodedTags, ['draft']);
+
+    encodedPaper['id'] = 'changed-at-wire';
+    encodedTags.add('wire-only');
+    expect(batchPaper['id'], 'changed-at-batch');
+    expect(batchTags, ['draft', 'batch-only']);
+  });
+
+  test('drops malformed pending batches without blocking settings startup', () {
+    final validTimestamp = DateTime.utc(2026, 7, 1, 9).toIso8601String();
+    final malformedBatches = <Object?>[
+      {
+        'baseState': <String, Object?>{},
+        'deviceId': '   ',
+        'startSequence': 0,
+        'createdAtUtc': validTimestamp,
+      },
+      {
+        'baseState': <String, Object?>{},
+        'deviceId': 'short',
+        'startSequence': 0,
+        'createdAtUtc': validTimestamp,
+      },
+      {
+        'baseState': <String, Object?>{},
+        'deviceId': 'device-a',
+        'startSequence': -1,
+        'createdAtUtc': validTimestamp,
+      },
+      {
+        'baseState': <String, Object?>{},
+        'deviceId': 'device-a',
+        'startSequence': maxSyncDeviceSequence + 1,
+        'createdAtUtc': validTimestamp,
+      },
+      {
+        'baseState': <String, Object?>{},
+        'deviceId': 'device-a',
+        'startSequence': 0.0,
+        'createdAtUtc': validTimestamp,
+      },
+      {
+        'baseState': <String, Object?>{},
+        'deviceId': 'device-a',
+        'startSequence': 0,
+        'createdAtUtc': '2026-07-01T09:00:00',
+      },
+      {
+        'baseState': <String, Object?>{},
+        'deviceId': 'device-a',
+        'startSequence': 0,
+        'createdAtUtc': '2026-02-30T09:00:00Z',
+      },
+      {
+        'baseState': <String, Object?>{},
+        'deviceId': 'device-a',
+        'startSequence': 0,
+        'createdAtUtc': ' $validTimestamp',
+      },
+      {
+        'baseState': <Object?>[],
+        'deviceId': 'device-a',
+        'startSequence': 0,
+        'createdAtUtc': validTimestamp,
+      },
+      <Object?, Object?>{
+        1: 'not-a-json-object',
+      },
+    ];
+
+    for (final malformedBatch in malformedBatches) {
+      final settings = SyncSettings.fromJson({
+        'enabled': true,
+        'provider': 'WEBDAV',
+        'pendingOperationBatch': malformedBatch,
+        'futureSetting': {'kept': true},
+      });
+
+      expect(settings.enabled, true, reason: '$malformedBatch');
+      expect(
+        settings.provider,
+        SyncProviderIds.webDav,
+        reason: '$malformedBatch',
+      );
+      expect(
+        settings.pendingOperationBatch,
+        isNull,
+        reason: '$malformedBatch',
+      );
+      expect(settings.extra['futureSetting'], {'kept': true});
+      expect(
+        settings.toJson().containsKey('pendingOperationBatch'),
+        false,
+        reason: '$malformedBatch',
+      );
+    }
+  });
+
+  test('keeps pending batch absent for legacy sync settings JSON', () {
+    final settings = SyncSettings.fromJson({
+      'enabled': false,
+      'provider': SyncProviderIds.none,
+      'legacyFutureSetting': true,
+    });
+
+    expect(settings.pendingOperationBatch, isNull);
+    expect(settings.copy().pendingOperationBatch, isNull);
+    expect(settings.toJson().containsKey('pendingOperationBatch'), false);
+    expect(settings.toJson()['legacyFutureSetting'], true);
+  });
+
   test('keeps latest tombstones when marking deleted records', () {
     final ten = DateTime.utc(2026, 7, 1, 10);
     final tenThirty = DateTime.utc(2026, 7, 1, 10, 30);
