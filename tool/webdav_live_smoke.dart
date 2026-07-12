@@ -2,7 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:repapertodo/repapertodo.dart';
+import 'package:repapertodo/src/core/model/app_state.dart';
+import 'package:repapertodo/src/core/model/paper_constants.dart';
+import 'package:repapertodo/src/core/model/paper_data.dart';
+import 'package:repapertodo/src/core/model/sync_settings.dart';
+import 'package:repapertodo/src/core/storage/state_store.dart';
+import 'package:repapertodo/src/sync/app_sync_service.dart';
+import 'package:repapertodo/src/sync/sync_device_id_store.dart';
+import 'package:repapertodo/src/sync/webdav/webdav_client.dart';
+import 'package:repapertodo/src/sync/webdav/webdav_presets.dart';
 
 Future<void> main() async {
   final env = Platform.environment;

@@ -149,6 +149,7 @@ class RePaperTodoApp extends StatefulWidget {
     this.paperWindowMode = false,
     this.paperWindowActionSender,
     this.paperWindowDragStarter,
+    this.paperWindowResizeStarter,
     super.key,
   });
 
@@ -161,6 +162,7 @@ class RePaperTodoApp extends StatefulWidget {
   final bool paperWindowMode;
   final PaperWindowActionSender? paperWindowActionSender;
   final Future<void> Function()? paperWindowDragStarter;
+  final Future<void> Function(String direction)? paperWindowResizeStarter;
 
   @override
   State<RePaperTodoApp> createState() => _RePaperTodoAppState();
@@ -215,6 +217,7 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
         paperWindowMode: widget.paperWindowMode,
         paperWindowActionSender: widget.paperWindowActionSender,
         paperWindowDragStarter: widget.paperWindowDragStarter,
+        paperWindowResizeStarter: widget.paperWindowResizeStarter,
       ),
     );
   }
@@ -569,6 +572,7 @@ class PaperBoardScreen extends StatefulWidget {
     this.paperWindowMode = false,
     this.paperWindowActionSender,
     this.paperWindowDragStarter,
+    this.paperWindowResizeStarter,
     super.key,
   });
 
@@ -581,6 +585,7 @@ class PaperBoardScreen extends StatefulWidget {
   final bool paperWindowMode;
   final PaperWindowActionSender? paperWindowActionSender;
   final Future<void> Function()? paperWindowDragStarter;
+  final Future<void> Function(String direction)? paperWindowResizeStarter;
 
   @override
   State<PaperBoardScreen> createState() => _PaperBoardScreenState();
@@ -757,6 +762,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
               ),
             ),
             _paperWindowDragStrip(),
+            ..._paperWindowResizeHandles(),
           ],
         ),
       );
@@ -819,72 +825,230 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   Widget _paperWindowCapsule(PaperData paper) {
     final colorScheme = Theme.of(context).colorScheme;
+    final scriptCapsuleSpec =
+        paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
+    void expandForEditing() {
+      setState(() => paper.isCollapsed = false);
+      unawaited(_saveState());
+      unawaited(controller.updatePaperSurface(paper));
+    }
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           Positioned.fill(
-            child: Material(
-              color: colorScheme.surfaceContainerLowest,
-              child: InkWell(
-                onTap: () {
-                  setState(() => paper.isCollapsed = false);
-                  unawaited(_saveState());
-                  unawaited(controller.updatePaperSurface(paper));
-                },
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          paper.isTodo
-                              ? Icons.check_box_outlined
-                              : Icons.notes_outlined,
-                          size: 16,
-                          color: colorScheme.primary,
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            _displayTitle(paper),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelMedium,
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: Material(
+                color: Colors.transparent,
+                child: SizedBox.expand(
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerLowest,
+                      border: Border.all(color: colorScheme.outlineVariant),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: InkWell(
+                      key: ValueKey('${paper.id}-paper-window-capsule'),
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: scriptCapsuleSpec == null
+                          ? expandForEditing
+                          : () => unawaited(
+                                _runPaperWindowScriptCapsule(scriptCapsuleSpec),
+                              ),
+                      onSecondaryTap:
+                          scriptCapsuleSpec == null ? null : expandForEditing,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                paper.isTodo
+                                    ? Icons.check_box_outlined
+                                    : scriptCapsuleSpec != null
+                                        ? Icons.bolt_outlined
+                                        : Icons.notes_outlined,
+                                size: 16,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  _displayTitle(paper),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style:
+                                      Theme.of(context).textTheme.labelMedium,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-          _paperWindowDragStrip(),
+          _paperWindowDragStrip(compact: true),
         ],
       ),
     );
   }
 
-  Widget _paperWindowDragStrip() {
+  Future<void> _runPaperWindowScriptCapsule(ScriptCapsuleSpec spec) async {
+    final actionSender = widget.paperWindowActionSender;
+    if (actionSender != null) {
+      await actionSender(PaperWindowActionKinds.runScriptCapsule);
+      return;
+    }
+    await _runScriptCapsule(spec);
+  }
+
+  Widget _paperWindowDragStrip({bool compact = false}) {
     final dragStarter = widget.paperWindowDragStarter;
     if (dragStarter == null) {
       return const SizedBox.shrink();
     }
     return Positioned(
-      left: 8,
-      right: 8,
+      left: compact ? 8 : 12,
+      right: compact ? 8 : 12,
       top: 0,
-      height: 6,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.move,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => unawaited(dragStarter()),
+      height: compact ? 14 : 24,
+      child: Semantics(
+        label: strings.get(PaperTodoStringKeys.actionMovePaperWindow),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.move,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanStart: (_) => unawaited(dragStarter()),
+            child: Center(
+              child: Container(
+                width: compact ? 32 : 48,
+                height: compact ? 3 : 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withValues(alpha: 0.42),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  List<Widget> _paperWindowResizeHandles() {
+    final resizeStarter = widget.paperWindowResizeStarter;
+    if (resizeStarter == null) {
+      return const [];
+    }
+
+    Widget handle({
+      required String direction,
+      required MouseCursor cursor,
+      double? left,
+      double? top,
+      double? right,
+      double? bottom,
+      double? width,
+      double? height,
+    }) {
+      return Positioned(
+        left: left,
+        top: top,
+        right: right,
+        bottom: bottom,
+        width: width,
+        height: height,
+        child: Semantics(
+          label: strings.get(PaperTodoStringKeys.actionResizePaperWindow),
+          child: MouseRegion(
+            cursor: cursor,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanStart: (_) => unawaited(resizeStarter(direction)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    const edge = 8.0;
+    const corner = 14.0;
+    return [
+      handle(
+        direction: 'left',
+        cursor: SystemMouseCursors.resizeLeftRight,
+        left: 0,
+        top: corner,
+        bottom: corner,
+        width: edge,
+      ),
+      handle(
+        direction: 'right',
+        cursor: SystemMouseCursors.resizeLeftRight,
+        right: 0,
+        top: corner,
+        bottom: corner,
+        width: edge,
+      ),
+      handle(
+        direction: 'top',
+        cursor: SystemMouseCursors.resizeUpDown,
+        left: corner,
+        top: 0,
+        right: corner,
+        height: edge,
+      ),
+      handle(
+        direction: 'bottom',
+        cursor: SystemMouseCursors.resizeUpDown,
+        left: corner,
+        right: corner,
+        bottom: 0,
+        height: edge,
+      ),
+      handle(
+        direction: 'topLeft',
+        cursor: SystemMouseCursors.resizeUpLeftDownRight,
+        left: 0,
+        top: 0,
+        width: corner,
+        height: corner,
+      ),
+      handle(
+        direction: 'topRight',
+        cursor: SystemMouseCursors.resizeUpRightDownLeft,
+        top: 0,
+        right: 0,
+        width: corner,
+        height: corner,
+      ),
+      handle(
+        direction: 'bottomLeft',
+        cursor: SystemMouseCursors.resizeUpRightDownLeft,
+        left: 0,
+        bottom: 0,
+        width: corner,
+        height: corner,
+      ),
+      handle(
+        direction: 'bottomRight',
+        cursor: SystemMouseCursors.resizeUpLeftDownRight,
+        right: 0,
+        bottom: 0,
+        width: corner,
+        height: corner,
+      ),
+    ];
   }
 
   List<Widget> _appBarActions({
@@ -1209,6 +1373,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       onSetPinnedToDesktop: _setPaperPinnedToDesktop,
       onSurfaceChanged: _updatePaperSurface,
       onCaptureBounds: _capturePaperBounds,
+      standaloneSurface: widget.paperWindowMode,
     );
   }
 
@@ -3904,6 +4069,7 @@ class PaperPreview extends StatelessWidget {
     required this.onSetPinnedToDesktop,
     required this.onSurfaceChanged,
     required this.onCaptureBounds,
+    this.standaloneSurface = false,
     super.key,
   });
 
@@ -3961,6 +4127,7 @@ class PaperPreview extends StatelessWidget {
       onSetPinnedToDesktop;
   final Future<void> Function(PaperData paper) onSurfaceChanged;
   final Future<void> Function(PaperData paper) onCaptureBounds;
+  final bool standaloneSurface;
 
   @override
   Widget build(BuildContext context) {
@@ -3979,18 +4146,24 @@ class PaperPreview extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerLowest,
-            border: Border.all(color: colorScheme.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withValues(alpha: 0.08),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            border: standaloneSurface
+                ? null
+                : Border.all(color: colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(standaloneSurface ? 0 : 8),
+            boxShadow: standaloneSurface
+                ? const []
+                : [
+                    BoxShadow(
+                      color: colorScheme.shadow.withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: standaloneSurface
+                ? const EdgeInsets.fromLTRB(16, 22, 16, 16)
+                : const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -4001,14 +4174,24 @@ class PaperPreview extends StatelessWidget {
                       _handlePaperContextMenuPointerDown(context, event),
                   child: Row(
                     children: [
-                      Icon(
-                        paper.isTodo
-                            ? Icons.check_box_outlined
-                            : scriptCapsuleSpec != null
-                                ? Icons.bolt_outlined
-                                : Icons.notes_outlined,
-                        size: 18,
-                        color: colorScheme.primary,
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer
+                              .withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: SizedBox.square(
+                          dimension: 28,
+                          child: Icon(
+                            paper.isTodo
+                                ? Icons.check_box_outlined
+                                : scriptCapsuleSpec != null
+                                    ? Icons.bolt_outlined
+                                    : Icons.notes_outlined,
+                            size: 16,
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
                       ),
                       if (paper.isNote && enableTodoNoteLinks) ...[
                         const SizedBox(width: 4),
@@ -4026,23 +4209,34 @@ class PaperPreview extends StatelessWidget {
                           onTitleChanged: onTitleChanged,
                         ),
                       ),
+                      if (standaloneSurface) ...[
+                        const SizedBox(width: 4),
+                        ..._paperHeaderActions(
+                          context: context,
+                          isCollapsed: isCollapsed,
+                          desktopInteractionLocked: desktopInteractionLocked,
+                          textZoom: textZoom,
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: _paperHeaderActions(
-                      context: context,
-                      isCollapsed: isCollapsed,
-                      desktopInteractionLocked: desktopInteractionLocked,
-                      textZoom: textZoom,
+                if (!standaloneSurface) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: _paperHeaderActions(
+                        context: context,
+                        isCollapsed: isCollapsed,
+                        desktopInteractionLocked: desktopInteractionLocked,
+                        textZoom: textZoom,
+                      ),
                     ),
                   ),
-                ),
+                ],
                 AbsorbPointer(
                   absorbing: desktopInteractionLocked,
                   child: _animatedPaperBody(isCollapsed, scriptCapsuleSpec),

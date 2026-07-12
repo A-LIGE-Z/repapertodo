@@ -303,6 +303,20 @@ Map<String, dynamic> _releaseMetadataRecord({
         'startupTimeoutSeconds': 30,
         'exitTimeoutSeconds': 30,
       },
+      'policySmoke': {
+        'status': 'passed',
+        'checkedAtUtc': DateTime.now().toUtc().toIso8601String(),
+        'releaseDirectory':
+            r'D:\AI\repapertodo\build\windows\x64\runner\Release',
+        'exeFileName': 'repapertodo.exe',
+        'trayIconRecoveredAfterTaskbarCreated': true,
+        'fullscreenAvoidance': true,
+        'fullscreenTopmostRestored': true,
+        'longRunningScriptCapsule': true,
+        'borderlessResizableWindow': true,
+        'taskSwitcherVisibility': true,
+        'capsuleEdgeDocking': true,
+      },
       'manualQa': {
         'status': 'skipped',
         'checkedAtUtc': DateTime.now().toUtc().toIso8601String(),
@@ -386,7 +400,10 @@ Map<String, dynamic> _releaseMetadataRecord({
       'bytes': releaseNotesFile.lengthSync(),
       'sha256': _sha256File(releaseNotesFile),
     },
-    'validation': ['scripts/windows_smoke.ps1'],
+    'validation': [
+      'scripts/windows_smoke.ps1',
+      'scripts/windows_policy_smoke.ps1',
+    ],
     'skippedValidation': ['flutter test --no-pub'],
     'artifacts': [
       {

@@ -110,6 +110,11 @@ public static class RePaperTodoSmokeWindowEnumerator {
   private static extern bool PostMessage(IntPtr window, uint message,
                                          IntPtr wParam, IntPtr lParam);
 
+  [DllImport("user32.dll", SetLastError = true)]
+  private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter,
+                                          int x, int y, int width, int height,
+                                          uint flags);
+
   private struct RECT {
     public int Left;
     public int Top;
@@ -150,6 +155,35 @@ public static class RePaperTodoSmokeWindowEnumerator {
     return result.ToInt64();
   }
 
+  public static long FindVisiblePaperWindow(uint expectedProcessId) {
+    IntPtr result = IntPtr.Zero;
+    EnumWindows((window, parameter) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId != expectedProcessId || !IsWindowVisible(window)) {
+        return true;
+      }
+      RECT bounds;
+      if (GetWindowRect(window, out bounds) &&
+          (bounds.Right - bounds.Left < 800 ||
+           bounds.Bottom - bounds.Top < 500)) {
+        result = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return result.ToInt64();
+  }
+
+  public static bool MoveResizeWindow(long window, int x, int y,
+                                      int width, int height) {
+    const uint SWP_NOZORDER = 0x0004;
+    const uint SWP_NOACTIVATE = 0x0010;
+    return window != 0 && SetWindowPos(new IntPtr(window), IntPtr.Zero,
+                                      x, y, width, height,
+                                      SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
   public static bool CloseWindow(long window) {
     return window != 0 && PostMessage(new IntPtr(window), 0x0010,
                                       IntPtr.Zero, IntPtr.Zero);
@@ -172,6 +206,58 @@ function Get-VisibleCoordinatorWindow {
   Initialize-WindowEnumerator
   return [RePaperTodoSmokeWindowEnumerator]::FindVisibleCoordinatorWindow(
     [uint32]$ProcessId)
+}
+
+function Get-VisiblePaperWindow {
+  param([int]$ProcessId)
+
+  Initialize-WindowEnumerator
+  return [RePaperTodoSmokeWindowEnumerator]::FindVisiblePaperWindow(
+    [uint32]$ProcessId)
+}
+
+function Move-ResizePaperWindow {
+  param(
+    [long]$WindowHandle,
+    [int]$X,
+    [int]$Y,
+    [int]$Width,
+    [int]$Height
+  )
+
+  Initialize-WindowEnumerator
+  if (-not [RePaperTodoSmokeWindowEnumerator]::MoveResizeWindow(
+      $WindowHandle, $X, $Y, $Width, $Height)) {
+    throw "Windows release smoke could not move and resize an independent paper window."
+  }
+}
+
+function Test-PersistedPaperBounds {
+  param(
+    [string]$StateFile,
+    [int]$X,
+    [int]$Y,
+    [int]$Width,
+    [int]$Height
+  )
+
+  if (-not (Test-Path -LiteralPath $StateFile -PathType Leaf)) {
+    return $false
+  }
+  try {
+    $state = Get-Content -Raw -LiteralPath $StateFile | ConvertFrom-Json
+    foreach ($paper in @($state.papers)) {
+      if ([Math]::Abs([double]$paper.x - $X) -le 1 -and
+          [Math]::Abs([double]$paper.y - $Y) -le 1 -and
+          [Math]::Abs([double]$paper.width - $Width) -le 1 -and
+          [Math]::Abs([double]$paper.height - $Height) -le 1) {
+        return $true
+      }
+    }
+  } catch {
+    return $false
+  }
+  return $false
 }
 
 function Close-CoordinatorWindow {
@@ -335,6 +421,13 @@ $visiblePaperCountAfterIgnoredCommand = 0
 $visiblePaperCountBeforeSettings = 0
 $visibleTopLevelWindowCountWhileSettingsOpen = 0
 $visibleTopLevelWindowCountAfterSettingsClose = 0
+$geometryPersistenceVerified = $false
+$geometryTestBounds = [ordered]@{
+  x = 180
+  y = 140
+  width = 360
+  height = 280
+}
 $initialPaperTypeCounts = [ordered]@{
   total = 0
   todo = 0
@@ -377,6 +470,29 @@ try {
     }
   $initialVisibleWindowCount =
     Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+
+  $paperWindow = Get-VisiblePaperWindow -ProcessId $primaryProcess.Id
+  if ($paperWindow -eq 0) {
+    throw "Windows release smoke could not find the initial independent paper window."
+  }
+  Move-ResizePaperWindow `
+    -WindowHandle $paperWindow `
+    -X $geometryTestBounds.x `
+    -Y $geometryTestBounds.y `
+    -Width $geometryTestBounds.width `
+    -Height $geometryTestBounds.height
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke did not persist native paper window geometry." `
+    -Condition {
+      Test-PersistedPaperBounds `
+        -StateFile $smokeStateFile `
+        -X $geometryTestBounds.x `
+        -Y $geometryTestBounds.y `
+        -Width $geometryTestBounds.width `
+        -Height $geometryTestBounds.height
+    }
+  $geometryPersistenceVerified = $true
 
   Invoke-SecondaryStartupCommand `
     -Executable $smokeExe `
@@ -514,6 +630,8 @@ try {
       initialVisibleTopLevelWindowCount = $initialVisibleWindowCount
       finalVisibleTopLevelWindowCount = $finalVisibleWindowCount
       independentPaperSurfaces = $true
+      geometryPersistenceVerified = $geometryPersistenceVerified
+      geometryTestBounds = $geometryTestBounds
       settingsCoordinatorLifecycle = $true
       settingsStartupCommands = $settingsStartupCommands
       visiblePaperCountBeforeSettings = $visiblePaperCountBeforeSettings

@@ -402,6 +402,7 @@ void main() {
     final store = _MemoryStateStore();
     final controller = RePaperTodoController(
       initialState: AppState(
+        maxTitleLength: 20,
         papers: [
           PaperData(
             id: 'title-clean-paper',
@@ -16311,6 +16312,7 @@ void main() {
         store: _MemoryStateStore(),
       ),
     );
+    await tester.pumpAndSettle();
 
     final capsule = find.byKey(
       const ValueKey('collapsed-script-note-script-capsule'),
@@ -16338,6 +16340,58 @@ void main() {
     expect(controller.state.papers.single.isCollapsed, false);
     expect(find.byKey(const ValueKey('collapsed-script-note-content')),
         findsOneWidget);
+  });
+
+  testWidgets('independent paper capsule routes script clicks to coordinator',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 180));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        maxTitleLength: 20,
+        papers: [
+          PaperData(
+            id: 'independent-script-note',
+            type: PaperTypes.note,
+            title: 'Deploy script',
+            content: '!pf\n  Start-Sleep -Seconds 20',
+            isCollapsed: true,
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+    final actions = <String>[];
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: 'independent-script-note',
+        paperWindowMode: true,
+        paperWindowActionSender: (kind, {value = ''}) async {
+          actions.add(kind);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final capsule = find.byKey(
+      const ValueKey('independent-script-note-paper-window-capsule'),
+    );
+    expect(capsule, findsOneWidget);
+
+    tester.widget<InkWell>(capsule).onTap!.call();
+    await tester.pump();
+
+    expect(actions, [PaperWindowActionKinds.runScriptCapsule]);
+    expect(controller.state.papers.single.isCollapsed, true);
+
+    tester.widget<InkWell>(capsule).onSecondaryTap!.call();
+    await tester.pumpAndSettle();
+
+    expect(controller.state.papers.single.isCollapsed, false);
   });
 
   testWidgets('reports linked script capsule failures', (tester) async {

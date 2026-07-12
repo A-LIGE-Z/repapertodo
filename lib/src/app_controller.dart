@@ -631,13 +631,40 @@ class RePaperTodoController {
   }
 
   Future<void> _rescuePapersIntoWorkAreas() async {
+    final placedPapers = <PaperData>[];
     for (final paper in state.papers.toList()) {
       final area = await _workAreaForPaper(paper);
       if (area == null || !area.isUsable) {
         continue;
       }
       _rescuePaperIntoWorkArea(paper, area);
+      if (paper.isVisible && !paper.isCollapsed) {
+        _nudgeRestoredPaperAwayFromOverlaps(paper, placedPapers, area);
+        placedPapers.add(paper);
+      }
       _paperIdsPendingWorkAreaRescue.remove(paper.id);
+    }
+  }
+
+  void _nudgeRestoredPaperAwayFromOverlaps(
+    PaperData paper,
+    List<PaperData> placedPapers,
+    PaperWorkArea area,
+  ) {
+    const threshold = PaperLayoutDefaults.newPaperCollisionThreshold;
+    const nudge = PaperLayoutDefaults.newPaperCollisionNudge;
+    var attempts = 0;
+    while (placedPapers.any(
+          (other) =>
+              (other.x - paper.x).abs() < threshold &&
+              (other.y - paper.y).abs() < threshold,
+        ) &&
+        attempts < 12) {
+      paper
+        ..x += nudge
+        ..y += nudge;
+      _rescuePaperIntoWorkArea(paper, area);
+      attempts++;
     }
   }
 

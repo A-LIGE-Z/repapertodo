@@ -956,6 +956,29 @@ void main() {
     expect(platform.paperWindows.restoreAllCount, 1);
   });
 
+  test('startup separates visible papers restored at the same origin', () async {
+    final platform = _RecordingPlatformServices();
+    platform.paperWindows.workArea =
+        const PaperWorkArea(x: 0, y: 0, width: 1200, height: 800);
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: false,
+        papers: [
+          PaperData(id: 'paper-1', type: PaperTypes.todo, x: 120, y: 120),
+          PaperData(id: 'paper-2', type: PaperTypes.note, x: 120, y: 120),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await controller.start();
+
+    expect(controller.state.papers[0].x, 120);
+    expect(controller.state.papers[0].y, 120);
+    expect(controller.state.papers[1].x, 150);
+    expect(controller.state.papers[1].y, 150);
+  });
+
   test('platform apply restores visible papers whose native surface is missing',
       () async {
     final platform = _RecordingPlatformServices();

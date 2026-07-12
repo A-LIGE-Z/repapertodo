@@ -232,10 +232,15 @@ results with:
 ```
 
 This manual QA record covers the Windows behaviors that cannot be proven by the
-headless smoke script: transparent borderless paper feel, task-switcher
-visibility, multi-monitor edge docking, fullscreen avoidance under real
-foreground apps, tray recovery after Explorer restarts, long-running script
-capsule process behavior, and independent visible paper surfaces. Skipped items
+headless smoke scripts: transparent borderless paper feel, task-switcher
+visibility, multi-monitor edge docking, and end-user interaction quality. The release pipeline also
+runs `scripts/windows_policy_smoke.ps1`, which removes and recovers the real
+notification icon through `TaskbarCreated`, then uses a separate fullscreen
+process to verify topmost avoidance and restoration. The same policy smoke
+executes a persistent 20-second script capsule, opens settings while it is
+still running, and verifies the PowerShell worker is removed on app exit.
+Manual QA retains those checks as an end-user confirmation on the target
+desktop. Skipped items
 fail by default; `-AllowSkipped` is only for exploratory non-publishable
 records.
 Passed records also bind the observation to the concrete build by recording the

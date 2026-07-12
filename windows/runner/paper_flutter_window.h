@@ -66,6 +66,7 @@ class PaperFlutterWindow : public Win32Window {
   bool collapsed_ = false;
   bool hide_when_covered_ = false;
   bool hide_when_fullscreen_ = false;
+  bool in_size_move_ = false;
   HWND desktop_parent_ = nullptr;
 };
 

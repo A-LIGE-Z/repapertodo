@@ -120,6 +120,9 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
       paperWindowDragStarter: () async {
         await _paperWindowChannel.invokeMethod<void>('startDrag');
       },
+      paperWindowResizeStarter: (direction) async {
+        await _paperWindowChannel.invokeMethod<void>('startResize', direction);
+      },
       configureAndroidBackgroundSync: ({
         required sync,
         required stateFilePath,

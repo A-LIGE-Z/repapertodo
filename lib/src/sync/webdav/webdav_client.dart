@@ -121,7 +121,7 @@ class WebDavClient {
     if (_shouldFallbackToPropFindForMetadata(response.statusCode)) {
       return _metadataFromPropFind(path);
     }
-    if (_isMissingResourceStatus(response.statusCode)) {
+    if (_isMissingMetadataStatus(response.statusCode)) {
       return null;
     }
     _throwIfUnexpected(response, expected: {200, 204});
@@ -239,7 +239,7 @@ class WebDavClient {
 
   Future<WebDavResourceMetadata?> _metadataFromPropFind(String path) async {
     final response = await _sendPropFind(path, depth: '0');
-    if (_isMissingResourceStatus(response.statusCode)) {
+    if (_isMissingMetadataStatus(response.statusCode)) {
       return null;
     }
     _throwIfUnexpected(response, expected: {207});
@@ -720,9 +720,14 @@ bool _isMissingResourceStatus(int statusCode) {
   return statusCode == 404 || statusCode == 410;
 }
 
+bool _isMissingMetadataStatus(int statusCode) {
+  return statusCode == 409 || _isMissingResourceStatus(statusCode);
+}
+
 bool _shouldFallbackToPropFindForMetadata(int statusCode) {
   return statusCode == 403 ||
       statusCode == 404 ||
+      statusCode == 409 ||
       statusCode == 405 ||
       statusCode == 501;
 }

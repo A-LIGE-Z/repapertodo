@@ -47,6 +47,12 @@ void main() {
         laterMessage: 'Windows release smoke input was not found',
       ),
       (
+        script: 'scripts/windows_policy_smoke.ps1',
+        message:
+            'Windows policy smoke result JSON path must use the .json extension.',
+        laterMessage: 'Windows policy smoke release exe was not found',
+      ),
+      (
         script: 'scripts/webdav_smoke.ps1',
         message:
             'WebDAV static smoke result JSON path must use the .json extension.',

@@ -937,6 +937,18 @@ function Test-ReleaseMetadataRecord {
         $visiblePaperCountBeforeSettings) {
     return "Release metadata Windows smoke must prove the settings coordinator lifecycle preserves independent paper HWNDs."
   }
+  if ($null -eq $Record.windows.policySmoke -or
+      [string]$Record.windows.policySmoke.status -ne "passed" -or
+      [string]$Record.windows.policySmoke.exeFileName -ne "repapertodo.exe" -or
+      [bool]$Record.windows.policySmoke.trayIconRecoveredAfterTaskbarCreated -ne $true -or
+      [bool]$Record.windows.policySmoke.fullscreenAvoidance -ne $true -or
+      [bool]$Record.windows.policySmoke.fullscreenTopmostRestored -ne $true -or
+      [bool]$Record.windows.policySmoke.longRunningScriptCapsule -ne $true -or
+      [bool]$Record.windows.policySmoke.borderlessResizableWindow -ne $true -or
+      [bool]$Record.windows.policySmoke.taskSwitcherVisibility -ne $true -or
+      [bool]$Record.windows.policySmoke.capsuleEdgeDocking -ne $true) {
+    return "Release metadata must prove Windows window styles, task-switcher visibility, capsule docking, tray recovery, fullscreen policy, and long-running scripts."
+  }
   if ($null -eq $Record.webDav -or
       $null -eq $Record.webDav.staticSmoke -or
       [string]$Record.webDav.staticSmoke.status -ne "passed") {
@@ -1189,9 +1201,16 @@ try {
 }
 
 try {
-  $record = Read-JsonRecord `
-    -Path $WebDavLiveSmokeResultJson `
-    -Context "generic WebDAV live smoke"
+  $record = if (-not [string]::IsNullOrWhiteSpace($WebDavLiveSmokeResultJson)) {
+    Read-JsonRecord `
+      -Path $WebDavLiveSmokeResultJson `
+      -Context "generic WebDAV live smoke"
+  } elseif ($null -ne $releaseMetadataRecord -and
+      $null -ne $releaseMetadataRecord.webDav) {
+    $releaseMetadataRecord.webDav.liveSmoke
+  } else {
+    throw "generic WebDAV live smoke JSON path was not provided."
+  }
   $issue = Test-WebDavLiveSmokeRecord `
     -Record $record `
     -ExpectedProviderId "custom"
@@ -1205,9 +1224,16 @@ try {
 }
 
 try {
-  $record = Read-JsonRecord `
-    -Path $WebDavDomesticLiveSmokeResultJson `
-    -Context "domestic WebDAV live smoke"
+  $record = if (-not [string]::IsNullOrWhiteSpace($WebDavDomesticLiveSmokeResultJson)) {
+    Read-JsonRecord `
+      -Path $WebDavDomesticLiveSmokeResultJson `
+      -Context "domestic WebDAV live smoke"
+  } elseif ($null -ne $releaseMetadataRecord -and
+      $null -ne $releaseMetadataRecord.webDav) {
+    $releaseMetadataRecord.webDav.domesticLiveSmoke
+  } else {
+    throw "domestic WebDAV live smoke JSON path was not provided."
+  }
   $issue = Test-WebDavLiveSmokeRecord `
     -Record $record `
     -ExpectedProviderId "jianguoyun"
@@ -1221,15 +1247,32 @@ try {
 }
 
 try {
-  $record = Read-JsonRecord `
-    -Path $AndroidDeviceSmokeResultJson `
-    -Context "Android device smoke"
+  $record = if (-not [string]::IsNullOrWhiteSpace($AndroidDeviceSmokeResultJson)) {
+    Read-JsonRecord `
+      -Path $AndroidDeviceSmokeResultJson `
+      -Context "Android device smoke"
+  } elseif ($null -ne $releaseMetadataRecord -and
+      $null -ne $releaseMetadataRecord.android) {
+    $releaseMetadataRecord.android.deviceSmoke
+  } else {
+    throw "Android device smoke JSON path was not provided."
+  }
   $artifactVersion =
     Get-ReleaseArtifactVersion -Version (Get-PubspecVersion -RepoRoot $repoRoot)
+  $effectiveApkFileName = $ExpectedAndroidApkFileName
+  if ([string]::IsNullOrWhiteSpace($effectiveApkFileName)) {
+    $effectiveApkFileName =
+      [string](Get-RecordPropertyValue -Record $record -Name "apkFileName")
+  }
+  $effectiveApkPath = $ExpectedAndroidApkPath
+  if ([string]::IsNullOrWhiteSpace($effectiveApkPath) -and
+      -not [string]::IsNullOrWhiteSpace($effectiveApkFileName)) {
+    $effectiveApkPath = Join-Path $repoRoot "dist\$effectiveApkFileName"
+  }
   $issue = Test-AndroidDeviceSmokeRecord `
     -Record $record `
-    -ExpectedApkFileName $ExpectedAndroidApkFileName `
-    -ExpectedApkPath $ExpectedAndroidApkPath `
+    -ExpectedApkFileName $effectiveApkFileName `
+    -ExpectedApkPath $effectiveApkPath `
     -ArtifactVersion $artifactVersion
   if ([string]::IsNullOrWhiteSpace($issue)) {
     Add-Check "androidDeviceSmoke" "passed" "Android device smoke evidence is publishable."

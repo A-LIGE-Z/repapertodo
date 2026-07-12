@@ -1,7 +1,6 @@
 import 'package:collection/collection.dart';
 
 import '../core/model/json_helpers.dart';
-import '../core/model/markdown_paste.dart';
 import '../core/model/paper_constants.dart';
 import '../core/model/paper_data.dart';
 import '../core/model/paper_item.dart';
@@ -11,6 +10,7 @@ import '../core/model/todo_due_date.dart';
 import '../core/state/papertodo_legacy_migration.dart';
 import 'sync_device_id.dart';
 import 'sync_operation.dart';
+import 'sync_text_limits.dart';
 
 bool isSyncOperationPayloadWellFormed(SyncOperation operation) {
   final payload = operation.payload;
@@ -998,7 +998,8 @@ bool _payloadMarkdownTextFieldIsSafe(JsonMap payload, String key) {
     return true;
   }
   final value = _payloadValue(payload, key);
-  return value is String && value.length <= MarkdownPasteText.maxTextLength;
+  return value is String &&
+      value.length <= SyncTextLimits.maxMarkdownTextLength;
 }
 
 bool _payloadTodoTextFieldIsSafe(JsonMap payload, String key) {

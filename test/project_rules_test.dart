@@ -127,6 +127,7 @@ void main() {
         'scripts/webdav_live_smoke.ps1',
         'scripts/webdav_smoke.ps1',
         'scripts/windows_manual_qa.ps1',
+        'scripts/windows_policy_smoke.ps1',
         'scripts/windows_smoke.ps1',
       ]),
     );
@@ -959,7 +960,12 @@ void main() {
       contains('encodeOperationLog(canonicalOperation)'),
     );
     expect(syncOperationPayload, contains('_payloadMarkdownTextFieldIsSafe'));
-    expect(syncOperationPayload, contains('MarkdownPasteText.maxTextLength'));
+    expect(
+        syncOperationPayload, contains('SyncTextLimits.maxMarkdownTextLength'));
+    expect(
+      syncOperationPayload,
+      isNot(contains("import '../core/model/markdown_paste.dart'")),
+    );
     expect(syncOperationPayload, contains('_payloadTodoTextFieldIsSafe'));
     expect(syncOperationPayload, contains('TodoPasteItems.maxLineLength'));
     expect(syncDesign, contains('Well-formed operations'));
@@ -3182,11 +3188,21 @@ void main() {
     expect(paperWindow, contains('SetHideFromWindowSwitcher'));
     expect(paperWindow, contains('IsExternalFullscreenWindow'));
     expect(paperWindow, contains('IsCoveredByAnotherWindow'));
+    expect(paperWindow, contains('case WM_ENTERSIZEMOVE:'));
+    expect(paperWindow, contains('case WM_EXITSIZEMOVE:'));
+    expect(paperWindow, contains('case WM_GETMINMAXINFO:'));
+    expect(paperWindow, contains('GetDpiForWindow(window)'));
+    expect(paperWindow, contains('WorkAreaForWindow(window, monitor_name)'));
+    expect(paperWindow, contains('side == "left"'));
+    expect(paperWindowHeader, contains('bool in_size_move_ = false;'));
     expect(cmake, contains('"paper_flutter_window.cpp"'));
     expect(mainDart, contains('PaperWindowArguments.tryParse(args)'));
     expect(paperWindowApp, contains("'paperChanged'"));
     expect(paperWindowApp, contains('paperWindowMode: true'));
     expect(windowsSmoke, contains('CountVisibleTopLevelWindows'));
+    expect(windowsSmoke, contains('MoveResizeWindow'));
+    expect(windowsSmoke, contains('Test-PersistedPaperBounds'));
+    expect(windowsSmoke, contains(r'geometryPersistenceVerified = $true'));
     expect(windowsSmoke, contains('independentPaperSurfaces = \$true'));
     expect(windowsSmoke, contains('settingsCoordinatorLifecycle = \$true'));
     expect(windowsSmoke, contains('settingsStartupCommands'));
@@ -3194,6 +3210,35 @@ void main() {
     expect(
       _readProjectText('scripts/release_readiness_audit.ps1'),
       contains('must prove independent visible paper HWNDs'),
+    );
+  });
+
+  test('independent paper windows expose a visible native drag affordance', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final strings = _readProjectText('lib/src/ui/papertodo_strings.dart');
+
+    expect(app, contains('_paperWindowDragStrip({bool compact = false})'));
+    expect(app, contains('onPanStart: (_) => unawaited(dragStarter())'));
+    expect(app, contains('_paperWindowResizeHandles()'));
+    expect(app, contains('unawaited(resizeStarter(direction))'));
+    expect(app, contains('actionMovePaperWindow'));
+    expect(app, contains('actionResizePaperWindow'));
+    expect(app, contains('standaloneSurface: widget.paperWindowMode'));
+    expect(strings, contains("'Drag to move paper'"));
+    expect(strings, contains("'Drag an edge to resize paper'"));
+    expect(strings, contains("'拖动以移动纸张'"));
+    expect(strings, contains("'拖动边缘以调整纸张大小'"));
+    expect(
+      _readProjectText('lib/src/windows/paper_window_app.dart'),
+      contains("invokeMethod<void>('startResize', direction)"),
+    );
+    expect(
+      _readProjectText('windows/runner/paper_flutter_window.cpp'),
+      contains('call.method_name() == "startResize"'),
+    );
+    expect(
+      _readProjectText('windows/runner/paper_flutter_window.cpp'),
+      contains('WM_SYSCOMMAND, SC_MOVE | HTCAPTION'),
     );
   });
 
@@ -3400,6 +3445,8 @@ void main() {
     final androidDeviceSmokeScript =
         _readProjectText('scripts/android_device_smoke.ps1');
     final windowsSmokeScript = _readProjectText('scripts/windows_smoke.ps1');
+    final windowsPolicySmokeScript =
+        _readProjectText('scripts/windows_policy_smoke.ps1');
     final windowsManualQaScript =
         _readProjectText('scripts/windows_manual_qa.ps1');
     final webDavSmokeScript = _readProjectText('scripts/webdav_smoke.ps1');
@@ -3784,6 +3831,29 @@ void main() {
     expect(script, contains('scripts/windows_smoke.ps1'));
     expect(script, contains('windows_smoke.ps1'));
     expect(script, contains('Run Windows release smoke'));
+    expect(script, contains('scripts/windows_policy_smoke.ps1'));
+    expect(script, contains('Run Windows policy smoke'));
+    expect(script, contains(r'$windowsPolicySmokeRecord = [ordered]@{}'));
+    expect(script, contains('windowsPolicySmokeRecord'));
+    expect(script, contains(r'policySmoke = $windowsPolicySmokeRecord'));
+    expect(
+      windowsPolicySmokeScript,
+      contains('trayIconRecoveredAfterTaskbarCreated'),
+    );
+    expect(windowsPolicySmokeScript, contains('fullscreenAvoidance'));
+    expect(windowsPolicySmokeScript, contains('fullscreenTopmostRestored'));
+    expect(windowsPolicySmokeScript, contains('longRunningScriptCapsule'));
+    expect(windowsPolicySmokeScript, contains('borderlessResizableWindow'));
+    expect(windowsPolicySmokeScript, contains('taskSwitcherVisibility'));
+    expect(windowsPolicySmokeScript, contains('capsuleEdgeDocking'));
+    expect(windowsPolicySmokeScript, contains('BroadcastTaskbarCreated'));
+    expect(windowsPolicySmokeScript, contains('Start-FullscreenProbe'));
+    expect(
+      releaseReadinessAudit,
+      contains(
+        'Release metadata must prove Windows window styles, task-switcher visibility, capsule docking, tray recovery, fullscreen policy, and long-running scripts.',
+      ),
+    );
     expect(
       script,
       contains(
@@ -5525,6 +5595,10 @@ void main() {
       ),
     );
     expect(releaseResultJsonPathTest, contains('scripts/windows_smoke.ps1'));
+    expect(
+      releaseResultJsonPathTest,
+      contains('scripts/windows_policy_smoke.ps1'),
+    );
     expect(releaseResultJsonPathTest, contains('scripts/webdav_smoke.ps1'));
     expect(
       releaseResultJsonPathTest,
@@ -6194,6 +6268,36 @@ try {
     );
   });
 
+  test('Windows policy smoke script parses before it runs', () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for smoke script parsing.');
+      return;
+    }
+
+    final result = await Process.run(
+      powerShell,
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        r"$ErrorActionPreference = 'Stop'; [scriptblock]::Create((Get-Content -Raw -LiteralPath 'scripts/windows_policy_smoke.ps1')) | Out-Null",
+      ],
+    );
+
+    expect(
+      result.exitCode,
+      0,
+      reason: [
+        'scripts/windows_policy_smoke.ps1 must remain parseable before Windows policy smoke.',
+        if (result.stdout.toString().trim().isNotEmpty)
+          'stdout: ${result.stdout}',
+        if (result.stderr.toString().trim().isNotEmpty)
+          'stderr: ${result.stderr}',
+      ].join('\n'),
+    );
+  });
+
   test('Windows manual QA script parses before it runs', () async {
     final powerShell = _findPowerShellExecutable();
     if (powerShell == null) {
@@ -6284,6 +6388,20 @@ try {
     );
   });
 
+  test('WebDAV live CLI avoids Flutter-only umbrella imports', () {
+    final tool = _readProjectText('tool/webdav_live_smoke.dart');
+    expect(
+        tool,
+        contains(
+            "import 'package:repapertodo/src/sync/app_sync_service.dart';"));
+    expect(tool,
+        isNot(contains("import 'package:repapertodo/repapertodo.dart';")));
+    expect(
+      _readProjectText('lib/src/sync/sync_text_limits.dart'),
+      contains('maxMarkdownTextLength'),
+    );
+  });
+
   test('release readiness audit keeps publish blockers explicit', () {
     final script = _readProjectText('scripts/release_readiness_audit.ps1');
     final readme = _readProjectText('README.md');
@@ -6292,6 +6410,9 @@ try {
         _readProjectText('test/release_readiness_audit_test.dart');
 
     expect(script, contains('readyForGitHubRelease'));
+    expect(script, contains('webDav.liveSmoke'));
+    expect(script, contains('releaseMetadataRecord.webDav.liveSmoke'));
+    expect(script, contains('releaseMetadataRecord.android.deviceSmoke'));
     expect(script, contains('runtimeLanguages'));
     expect(script, contains('cleanGitTree'));
     expect(script, contains('androidSigning'));

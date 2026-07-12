@@ -1079,6 +1079,37 @@ void main() {
     expect(metadata, isNull);
   });
 
+  test('treats provider 409 metadata as a missing parent path', () async {
+    for (final headStatus in const [409, 501]) {
+      final requests = <http.Request>[];
+      final client = WebDavClient(
+        baseUri:
+            Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+        credentials:
+            const WebDavCredentials(username: 'user', password: 'pass'),
+        httpClient: MockClient((request) async {
+          requests.add(request);
+          if (request.method == 'HEAD') {
+            return http.Response('', headStatus);
+          }
+          if (request.method == 'PROPFIND') {
+            return http.Response('parent collection is missing', 409);
+          }
+          return http.Response('unexpected ${request.method}', 500);
+        }),
+      );
+
+      final metadata = await client.metadata('repapertodo/missing.json');
+
+      expect(metadata, isNull, reason: 'HEAD status $headStatus');
+      expect(
+        requests.map((request) => request.method),
+        ['HEAD', 'PROPFIND'],
+        reason: 'HEAD status $headStatus',
+      );
+    }
+  });
+
   test('treats gone WebDAV metadata as missing', () async {
     for (final caseData in const <({int headStatus, int? propFindStatus})>[
       (headStatus: 410, propFindStatus: null),

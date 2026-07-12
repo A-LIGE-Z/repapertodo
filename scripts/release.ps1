@@ -1584,6 +1584,48 @@ function Assert-WindowsSmokeRecord {
     -Expected @("--new-note", "--new-todo", "--exit")
 }
 
+function Assert-WindowsPolicySmokeRecord {
+  param(
+    [object]$Record,
+    [string]$RepoRoot
+  )
+
+  if ($null -eq $Record -or
+      [string](Get-RecordPropertyValue -Record $Record -Name "status") -ne "passed") {
+    throw "Windows policy smoke record must have status 'passed'."
+  }
+  $checkedAtUtcText =
+    [string](Get-RecordPropertyValue -Record $Record -Name "checkedAtUtc")
+  try { $checkedAtUtc = [DateTimeOffset]::Parse($checkedAtUtcText) } catch {
+    throw "Windows policy smoke record checkedAtUtc is invalid."
+  }
+  if ($checkedAtUtc.Offset -ne [TimeSpan]::Zero) {
+    throw "Windows policy smoke record checkedAtUtc must be UTC."
+  }
+  if ([string](Get-RecordPropertyValue -Record $Record -Name "exeFileName") -ne
+      "repapertodo.exe") {
+    throw "Windows policy smoke record exeFileName must be repapertodo.exe."
+  }
+  if (-not [string]::IsNullOrWhiteSpace($RepoRoot)) {
+    Assert-WindowsSmokeReleaseDirectory `
+      -RepoRoot $RepoRoot `
+      -ReleaseDirectory ([string](Get-RecordPropertyValue -Record $Record -Name "releaseDirectory"))
+  }
+  foreach ($property in @(
+      "trayIconRecoveredAfterTaskbarCreated",
+      "fullscreenAvoidance",
+      "fullscreenTopmostRestored",
+      "longRunningScriptCapsule",
+      "borderlessResizableWindow",
+      "taskSwitcherVisibility",
+      "capsuleEdgeDocking"
+    )) {
+    if ((Get-RecordPropertyValue -Record $Record -Name $property) -ne $true) {
+      throw "Windows policy smoke record $property must be true."
+    }
+  }
+}
+
 function Assert-RepositoryEvidenceFile {
   param(
     [string]$Context,
@@ -1754,6 +1796,7 @@ function Assert-ReleaseMetadataFile {
     [object]$AndroidSdkTools,
     [string]$AndroidApkPath,
     [object]$WindowsSmokeRecord,
+    [object]$WindowsPolicySmokeRecord,
     [object]$WindowsManualQaRecord,
     [object]$WebDavSmokeRecord,
     [object]$WebDavLiveSmokeRecord,
@@ -1812,6 +1855,19 @@ function Assert-ReleaseMetadataFile {
       $metadata.windows.smoke.PSObject.Properties[$property].Value
     if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $WindowsSmokeRecord[$property])) {
       throw "Release metadata JSON windows.smoke.$property does not match the Windows smoke result."
+    }
+  }
+  if ($null -eq $metadata.windows.policySmoke) {
+    throw "Release metadata JSON windows.policySmoke is missing."
+  }
+  Assert-WindowsPolicySmokeRecord `
+    -Record $metadata.windows.policySmoke `
+    -RepoRoot $RepoRoot
+  foreach ($property in $WindowsPolicySmokeRecord.Keys) {
+    $actualValue =
+      $metadata.windows.policySmoke.PSObject.Properties[$property].Value
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $WindowsPolicySmokeRecord[$property])) {
+      throw "Release metadata JSON windows.policySmoke.$property does not match the Windows policy smoke result."
     }
   }
   if ($null -eq $metadata.windows.manualQa) {
@@ -2374,6 +2430,7 @@ function New-ReleaseNotes {
     [string[]]$validationExecuted,
     [string[]]$validationSkipped,
     [object]$windowsSmokeRecord,
+    [object]$windowsPolicySmokeRecord,
     [object]$windowsManualQaRecord,
     [object]$webDavSmokeRecord,
     [object]$webDavLiveSmokeRecord,
@@ -2442,6 +2499,7 @@ Flutter toolchain: Flutter $flutterFrameworkVersion ($flutterChannel), Dart $dar
 
 Verification summary:
 - Windows smoke: $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "status")); exe $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "exeFileName")); persisted papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalPaperCount")); independent visible HWNDs $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalVisibleTopLevelWindowCount")); todo papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialTodoPaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalTodoPaperCount")); note papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialNotePaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalNotePaperCount")).
+- Windows policy smoke: $([string](Get-RecordPropertyValue -Record $windowsPolicySmokeRecord -Name "status")); tray recovery $([string](Get-RecordPropertyValue -Record $windowsPolicySmokeRecord -Name "trayIconRecoveredAfterTaskbarCreated")); fullscreen avoidance $([string](Get-RecordPropertyValue -Record $windowsPolicySmokeRecord -Name "fullscreenAvoidance")); topmost restoration $([string](Get-RecordPropertyValue -Record $windowsPolicySmokeRecord -Name "fullscreenTopmostRestored")).
 - Windows manual QA: $windowsManualQaSummary.
 - WebDAV static smoke: $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "status")); generic WebDAV $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "genericWebDavSupported")); Jianguoyun preset $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "jianguoyunPresetSupported")); operation logs $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "operationLogsSupported")); Windows/Android round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "crossDeviceOperationRoundTripCovered")); local HTTP WebDAV protocol round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "localHttpWebDavRoundTripCovered")); Android background shared Dart sync path $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncSharedDartPath")); Android background absolute state path gate $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncAbsoluteStatePathCovered")); Android background data.json state path gate $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncDataJsonStatePathCovered")).
 - WebDAV generic live smoke: $webDavLiveSmokeSummary.
@@ -2625,6 +2683,7 @@ if (-not $SkipBuild) {
   $validationSkipped += "flutter build apk --release --no-pub"
 }
 $validationExecuted += "scripts/windows_smoke.ps1"
+$validationExecuted += "scripts/windows_policy_smoke.ps1"
 $validationExecuted += "scripts/webdav_smoke.ps1"
 $validationExecuted += "scripts/android_smoke.ps1"
 $androidDeviceSmokeRecord = [ordered]@{
@@ -2700,15 +2759,21 @@ $dist = Join-Path $repoRoot "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $windowsSmokeResultFile =
   Join-Path $dist "repapertodo-$artifactVersion-windows-smoke.json"
+$windowsPolicySmokeResultFile =
+  Join-Path $dist "repapertodo-$artifactVersion-windows-policy-smoke.json"
 $webDavSmokeResultFile =
   Join-Path $dist "repapertodo-$artifactVersion-webdav-smoke.json"
 if (Test-Path -LiteralPath $windowsSmokeResultFile) {
   Remove-Item -LiteralPath $windowsSmokeResultFile -Force
 }
+if (Test-Path -LiteralPath $windowsPolicySmokeResultFile) {
+  Remove-Item -LiteralPath $windowsPolicySmokeResultFile -Force
+}
 if (Test-Path -LiteralPath $webDavSmokeResultFile) {
   Remove-Item -LiteralPath $webDavSmokeResultFile -Force
 }
 $windowsSmokeRecord = [ordered]@{}
+$windowsPolicySmokeRecord = [ordered]@{}
 $webDavSmokeRecord = [ordered]@{}
 
 Invoke-Step "Run Windows release smoke" {
@@ -2730,6 +2795,26 @@ foreach ($property in $windowsSmokeResult.PSObject.Properties) {
   $windowsSmokeRecord[$property.Name] = $property.Value
 }
 Remove-Item -LiteralPath $windowsSmokeResultFile -Force
+
+Invoke-Step "Run Windows policy smoke" {
+  & (Join-Path $PSScriptRoot "windows_policy_smoke.ps1") `
+    -ReleaseDirectory (Join-Path $repoRoot "build\windows\x64\runner\Release") `
+    -StartupTimeoutSeconds 120 `
+    -ExitTimeoutSeconds 60 `
+    -ResultJson $windowsPolicySmokeResultFile
+}
+
+try {
+  $windowsPolicySmokeResult =
+    Get-Content -Raw -LiteralPath $windowsPolicySmokeResultFile |
+    ConvertFrom-Json
+} catch {
+  throw "Windows policy smoke result JSON could not be parsed: $($_.Exception.Message)"
+}
+foreach ($property in $windowsPolicySmokeResult.PSObject.Properties) {
+  $windowsPolicySmokeRecord[$property.Name] = $property.Value
+}
+Remove-Item -LiteralPath $windowsPolicySmokeResultFile -Force
 
 Invoke-Step "Run WebDAV static smoke" {
   & (Join-Path $PSScriptRoot "webdav_smoke.ps1") `
@@ -2976,6 +3061,7 @@ Invoke-Step "Package release artifacts" {
     -ValidationExecuted $validationExecuted `
     -ValidationSkipped $validationSkipped `
     -WindowsSmokeRecord $windowsSmokeRecord `
+    -WindowsPolicySmokeRecord $windowsPolicySmokeRecord `
     -WindowsManualQaRecord $windowsManualQaRecord `
     -WebDavSmokeRecord $webDavSmokeRecord `
     -WebDavLiveSmokeRecord $webDavLiveSmokeRecord `
@@ -3030,6 +3116,7 @@ Invoke-Step "Package release artifacts" {
     builtAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     windows = [ordered]@{
       smoke = $windowsSmokeRecord
+      policySmoke = $windowsPolicySmokeRecord
       manualQa = $windowsManualQaRecord
     }
     webDav = [ordered]@{
@@ -3072,6 +3159,7 @@ Invoke-Step "Package release artifacts" {
     -AndroidSdkTools $androidSdkTools `
     -AndroidApkPath $androidApk `
     -WindowsSmokeRecord $windowsSmokeRecord `
+    -WindowsPolicySmokeRecord $windowsPolicySmokeRecord `
     -WindowsManualQaRecord $windowsManualQaRecord `
     -WebDavSmokeRecord $webDavSmokeRecord `
     -WebDavLiveSmokeRecord $webDavLiveSmokeRecord `

@@ -144,6 +144,53 @@ bool IsCoveredByAnotherWindow(HWND app_window) {
   return false;
 }
 
+struct MonitorWorkAreaLookup {
+  std::wstring device_name;
+  RECT work_area = {};
+  bool found = false;
+};
+
+BOOL CALLBACK FindMonitorWorkArea(HMONITOR monitor, HDC, LPRECT,
+                                  LPARAM parameter) {
+  auto* lookup = reinterpret_cast<MonitorWorkAreaLookup*>(parameter);
+  if (!lookup) {
+    return TRUE;
+  }
+  MONITORINFOEXW info = {};
+  info.cbSize = sizeof(info);
+  if (!GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO*>(&info))) {
+    return TRUE;
+  }
+  const bool primary = lookup->device_name.empty() &&
+                       (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
+  if (primary || (!lookup->device_name.empty() &&
+                  lookup->device_name == info.szDevice)) {
+    lookup->work_area = info.rcWork;
+    lookup->found = true;
+    return FALSE;
+  }
+  return TRUE;
+}
+
+RECT WorkAreaForWindow(HWND window, const std::string& device_name) {
+  MonitorWorkAreaLookup lookup;
+  lookup.device_name = Utf8WindowTitle(device_name);
+  EnumDisplayMonitors(nullptr, nullptr, FindMonitorWorkArea,
+                      reinterpret_cast<LPARAM>(&lookup));
+  if (lookup.found) {
+    return lookup.work_area;
+  }
+  HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO info = {};
+  info.cbSize = sizeof(info);
+  if (monitor && GetMonitorInfoW(monitor, &info)) {
+    return info.rcWork;
+  }
+  RECT fallback = {};
+  SystemParametersInfoW(SPI_GETWORKAREA, 0, &fallback, 0);
+  return fallback;
+}
+
 }  // namespace
 
 PaperFlutterWindow::PaperFlutterWindow(const flutter::DartProject& project,
@@ -216,8 +263,38 @@ bool PaperFlutterWindow::OnCreate() {
         }
         if (call.method_name() == "startDrag") {
           if (HWND window = GetHandle()) {
+            POINT cursor = {};
+            GetCursorPos(&cursor);
             ReleaseCapture();
-            SendMessageW(window, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+            SendMessageW(window, WM_SYSCOMMAND, SC_MOVE | HTCAPTION,
+                         MAKELPARAM(cursor.x, cursor.y));
+          }
+          result->Success();
+          return;
+        }
+        if (call.method_name() == "startResize") {
+          int hit_test = 0;
+          if (call.arguments()) {
+            if (const auto* direction =
+                    std::get_if<std::string>(call.arguments())) {
+              if (*direction == "left") hit_test = HTLEFT;
+              if (*direction == "right") hit_test = HTRIGHT;
+              if (*direction == "top") hit_test = HTTOP;
+              if (*direction == "bottom") hit_test = HTBOTTOM;
+              if (*direction == "topLeft") hit_test = HTTOPLEFT;
+              if (*direction == "topRight") hit_test = HTTOPRIGHT;
+              if (*direction == "bottomLeft") hit_test = HTBOTTOMLEFT;
+              if (*direction == "bottomRight") hit_test = HTBOTTOMRIGHT;
+            }
+          }
+          if (hit_test != 0) {
+            if (HWND window = GetHandle()) {
+              POINT cursor = {};
+              GetCursorPos(&cursor);
+              ReleaseCapture();
+              SendMessageW(window, WM_NCLBUTTONDOWN, hit_test,
+                           MAKELPARAM(cursor.x, cursor.y));
+            }
           }
           result->Success();
           return;
@@ -255,27 +332,43 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       return 0;
     case WM_MOVE:
     case WM_SIZE:
-      if (surface_initialized_ && !applying_bounds_ &&
+      if (surface_initialized_ && !applying_bounds_ && !in_size_move_ &&
           wparam != SIZE_MINIMIZED) {
         SendBoundsChanged();
       }
       break;
+    case WM_ENTERSIZEMOVE:
+      in_size_move_ = true;
+      break;
+    case WM_EXITSIZEMOVE:
+      in_size_move_ = false;
+      if (surface_initialized_) {
+        SendBoundsChanged();
+      }
+      break;
+    case WM_GETMINMAXINFO: {
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      if (info) {
+        info->ptMinTrackSize.x = collapsed_ ? 92 : 220;
+        info->ptMinTrackSize.y = collapsed_ ? 46 : 160;
+        return 0;
+      }
+      break;
+    }
     case WM_NCCALCSIZE:
       if (wparam == TRUE) {
         return 0;
       }
       break;
     case WM_NCHITTEST: {
-      const LRESULT base =
-          Win32Window::MessageHandler(window, message, wparam, lparam);
-      if (base != HTCLIENT) {
-        return base;
-      }
       RECT rect = {};
       GetWindowRect(window, &rect);
       const int x = GET_X_LPARAM(lparam);
       const int y = GET_Y_LPARAM(lparam);
-      constexpr int edge = 7;
+      const UINT dpi = GetDpiForWindow(window);
+      const int edge = std::max(
+          10, static_cast<int>(std::lround(
+                  10.0 * static_cast<double>(dpi ? dpi : 96) / 96.0)));
       const bool left = x < rect.left + edge;
       const bool right = x >= rect.right - edge;
       const bool top = y < rect.top + edge;
@@ -346,13 +439,30 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       surface, "hideFromWindowSwitcher", hide_from_window_switcher_));
   const double native_width = collapsed_ ? 92.0 : width;
   const double native_height = collapsed_ ? 46.0 : height;
-  applying_bounds_ = true;
-  SetWindowPos(window, nullptr, static_cast<int>(std::round(x)),
-               static_cast<int>(std::round(y)),
-               std::max(1, static_cast<int>(std::round(native_width))),
-               std::max(1, static_cast<int>(std::round(native_height))),
-               SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-  applying_bounds_ = false;
+  double native_x = x;
+  double native_y = y;
+  if (collapsed_) {
+    const std::string monitor_name =
+        StringValue(surface, "capsuleMonitorDeviceName", "");
+    const RECT work_area = WorkAreaForWindow(window, monitor_name);
+    const std::string side = StringValue(surface, "capsuleSide", "right");
+    native_x = side == "left"
+                   ? static_cast<double>(work_area.left)
+                   : static_cast<double>(work_area.right) - native_width;
+    native_y = std::clamp(
+        y, static_cast<double>(work_area.top),
+        std::max(static_cast<double>(work_area.top),
+                 static_cast<double>(work_area.bottom) - native_height));
+  }
+  if (!in_size_move_) {
+    applying_bounds_ = true;
+    SetWindowPos(window, nullptr, static_cast<int>(std::round(native_x)),
+                 static_cast<int>(std::round(native_y)),
+                 std::max(1, static_cast<int>(std::round(native_width))),
+                 std::max(1, static_cast<int>(std::round(native_height))),
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    applying_bounds_ = false;
+  }
   surface_initialized_ = true;
   const std::string title = StringValue(surface, "title", "RePaperTodo");
   SetWindowTextW(window, Utf8WindowTitle(title).c_str());

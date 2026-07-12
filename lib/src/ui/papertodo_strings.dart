@@ -44,6 +44,8 @@ abstract final class PaperTodoStringKeys {
   static const actionMore = 'actionMore';
   static const actionMoveItemDown = 'actionMoveItemDown';
   static const actionMoveItemUp = 'actionMoveItemUp';
+  static const actionMovePaperWindow = 'actionMovePaperWindow';
+  static const actionResizePaperWindow = 'actionResizePaperWindow';
   static const actionNewNote = 'actionNewNote';
   static const actionNewNotePaper = 'actionNewNotePaper';
   static const actionNewTodo = 'actionNewTodo';
@@ -485,6 +487,8 @@ const _enStrings = {
   PaperTodoStringKeys.actionMore: 'More actions',
   PaperTodoStringKeys.actionMoveItemDown: 'Move item down',
   PaperTodoStringKeys.actionMoveItemUp: 'Move item up',
+  PaperTodoStringKeys.actionMovePaperWindow: 'Drag to move paper',
+  PaperTodoStringKeys.actionResizePaperWindow: 'Drag an edge to resize paper',
   PaperTodoStringKeys.actionNewNote: 'New note',
   PaperTodoStringKeys.actionNewNotePaper: 'New note paper',
   PaperTodoStringKeys.actionNewTodo: 'New todo',
@@ -860,6 +864,8 @@ const _zhStrings = {
   PaperTodoStringKeys.actionMore: '更多操作',
   PaperTodoStringKeys.actionMoveItemDown: '下移事项',
   PaperTodoStringKeys.actionMoveItemUp: '上移事项',
+  PaperTodoStringKeys.actionMovePaperWindow: '拖动以移动纸张',
+  PaperTodoStringKeys.actionResizePaperWindow: '拖动边缘以调整纸张大小',
   PaperTodoStringKeys.actionNewNote: '新建笔记',
   PaperTodoStringKeys.actionNewNotePaper: '新建笔记纸片',
   PaperTodoStringKeys.actionNewTodo: '新建待办',
