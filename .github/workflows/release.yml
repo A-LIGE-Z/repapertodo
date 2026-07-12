@@ -55,6 +55,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Set up latest Android command-line tools
+        uses: android-actions/setup-android@v3
+
       - name: Install Android API 37
         shell: pwsh
         run: |
@@ -142,6 +145,9 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      - name: Set up latest Android command-line tools
+        uses: android-actions/setup-android@v3
 
       - name: Install Android API 37
         shell: pwsh
