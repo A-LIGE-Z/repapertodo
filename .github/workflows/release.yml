@@ -86,7 +86,7 @@ jobs:
             $licenses | & $sdkManager.FullName --licenses
           }
           Invoke-Native "sdkmanager install Android API 37" {
-            & $sdkManager.FullName --channel=3 "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+            & $sdkManager.FullName --channel=3 "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
           }
 
       - name: Configure Android release signing
@@ -177,7 +177,7 @@ jobs:
             $licenses | & $sdkManager.FullName --licenses
           }
           Invoke-Native "sdkmanager install Android API 37" {
-            & $sdkManager.FullName --channel=3 "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+            & $sdkManager.FullName --channel=3 "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
           }
 
       - name: Configure Android release signing
