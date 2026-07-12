@@ -26,6 +26,14 @@ String? _findPowerShellExecutable() {
 String _sha256File(File file) =>
     sha256.convert(file.readAsBytesSync()).toString();
 
+String _canonicalDirectoryPath(String path) {
+  try {
+    return Directory(path).resolveSymbolicLinksSync();
+  } on FileSystemException {
+    return Directory(path).absolute.path;
+  }
+}
+
 Future<({File exe, File appSo})> _writeReleaseFiles(Directory directory) async {
   final release = Directory(p.join(directory.path, 'Release'));
   final data = Directory(p.join(release.path, 'data'));
@@ -112,7 +120,13 @@ void main() {
     expect(record['tester'], 'qa-tester');
     expect(record['windowsVersion'], isA<String>());
     expect((record['windowsVersion'] as String).trim(), isNotEmpty);
-    expect(record['releaseDirectory'], exe.parent.path);
+    expect(
+      p.equals(
+        _canonicalDirectoryPath(record['releaseDirectory'] as String),
+        _canonicalDirectoryPath(exe.parent.path),
+      ),
+      true,
+    );
     expect(record['exeFileName'], 'repapertodo.exe');
     expect(record['exeBytes'], exe.lengthSync());
     expect(record['exeSha256'], _sha256File(exe));

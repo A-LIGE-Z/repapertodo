@@ -4689,8 +4689,8 @@ void main() {
     expect(workflow, contains('"sdkmanager --licenses"'));
     expect(workflow, contains('"sdkmanager install Android API 37"'));
     expect(workflow, contains(r'failed with exit code $LASTEXITCODE'));
-    expect(workflow, contains('platforms;android-37'));
-    expect(workflow, isNot(contains('platforms;android-37.0')));
+    expect(workflow, contains('platforms;android-37.0'));
+    expect(workflow, isNot(contains('"platforms;android-37"')));
     expect(workflow, contains('build-tools;37.0.0'));
     expect(workflow, contains('Configure Android release signing'));
     expect(workflow, contains('ANDROID_KEYSTORE_BASE64'));
@@ -4852,7 +4852,7 @@ void main() {
     expect(
       RegExp(
         RegExp.escape(
-          r'& $sdkManager.FullName --channel=3 "platform-tools" "platforms;android-37" "build-tools;37.0.0"',
+          r'& $sdkManager.FullName --channel=3 "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"',
         ),
       ).allMatches(workflow).length,
       2,
