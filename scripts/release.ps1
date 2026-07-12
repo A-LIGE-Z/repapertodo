@@ -1710,6 +1710,25 @@ function Assert-WebDavSmokeRecord {
   }
 }
 
+function Test-ReleaseMetadataRecordValueEqual {
+  param(
+    [string]$PropertyName,
+    [object]$Actual,
+    [object]$Expected
+  )
+
+  if ($PropertyName.EndsWith("AtUtc", [StringComparison]::Ordinal)) {
+    try {
+      $actualTimestamp = [DateTimeOffset]::Parse([string]$Actual)
+      $expectedTimestamp = [DateTimeOffset]::Parse([string]$Expected)
+      return $actualTimestamp.ToUniversalTime() -eq $expectedTimestamp.ToUniversalTime()
+    } catch {
+      return $false
+    }
+  }
+  return [string]$Actual -eq [string]$Expected
+}
+
 function Assert-ReleaseMetadataFile {
   param(
     [string]$RepoRoot,
@@ -1779,7 +1798,7 @@ function Assert-ReleaseMetadataFile {
   foreach ($property in $WindowsSmokeRecord.Keys) {
     $actualValue =
       $metadata.windows.smoke.PSObject.Properties[$property].Value
-    if ([string]$actualValue -ne [string]$WindowsSmokeRecord[$property]) {
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $WindowsSmokeRecord[$property])) {
       throw "Release metadata JSON windows.smoke.$property does not match the Windows smoke result."
     }
   }
@@ -1790,7 +1809,7 @@ function Assert-ReleaseMetadataFile {
   foreach ($property in $WindowsManualQaRecord.Keys) {
     $actualValue =
       $metadata.windows.manualQa.PSObject.Properties[$property].Value
-    if ([string]$actualValue -ne [string]$WindowsManualQaRecord[$property]) {
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $WindowsManualQaRecord[$property])) {
       throw "Release metadata JSON windows.manualQa.$property does not match the Windows manual QA result."
     }
   }
@@ -1807,7 +1826,7 @@ function Assert-ReleaseMetadataFile {
   foreach ($property in $WebDavSmokeRecord.Keys) {
     $actualValue =
       $metadata.webDav.staticSmoke.PSObject.Properties[$property].Value
-    if ([string]$actualValue -ne [string]$WebDavSmokeRecord[$property]) {
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $WebDavSmokeRecord[$property])) {
       throw "Release metadata JSON webDav.staticSmoke.$property does not match the WebDAV static smoke result."
     }
   }
@@ -1820,7 +1839,7 @@ function Assert-ReleaseMetadataFile {
   foreach ($property in $WebDavLiveSmokeRecord.Keys) {
     $actualValue =
       $metadata.webDav.liveSmoke.PSObject.Properties[$property].Value
-    if ([string]$actualValue -ne [string]$WebDavLiveSmokeRecord[$property]) {
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $WebDavLiveSmokeRecord[$property])) {
       throw "Release metadata JSON webDav.liveSmoke.$property does not match the WebDAV live smoke result."
     }
   }
@@ -1833,7 +1852,7 @@ function Assert-ReleaseMetadataFile {
   foreach ($property in $WebDavDomesticLiveSmokeRecord.Keys) {
     $actualValue =
       $metadata.webDav.domesticLiveSmoke.PSObject.Properties[$property].Value
-    if ([string]$actualValue -ne [string]$WebDavDomesticLiveSmokeRecord[$property]) {
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $WebDavDomesticLiveSmokeRecord[$property])) {
       throw "Release metadata JSON webDav.domesticLiveSmoke.$property does not match the domestic WebDAV live smoke result."
     }
   }
@@ -1850,7 +1869,7 @@ function Assert-ReleaseMetadataFile {
   }
   foreach ($property in @("apkAnalyzer", "aapt2")) {
     $actualValue = $metadata.android.tools.PSObject.Properties[$property].Value
-    if ([string]$actualValue -ne [string]$AndroidSdkTools[$property]) {
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $AndroidSdkTools[$property])) {
       throw "Release metadata JSON android.tools.$property does not match the validated Android SDK tool path."
     }
   }
@@ -1864,7 +1883,7 @@ function Assert-ReleaseMetadataFile {
   foreach ($property in $AndroidStaticSmokeRecord.Keys) {
     $actualValue =
       $metadata.android.staticSmoke.PSObject.Properties[$property].Value
-    if ([string]$actualValue -ne [string]$AndroidStaticSmokeRecord[$property]) {
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $AndroidStaticSmokeRecord[$property])) {
       throw "Release metadata JSON android.staticSmoke.$property does not match the Android static smoke result."
     }
   }
@@ -1878,7 +1897,7 @@ function Assert-ReleaseMetadataFile {
   foreach ($property in $AndroidDeviceSmokeRecord.Keys) {
     $actualValue =
       $metadata.android.deviceSmoke.PSObject.Properties[$property].Value
-    if ([string]$actualValue -ne [string]$AndroidDeviceSmokeRecord[$property]) {
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $AndroidDeviceSmokeRecord[$property])) {
       throw "Release metadata JSON android.deviceSmoke.$property does not match the Android device smoke result."
     }
   }
@@ -1903,7 +1922,7 @@ function Assert-ReleaseMetadataFile {
     "dartSdkVersion"
   )) {
     $actualValue = $metadata.toolchain.PSObject.Properties[$property].Value
-    if ([string]$actualValue -ne [string]$ToolchainInfo[$property]) {
+    if (-not (Test-ReleaseMetadataRecordValueEqual -PropertyName $property -Actual $actualValue -Expected $ToolchainInfo[$property])) {
       throw "Release metadata JSON toolchain.$property does not match the validated Flutter toolchain."
     }
   }
