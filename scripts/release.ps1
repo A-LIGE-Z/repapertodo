@@ -1719,9 +1719,21 @@ function Test-ReleaseMetadataRecordValueEqual {
 
   if ($PropertyName.EndsWith("AtUtc", [StringComparison]::Ordinal)) {
     try {
-      $actualTimestamp = [DateTimeOffset]::Parse([string]$Actual)
-      $expectedTimestamp = [DateTimeOffset]::Parse([string]$Expected)
-      return $actualTimestamp.ToUniversalTime() -eq $expectedTimestamp.ToUniversalTime()
+      $actualTimestamp = if ($Actual -is [DateTimeOffset]) {
+        ([DateTimeOffset]$Actual).ToUniversalTime()
+      } elseif ($Actual -is [DateTime]) {
+        [DateTimeOffset]::new(([DateTime]$Actual).ToUniversalTime())
+      } else {
+        [DateTimeOffset]::Parse([string]$Actual).ToUniversalTime()
+      }
+      $expectedTimestamp = if ($Expected -is [DateTimeOffset]) {
+        ([DateTimeOffset]$Expected).ToUniversalTime()
+      } elseif ($Expected -is [DateTime]) {
+        [DateTimeOffset]::new(([DateTime]$Expected).ToUniversalTime())
+      } else {
+        [DateTimeOffset]::Parse([string]$Expected).ToUniversalTime()
+      }
+      return $actualTimestamp.UtcDateTime.Ticks -eq $expectedTimestamp.UtcDateTime.Ticks
     } catch {
       return $false
     }
