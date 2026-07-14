@@ -134,6 +134,9 @@ abstract final class PaperTodoStringKeys {
   static const custom = 'custom';
   static const customFontFamily = 'customFontFamily';
   static const customThemeColor = 'customThemeColor';
+  static const themeColorDefault = 'themeColorDefault';
+  static const themeColorPick = 'themeColorPick';
+  static const themeColorClear = 'themeColorClear';
   static const deepCapsuleMode = 'deepCapsuleMode';
   static const deepCapsuleMonitor = 'deepCapsuleMonitor';
   static const deepCapsuleSide = 'deepCapsuleSide';
@@ -144,6 +147,9 @@ abstract final class PaperTodoStringKeys {
   static const dialogDueDate = 'dialogDueDate';
   static const dialogRestoreSnapshot = 'dialogRestoreSnapshot';
   static const dialogSyncSettings = 'dialogSyncSettings';
+  static const settingsTodoAndNotes = 'settingsTodoAndNotes';
+  static const settingsCapsules = 'settingsCapsules';
+  static const settingsGeneralAdvanced = 'settingsGeneralAdvanced';
   static const dueLabel = 'dueLabel';
   static const dueTomorrow = 'dueTomorrow';
   static const dueYearDisplay = 'dueYearDisplay';
@@ -338,6 +344,8 @@ abstract final class PaperTodoStringKeys {
   static const webDavIssuePasswordInvalid = 'webDavIssuePasswordInvalid';
   static const webDavIssuePasswordRequired = 'webDavIssuePasswordRequired';
   static const webDavIssuePassphraseRequired = 'webDavIssuePassphraseRequired';
+  static const webDavIssueProviderRootPathTooLong =
+      'webDavIssueProviderRootPathTooLong';
   static const webDavIssueRootPathInvalid = 'webDavIssueRootPathInvalid';
   static const webDavIssueSummary = 'webDavIssueSummary';
   static const webDavIssueUsernameInvalid = 'webDavIssueUsernameInvalid';
@@ -580,6 +588,9 @@ const _enStrings = {
   PaperTodoStringKeys.custom: 'Custom',
   PaperTodoStringKeys.customFontFamily: 'Custom font family',
   PaperTodoStringKeys.customThemeColor: 'Custom theme color',
+  PaperTodoStringKeys.themeColorDefault: 'Default theme color',
+  PaperTodoStringKeys.themeColorPick: 'Choose color',
+  PaperTodoStringKeys.themeColorClear: 'Restore default',
   PaperTodoStringKeys.deepCapsuleMode: 'Deep capsule mode',
   PaperTodoStringKeys.deepCapsuleMonitor: 'Deep capsule monitor',
   PaperTodoStringKeys.deepCapsuleSide: 'Deep capsule side',
@@ -590,6 +601,9 @@ const _enStrings = {
   PaperTodoStringKeys.dialogDueDate: 'Due date',
   PaperTodoStringKeys.dialogRestoreSnapshot: 'Restore snapshot?',
   PaperTodoStringKeys.dialogSyncSettings: 'Sync settings',
+  PaperTodoStringKeys.settingsTodoAndNotes: 'Todo & notes',
+  PaperTodoStringKeys.settingsCapsules: 'Capsules',
+  PaperTodoStringKeys.settingsGeneralAdvanced: 'General & advanced',
   PaperTodoStringKeys.dueLabel: 'Due {0}',
   PaperTodoStringKeys.dueTomorrow: 'Tomorrow {0}',
   PaperTodoStringKeys.dueYearDisplay: 'Due year display',
@@ -803,6 +817,8 @@ const _enStrings = {
       'Enter a WebDAV password or app password.',
   PaperTodoStringKeys.webDavIssuePassphraseRequired:
       'Enter a sync encryption passphrase.',
+  PaperTodoStringKeys.webDavIssueProviderRootPathTooLong:
+      'Jianguoyun requires the first remote-folder segment to be at most {0} characters.',
   PaperTodoStringKeys.webDavIssueRootPathInvalid:
       'Use a remote folder without parent-directory segments, invalid percent escapes, control characters, or blank path segments.',
   PaperTodoStringKeys.webDavIssueSummary:
@@ -952,6 +968,9 @@ const _zhStrings = {
   PaperTodoStringKeys.custom: '自定义',
   PaperTodoStringKeys.customFontFamily: '自定义字体族',
   PaperTodoStringKeys.customThemeColor: '自定义主题色',
+  PaperTodoStringKeys.themeColorDefault: '默认主题色',
+  PaperTodoStringKeys.themeColorPick: '选择颜色',
+  PaperTodoStringKeys.themeColorClear: '恢复默认',
   PaperTodoStringKeys.deepCapsuleMode: '边缘胶囊模式',
   PaperTodoStringKeys.deepCapsuleMonitor: '边缘胶囊显示器',
   PaperTodoStringKeys.deepCapsuleSide: '边缘胶囊侧边',
@@ -962,6 +981,9 @@ const _zhStrings = {
   PaperTodoStringKeys.dialogDueDate: '到期时间',
   PaperTodoStringKeys.dialogRestoreSnapshot: '恢复快照？',
   PaperTodoStringKeys.dialogSyncSettings: '同步设置',
+  PaperTodoStringKeys.settingsTodoAndNotes: '待办与笔记',
+  PaperTodoStringKeys.settingsCapsules: '胶囊',
+  PaperTodoStringKeys.settingsGeneralAdvanced: '通用与高级',
   PaperTodoStringKeys.dueLabel: '到期 {0}',
   PaperTodoStringKeys.dueTomorrow: '明天 {0}',
   PaperTodoStringKeys.dueYearDisplay: '到期年份显示',
@@ -1153,6 +1175,8 @@ const _zhStrings = {
   PaperTodoStringKeys.webDavIssuePasswordInvalid: '密码不能包含控制字符。',
   PaperTodoStringKeys.webDavIssuePasswordRequired: '请输入 WebDAV 密码或应用密码。',
   PaperTodoStringKeys.webDavIssuePassphraseRequired: '请输入同步加密密钥短语。',
+  PaperTodoStringKeys.webDavIssueProviderRootPathTooLong:
+      '坚果云要求远程文件夹的第一段不超过 {0} 个字符。',
   PaperTodoStringKeys.webDavIssueRootPathInvalid:
       '远程文件夹不能包含上级目录段、非法百分号转义、控制字符或空路径段。',
   PaperTodoStringKeys.webDavIssueSummary:

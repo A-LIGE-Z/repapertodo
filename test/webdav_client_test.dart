@@ -74,7 +74,7 @@ void main() {
       credentials: const WebDavCredentials(username: 'user', password: 'pass'),
       httpClient: MockClient((request) async {
         requests.add(request);
-        return http.Response('', 204);
+        return http.Response('', 204, headers: {'etag': 'path-v1'});
       }),
     );
 
@@ -300,6 +300,51 @@ void main() {
       null,
       DateTime.utc(2026, 7, 1, 9, 3),
     ]);
+  });
+
+  test('falls back to PROPFIND metadata when HEAD omits ETag', () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'HEAD') {
+          return http.Response(
+            '',
+            200,
+            headers: {
+              'content-length': '0',
+              'last-modified': 'Wed, 01 Jul 2026 09:01:00 GMT',
+            },
+          );
+        }
+        if (request.method == 'PROPFIND') {
+          return http.Response('''
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>manifest-from-propfind</D:getetag>
+        <D:getcontentlength>42</D:getcontentlength>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''', 207);
+        }
+        return http.Response('unexpected ${request.method}', 500);
+      }),
+    );
+
+    final metadata = await client.metadata('repapertodo/manifest.json');
+
+    expect(requests.map((request) => request.method), ['HEAD', 'PROPFIND']);
+    expect(metadata?.etag, 'manifest-from-propfind');
+    expect(metadata?.contentLength, 42);
+    expect(metadata?.lastModified, DateTime.utc(2026, 7, 1, 9, 1));
   });
 
   test('falls back to PROPFIND metadata when HEAD is unsupported', () async {
@@ -1191,6 +1236,64 @@ void main() {
     expect(requests[2].headers['if-match'], '"manifest-v1"');
     expect(requests[3].headers['if-match'], '"manifest-v2"');
     expect(requests[4].headers['if-match'], '"manifest-v3"');
+  });
+
+  test('retries unquoted provider ETags as conditional PUTs after 412',
+      () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (requests.length == 1) {
+          return http.Response('quoted ETag rejected', 412);
+        }
+        return http.Response('', 204);
+      }),
+    );
+
+    await client.putBytes(
+      'repapertodo/manifest.json',
+      const [1, 2, 3],
+      ifMatch: 'provider-opaque-etag',
+    );
+
+    expect(requests, hasLength(2));
+    expect(requests.every((request) => request.method == 'PUT'), true);
+    expect(requests[0].headers['if-match'], '"provider-opaque-etag"');
+    expect(requests[1].headers['if-match'], 'provider-opaque-etag');
+    expect(requests[0].bodyBytes, const [1, 2, 3]);
+    expect(requests[1].bodyBytes, const [1, 2, 3]);
+  });
+
+  test('keeps conflicts when quoted and raw conditional PUTs both fail',
+      () async {
+    final requests = <http.Request>[];
+    final client = WebDavClient(
+      baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
+      credentials: const WebDavCredentials(username: 'user', password: 'pass'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response('remote changed', 412);
+      }),
+    );
+
+    await expectLater(
+      client.putBytes(
+        'repapertodo/manifest.json',
+        const [1],
+        ifMatch: 'provider-opaque-etag',
+      ),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.statusCode, 'statusCode', 412),
+      ),
+    );
+
+    expect(requests, hasLength(2));
+    expect(requests[0].headers['if-match'], '"provider-opaque-etag"');
+    expect(requests[1].headers['if-match'], 'provider-opaque-etag');
   });
 
   test('rejects unsafe WebDAV condition headers before sending', () async {
@@ -2551,7 +2654,7 @@ void main() {
       ),
       httpClient: MockClient((request) async {
         requests.add(request);
-        return http.Response('', 204);
+        return http.Response('', 204, headers: {'etag': 'auth-v1'});
       }),
     );
 
@@ -2576,7 +2679,7 @@ void main() {
       ),
       httpClient: MockClient((request) async {
         requests.add(request);
-        return http.Response('', 204);
+        return http.Response('', 204, headers: {'etag': 'auth-v1'});
       }),
     );
 

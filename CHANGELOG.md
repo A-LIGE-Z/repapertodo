@@ -2,6 +2,91 @@
 
 ## Unreleased
 
+- Made Jianguoyun conditional manifest updates compatible with its unquoted
+  opaque ETags: sync still tries the standard quoted `If-Match` first, then
+  retries the provider's original conditional value only after a 412, without
+  ever falling back to an unconditional overwrite.
+- Validate Jianguoyun's 30-character sandbox-name limit directly in WebDAV
+  settings, with a focused inline recovery message instead of exposing a raw
+  provider XML error only after sync starts.
+- Reset stale durable outbox and remote device-sequence progress when the
+  WebDAV endpoint, account, encryption passphrase, or remote folder changes,
+  preventing a new sync target from entering a permanent conflict loop.
+- Reworked the Android board around one PaperTodo paper surface instead of
+  nested cards: compact 52px navigation, integrated 56px paper headers,
+  borderless todo rows, an original-style plus append surface with compact
+  undo/redo controls, a darker neutral desktop canvas, 44-48px touch targets,
+  and the same phone layout in portrait and landscape across light and dark
+  themes.
+- Restored PaperTodo's persistent settings category rail with independently
+  scrollable display, todo/note, capsule, general, and WebDAV sections; compact
+  windows retain icon-sized 48px navigation targets.
+- Removed the retired font-preset selector from settings and now expose only
+  the installed-system-font picker while preserving legacy preset data during
+  migration.
+- Replaced the raw custom-theme hex field with PaperTodo's swatch/current
+  color/choose/reset interaction and a cross-platform full-gamut HSV picker.
+- Replaced line-spacing sliders with keyboard-editable todo/note fields,
+  explicit default reset controls, and the original 0.8-5.0 bounds.
+- Made collapsed paper windows adapt to the rendered title length and matched
+  PaperTodo's title-only resting viewport plus partial hover reveal for deep
+  capsules instead of forcing every capsule to a fixed 92px width.
+- Routed Windows todo reminders to the independent paper that owns the item;
+  the hidden coordinator no longer emits invisible reminders and sibling paper
+  engines no longer duplicate the same reminder.
+- Replaced in-paper Windows reminder snackbars with compact native bubbles
+  positioned beside the owning paper or capsule; hovering pauses dismissal and
+  clicking opens the due todo paper.
+- Added native deep-capsule drop routing so capsules can be dragged between
+  monitor edges and reordered inside a queue without overwriting the paper's
+  normal saved position or size; master-capsule drags update queue start height.
+- Added lightweight native master capsules that remain in slot 0 while queues
+  are expanded or retracted, plus edge proxies for expanded papers; proxy
+  clicks activate or collapse their paper according to the PaperTodo setting,
+  and proxy drags preserve normal cross-edge queue reordering without creating
+  additional Flutter engines.
+- Made expanded-paper native proxy clicks activate their owning HWND
+  synchronously during the Windows mouse event, before the action crosses the
+  Dart platform channel, so foreground activation cannot be lost to timing.
+- Kept real deep-capsule queue offsets relative to each monitor's work area so
+  capsules remain correctly stacked on displays positioned above or below the
+  primary monitor instead of being clamped together at the screen edge.
+- Synchronized native master/proxy lifecycle after individual and bulk paper
+  show or hide actions so hidden queues cannot leave clickable capsule windows
+  behind.
+- Stacked deep capsules on PaperTodo's 46px pill plus 4px gap geometry instead
+  of reusing unrelated paper coordinates, keeping multiple papers in stable
+  per-monitor, per-edge queues.
+- Matched the original PaperTodo paper palette, transparent 8px shadow chrome,
+  compact 31px title bar, original tint strengths, 24-28px paper controls,
+  rounded shell, subtle todo rows, plus-only append area, and direct todo drag
+  handles across light and dark color schemes.
+- Restyled the settings window with the original paper shell, compact density,
+  leading checkbox toggles, a desktop-sized viewport, and a dedicated close
+  action while retaining validation and explicit save behavior.
+- Matched PaperTodo note interaction by entering edit mode from the paper
+  preview, returning to preview on focus loss, and removing the persistent
+  edit/preview/split selector; notes now render inside a bound paper page with
+  a compact canvas toolbar and status bar.
+- Rebuilt independent paper capsules as the original 92x46 transparent chrome
+  with an inset 30px pill, compact icon/title area, drag gesture, and dedicated
+  right-side hide button while preserving script click behavior.
+- Deep capsules now rest with only 54px exposed at the configured screen edge,
+  reveal the full pill on pointer hover, and retract again on pointer exit on
+  both left- and right-docked monitor queues.
+- Paper and todo context menus now use the active paper palette, compact
+  Windows 36px rows, rounded outlined surfaces, restrained shadows, and dense
+  dividers while Android retains 48px touch targets.
+- Kept independent Windows paper positions and sizes stable when titles, todo
+  items, note text, or canvas content change during or after a drag/resize;
+  child-window move events now update the coordinator's native geometry caches,
+  tray reconciliation preserves live HWND bounds, and title/topmost/desktop-pin
+  refreshes no longer call the full geometry-applying surface path. Expanding
+  a capsule or opening a reminder now also restores the saved normal paper
+  bounds instead of adopting the capsule HWND's minimum size and edge position.
+- Extended Windows Release smoke to move and resize a real independent paper,
+  type into its Flutter content field through native input, wait for the edit to
+  persist, and then require both model and HWND geometry to remain unchanged.
 - Normalized local paper IDs at the Windows platform boundary before sending
   surface, tray, bounds, visibility, and work-area channel payloads.
 - Rejected unsafe paper IDs inside the Windows native surface registry so

@@ -360,6 +360,10 @@ class SyncSettingsDialog extends StatefulWidget {
 }
 
 class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
+  _SettingsSection _selectedSettingsSection = _SettingsSection.display;
+  final Map<_SettingsSection, GlobalKey> _settingsSectionKeys = {
+    for (final section in _SettingsSection.values) section: GlobalKey(),
+  };
   late bool _enabled;
   late bool _autoSyncOnStart;
   late String _theme;
@@ -427,6 +431,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _pinnedNoteHotKeyController;
   late final TextEditingController _reminderIntervalController;
   late final TextEditingController _reminderDurationController;
+  late final TextEditingController _todoLineSpacingController;
+  late final TextEditingController _noteLineSpacingController;
   String? _errorText;
   String? _endpointErrorText;
   String? _rootPathErrorText;
@@ -458,7 +464,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _markdownRenderMode =
         MarkdownRenderModes.normalize(widget.initialMarkdownRenderMode);
     _todoVisualSize = TodoVisualSizes.normalize(widget.initialTodoVisualSize);
-    _uiFontPreset = UiFontPresets.normalize(widget.initialUiFontPreset);
+    // PaperTodo keeps the legacy preset value only for data compatibility.
+    // The current settings UI exposes one installed-system-font selector.
+    _uiFontPreset = UiFontPresets.defaultPreset;
     _zoom = widget.initialZoom.clamp(0.5, 1.5).toDouble();
     _maxTitleLength = widget.initialMaxTitleLength.clamp(2, 20).toDouble();
     _enableToolTips = widget.initialEnableToolTips;
@@ -544,6 +552,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
           .clamp(1, 600)
           .toString(),
     );
+    _todoLineSpacingController = TextEditingController(
+      text: _todoLineSpacing.toStringAsFixed(1),
+    );
+    _noteLineSpacingController = TextEditingController(
+      text: _noteLineSpacing.toStringAsFixed(1),
+    );
     _loadInstalledFontFamilies();
   }
 
@@ -572,6 +586,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _pinnedNoteHotKeyController.dispose();
     _reminderIntervalController.dispose();
     _reminderDurationController.dispose();
+    _todoLineSpacingController.dispose();
+    _noteLineSpacingController.dispose();
     super.dispose();
   }
 
@@ -604,867 +620,985 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final mediaSize = MediaQuery.sizeOf(context);
+    final desktopLayout = mediaSize.width >= 900;
+    final contentHeight = (mediaSize.height - 170).clamp(360.0, 680.0);
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      backgroundColor: colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+      contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       title: Row(
         children: [
-          const Icon(Icons.sync_outlined),
-          const SizedBox(width: 12),
+          Icon(Icons.settings_outlined, color: colorScheme.primary, size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              strings.get(PaperTodoStringKeys.dialogSyncSettings),
+              strings.get(PaperTodoStringKeys.actionSettings),
               overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
+          ),
+          IconButton(
+            tooltip: strings.get(PaperTodoStringKeys.actionCancel),
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close, size: 18),
           ),
         ],
       ),
       content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _adaptiveChoiceSelector(
-                key: const ValueKey('settings-theme-selector'),
-                labelText: strings.get(PaperTodoStringKeys.theme),
-                compactIcon: Icons.brightness_auto_outlined,
-                selectedValue: _theme,
-                choices: [
-                  _SettingsChoice(
-                    value: 'system',
-                    label: strings.get(PaperTodoStringKeys.themeSystem),
-                    icon: Icons.brightness_auto_outlined,
+        width: desktopLayout ? 820 : 520,
+        height: contentHeight,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: desktopLayout ? 164 : 52,
+              child: _settingsNavigation(compact: !desktopLayout),
+            ),
+            const VerticalDivider(width: 20),
+            Expanded(
+              child: Scrollbar(
+                thumbVisibility: desktopLayout,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_selectedSettingsSection ==
+                          _SettingsSection.display) ...[
+                        _settingsSectionHeader(
+                          section: _SettingsSection.display,
+                          icon: Icons.palette_outlined,
+                          label: strings.get(PaperTodoStringKeys.appearance),
+                        ),
+                        const SizedBox(height: 12),
+                        _adaptiveChoiceSelector(
+                          key: const ValueKey('settings-theme-selector'),
+                          labelText: strings.get(PaperTodoStringKeys.theme),
+                          compactIcon: Icons.brightness_auto_outlined,
+                          selectedValue: _theme,
+                          choices: [
+                            _SettingsChoice(
+                              value: 'system',
+                              label:
+                                  strings.get(PaperTodoStringKeys.themeSystem),
+                              icon: Icons.brightness_auto_outlined,
+                            ),
+                            _SettingsChoice(
+                              value: 'light',
+                              label:
+                                  strings.get(PaperTodoStringKeys.themeLight),
+                              icon: Icons.light_mode_outlined,
+                            ),
+                            _SettingsChoice(
+                              value: 'dark',
+                              label: strings.get(PaperTodoStringKeys.themeDark),
+                              icon: Icons.dark_mode_outlined,
+                            ),
+                          ],
+                          onChanged: (value) => setState(() => _theme = value),
+                        ),
+                        const SizedBox(height: 12),
+                        _adaptiveChoiceSelector(
+                          key: const ValueKey('settings-color-scheme-selector'),
+                          labelText:
+                              strings.get(PaperTodoStringKeys.colorScheme),
+                          compactIcon: Icons.palette_outlined,
+                          selectedValue: _colorScheme,
+                          choices: [
+                            _SettingsChoice(
+                              value: ColorSchemes.warm,
+                              label: strings.get(PaperTodoStringKeys.colorWarm),
+                            ),
+                            _SettingsChoice(
+                              value: ColorSchemes.ink,
+                              label: strings.get(PaperTodoStringKeys.colorInk),
+                            ),
+                            _SettingsChoice(
+                              value: ColorSchemes.forest,
+                              label:
+                                  strings.get(PaperTodoStringKeys.colorForest),
+                            ),
+                            _SettingsChoice(
+                              value: ColorSchemes.rose,
+                              label: strings.get(PaperTodoStringKeys.colorRose),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _colorScheme = value),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          strings.get(PaperTodoStringKeys.customThemeColor),
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                        const SizedBox(height: 6),
+                        _customThemeColorEditor(),
+                        const SizedBox(height: 16),
+                        Text(
+                          strings.get(PaperTodoStringKeys.appearance),
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        _adaptiveChoiceSelector(
+                          key:
+                              const ValueKey('settings-markdown-mode-selector'),
+                          labelText:
+                              strings.get(PaperTodoStringKeys.markdownMode),
+                          compactIcon: Icons.article_outlined,
+                          selectedValue: _markdownRenderMode,
+                          choices: [
+                            _SettingsChoice(
+                              value: MarkdownRenderModes.off,
+                              label:
+                                  strings.get(PaperTodoStringKeys.markdownOff),
+                              icon: Icons.edit_outlined,
+                            ),
+                            _SettingsChoice(
+                              value: MarkdownRenderModes.basic,
+                              label: strings.get(PaperTodoStringKeys.basic),
+                              icon: Icons.article_outlined,
+                            ),
+                            _SettingsChoice(
+                              value: MarkdownRenderModes.enhanced,
+                              label: strings.get(PaperTodoStringKeys.enhanced),
+                              icon: Icons.vertical_split_outlined,
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _markdownRenderMode = value),
+                        ),
+                        const SizedBox(height: 12),
+                        _adaptiveChoiceSelector(
+                          key: const ValueKey(
+                              'settings-todo-visual-size-selector'),
+                          labelText:
+                              strings.get(PaperTodoStringKeys.todoVisualSize),
+                          compactIcon: Icons.format_size_outlined,
+                          selectedValue: _todoVisualSize,
+                          choices: [
+                            _SettingsChoice(
+                              value: TodoVisualSizes.small,
+                              label: strings.get(PaperTodoStringKeys.small),
+                            ),
+                            _SettingsChoice(
+                              value: TodoVisualSizes.medium,
+                              label: strings.get(PaperTodoStringKeys.medium),
+                            ),
+                            _SettingsChoice(
+                              value: TodoVisualSizes.large,
+                              label: strings.get(PaperTodoStringKeys.large),
+                            ),
+                            _SettingsChoice(
+                              value: TodoVisualSizes.extraLarge,
+                              label: strings.get(PaperTodoStringKeys.xl),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _todoVisualSize = value),
+                        ),
+                        const SizedBox(height: 12),
+                        _fontFamilyField(),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _externalMarkdownExtensionController,
+                          focusNode: _externalMarkdownExtensionFocusNode,
+                          onChanged: (_) {
+                            if (_externalMarkdownExtensionErrorText == null) {
+                              return;
+                            }
+                            setState(() =>
+                                _externalMarkdownExtensionErrorText = null);
+                          },
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            labelText: strings.get(
+                              PaperTodoStringKeys.externalMarkdownExtension,
+                            ),
+                            errorText: _externalMarkdownExtensionErrorText,
+                            prefixIcon: const Icon(Icons.file_open_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _SettingsSlider(
+                          icon: Icons.zoom_in_outlined,
+                          label: strings.get(PaperTodoStringKeys.zoom),
+                          valueLabel: '${(_zoom * 100).round()}%',
+                          value: _zoom,
+                          min: 0.5,
+                          max: 1.5,
+                          divisions: 10,
+                          onChanged: (value) => setState(() => _zoom = value),
+                        ),
+                        _SettingsSlider(
+                          icon: Icons.short_text_outlined,
+                          label:
+                              strings.get(PaperTodoStringKeys.maxTitleLength),
+                          valueLabel: '${_maxTitleLength.round()} chars',
+                          value: _maxTitleLength,
+                          min: 2,
+                          max: 20,
+                          divisions: 18,
+                          onChanged: (value) =>
+                              setState(() => _maxTitleLength = value),
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: _SettingsHelpIcon(
+                            message:
+                                strings.get(PaperTodoStringKeys.tooltipsHelp),
+                          ),
+                          title:
+                              Text(strings.get(PaperTodoStringKeys.tooltips)),
+                          value: _enableToolTips,
+                          onChanged: (value) =>
+                              setState(() => _enableToolTips = value),
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.animation_outlined),
+                          title:
+                              Text(strings.get(PaperTodoStringKeys.animations)),
+                          value: _enableAnimations,
+                          onChanged: (value) =>
+                              setState(() => _enableAnimations = value),
+                        ),
+                        _adaptiveFieldPair(
+                          first: _lineSpacingEditor(
+                            key: const ValueKey('settings-todo-line-spacing'),
+                            controller: _todoLineSpacingController,
+                            icon: Icons.checklist_outlined,
+                            label: strings.get(PaperTodoStringKeys.todoSpacing),
+                          ),
+                          second: _lineSpacingEditor(
+                            key: const ValueKey('settings-note-line-spacing'),
+                            controller: _noteLineSpacingController,
+                            icon: Icons.notes_outlined,
+                            label: strings.get(PaperTodoStringKeys.noteSpacing),
+                          ),
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.event_repeat_outlined),
+                          title: Text(strings
+                              .get(PaperTodoStringKeys.relativeDueDates)),
+                          value: _showTodoDueRelativeTime,
+                          onChanged: (value) =>
+                              setState(() => _showTodoDueRelativeTime = value),
+                        ),
+                        const SizedBox(height: 8),
+                        _adaptiveChoiceSelector(
+                          key: const ValueKey('settings-due-year-selector'),
+                          labelText:
+                              strings.get(PaperTodoStringKeys.dueYearDisplay),
+                          compactIcon: Icons.event_outlined,
+                          selectedValue: _todoDueYearDisplayMode,
+                          choices: [
+                            _SettingsChoice(
+                              value: TodoDueYearDisplayModes.none,
+                              label: strings.get(PaperTodoStringKeys.noYear),
+                            ),
+                            _SettingsChoice(
+                              value: TodoDueYearDisplayModes.short,
+                              label: strings.get(PaperTodoStringKeys.yy),
+                            ),
+                            _SettingsChoice(
+                              value: TodoDueYearDisplayModes.full,
+                              label: strings.get(PaperTodoStringKeys.yyyy),
+                            ),
+                          ],
+                          onChanged: _showTodoDueRelativeTime
+                              ? null
+                              : (value) => setState(
+                                  () => _todoDueYearDisplayMode = value),
+                        ),
+                        const Divider(height: 24),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.add_task_outlined),
+                          title: Text(
+                              strings.get(PaperTodoStringKeys.topBarNewTodo)),
+                          value: _showTopBarNewTodoButton,
+                          onChanged: (value) =>
+                              setState(() => _showTopBarNewTodoButton = value),
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.note_add_outlined),
+                          title: Text(
+                              strings.get(PaperTodoStringKeys.topBarNewNote)),
+                          value: _showTopBarNewNoteButton,
+                          onChanged: (value) =>
+                              setState(() => _showTopBarNewNoteButton = value),
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.file_open_outlined),
+                          title: Text(strings
+                              .get(PaperTodoStringKeys.topBarOpenSurface)),
+                          value: _showTopBarExternalOpenButton,
+                          onChanged: (value) => setState(
+                              () => _showTopBarExternalOpenButton = value),
+                        ),
+                      ],
+                      if (_selectedSettingsSection ==
+                          _SettingsSection.capsules) ...[
+                        const Divider(height: 24),
+                        _settingsSectionHeader(
+                          section: _SettingsSection.capsules,
+                          icon: Icons.view_agenda_outlined,
+                          label:
+                              strings.get(PaperTodoStringKeys.settingsCapsules),
+                        ),
+                        const SizedBox(height: 4),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.view_agenda_outlined),
+                          title: Text(
+                              strings.get(PaperTodoStringKeys.capsuleMode)),
+                          value: _useCapsuleMode,
+                          onChanged: (value) => setState(() {
+                            _useCapsuleMode = value;
+                            if (!value) {
+                              _useDeepCapsuleMode = false;
+                              _useCapsuleCollapseAll = false;
+                              _capsuleCollapseAllActive = false;
+                              _showDeepCapsuleWhileExpanded = false;
+                              _collapseExpandedDeepCapsuleOnClick = false;
+                              _hideDeepCapsulesWhenCovered = false;
+                              _hideDeepCapsulesWhenFullscreen = false;
+                            }
+                          }),
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary:
+                              const Icon(Icons.stacked_line_chart_outlined),
+                          title: Text(
+                              strings.get(PaperTodoStringKeys.deepCapsuleMode)),
+                          value: _useDeepCapsuleMode,
+                          onChanged: _useCapsuleMode
+                              ? (value) => setState(() {
+                                    _useDeepCapsuleMode = value;
+                                    if (!value) {
+                                      _showDeepCapsuleWhileExpanded = false;
+                                      _collapseExpandedDeepCapsuleOnClick =
+                                          false;
+                                      _hideDeepCapsulesWhenCovered = false;
+                                      _hideDeepCapsulesWhenFullscreen = false;
+                                    }
+                                  })
+                              : null,
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.unfold_less_outlined),
+                          title: Text(strings
+                              .get(PaperTodoStringKeys.collapseAllControl)),
+                          value: _useCapsuleCollapseAll,
+                          onChanged: _useCapsuleMode
+                              ? (value) => setState(() {
+                                    _useCapsuleCollapseAll = value;
+                                    if (!value) {
+                                      _capsuleCollapseAllActive = false;
+                                    }
+                                  })
+                              : null,
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary:
+                              const Icon(Icons.vertical_align_center_outlined),
+                          title: Text(strings
+                              .get(PaperTodoStringKeys.collapseAllActive)),
+                          value: _capsuleCollapseAllActive,
+                          onChanged: _useCapsuleMode && _useCapsuleCollapseAll
+                              ? (value) => setState(
+                                  () => _capsuleCollapseAllActive = value)
+                              : null,
+                        ),
+                        const SizedBox(height: 8),
+                        _adaptiveChoiceSelector(
+                          key: const ValueKey(
+                              'settings-deep-capsule-side-selector'),
+                          labelText:
+                              strings.get(PaperTodoStringKeys.deepCapsuleSide),
+                          compactIcon: Icons.vertical_align_center_outlined,
+                          selectedValue: _deepCapsuleSide,
+                          choices: [
+                            _SettingsChoice(
+                              value: DeepCapsuleSides.left,
+                              label: strings.get(PaperTodoStringKeys.left),
+                              icon: Icons.keyboard_double_arrow_left_outlined,
+                            ),
+                            _SettingsChoice(
+                              value: DeepCapsuleSides.right,
+                              label: strings.get(PaperTodoStringKeys.right),
+                              icon: Icons.keyboard_double_arrow_right_outlined,
+                            ),
+                          ],
+                          onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                              ? (value) =>
+                                  setState(() => _deepCapsuleSide = value)
+                              : null,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _deepCapsuleTopMarginController,
+                          enabled: _useCapsuleMode && _useDeepCapsuleMode,
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            labelText: strings.get(
+                              PaperTodoStringKeys.deepCapsuleTopMargin,
+                            ),
+                            prefixIcon:
+                                const Icon(Icons.vertical_align_top_outlined),
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _deepCapsuleMonitorController,
+                          enabled: _useCapsuleMode && _useDeepCapsuleMode,
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            labelText: strings
+                                .get(PaperTodoStringKeys.deepCapsuleMonitor),
+                            prefixIcon: const Icon(Icons.monitor_outlined),
+                          ),
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.open_in_full_outlined),
+                          title: Text(
+                            strings.get(PaperTodoStringKeys
+                                .showDeepCapsuleWhileExpanded),
+                          ),
+                          value: _showDeepCapsuleWhileExpanded,
+                          onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                              ? (value) => setState(
+                                  () => _showDeepCapsuleWhileExpanded = value)
+                              : null,
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.ads_click_outlined),
+                          title: Text(
+                            strings.get(
+                              PaperTodoStringKeys
+                                  .collapseExpandedDeepCapsuleOnClick,
+                            ),
+                          ),
+                          value: _collapseExpandedDeepCapsuleOnClick,
+                          onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                              ? (value) => setState(
+                                    () => _collapseExpandedDeepCapsuleOnClick =
+                                        value,
+                                  )
+                              : null,
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.layers_clear_outlined),
+                          title: Text(
+                            strings.get(
+                                PaperTodoStringKeys.hideCoveredDeepCapsules),
+                          ),
+                          value: _hideDeepCapsulesWhenCovered,
+                          onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                              ? (value) => setState(
+                                  () => _hideDeepCapsulesWhenCovered = value)
+                              : null,
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.fullscreen_exit_outlined),
+                          title: Text(
+                            strings.get(
+                                PaperTodoStringKeys.hideFullscreenDeepCapsules),
+                          ),
+                          value: _hideDeepCapsulesWhenFullscreen,
+                          onChanged: _useCapsuleMode && _useDeepCapsuleMode
+                              ? (value) => setState(
+                                    () =>
+                                        _hideDeepCapsulesWhenFullscreen = value,
+                                  )
+                              : null,
+                        ),
+                      ],
+                      if (_selectedSettingsSection ==
+                          _SettingsSection.general) ...[
+                        const Divider(height: 24),
+                        _settingsSectionHeader(
+                          section: _SettingsSection.general,
+                          icon: Icons.tune_outlined,
+                          label: strings
+                              .get(PaperTodoStringKeys.settingsGeneralAdvanced),
+                        ),
+                        if (_hasDesktopIntegrationSettings)
+                          const SizedBox(height: 4),
+                        if (widget.supportsStartAtLogin)
+                          _SettingsCheckboxTile(
+                            contentPadding: EdgeInsets.zero,
+                            secondary: const Icon(Icons.login_outlined),
+                            title: Text(
+                                strings.get(PaperTodoStringKeys.startAtLogin)),
+                            value: _startAtLogin,
+                            onChanged: (value) =>
+                                setState(() => _startAtLogin = value),
+                          ),
+                        if (widget.supportsHideFromWindowSwitcher)
+                          _SettingsCheckboxTile(
+                            contentPadding: EdgeInsets.zero,
+                            secondary:
+                                const Icon(Icons.visibility_off_outlined),
+                            title: Text(
+                              strings.get(
+                                  PaperTodoStringKeys.hideFromTaskSwitcher),
+                            ),
+                            value: _hideFromWindowSwitcher,
+                            onChanged: (value) =>
+                                setState(() => _hideFromWindowSwitcher = value),
+                          ),
+                        if (widget.supportsFullscreenTopmostMode) ...[
+                          const SizedBox(height: 8),
+                          _adaptiveChoiceSelector(
+                            key: const ValueKey(
+                                'settings-fullscreen-topmost-selector'),
+                            labelText: strings
+                                .get(PaperTodoStringKeys.fullscreenTopmostMode),
+                            compactIcon: Icons.fullscreen_exit_outlined,
+                            selectedValue: _fullscreenTopmostMode,
+                            choices: [
+                              _SettingsChoice(
+                                value: FullscreenTopmostModes.avoid,
+                                label: strings
+                                    .get(PaperTodoStringKeys.avoidFullscreen),
+                                icon: Icons.fullscreen_exit_outlined,
+                              ),
+                              _SettingsChoice(
+                                value: FullscreenTopmostModes.stayOnTop,
+                                label:
+                                    strings.get(PaperTodoStringKeys.stayOnTop),
+                                icon: Icons.push_pin_outlined,
+                              ),
+                            ],
+                            onChanged: (value) =>
+                                setState(() => _fullscreenTopmostMode = value),
+                          ),
+                        ],
+                        if (widget.supportsGlobalHotkeys) ...[
+                          const SizedBox(height: 12),
+                          _adaptiveFieldPair(
+                            first: _hotKeyCaptureField(
+                              controller: _pinnedTodoHotKeyController,
+                              labelText: strings
+                                  .get(PaperTodoStringKeys.pinnedTodoHotkey),
+                              icon: Icons.keyboard_outlined,
+                            ),
+                            second: _hotKeyCaptureField(
+                              controller: _pinnedNoteHotKeyController,
+                              labelText: strings
+                                  .get(PaperTodoStringKeys.pinnedNoteHotkey),
+                              icon: Icons.keyboard_command_key_outlined,
+                            ),
+                          ),
+                        ],
+                        if (widget.supportsScriptCapsules) ...[
+                          const Divider(height: 24),
+                          _SettingsCheckboxTile(
+                            contentPadding: EdgeInsets.zero,
+                            secondary: const Icon(Icons.terminal_outlined),
+                            title: Text(
+                              strings.get(
+                                PaperTodoStringKeys
+                                    .runLinkedScriptCapsulesOnClick,
+                              ),
+                            ),
+                            value: _runLinkedScriptCapsulesOnClick,
+                            onChanged: _enableTodoNoteLinks
+                                ? (value) => setState(
+                                      () => _runLinkedScriptCapsulesOnClick =
+                                          value,
+                                    )
+                                : null,
+                          ),
+                          _SettingsCheckboxTile(
+                            contentPadding: EdgeInsets.zero,
+                            secondary: const Icon(Icons.memory_outlined),
+                            title: Text(
+                              strings.get(
+                                PaperTodoStringKeys.persistentPowerShellProcess,
+                              ),
+                            ),
+                            value: _usePersistentPowerShellProcess,
+                            onChanged: (value) => setState(
+                              () => _usePersistentPowerShellProcess = value,
+                            ),
+                          ),
+                          _SettingsCheckboxTile(
+                            contentPadding: EdgeInsets.zero,
+                            secondary: const Icon(Icons.bolt_outlined),
+                            title: Text(strings
+                                .get(PaperTodoStringKeys.preferPowerShell7)),
+                            value: _preferPowerShell7,
+                            onChanged: (value) =>
+                                setState(() => _preferPowerShell7 = value),
+                          ),
+                          _SettingsCheckboxTile(
+                            contentPadding: EdgeInsets.zero,
+                            secondary:
+                                const Icon(Icons.visibility_off_outlined),
+                            title: Text(strings
+                                .get(PaperTodoStringKeys.hideScriptRunWindow)),
+                            value: _hideScriptRunWindow,
+                            onChanged: (value) =>
+                                setState(() => _hideScriptRunWindow = value),
+                          ),
+                        ],
+                      ],
+                      if (_selectedSettingsSection ==
+                          _SettingsSection.todoAndNotes) ...[
+                        const Divider(height: 24),
+                        _settingsSectionHeader(
+                          section: _SettingsSection.todoAndNotes,
+                          icon: Icons.checklist_outlined,
+                          label: strings
+                              .get(PaperTodoStringKeys.settingsTodoAndNotes),
+                        ),
+                        const SizedBox(height: 4),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary:
+                              const Icon(Icons.notifications_active_outlined),
+                          title: Text(
+                              strings.get(PaperTodoStringKeys.todoReminders)),
+                          value: _useTodoReminderInterval,
+                          onChanged: (value) =>
+                              setState(() => _useTodoReminderInterval = value),
+                        ),
+                        const SizedBox(height: 8),
+                        _adaptiveFieldPair(
+                          first: TextField(
+                            controller: _reminderIntervalController,
+                            enabled: _useTodoReminderInterval,
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              labelText: strings
+                                  .get(PaperTodoStringKeys.reminderInterval),
+                              prefixIcon: const Icon(Icons.timer_outlined),
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                          second: _adaptiveChoiceSelector(
+                            key: const ValueKey(
+                                'settings-reminder-unit-selector'),
+                            labelText:
+                                strings.get(PaperTodoStringKeys.reminderUnit),
+                            compactIcon: Icons.schedule_outlined,
+                            selectedValue: _todoReminderIntervalUnit,
+                            choices: [
+                              _SettingsChoice(
+                                value: TodoReminderIntervalUnits.minutes,
+                                label: strings.get(PaperTodoStringKeys.minutes),
+                              ),
+                              _SettingsChoice(
+                                value: TodoReminderIntervalUnits.hours,
+                                label: strings.get(PaperTodoStringKeys.hours),
+                              ),
+                            ],
+                            onChanged: _useTodoReminderInterval
+                                ? (value) => setState(
+                                    () => _todoReminderIntervalUnit = value)
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _adaptiveChoiceSelector(
+                          key: const ValueKey(
+                              'settings-reminder-scope-selector'),
+                          labelText:
+                              strings.get(PaperTodoStringKeys.reminderScope),
+                          compactIcon: Icons.notifications_active_outlined,
+                          selectedValue: _todoReminderScope,
+                          choices: [
+                            _SettingsChoice(
+                              value: TodoReminderScopes.all,
+                              label: strings.get(PaperTodoStringKeys.allDue),
+                              icon: Icons.format_list_bulleted_outlined,
+                            ),
+                            _SettingsChoice(
+                              value: TodoReminderScopes.nearest,
+                              label: strings.get(PaperTodoStringKeys.nearest),
+                              icon: Icons.near_me_outlined,
+                            ),
+                          ],
+                          onChanged: _useTodoReminderInterval
+                              ? (value) =>
+                                  setState(() => _todoReminderScope = value)
+                              : null,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _reminderDurationController,
+                          enabled: _useTodoReminderInterval,
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            labelText: strings.get(
+                                PaperTodoStringKeys.reminderDisplaySeconds),
+                            prefixIcon:
+                                const Icon(Icons.hourglass_bottom_outlined),
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                        const Divider(height: 24),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.account_tree_outlined),
+                          title: Text(
+                              strings.get(PaperTodoStringKeys.todoNoteLinks)),
+                          value: _enableTodoNoteLinks,
+                          onChanged: (value) =>
+                              setState(() => _enableTodoNoteLinks = value),
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.notes_outlined),
+                          title: Text(strings
+                              .get(PaperTodoStringKeys.showLinkedNoteName)),
+                          value: _showLinkedNoteName,
+                          onChanged: _enableTodoNoteLinks
+                              ? (value) =>
+                                  setState(() => _showLinkedNoteName = value)
+                              : null,
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.subject_outlined),
+                          title: Text(
+                            strings.get(
+                                PaperTodoStringKeys.allowLongLinkedNoteTitles),
+                          ),
+                          value: _allowLongLinkedNoteTitles,
+                          onChanged: _enableTodoNoteLinks && _showLinkedNoteName
+                              ? (value) => setState(
+                                  () => _allowLongLinkedNoteTitles = value)
+                              : null,
+                        ),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.layers_clear_outlined),
+                          title: Text(strings
+                              .get(PaperTodoStringKeys.hideLinkedNoteCapsules)),
+                          value: _hideLinkedNotesFromCapsules,
+                          onChanged: _enableTodoNoteLinks
+                              ? (value) => setState(
+                                  () => _hideLinkedNotesFromCapsules = value)
+                              : null,
+                        ),
+                      ],
+                      if (_selectedSettingsSection ==
+                          _SettingsSection.sync) ...[
+                        const Divider(height: 24),
+                        _settingsSectionHeader(
+                          section: _SettingsSection.sync,
+                          icon: Icons.cloud_sync_outlined,
+                          label: strings.get(PaperTodoStringKeys.webDavSync),
+                        ),
+                        const SizedBox(height: 4),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const Icon(Icons.sync_outlined),
+                          title:
+                              Text(strings.get(PaperTodoStringKeys.webDavSync)),
+                          value: _enabled,
+                          onChanged: (value) =>
+                              setState(() => _enabled = value),
+                        ),
+                        const SizedBox(height: 12),
+                        _webDavPresetSelector(context),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _endpointController,
+                          focusNode: _endpointFocusNode,
+                          enabled: _enabled,
+                          onChanged: (_) => _clearWebDavError(
+                            WebDavSyncConfigurationIssue.endpoint,
+                          ),
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            labelText:
+                                strings.get(PaperTodoStringKeys.webDavUrl),
+                            errorText: _endpointErrorText,
+                            prefixIcon: const Icon(Icons.link_outlined),
+                          ),
+                          keyboardType: TextInputType.url,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _rootPathController,
+                          focusNode: _rootPathFocusNode,
+                          enabled: _enabled,
+                          onChanged: (_) => _clearWebDavError(
+                            WebDavSyncConfigurationIssue.rootPath,
+                          ),
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            labelText:
+                                strings.get(PaperTodoStringKeys.remoteFolder),
+                            errorText: _rootPathErrorText,
+                            prefixIcon: const Icon(Icons.folder_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _usernameController,
+                          focusNode: _usernameFocusNode,
+                          enabled: _enabled,
+                          onChanged: (_) => _clearWebDavError(
+                            WebDavSyncConfigurationIssue.username,
+                          ),
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            labelText:
+                                strings.get(PaperTodoStringKeys.username),
+                            errorText: _usernameErrorText,
+                            prefixIcon: const Icon(Icons.person_outline),
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _passwordController,
+                          focusNode: _passwordFocusNode,
+                          enabled: _enabled,
+                          obscureText: _obscurePassword,
+                          onChanged: (_) => _clearWebDavError(
+                            WebDavSyncConfigurationIssue.password,
+                          ),
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            labelText:
+                                strings.get(PaperTodoStringKeys.password),
+                            errorText: _passwordErrorText,
+                            prefixIcon: const Icon(Icons.key_outlined),
+                            suffixIcon: IconButton(
+                              tooltip: _enableToolTips
+                                  ? _obscurePassword
+                                      ? strings
+                                          .get(PaperTodoStringKeys.showPassword)
+                                      : strings
+                                          .get(PaperTodoStringKeys.hidePassword)
+                                  : null,
+                              onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword),
+                              icon: Icon(_obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _encryptionPassphraseController,
+                          focusNode: _encryptionPassphraseFocusNode,
+                          enabled: _enabled,
+                          obscureText: _obscureEncryptionPassphrase,
+                          onChanged: (_) => _clearWebDavError(
+                            WebDavSyncConfigurationIssue.encryptionPassphrase,
+                          ),
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            labelText: strings.get(
+                                PaperTodoStringKeys.syncEncryptionPassphrase),
+                            helperText: strings
+                                .get(PaperTodoStringKeys.passphraseHelper),
+                            errorText: _encryptionPassphraseErrorText,
+                            prefixIcon:
+                                const Icon(Icons.enhanced_encryption_outlined),
+                            suffixIcon: IconButton(
+                              tooltip: _enableToolTips
+                                  ? _obscureEncryptionPassphrase
+                                      ? strings.get(
+                                          PaperTodoStringKeys.showPassphrase)
+                                      : strings.get(
+                                          PaperTodoStringKeys.hidePassphrase)
+                                  : null,
+                              onPressed: () => setState(() =>
+                                  _obscureEncryptionPassphrase =
+                                      !_obscureEncryptionPassphrase),
+                              icon: Icon(_obscureEncryptionPassphrase
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _adaptiveFieldPair(
+                          first: TextField(
+                            controller: _intervalController,
+                            enabled: _enabled,
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              labelText: strings
+                                  .get(PaperTodoStringKeys.intervalMinutes),
+                              prefixIcon: const Icon(Icons.schedule_outlined),
+                            ),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                          ),
+                          second: TextField(
+                            controller: _requestTimeoutController,
+                            enabled: _enabled,
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              labelText: strings.get(
+                                  PaperTodoStringKeys.requestTimeoutSeconds),
+                              prefixIcon: const Icon(Icons.timer_outlined),
+                            ),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        _SettingsCheckboxTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                              strings.get(PaperTodoStringKeys.syncOnStart)),
+                          value: _autoSyncOnStart,
+                          onChanged: _enabled
+                              ? (value) =>
+                                  setState(() => _autoSyncOnStart = value)
+                              : null,
+                        ),
+                        if (_errorText != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _errorText!,
+                            style: TextStyle(color: colorScheme.error),
+                          ),
+                        ],
+                      ],
+                    ],
                   ),
-                  _SettingsChoice(
-                    value: 'light',
-                    label: strings.get(PaperTodoStringKeys.themeLight),
-                    icon: Icons.light_mode_outlined,
-                  ),
-                  _SettingsChoice(
-                    value: 'dark',
-                    label: strings.get(PaperTodoStringKeys.themeDark),
-                    icon: Icons.dark_mode_outlined,
-                  ),
-                ],
-                onChanged: (value) => setState(() => _theme = value),
-              ),
-              const SizedBox(height: 12),
-              _adaptiveChoiceSelector(
-                key: const ValueKey('settings-color-scheme-selector'),
-                labelText: strings.get(PaperTodoStringKeys.colorScheme),
-                compactIcon: Icons.palette_outlined,
-                selectedValue: _colorScheme,
-                choices: [
-                  _SettingsChoice(
-                    value: ColorSchemes.warm,
-                    label: strings.get(PaperTodoStringKeys.colorWarm),
-                  ),
-                  _SettingsChoice(
-                    value: ColorSchemes.ink,
-                    label: strings.get(PaperTodoStringKeys.colorInk),
-                  ),
-                  _SettingsChoice(
-                    value: ColorSchemes.forest,
-                    label: strings.get(PaperTodoStringKeys.colorForest),
-                  ),
-                  _SettingsChoice(
-                    value: ColorSchemes.rose,
-                    label: strings.get(PaperTodoStringKeys.colorRose),
-                  ),
-                ],
-                onChanged: (value) => setState(() => _colorScheme = value),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _customThemeColorController,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: strings.get(PaperTodoStringKeys.customThemeColor),
-                  prefixIcon: const Icon(Icons.palette_outlined),
                 ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                strings.get(PaperTodoStringKeys.appearance),
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              _adaptiveChoiceSelector(
-                key: const ValueKey('settings-markdown-mode-selector'),
-                labelText: strings.get(PaperTodoStringKeys.markdownMode),
-                compactIcon: Icons.article_outlined,
-                selectedValue: _markdownRenderMode,
-                choices: [
-                  _SettingsChoice(
-                    value: MarkdownRenderModes.off,
-                    label: strings.get(PaperTodoStringKeys.markdownOff),
-                    icon: Icons.edit_outlined,
-                  ),
-                  _SettingsChoice(
-                    value: MarkdownRenderModes.basic,
-                    label: strings.get(PaperTodoStringKeys.basic),
-                    icon: Icons.article_outlined,
-                  ),
-                  _SettingsChoice(
-                    value: MarkdownRenderModes.enhanced,
-                    label: strings.get(PaperTodoStringKeys.enhanced),
-                    icon: Icons.vertical_split_outlined,
-                  ),
-                ],
-                onChanged: (value) =>
-                    setState(() => _markdownRenderMode = value),
-              ),
-              const SizedBox(height: 12),
-              _adaptiveChoiceSelector(
-                key: const ValueKey('settings-todo-visual-size-selector'),
-                labelText: strings.get(PaperTodoStringKeys.todoVisualSize),
-                compactIcon: Icons.format_size_outlined,
-                selectedValue: _todoVisualSize,
-                choices: [
-                  _SettingsChoice(
-                    value: TodoVisualSizes.small,
-                    label: strings.get(PaperTodoStringKeys.small),
-                  ),
-                  _SettingsChoice(
-                    value: TodoVisualSizes.medium,
-                    label: strings.get(PaperTodoStringKeys.medium),
-                  ),
-                  _SettingsChoice(
-                    value: TodoVisualSizes.large,
-                    label: strings.get(PaperTodoStringKeys.large),
-                  ),
-                  _SettingsChoice(
-                    value: TodoVisualSizes.extraLarge,
-                    label: strings.get(PaperTodoStringKeys.xl),
-                  ),
-                ],
-                onChanged: (value) => setState(() => _todoVisualSize = value),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _uiFontPreset,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: strings.get(PaperTodoStringKeys.fontPreset),
-                  prefixIcon: const Icon(Icons.font_download_outlined),
-                ),
-                isExpanded: true,
-                items: [
-                  DropdownMenuItem(
-                    value: UiFontPresets.defaultPreset,
-                    child: Text(strings.get(PaperTodoStringKeys.defaultFont)),
-                  ),
-                  DropdownMenuItem(
-                    value: UiFontPresets.yaHei,
-                    child: Text(strings.get(PaperTodoStringKeys.yaHei)),
-                  ),
-                  DropdownMenuItem(
-                    value: UiFontPresets.dengXian,
-                    child: Text(strings.get(PaperTodoStringKeys.dengXian)),
-                  ),
-                  DropdownMenuItem(
-                    value: UiFontPresets.serif,
-                    child: Text(strings.get(PaperTodoStringKeys.serif)),
-                  ),
-                  DropdownMenuItem(
-                    value: UiFontPresets.mono,
-                    child: Text(strings.get(PaperTodoStringKeys.mono)),
-                  ),
-                  DropdownMenuItem(
-                    value: UiFontPresets.custom,
-                    child: Text(strings.get(PaperTodoStringKeys.custom)),
-                  ),
-                ],
-                onChanged: (value) => setState(
-                  () => _uiFontPreset =
-                      UiFontPresets.normalize(value ?? _uiFontPreset),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _fontFamilyField(),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _externalMarkdownExtensionController,
-                focusNode: _externalMarkdownExtensionFocusNode,
-                onChanged: (_) {
-                  if (_externalMarkdownExtensionErrorText == null) {
-                    return;
-                  }
-                  setState(() => _externalMarkdownExtensionErrorText = null);
-                },
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: strings.get(
-                    PaperTodoStringKeys.externalMarkdownExtension,
-                  ),
-                  errorText: _externalMarkdownExtensionErrorText,
-                  prefixIcon: const Icon(Icons.file_open_outlined),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _SettingsSlider(
-                icon: Icons.zoom_in_outlined,
-                label: strings.get(PaperTodoStringKeys.zoom),
-                valueLabel: '${(_zoom * 100).round()}%',
-                value: _zoom,
-                min: 0.5,
-                max: 1.5,
-                divisions: 10,
-                onChanged: (value) => setState(() => _zoom = value),
-              ),
-              _SettingsSlider(
-                icon: Icons.short_text_outlined,
-                label: strings.get(PaperTodoStringKeys.maxTitleLength),
-                valueLabel: '${_maxTitleLength.round()} chars',
-                value: _maxTitleLength,
-                min: 2,
-                max: 20,
-                divisions: 18,
-                onChanged: (value) => setState(() => _maxTitleLength = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: _SettingsHelpIcon(
-                  message: strings.get(PaperTodoStringKeys.tooltipsHelp),
-                ),
-                title: Text(strings.get(PaperTodoStringKeys.tooltips)),
-                value: _enableToolTips,
-                onChanged: (value) => setState(() => _enableToolTips = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.animation_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.animations)),
-                value: _enableAnimations,
-                onChanged: (value) => setState(() => _enableAnimations = value),
-              ),
-              _SettingsSlider(
-                icon: Icons.checklist_outlined,
-                label: strings.get(PaperTodoStringKeys.todoSpacing),
-                valueLabel: _todoLineSpacing.toStringAsFixed(1),
-                value: _todoLineSpacing,
-                min: 0.8,
-                max: 5.0,
-                divisions: 42,
-                onChanged: (value) => setState(() => _todoLineSpacing = value),
-              ),
-              _SettingsSlider(
-                icon: Icons.notes_outlined,
-                label: strings.get(PaperTodoStringKeys.noteSpacing),
-                valueLabel: _noteLineSpacing.toStringAsFixed(1),
-                value: _noteLineSpacing,
-                min: 0.8,
-                max: 5.0,
-                divisions: 42,
-                onChanged: (value) => setState(() => _noteLineSpacing = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.event_repeat_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.relativeDueDates)),
-                value: _showTodoDueRelativeTime,
-                onChanged: (value) =>
-                    setState(() => _showTodoDueRelativeTime = value),
-              ),
-              const SizedBox(height: 8),
-              _adaptiveChoiceSelector(
-                key: const ValueKey('settings-due-year-selector'),
-                labelText: strings.get(PaperTodoStringKeys.dueYearDisplay),
-                compactIcon: Icons.event_outlined,
-                selectedValue: _todoDueYearDisplayMode,
-                choices: [
-                  _SettingsChoice(
-                    value: TodoDueYearDisplayModes.none,
-                    label: strings.get(PaperTodoStringKeys.noYear),
-                  ),
-                  _SettingsChoice(
-                    value: TodoDueYearDisplayModes.short,
-                    label: strings.get(PaperTodoStringKeys.yy),
-                  ),
-                  _SettingsChoice(
-                    value: TodoDueYearDisplayModes.full,
-                    label: strings.get(PaperTodoStringKeys.yyyy),
-                  ),
-                ],
-                onChanged: _showTodoDueRelativeTime
-                    ? null
-                    : (value) =>
-                        setState(() => _todoDueYearDisplayMode = value),
-              ),
-              const Divider(height: 24),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.add_task_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.topBarNewTodo)),
-                value: _showTopBarNewTodoButton,
-                onChanged: (value) =>
-                    setState(() => _showTopBarNewTodoButton = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.note_add_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.topBarNewNote)),
-                value: _showTopBarNewNoteButton,
-                onChanged: (value) =>
-                    setState(() => _showTopBarNewNoteButton = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.file_open_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.topBarOpenSurface)),
-                value: _showTopBarExternalOpenButton,
-                onChanged: (value) =>
-                    setState(() => _showTopBarExternalOpenButton = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.view_agenda_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.capsuleMode)),
-                value: _useCapsuleMode,
-                onChanged: (value) => setState(() {
-                  _useCapsuleMode = value;
-                  if (!value) {
-                    _useDeepCapsuleMode = false;
-                    _useCapsuleCollapseAll = false;
-                    _capsuleCollapseAllActive = false;
-                    _showDeepCapsuleWhileExpanded = false;
-                    _collapseExpandedDeepCapsuleOnClick = false;
-                    _hideDeepCapsulesWhenCovered = false;
-                    _hideDeepCapsulesWhenFullscreen = false;
-                  }
-                }),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.stacked_line_chart_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.deepCapsuleMode)),
-                value: _useDeepCapsuleMode,
-                onChanged: _useCapsuleMode
-                    ? (value) => setState(() {
-                          _useDeepCapsuleMode = value;
-                          if (!value) {
-                            _showDeepCapsuleWhileExpanded = false;
-                            _collapseExpandedDeepCapsuleOnClick = false;
-                            _hideDeepCapsulesWhenCovered = false;
-                            _hideDeepCapsulesWhenFullscreen = false;
-                          }
-                        })
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.unfold_less_outlined),
-                title:
-                    Text(strings.get(PaperTodoStringKeys.collapseAllControl)),
-                value: _useCapsuleCollapseAll,
-                onChanged: _useCapsuleMode
-                    ? (value) => setState(() {
-                          _useCapsuleCollapseAll = value;
-                          if (!value) {
-                            _capsuleCollapseAllActive = false;
-                          }
-                        })
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.vertical_align_center_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.collapseAllActive)),
-                value: _capsuleCollapseAllActive,
-                onChanged: _useCapsuleMode && _useCapsuleCollapseAll
-                    ? (value) =>
-                        setState(() => _capsuleCollapseAllActive = value)
-                    : null,
-              ),
-              const SizedBox(height: 8),
-              _adaptiveChoiceSelector(
-                key: const ValueKey('settings-deep-capsule-side-selector'),
-                labelText: strings.get(PaperTodoStringKeys.deepCapsuleSide),
-                compactIcon: Icons.vertical_align_center_outlined,
-                selectedValue: _deepCapsuleSide,
-                choices: [
-                  _SettingsChoice(
-                    value: DeepCapsuleSides.left,
-                    label: strings.get(PaperTodoStringKeys.left),
-                    icon: Icons.keyboard_double_arrow_left_outlined,
-                  ),
-                  _SettingsChoice(
-                    value: DeepCapsuleSides.right,
-                    label: strings.get(PaperTodoStringKeys.right),
-                    icon: Icons.keyboard_double_arrow_right_outlined,
-                  ),
-                ],
-                onChanged: _useCapsuleMode && _useDeepCapsuleMode
-                    ? (value) => setState(() => _deepCapsuleSide = value)
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _deepCapsuleTopMarginController,
-                enabled: _useCapsuleMode && _useDeepCapsuleMode,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: strings.get(
-                    PaperTodoStringKeys.deepCapsuleTopMargin,
-                  ),
-                  prefixIcon: const Icon(Icons.vertical_align_top_outlined),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _deepCapsuleMonitorController,
-                enabled: _useCapsuleMode && _useDeepCapsuleMode,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText:
-                      strings.get(PaperTodoStringKeys.deepCapsuleMonitor),
-                  prefixIcon: const Icon(Icons.monitor_outlined),
-                ),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.open_in_full_outlined),
-                title: Text(
-                  strings.get(PaperTodoStringKeys.showDeepCapsuleWhileExpanded),
-                ),
-                value: _showDeepCapsuleWhileExpanded,
-                onChanged: _useCapsuleMode && _useDeepCapsuleMode
-                    ? (value) =>
-                        setState(() => _showDeepCapsuleWhileExpanded = value)
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.ads_click_outlined),
-                title: Text(
-                  strings.get(
-                    PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick,
-                  ),
-                ),
-                value: _collapseExpandedDeepCapsuleOnClick,
-                onChanged: _useCapsuleMode && _useDeepCapsuleMode
-                    ? (value) => setState(
-                          () => _collapseExpandedDeepCapsuleOnClick = value,
-                        )
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.layers_clear_outlined),
-                title: Text(
-                  strings.get(PaperTodoStringKeys.hideCoveredDeepCapsules),
-                ),
-                value: _hideDeepCapsulesWhenCovered,
-                onChanged: _useCapsuleMode && _useDeepCapsuleMode
-                    ? (value) =>
-                        setState(() => _hideDeepCapsulesWhenCovered = value)
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.fullscreen_exit_outlined),
-                title: Text(
-                  strings.get(PaperTodoStringKeys.hideFullscreenDeepCapsules),
-                ),
-                value: _hideDeepCapsulesWhenFullscreen,
-                onChanged: _useCapsuleMode && _useDeepCapsuleMode
-                    ? (value) => setState(
-                          () => _hideDeepCapsulesWhenFullscreen = value,
-                        )
-                    : null,
-              ),
-              if (_hasDesktopIntegrationSettings) const Divider(height: 24),
-              if (widget.supportsStartAtLogin)
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.login_outlined),
-                  title: Text(strings.get(PaperTodoStringKeys.startAtLogin)),
-                  value: _startAtLogin,
-                  onChanged: (value) => setState(() => _startAtLogin = value),
-                ),
-              if (widget.supportsHideFromWindowSwitcher)
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.visibility_off_outlined),
-                  title: Text(
-                    strings.get(PaperTodoStringKeys.hideFromTaskSwitcher),
-                  ),
-                  value: _hideFromWindowSwitcher,
-                  onChanged: (value) =>
-                      setState(() => _hideFromWindowSwitcher = value),
-                ),
-              if (widget.supportsFullscreenTopmostMode) ...[
-                const SizedBox(height: 8),
-                _adaptiveChoiceSelector(
-                  key: const ValueKey('settings-fullscreen-topmost-selector'),
-                  labelText:
-                      strings.get(PaperTodoStringKeys.fullscreenTopmostMode),
-                  compactIcon: Icons.fullscreen_exit_outlined,
-                  selectedValue: _fullscreenTopmostMode,
-                  choices: [
-                    _SettingsChoice(
-                      value: FullscreenTopmostModes.avoid,
-                      label: strings.get(PaperTodoStringKeys.avoidFullscreen),
-                      icon: Icons.fullscreen_exit_outlined,
-                    ),
-                    _SettingsChoice(
-                      value: FullscreenTopmostModes.stayOnTop,
-                      label: strings.get(PaperTodoStringKeys.stayOnTop),
-                      icon: Icons.push_pin_outlined,
-                    ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _fullscreenTopmostMode = value),
-                ),
-              ],
-              if (widget.supportsGlobalHotkeys) ...[
-                const SizedBox(height: 12),
-                _adaptiveFieldPair(
-                  first: _hotKeyCaptureField(
-                    controller: _pinnedTodoHotKeyController,
-                    labelText:
-                        strings.get(PaperTodoStringKeys.pinnedTodoHotkey),
-                    icon: Icons.keyboard_outlined,
-                  ),
-                  second: _hotKeyCaptureField(
-                    controller: _pinnedNoteHotKeyController,
-                    labelText:
-                        strings.get(PaperTodoStringKeys.pinnedNoteHotkey),
-                    icon: Icons.keyboard_command_key_outlined,
-                  ),
-                ),
-              ],
-              if (widget.supportsScriptCapsules) ...[
-                const Divider(height: 24),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.terminal_outlined),
-                  title: Text(
-                    strings.get(
-                      PaperTodoStringKeys.runLinkedScriptCapsulesOnClick,
-                    ),
-                  ),
-                  value: _runLinkedScriptCapsulesOnClick,
-                  onChanged: _enableTodoNoteLinks
-                      ? (value) => setState(
-                            () => _runLinkedScriptCapsulesOnClick = value,
-                          )
-                      : null,
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.memory_outlined),
-                  title: Text(
-                    strings.get(
-                      PaperTodoStringKeys.persistentPowerShellProcess,
-                    ),
-                  ),
-                  value: _usePersistentPowerShellProcess,
-                  onChanged: (value) => setState(
-                    () => _usePersistentPowerShellProcess = value,
-                  ),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.bolt_outlined),
-                  title:
-                      Text(strings.get(PaperTodoStringKeys.preferPowerShell7)),
-                  value: _preferPowerShell7,
-                  onChanged: (value) =>
-                      setState(() => _preferPowerShell7 = value),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.visibility_off_outlined),
-                  title: Text(
-                      strings.get(PaperTodoStringKeys.hideScriptRunWindow)),
-                  value: _hideScriptRunWindow,
-                  onChanged: (value) =>
-                      setState(() => _hideScriptRunWindow = value),
-                ),
-              ],
-              const Divider(height: 24),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.notifications_active_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.todoReminders)),
-                value: _useTodoReminderInterval,
-                onChanged: (value) =>
-                    setState(() => _useTodoReminderInterval = value),
-              ),
-              const SizedBox(height: 8),
-              _adaptiveFieldPair(
-                first: TextField(
-                  controller: _reminderIntervalController,
-                  enabled: _useTodoReminderInterval,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    labelText:
-                        strings.get(PaperTodoStringKeys.reminderInterval),
-                    prefixIcon: const Icon(Icons.timer_outlined),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                second: _adaptiveChoiceSelector(
-                  key: const ValueKey('settings-reminder-unit-selector'),
-                  labelText: strings.get(PaperTodoStringKeys.reminderUnit),
-                  compactIcon: Icons.schedule_outlined,
-                  selectedValue: _todoReminderIntervalUnit,
-                  choices: [
-                    _SettingsChoice(
-                      value: TodoReminderIntervalUnits.minutes,
-                      label: strings.get(PaperTodoStringKeys.minutes),
-                    ),
-                    _SettingsChoice(
-                      value: TodoReminderIntervalUnits.hours,
-                      label: strings.get(PaperTodoStringKeys.hours),
-                    ),
-                  ],
-                  onChanged: _useTodoReminderInterval
-                      ? (value) =>
-                          setState(() => _todoReminderIntervalUnit = value)
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _adaptiveChoiceSelector(
-                key: const ValueKey('settings-reminder-scope-selector'),
-                labelText: strings.get(PaperTodoStringKeys.reminderScope),
-                compactIcon: Icons.notifications_active_outlined,
-                selectedValue: _todoReminderScope,
-                choices: [
-                  _SettingsChoice(
-                    value: TodoReminderScopes.all,
-                    label: strings.get(PaperTodoStringKeys.allDue),
-                    icon: Icons.format_list_bulleted_outlined,
-                  ),
-                  _SettingsChoice(
-                    value: TodoReminderScopes.nearest,
-                    label: strings.get(PaperTodoStringKeys.nearest),
-                    icon: Icons.near_me_outlined,
-                  ),
-                ],
-                onChanged: _useTodoReminderInterval
-                    ? (value) => setState(() => _todoReminderScope = value)
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _reminderDurationController,
-                enabled: _useTodoReminderInterval,
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText:
-                      strings.get(PaperTodoStringKeys.reminderDisplaySeconds),
-                  prefixIcon: const Icon(Icons.hourglass_bottom_outlined),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const Divider(height: 24),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.account_tree_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.todoNoteLinks)),
-                value: _enableTodoNoteLinks,
-                onChanged: (value) =>
-                    setState(() => _enableTodoNoteLinks = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.notes_outlined),
-                title:
-                    Text(strings.get(PaperTodoStringKeys.showLinkedNoteName)),
-                value: _showLinkedNoteName,
-                onChanged: _enableTodoNoteLinks
-                    ? (value) => setState(() => _showLinkedNoteName = value)
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.subject_outlined),
-                title: Text(
-                  strings.get(PaperTodoStringKeys.allowLongLinkedNoteTitles),
-                ),
-                value: _allowLongLinkedNoteTitles,
-                onChanged: _enableTodoNoteLinks && _showLinkedNoteName
-                    ? (value) =>
-                        setState(() => _allowLongLinkedNoteTitles = value)
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.layers_clear_outlined),
-                title: Text(
-                    strings.get(PaperTodoStringKeys.hideLinkedNoteCapsules)),
-                value: _hideLinkedNotesFromCapsules,
-                onChanged: _enableTodoNoteLinks
-                    ? (value) =>
-                        setState(() => _hideLinkedNotesFromCapsules = value)
-                    : null,
-              ),
-              const Divider(height: 24),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.sync_outlined),
-                title: Text(strings.get(PaperTodoStringKeys.webDavSync)),
-                value: _enabled,
-                onChanged: (value) => setState(() => _enabled = value),
-              ),
-              const SizedBox(height: 12),
-              _webDavPresetSelector(context),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _endpointController,
-                focusNode: _endpointFocusNode,
-                enabled: _enabled,
-                onChanged: (_) => _clearWebDavError(
-                  WebDavSyncConfigurationIssue.endpoint,
-                ),
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: strings.get(PaperTodoStringKeys.webDavUrl),
-                  errorText: _endpointErrorText,
-                  prefixIcon: const Icon(Icons.link_outlined),
-                ),
-                keyboardType: TextInputType.url,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _rootPathController,
-                focusNode: _rootPathFocusNode,
-                enabled: _enabled,
-                onChanged: (_) => _clearWebDavError(
-                  WebDavSyncConfigurationIssue.rootPath,
-                ),
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: strings.get(PaperTodoStringKeys.remoteFolder),
-                  errorText: _rootPathErrorText,
-                  prefixIcon: const Icon(Icons.folder_outlined),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _usernameController,
-                focusNode: _usernameFocusNode,
-                enabled: _enabled,
-                onChanged: (_) => _clearWebDavError(
-                  WebDavSyncConfigurationIssue.username,
-                ),
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: strings.get(PaperTodoStringKeys.username),
-                  errorText: _usernameErrorText,
-                  prefixIcon: const Icon(Icons.person_outline),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _passwordController,
-                focusNode: _passwordFocusNode,
-                enabled: _enabled,
-                obscureText: _obscurePassword,
-                onChanged: (_) => _clearWebDavError(
-                  WebDavSyncConfigurationIssue.password,
-                ),
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText: strings.get(PaperTodoStringKeys.password),
-                  errorText: _passwordErrorText,
-                  prefixIcon: const Icon(Icons.key_outlined),
-                  suffixIcon: IconButton(
-                    tooltip: _enableToolTips
-                        ? _obscurePassword
-                            ? strings.get(PaperTodoStringKeys.showPassword)
-                            : strings.get(PaperTodoStringKeys.hidePassword)
-                        : null,
-                    onPressed: () =>
-                        setState(() => _obscurePassword = !_obscurePassword),
-                    icon: Icon(_obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _encryptionPassphraseController,
-                focusNode: _encryptionPassphraseFocusNode,
-                enabled: _enabled,
-                obscureText: _obscureEncryptionPassphrase,
-                onChanged: (_) => _clearWebDavError(
-                  WebDavSyncConfigurationIssue.encryptionPassphrase,
-                ),
-                decoration: InputDecoration(
-                  border: const OutlineInputBorder(),
-                  labelText:
-                      strings.get(PaperTodoStringKeys.syncEncryptionPassphrase),
-                  helperText: strings.get(PaperTodoStringKeys.passphraseHelper),
-                  errorText: _encryptionPassphraseErrorText,
-                  prefixIcon: const Icon(Icons.enhanced_encryption_outlined),
-                  suffixIcon: IconButton(
-                    tooltip: _enableToolTips
-                        ? _obscureEncryptionPassphrase
-                            ? strings.get(PaperTodoStringKeys.showPassphrase)
-                            : strings.get(PaperTodoStringKeys.hidePassphrase)
-                        : null,
-                    onPressed: () => setState(() =>
-                        _obscureEncryptionPassphrase =
-                            !_obscureEncryptionPassphrase),
-                    icon: Icon(_obscureEncryptionPassphrase
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _adaptiveFieldPair(
-                first: TextField(
-                  controller: _intervalController,
-                  enabled: _enabled,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    labelText: strings.get(PaperTodoStringKeys.intervalMinutes),
-                    prefixIcon: const Icon(Icons.schedule_outlined),
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                ),
-                second: TextField(
-                  controller: _requestTimeoutController,
-                  enabled: _enabled,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    labelText:
-                        strings.get(PaperTodoStringKeys.requestTimeoutSeconds),
-                    prefixIcon: const Icon(Icons.timer_outlined),
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                ),
-              ),
-              const SizedBox(height: 4),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(strings.get(PaperTodoStringKeys.syncOnStart)),
-                value: _autoSyncOnStart,
-                onChanged: _enabled
-                    ? (value) =>
-                        setState(() => _autoSyncOnStart = value ?? false)
-                    : null,
-              ),
-              if (_errorText != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _errorText!,
-                  style: TextStyle(color: colorScheme.error),
-                ),
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
       actions: [
@@ -1481,8 +1615,332 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     );
   }
 
+  Widget _customThemeColorEditor() {
+    final colors = Theme.of(context).colorScheme;
+    final normalized = _normalizeColorHex(_customThemeColorController.text);
+    final selectedColor = normalized.isEmpty
+        ? colors.primary
+        : Color(int.parse('FF${normalized.substring(1)}', radix: 16));
+    final currentLabel = normalized.isEmpty
+        ? strings.get(PaperTodoStringKeys.themeColorDefault)
+        : normalized;
+
+    return Semantics(
+      label: strings.get(PaperTodoStringKeys.customThemeColor),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Material(
+            color: selectedColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: colors.outlineVariant),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: const ValueKey('settings-theme-color-swatch'),
+              onTap: _showCustomThemeColorDialog,
+              child: const SizedBox(width: 58, height: 42),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  currentLabel,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    FilledButton.tonalIcon(
+                      key: const ValueKey('settings-theme-color-pick'),
+                      onPressed: _showCustomThemeColorDialog,
+                      icon: const Icon(Icons.colorize_outlined, size: 16),
+                      label: Text(
+                        strings.get(PaperTodoStringKeys.themeColorPick),
+                      ),
+                    ),
+                    TextButton(
+                      key: const ValueKey('settings-theme-color-clear'),
+                      onPressed: normalized.isEmpty
+                          ? null
+                          : () => setState(
+                                () => _customThemeColorController.clear(),
+                              ),
+                      child: Text(
+                        strings.get(PaperTodoStringKeys.themeColorClear),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCustomThemeColorDialog() async {
+    final normalized = _normalizeColorHex(_customThemeColorController.text);
+    final initialColor = normalized.isEmpty
+        ? Theme.of(context).colorScheme.primary
+        : Color(int.parse('FF${normalized.substring(1)}', radix: 16));
+    var hsv = HSVColor.fromColor(initialColor);
+    final selected = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final color = hsv.toColor();
+            Widget channelSlider({
+              required String label,
+              required double value,
+              required double max,
+              required ValueChanged<double> onChanged,
+            }) {
+              return Row(
+                children: [
+                  SizedBox(
+                    width: 22,
+                    child: Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ),
+                  Expanded(
+                    child: Slider(
+                      value: value,
+                      min: 0,
+                      max: max,
+                      onChanged: onChanged,
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            return AlertDialog(
+              title: Text(strings.get(PaperTodoStringKeys.themeColorPick)),
+              content: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    channelSlider(
+                      label: 'H',
+                      value: hsv.hue,
+                      max: 360,
+                      onChanged: (value) =>
+                          setDialogState(() => hsv = hsv.withHue(value)),
+                    ),
+                    channelSlider(
+                      label: 'S',
+                      value: hsv.saturation,
+                      max: 1,
+                      onChanged: (value) => setDialogState(
+                        () => hsv = hsv.withSaturation(value),
+                      ),
+                    ),
+                    channelSlider(
+                      label: 'V',
+                      value: hsv.value,
+                      max: 1,
+                      onChanged: (value) =>
+                          setDialogState(() => hsv = hsv.withValue(value)),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
+                ),
+                FilledButton(
+                  key: const ValueKey('settings-theme-color-apply'),
+                  onPressed: () => Navigator.of(dialogContext).pop(color),
+                  child: Text(strings.get(PaperTodoStringKeys.themeColorPick)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    final red = (selected.r * 255).round().toRadixString(16).padLeft(2, '0');
+    final green = (selected.g * 255).round().toRadixString(16).padLeft(2, '0');
+    final blue = (selected.b * 255).round().toRadixString(16).padLeft(2, '0');
+    setState(() {
+      _customThemeColorController.text = '#$red$green$blue'.toUpperCase();
+    });
+  }
+
+  Widget _settingsNavigation({required bool compact}) {
+    final colors = Theme.of(context).colorScheme;
+    return ListView(
+      key: const ValueKey('settings-category-navigation'),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      children: [
+        for (final section in _SettingsSection.values)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Tooltip(
+              message: compact ? _settingsSectionLabel(section) : '',
+              child: Material(
+                color: section == _selectedSettingsSection
+                    ? colors.primaryContainer
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  key: ValueKey('settings-category-${section.name}'),
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _selectSettingsSection(section),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 0 : 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: compact
+                            ? MainAxisAlignment.center
+                            : MainAxisAlignment.start,
+                        children: [
+                          Icon(
+                            _settingsSectionIcon(section),
+                            size: 19,
+                            color: section == _selectedSettingsSection
+                                ? colors.onPrimaryContainer
+                                : colors.onSurfaceVariant,
+                          ),
+                          if (!compact) ...[
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _settingsSectionLabel(section),
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(
+                                      color: section == _selectedSettingsSection
+                                          ? colors.onPrimaryContainer
+                                          : colors.onSurfaceVariant,
+                                      fontWeight:
+                                          section == _selectedSettingsSection
+                                              ? FontWeight.w600
+                                              : FontWeight.w500,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _settingsSectionHeader({
+    required _SettingsSection section,
+    required IconData icon,
+    required String label,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      key: _settingsSectionKeys[section],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: colors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _selectSettingsSection(_SettingsSection section) {
+    setState(() => _selectedSettingsSection = section);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _settingsSectionKeys[section]?.currentContext;
+      if (!mounted || target == null) {
+        return;
+      }
+      Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        alignment: 0,
+      );
+    });
+  }
+
+  String _settingsSectionLabel(_SettingsSection section) {
+    return switch (section) {
+      _SettingsSection.display => strings.get(PaperTodoStringKeys.appearance),
+      _SettingsSection.todoAndNotes =>
+        strings.get(PaperTodoStringKeys.settingsTodoAndNotes),
+      _SettingsSection.capsules =>
+        strings.get(PaperTodoStringKeys.settingsCapsules),
+      _SettingsSection.general =>
+        strings.get(PaperTodoStringKeys.settingsGeneralAdvanced),
+      _SettingsSection.sync => strings.get(PaperTodoStringKeys.webDavSync),
+    };
+  }
+
+  IconData _settingsSectionIcon(_SettingsSection section) {
+    return switch (section) {
+      _SettingsSection.display => Icons.palette_outlined,
+      _SettingsSection.todoAndNotes => Icons.checklist_outlined,
+      _SettingsSection.capsules => Icons.view_agenda_outlined,
+      _SettingsSection.general => Icons.tune_outlined,
+      _SettingsSection.sync => Icons.cloud_sync_outlined,
+    };
+  }
+
   Widget _fontFamilyField() {
-    final enabled = _uiFontPreset == UiFontPresets.custom;
+    const enabled = true;
     return LayoutBuilder(
       builder: (context, constraints) {
         final optionsWidth =
@@ -1507,7 +1965,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
           },
           onSelected: (fontFamily) {
             setState(() {
-              _uiFontPreset = UiFontPresets.custom;
+              _uiFontPreset = UiFontPresets.defaultPreset;
               _fontFamilyController.text = fontFamily;
             });
           },
@@ -1800,6 +2258,33 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     );
   }
 
+  Widget _lineSpacingEditor({
+    required Key key,
+    required TextEditingController controller,
+    required IconData icon,
+    required String label,
+  }) {
+    return TextField(
+      key: key,
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d{0,1}(?:\.\d{0,2})?')),
+      ],
+      decoration: InputDecoration(
+        border: const OutlineInputBorder(),
+        labelText: label,
+        prefixIcon: Icon(icon),
+        helperText: '0.8 - 5.0',
+        suffixIcon: IconButton(
+          tooltip: strings.get(PaperTodoStringKeys.themeColorClear),
+          onPressed: () => setState(() => controller.text = '1.0'),
+          icon: const Icon(Icons.restart_alt_outlined),
+        ),
+      ),
+    );
+  }
+
   Widget _webDavPresetSelector(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 600;
     final presetItems = [
@@ -1919,7 +2404,12 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
           ? strings.get(PaperTodoStringKeys.webDavIssuePasswordRequired)
           : strings.get(PaperTodoStringKeys.webDavIssuePasswordInvalid),
       WebDavSyncConfigurationIssue.rootPath =>
-        strings.get(PaperTodoStringKeys.webDavIssueRootPathInvalid),
+        settings.hasProviderRootPathLengthViolation
+            ? strings.format(
+                PaperTodoStringKeys.webDavIssueProviderRootPathTooLong,
+                [settings.providerRootPathFirstSegmentLengthLimit],
+              )
+            : strings.get(PaperTodoStringKeys.webDavIssueRootPathInvalid),
       WebDavSyncConfigurationIssue.encryptionPassphrase =>
         strings.get(PaperTodoStringKeys.webDavIssuePassphraseRequired),
     };
@@ -1958,6 +2448,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         int.tryParse(_reminderIntervalController.text.trim()) ?? 10;
     final reminderDuration =
         int.tryParse(_reminderDurationController.text.trim()) ?? 5;
+    final todoLineSpacing =
+        double.tryParse(_todoLineSpacingController.text.trim()) ?? 1;
+    final noteLineSpacing =
+        double.tryParse(_noteLineSpacingController.text.trim()) ?? 1;
     final deepCapsuleTopMargin =
         double.tryParse(_deepCapsuleTopMarginController.text.trim()) ?? 48;
     final externalMarkdownExtension =
@@ -2053,8 +2547,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         maxTitleLength: _maxTitleLength.round().clamp(2, 20).toInt(),
         enableToolTips: _enableToolTips,
         enableAnimations: _enableAnimations,
-        todoLineSpacing: _todoLineSpacing,
-        noteLineSpacing: _noteLineSpacing,
+        todoLineSpacing: todoLineSpacing.clamp(0.8, 5.0).toDouble(),
+        noteLineSpacing: noteLineSpacing.clamp(0.8, 5.0).toDouble(),
         showTodoDueRelativeTime: _showTodoDueRelativeTime,
         todoDueYearDisplayMode: _todoDueYearDisplayMode,
         useTodoReminderInterval: _useTodoReminderInterval,
@@ -2159,6 +2653,46 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       return '';
     }
     return '#${withoutPrefix.toUpperCase()}';
+  }
+}
+
+enum _SettingsSection {
+  display,
+  todoAndNotes,
+  capsules,
+  general,
+  sync,
+}
+
+class _SettingsCheckboxTile extends StatelessWidget {
+  const _SettingsCheckboxTile({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.secondary,
+    this.contentPadding,
+  });
+
+  final Widget title;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final Widget? secondary;
+  final EdgeInsetsGeometry? contentPadding;
+
+  @override
+  Widget build(BuildContext context) {
+    return CheckboxListTile(
+      contentPadding: contentPadding,
+      controlAffinity: ListTileControlAffinity.leading,
+      secondary: secondary,
+      dense: true,
+      visualDensity: const VisualDensity(horizontal: -2, vertical: -3),
+      title: title,
+      value: value,
+      onChanged: onChanged == null
+          ? null
+          : (nextValue) => onChanged!(nextValue ?? false),
+    );
   }
 }
 

@@ -3513,6 +3513,9 @@ void main() {
           );
         },
         onSync: ({required localState, localUpdatedAtUtc}) async {
+          expect(localState.sync.operationDeviceSequences, {
+            'device-local': 5,
+          });
           return WebDavStateSyncResult(
             status: WebDavStateSyncStatus.uploaded,
             manifest: SyncManifest(
@@ -3592,6 +3595,55 @@ void main() {
       stored.sync.deletedPaperTombstones,
       {'note': DateTime.utc(2026, 7, 11, 9).toIso8601String()},
     );
+  });
+
+  test('sync conflict preserves accepted pending operation progress', () async {
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_app_sync_pending_conflict_progress_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: p.join(directory.path, 'data.json'));
+    final deviceIdPath = p.join(directory.path, 'sync-device-id');
+    final localState = await _persistPendingNoteEdit(
+      store: store,
+      deviceIdPath: deviceIdPath,
+    );
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: (_, {deviceId}) => _FakeWebDavStateSyncService(
+        onUploadOperationLogs: (
+          operations, {
+          previousDeviceSequences,
+        }) async {
+          expect(previousDeviceSequences, {'device-local': 4});
+          return const WebDavOperationLogUploadResult(
+            deviceSequences: {'device-local': 5},
+            uploadedCount: 1,
+            acceptedDeviceSequences: {'device-local': 5},
+          );
+        },
+        onSync: ({required localState, localUpdatedAtUtc}) async {
+          expect(localState.sync.operationDeviceSequences, {
+            'device-local': 5,
+          });
+          return const WebDavStateSyncResult(
+            status: WebDavStateSyncStatus.conflict,
+            snapshotPath: 'repapertodo/snapshots/conflict-local.json',
+          );
+        },
+      ),
+    );
+
+    final result = await service.syncAndMergeNow(
+      localState: localState,
+      store: store,
+    );
+
+    expect(result.syncResult.status, AppSyncStatus.conflict);
+    expect(result.state.sync.pendingOperationBatch, isNotNull);
+    expect(result.state.sync.operationDeviceSequences, {'device-local': 5});
+    final stored = await store.load();
+    expect(stored.sync.pendingOperationBatch, isNotNull);
+    expect(stored.sync.operationDeviceSequences, {'device-local': 5});
   });
 
   test('downloaded snapshots replay pending local edits before batch cleanup',

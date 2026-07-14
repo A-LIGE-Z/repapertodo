@@ -50,11 +50,18 @@ Status: In progress.
   enumerates the process windows and requires one visible HWND per visible
   paper; it also opens and closes the settings coordinator and requires the
   independent paper HWND count and persisted visibility to remain unchanged.
+- Windows Release smoke now moves and resizes a real independent paper, types a
+  content edit through native input, waits for `data.json` persistence, and
+  verifies that neither the model nor HWND returns to the old geometry.
+- Automated queue coverage keeps primary and secondary-monitor capsule queues
+  independent, applies separate per-queue start offsets, and passes work-area-
+  relative top coordinates to the native runner for displays above or below
+  the primary monitor.
 - Per-HWND always-on-top, task-switcher policy, desktop pinning,
   fullscreen/covered deep-capsule avoidance, and 92x46 collapsed capsule chrome
   are implemented in the runner.
-- Remaining native-window parity work is real multi-monitor queue QA,
-  transparency/drag-resize polish, and sustained desktop-session validation.
+- Remaining native-window parity work is real multi-monitor queue QA and
+  sustained desktop-session validation beyond the automated release session.
 
 ## Phase 3: Windows Feature Parity
 
@@ -67,10 +74,13 @@ Status: In progress.
   behavior.
 - A structured Windows manual QA recording script is available for release
   evidence when these desktop behaviors are checked in a real user session.
-- Still requiring focused Windows parity QA: transparent borderless feel,
-  task-switcher visibility, multi-monitor edge docking, fullscreen avoidance
-  under real foreground apps, tray interactions after Explorer restart, and
-  long-running script capsule process behavior.
+- Automated policy smoke now covers borderless/resizable styles, task-switcher
+  visibility, edge docking on the current monitor, a real fullscreen foreground
+  probe, `TaskbarCreated` tray recovery, and persistent long-running PowerShell
+  cleanup. Focused manual parity QA remains required for subjective transparent
+  borderless feel and sustained desktop sessions. Multi-monitor edge docking is
+  explicitly deferred for the current local release candidate and remains a
+  required gate before a public GitHub Release.
 
 ## Phase 4: Sync Core
 
@@ -90,7 +100,7 @@ Status: Done for the local-first core, with continued hardening.
 
 ## Phase 5: WebDAV
 
-Status: Done for generic/Jianguoyun static coverage, still needs real-provider
+Status: Done for generic WebDAV protocol coverage and credentialed Jianguoyun
 compatibility QA.
 
 - Generic HTTP/HTTPS WebDAV sync is implemented.
@@ -103,8 +113,10 @@ compatibility QA.
 - A live WebDAV smoke entrypoint is available for credentialed provider QA; it
   runs a real remote Windows/Android snapshot and operation-log round trip
   against the configured endpoint.
-- Required before stable replacement claim: live WebDAV QA against generic
-  WebDAV and at least one domestic provider account.
+- Jianguoyun QA now covers its HEAD-without-ETag behavior, depth-0 PROPFIND
+  metadata, unquoted opaque ETag conditional-write fallback, durable operation
+  upload, snapshot sequence advancement, and manifest publication without
+  unsafe unconditional overwrites.
 
 ## Phase 6: Android
 
@@ -127,8 +139,13 @@ Status: In progress.
   run against the repository-local HTTP WebDAV server: the worker returned
   success, uploaded encrypted snapshot/operation/manifest files, and persisted
   its device sequence back to Android `data.json`.
-- Required before stable replacement claim: repeat Android foreground and
-  background sync against credentialed external WebDAV providers.
+- The signed release APK has also completed a real API 35 WorkManager run
+  against credentialed Jianguoyun WebDAV: the worker returned `SUCCESS`,
+  cleared the durable pending batch, and advanced the persisted device
+  sequence after publishing the remote manifest.
+- The packaged signed APK has completed install, launcher, foreground-process,
+  and API-range smoke on a physical Android 16/API 36 device. The test app data
+  was cleared after validation so credentialed QA state was not left behind.
 
 ## Phase 7: Release Readiness
 
@@ -136,6 +153,10 @@ Status: In progress.
 
 - Local release packaging builds and verifies the Windows zip, Android APK,
   SHA-256 file, release metadata JSON, and GitHub Release notes markdown.
+- The `0.1.1+4` local release package was generated from the final Windows and
+  Android Release builds; its packaged APK passed static inspection and a
+  physical API 36 runtime smoke, and all 1101 Flutter tests plus static analysis
+  passed afterward.
 - GitHub Release publishing flow is implemented with clean-tree enforcement,
   signing enforcement for public publish, tag/version validation, exact asset
   set checks, uploaded-state checks, size checks, and downloaded SHA-256
@@ -145,3 +166,7 @@ Status: In progress.
 - Required before stable replacement claim: clean full release run from the
   intended commit, signed Android release configuration, live Android runtime
   smoke when a device/emulator is available, and manual Windows parity QA.
+- Current release audit blockers are intentionally limited to the dirty local
+  development tree and the skipped real multi-monitor Windows QA item; signing,
+  checksums, generic and Jianguoyun WebDAV live evidence, and Android device
+  evidence pass the audit.

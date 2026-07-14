@@ -63,6 +63,9 @@ class NoopPaperWindowHost implements PaperWindowHost {
   Stream<PaperWindowActionRequest> get actionRequests => const Stream.empty();
 
   @override
+  Stream<CapsuleDropRequest> get capsuleDrops => const Stream.empty();
+
+  @override
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async => null;
 
   @override
@@ -87,6 +90,9 @@ class NoopPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<bool> hasVisibleSurface(PaperData paper) async => paper.isVisible;
+
+  @override
+  Future<void> refreshSurfaceRegistry(AppState state) async {}
 
   @override
   Future<void> restoreAll(AppState state) async {}

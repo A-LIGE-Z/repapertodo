@@ -466,6 +466,7 @@ void main() {
     );
 
     expect(platform.paperWindows.shownIds, ['paper-a', 'paper-b']);
+    expect(platform.paperWindows.refreshSurfaceRegistryCount, 1);
     expect(platform.tray.rebuildMenuCount, 1);
 
     await controller.executeStartupCommand(
@@ -473,6 +474,7 @@ void main() {
     );
 
     expect(platform.paperWindows.hiddenIds, ['paper-a', 'paper-b']);
+    expect(platform.paperWindows.refreshSurfaceRegistryCount, 2);
     expect(platform.tray.rebuildMenuCount, 2);
   });
 
@@ -956,7 +958,8 @@ void main() {
     expect(platform.paperWindows.restoreAllCount, 1);
   });
 
-  test('startup separates visible papers restored at the same origin', () async {
+  test('startup separates visible papers restored at the same origin',
+      () async {
     final platform = _RecordingPlatformServices();
     platform.paperWindows.workArea =
         const PaperWorkArea(x: 0, y: 0, width: 1200, height: 800);
@@ -1246,6 +1249,7 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   Object? workAreaError;
   bool? visibleSurfaces;
   var restoreAllCount = 0;
+  var refreshSurfaceRegistryCount = 0;
 
   @override
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async {
@@ -1263,6 +1267,11 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
     restoredVisibilitySnapshots.add(
       state.papers.map((paper) => paper.isVisible).toList(),
     );
+  }
+
+  @override
+  Future<void> refreshSurfaceRegistry(AppState state) async {
+    refreshSurfaceRegistryCount += 1;
   }
 
   @override

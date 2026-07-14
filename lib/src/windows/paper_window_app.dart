@@ -44,6 +44,9 @@ class _PaperWindowEngineApp extends StatefulWidget {
 }
 
 class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
+  var _appGeneration = 0;
+  var _receivedInitialState = false;
+
   @override
   void initState() {
     super.initState();
@@ -74,7 +77,13 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
         }
         widget.store.replaceState(state);
         if (mounted) {
-          setState(() => widget.controller.replaceState(state));
+          setState(() {
+            widget.controller.replaceState(state);
+            if (!_receivedInitialState) {
+              _receivedInitialState = true;
+              _appGeneration += 1;
+            }
+          });
         }
         return true;
       case 'applyPaper':
@@ -106,6 +115,7 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
   @override
   Widget build(BuildContext context) {
     return RePaperTodoApp(
+      key: ValueKey(_appGeneration),
       controller: widget.controller,
       store: widget.store,
       initialSurfacePaperId: widget.paperId,
@@ -120,8 +130,20 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
       paperWindowDragStarter: () async {
         await _paperWindowChannel.invokeMethod<void>('startDrag');
       },
+      paperWindowCapsuleHoverChanged: (hovered) async {
+        await _paperWindowChannel.invokeMethod<void>(
+          'capsuleHoverChanged',
+          hovered,
+        );
+      },
       paperWindowResizeStarter: (direction) async {
         await _paperWindowChannel.invokeMethod<void>('startResize', direction);
+      },
+      paperWindowReminderPresenter: (reminder) async {
+        await _paperWindowChannel.invokeMethod<void>(
+          'showReminder',
+          reminder,
+        );
       },
       configureAndroidBackgroundSync: ({
         required sync,

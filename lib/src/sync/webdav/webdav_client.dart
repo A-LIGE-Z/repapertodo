@@ -125,14 +125,28 @@ class WebDavClient {
       return null;
     }
     _throwIfUnexpected(response, expected: {200, 204});
+    final rawEtag = _headerValue(response.headers, 'etag');
     final lastModified = _headerValue(response.headers, 'last-modified');
-    return WebDavResourceMetadata(
-      etag: _normalizedHeaderEtagValue(_headerValue(response.headers, 'etag')),
+    final headMetadata = WebDavResourceMetadata(
+      etag: _normalizedHeaderEtagValue(rawEtag),
       contentLength: _tryParseContentLength(
         _headerValue(response.headers, 'content-length'),
       ),
       lastModified:
           lastModified == null ? null : _tryParseHttpDate(lastModified),
+    );
+    if (rawEtag != null) {
+      return headMetadata;
+    }
+    final propFindMetadata = await _metadataFromPropFind(path);
+    if (propFindMetadata == null) {
+      return headMetadata;
+    }
+    return WebDavResourceMetadata(
+      etag: propFindMetadata.etag,
+      contentLength:
+          propFindMetadata.contentLength ?? headMetadata.contentLength,
+      lastModified: propFindMetadata.lastModified ?? headMetadata.lastModified,
     );
   }
 
@@ -154,7 +168,21 @@ class WebDavClient {
       if (normalizedIfMatch != null) 'if-match': normalizedIfMatch,
       if (createOnly) 'if-none-match': '*',
     };
-    final response = await _send('PUT', path, headers: headers, body: bytes);
+    var response = await _send('PUT', path, headers: headers, body: bytes);
+    final rawIfMatch = _rawUnquotedIfMatchRetryValue(ifMatch);
+    if (response.statusCode == HttpStatus.preconditionFailed &&
+        rawIfMatch != null &&
+        rawIfMatch != normalizedIfMatch) {
+      response = await _send(
+        'PUT',
+        path,
+        headers: {
+          'content-type': 'application/octet-stream',
+          'if-match': rawIfMatch,
+        },
+        body: bytes,
+      );
+    }
     _throwIfUnexpected(response, expected: {200, 201, 204});
   }
 
@@ -1141,6 +1169,21 @@ String? _normalizedIfMatchHeaderValue(String? value) {
     return trimmed;
   }
   return '"$trimmed"';
+}
+
+String? _rawUnquotedIfMatchRetryValue(String? value) {
+  final trimmed = value?.trim();
+  if (trimmed == null ||
+      trimmed.isEmpty ||
+      trimmed == '*' ||
+      trimmed.contains('"') ||
+      trimmed.toLowerCase().startsWith('w/')) {
+    return null;
+  }
+  if (_hasControlCharacter(trimmed) || !_hasValidRemoteEtagShape(trimmed)) {
+    return null;
+  }
+  return trimmed;
 }
 
 bool _hasValidRemoteEtagShape(

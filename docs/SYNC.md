@@ -57,6 +57,12 @@ Initial recommended preset:
 - Endpoint: `https://dav.jianguoyun.com/dav/`
 - Suggested remote path: `/RePaperTodo/`
 
+Jianguoyun treats the first configured remote-path segment as a sandbox name
+and rejects names longer than 30 characters. The shared settings model must
+validate that provider limit before any network request, including when the
+Jianguoyun endpoint is entered through the generic provider option, and the UI
+must focus the remote-folder field with a specific recovery message.
+
 Provider presets are maintained in a shared registry so UI labels, default
 endpoints, and model defaults stay aligned. Generic WebDAV is an explicit
 registry entry without provider defaults, and it must remain available even
@@ -338,9 +344,12 @@ strong ETag is available.
 WebDAV ETag metadata with control characters, empty quoted tags, wildcard-only
 values, or malformed quote structure is ignored before it can affect recovery
 sorting or conditional writes. Unquoted provider ETags may be retained for
-compatibility, but `If-Match` generation must quote them before transport and
-must reject weak, control-character, or malformed values instead of sending an
-unsafe condition header.
+compatibility. Conditional writes send the standards-compliant quoted
+`If-Match` first; only when a provider rejects that request with `412` may the
+client retry the exact original unquoted opaque ETag. The retry remains a
+conditional write and must never degrade into an unconditional PUT. Weak,
+control-character, wildcard-only, or malformed values are rejected instead of
+being sent as condition headers.
 Collection creation treats common successful or already-existing `MKCOL`
 responses as accepted, including provider-specific 409/412 responses only when
 their body clearly reports that the collection already exists, including
@@ -777,6 +786,6 @@ Snapshot and operation-log file contents are encrypted for user-facing sync;
   Silent local-edit upload failures must keep the pending edit so later
   automatic, lifecycle, or manual sync attempts retry the same operation without
   requiring another user edit.
-- Opening settings must pause pending debounced local-edit uploads and defer lifecycle/auto sync while the dialog is open; canceling settings or saving settings without changing sync configuration restores the pending upload, even when platform setting application reports errors, while saving sync setting changes clears stale pending uploads so edits are not sent under a new sync configuration. Settings save failures must surface as readable UI errors and must not drop the paused pending edit or leave later local edits blocked from debounced upload.
+- Opening settings must pause pending debounced local-edit uploads and defer lifecycle/auto sync while the dialog is open; canceling settings or saving settings without changing sync configuration restores the pending upload, even when platform setting application reports errors. Changing the WebDAV endpoint, account credentials, encryption passphrase, provider, or remote root must clear the durable pending batch and remote device-sequence progress so operations from the old target are never replayed into the new target. Enabling or disabling the same target clears a stale pending batch but preserves its accepted device-sequence progress, while scheduling-only changes preserve both. Settings save failures must surface as readable UI errors and must not drop the paused pending edit or leave later local edits blocked from debounced upload.
 - After any sync, recovery restore, or local-operation upload replaces local state, reapply the resulting state to the platform layer so Windows surfaces, tray state, hotkeys, and window policies match the accepted data. This still applies when an operation upload is accepted idempotently and creates no new remote log, because sequence progress and canonicalized state affect later sync inputs and Windows integration.
 - Offer retry actions for transient manual sync, recovery snapshot listing, and recovery restore failures.

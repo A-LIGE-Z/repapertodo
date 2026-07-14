@@ -164,11 +164,13 @@ Map<String, dynamic> _windowsManualQaRecord({
   String tester = 'readiness-audit-test',
   String windowsVersion = 'Windows readiness audit test',
   bool includeExtraItem = false,
+  bool deferMultiMonitor = false,
+  String? skippedItemId,
 }) {
   Map<String, String> item(String id) => {
         'id': id,
         'title': id,
-        'status': 'pass',
+        'status': skippedItemId == id ? 'skip' : 'pass',
       };
   final items = [
     item('transparentBorderlessFeel'),
@@ -181,9 +183,11 @@ Map<String, dynamic> _windowsManualQaRecord({
     if (includeExtraItem) item('unreviewedExtraWindowsBehavior'),
   ];
   return {
-    'status': 'passed',
+    'status': deferMultiMonitor ? 'passedWithDeferredMultiMonitor' : 'passed',
     'checkedAtUtc': DateTime.now().toUtc().toIso8601String(),
-    'reason': '',
+    'reason': deferMultiMonitor
+        ? 'Multi-monitor edge docking is explicitly deferred for local QA.'
+        : '',
     'tester': tester,
     'windowsVersion': windowsVersion,
     'exePath': exe.path,
@@ -195,6 +199,10 @@ Map<String, dynamic> _windowsManualQaRecord({
     'appSoBytes': appSo.lengthSync(),
     'appSoSha256': _sha256File(appSo),
     'allowSkipped': false,
+    'deferMultiMonitor': deferMultiMonitor,
+    'deferredItemIds': deferMultiMonitor
+        ? const ['multiMonitorEdgeDocking']
+        : const <String>[],
     'notes': 'Synthetic readiness audit test record.',
     'items': items,
   };
@@ -287,6 +295,8 @@ Map<String, dynamic> _releaseMetadataRecord({
         'initialVisibleTopLevelWindowCount': 1,
         'finalVisibleTopLevelWindowCount': 2,
         'independentPaperSurfaces': true,
+        'geometryPersistenceVerified': true,
+        'contentEditGeometryStabilityVerified': true,
         'settingsCoordinatorLifecycle': true,
         'settingsStartupCommands': ['--settings'],
         'visiblePaperCountBeforeSettings': 2,
@@ -607,6 +617,128 @@ void main() {
     expect(_checkById(audit, 'androidDeviceSmoke')['status'], 'passed');
   });
 
+  test('readiness audit accepts only multi-monitor deferral for local release',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for readiness audit tests.');
+      return;
+    }
+    final windowsRelease = Directory(
+      p.join('build', 'windows', 'x64', 'runner', 'Release'),
+    );
+    final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
+    final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
+    if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
+      markTestSkipped('Release artifacts are unavailable for hash matching.');
+      return;
+    }
+
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_readiness_local_deferred_monitor_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final windowsQaJson = File(p.join(temp.path, 'windows-manual-qa.json'));
+    final androidSmokeJson =
+        File(p.join(temp.path, 'android-device-smoke.json'));
+    final genericWebDavJson =
+        File(p.join(temp.path, 'webdav-generic-live-smoke.json'));
+    final domesticWebDavJson =
+        File(p.join(temp.path, 'webdav-domestic-live-smoke.json'));
+    _writeJson(
+      windowsQaJson,
+      _windowsManualQaRecord(
+        exe: exe,
+        appSo: appSo,
+        deferMultiMonitor: true,
+        skippedItemId: 'multiMonitorEdgeDocking',
+      ),
+    );
+    _writeJson(androidSmokeJson, _androidDeviceSmokeRecord(apk: apk));
+    _writeJson(genericWebDavJson, _webDavLiveSmokeRecord());
+    _writeJson(
+      domesticWebDavJson,
+      _webDavLiveSmokeRecord(providerId: 'jianguoyun'),
+    );
+
+    final audit = _decodeAudit(
+      await _runReadinessAudit(
+        powerShell: powerShell,
+        windowsManualQaJson: windowsQaJson.path,
+        androidDeviceSmokeJson: androidSmokeJson.path,
+        windowsReleaseDirectory: windowsRelease.path,
+        androidApkPath: apk.path,
+        webDavLiveSmokeJson: genericWebDavJson.path,
+        webDavDomesticLiveSmokeJson: domesticWebDavJson.path,
+      ),
+    );
+
+    expect(_checkById(audit, 'windowsManualQa')['status'], 'deferred');
+    expect(_checkById(audit, 'cleanGitTree')['status'], 'deferred');
+    expect(audit['readyForLocalRelease'], true);
+    expect(audit['readyForGitHubRelease'], false);
+    expect(audit['localBlockers'], isEmpty);
+    expect(
+      (audit['blockers'] as List).join(' '),
+      contains('multi-monitor edge docking'),
+    );
+  });
+
+  test('readiness audit rejects deferring a non-monitor Windows QA item',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for readiness audit tests.');
+      return;
+    }
+    final windowsRelease = Directory(
+      p.join('build', 'windows', 'x64', 'runner', 'Release'),
+    );
+    final exe = File(p.join(windowsRelease.path, 'repapertodo.exe'));
+    final appSo = File(p.join(windowsRelease.path, 'data', 'app.so'));
+    final apk = File(p.join('dist', 'repapertodo-android-0.1.1-4.apk'));
+    if (!exe.existsSync() || !appSo.existsSync() || !apk.existsSync()) {
+      markTestSkipped('Release artifacts are unavailable for hash matching.');
+      return;
+    }
+
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_readiness_wrong_deferred_item_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final windowsQaJson = File(p.join(temp.path, 'windows-manual-qa.json'));
+    final androidSmokeJson =
+        File(p.join(temp.path, 'android-device-smoke.json'));
+    _writeJson(
+      windowsQaJson,
+      _windowsManualQaRecord(
+        exe: exe,
+        appSo: appSo,
+        deferMultiMonitor: true,
+        skippedItemId: 'fullscreenAvoidance',
+      ),
+    );
+    _writeJson(androidSmokeJson, _androidDeviceSmokeRecord(apk: apk));
+
+    final audit = _decodeAudit(
+      await _runReadinessAudit(
+        powerShell: powerShell,
+        windowsManualQaJson: windowsQaJson.path,
+        androidDeviceSmokeJson: androidSmokeJson.path,
+        windowsReleaseDirectory: windowsRelease.path,
+        androidApkPath: apk.path,
+      ),
+    );
+
+    final windowsCheck = _checkById(audit, 'windowsManualQa');
+    expect(windowsCheck['status'], 'blocked');
+    expect(
+      windowsCheck['summary'],
+      contains("multiMonitorEdgeDocking' must be present and skip"),
+    );
+  });
+
   test('readiness audit accepts release metadata pinned to zh and en',
       () async {
     final powerShell = _findPowerShellExecutable();
@@ -810,6 +942,57 @@ void main() {
     expect(
       metadataCheck['summary'],
       contains('must prove independent visible paper HWNDs'),
+    );
+  });
+
+  test('readiness audit rejects content edits without geometry stability',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for readiness audit tests.');
+      return;
+    }
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_readiness_content_geometry_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final windowsZip =
+        File(p.join(temp.path, 'repapertodo-windows-x64-0.1.1-4.zip'))
+          ..writeAsStringSync('windows package');
+    final androidApk =
+        File(p.join(temp.path, 'repapertodo-android-0.1.1-4.apk'))
+          ..writeAsStringSync('android package');
+    final releaseMetadataJson =
+        File(p.join(temp.path, 'repapertodo-0.1.1-4-release.json'));
+    final metadata =
+        _releaseMetadataRecord(windowsZip: windowsZip, androidApk: androidApk);
+    final windows = metadata['windows'] as Map<String, dynamic>;
+    final smoke = windows['smoke'] as Map<String, dynamic>;
+    smoke['contentEditGeometryStabilityVerified'] = false;
+    _writeJson(releaseMetadataJson, metadata);
+
+    final audit = _decodeAudit(
+      await Process.run(
+        powerShell,
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          'scripts/release_readiness_audit.ps1',
+          '-ReleaseMetadataJson',
+          releaseMetadataJson.path,
+        ],
+        workingDirectory: Directory.current.path,
+      ),
+    );
+
+    final metadataCheck = _checkById(audit, 'releaseMetadata');
+    expect(metadataCheck['status'], 'blocked');
+    expect(
+      metadataCheck['summary'],
+      contains('content-edit geometry stability'),
     );
   });
 

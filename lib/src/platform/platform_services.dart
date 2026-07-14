@@ -20,6 +20,7 @@ abstract interface class PaperWindowHost {
   Stream<PaperData> get surfaceUpdates;
   Stream<PaperData> get paperEdits;
   Stream<PaperWindowActionRequest> get actionRequests;
+  Stream<CapsuleDropRequest> get capsuleDrops;
   Stream<String> get paperOpenRequests;
   Stream<String> get paperDeleteRequests;
   Stream<void> get coordinatorCloseRequests;
@@ -33,8 +34,27 @@ abstract interface class PaperWindowHost {
   Future<void> closePaperSurface(PaperData paper);
   Future<void> updatePaperSurface(PaperData paper);
   Future<void> capturePaperSurfaceBounds(PaperData paper);
+  Future<void> refreshSurfaceRegistry(AppState state);
   Future<void> restoreAll(AppState state);
   Future<void> hideCoordinatorWindow();
+}
+
+class CapsuleDropRequest {
+  const CapsuleDropRequest({
+    required this.paperId,
+    required this.monitorDeviceName,
+    required this.side,
+    required this.dropTop,
+    required this.workAreaTop,
+    required this.isMasterCapsule,
+  });
+
+  final String paperId;
+  final String monitorDeviceName;
+  final String side;
+  final double dropTop;
+  final double workAreaTop;
+  final bool isMasterCapsule;
 }
 
 class PaperWindowActionRequest {
@@ -56,6 +76,9 @@ abstract final class PaperWindowActionKinds {
   static const openExternalMarkdown = 'openExternalMarkdown';
   static const runScriptCapsule = 'runScriptCapsule';
   static const openUri = 'openUri';
+  static const openReminderPaper = 'openReminderPaper';
+  static const toggleCollapseAll = 'toggleCollapseAll';
+  static const collapsePaper = 'collapsePaper';
 
   static const values = {
     openPaper,
@@ -64,6 +87,9 @@ abstract final class PaperWindowActionKinds {
     openExternalMarkdown,
     runScriptCapsule,
     openUri,
+    openReminderPaper,
+    toggleCollapseAll,
+    collapsePaper,
   };
 }
 

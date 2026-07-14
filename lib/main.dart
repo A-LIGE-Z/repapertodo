@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -65,6 +66,7 @@ Future<void> main(List<String> args) async {
         RePaperTodoApp(
           controller: bootstrap.controller,
           store: bootstrap.store,
+          coordinatorWindowMode: Platform.isWindows,
         ),
       );
     },

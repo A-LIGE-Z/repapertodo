@@ -243,6 +243,8 @@ void main() {
         'height': 460.0,
         'isVisible': false,
         'isCollapsed': false,
+        'capsuleTopIsWorkAreaRelative': false,
+        'useDeepCapsuleMode': true,
         'capsuleSide': DeepCapsuleSides.left,
         'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
         'alwaysOnTop': false,
@@ -637,7 +639,10 @@ void main() {
     );
 
     await services.paperWindows.restoreAll(
-      AppState(papers: [primaryPaper, secondaryPaper]),
+      AppState(
+        showDeepCapsuleWhileExpanded: false,
+        papers: [primaryPaper, secondaryPaper],
+      ),
     );
 
     expect(primaryPaper.capsuleMonitorDeviceName, '');
@@ -892,7 +897,10 @@ void main() {
     );
 
     await services.paperWindows.restoreAll(
-      AppState(papers: [firstPaper, secondPaper]),
+      AppState(
+        showDeepCapsuleWhileExpanded: false,
+        papers: [firstPaper, secondPaper],
+      ),
     );
     final platformCalls = _withoutQueueMonitorNormalization(calls);
     expect(
@@ -900,6 +908,7 @@ void main() {
       [
         'setPaperWindowState',
         'setPaperSurfaces',
+        'setNativeCapsuleSurfaces',
         'setBounds',
         'setPinnedToDesktop',
         'show',
@@ -920,6 +929,8 @@ void main() {
         'height': 260.0,
         'isVisible': true,
         'isCollapsed': false,
+        'capsuleTopIsWorkAreaRelative': false,
+        'useDeepCapsuleMode': true,
         'capsuleSide': '',
         'capsuleMonitorDeviceName': '',
         'alwaysOnTop': false,
@@ -934,11 +945,13 @@ void main() {
         'title': 'Second',
         'type': PaperTypes.note,
         'x': 30.0,
-        'y': 40.0,
+        'y': 48.0,
         'width': 420.0,
         'height': 360.0,
         'isVisible': true,
         'isCollapsed': true,
+        'capsuleTopIsWorkAreaRelative': true,
+        'useDeepCapsuleMode': true,
         'capsuleSide': DeepCapsuleSides.left,
         'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
         'alwaysOnTop': true,
@@ -949,7 +962,7 @@ void main() {
         'isScriptCapsule': true,
       },
     ]);
-    final activeSurfaceCalls = platformCalls.skip(2).toList();
+    final activeSurfaceCalls = platformCalls.skip(3).toList();
     expect(activeSurfaceCalls[0].arguments, {
       'paperId': 'paper-1',
       'x': 10.0,
@@ -1051,6 +1064,8 @@ void main() {
         'height': 260.0,
         'isVisible': true,
         'isCollapsed': false,
+        'capsuleTopIsWorkAreaRelative': false,
+        'useDeepCapsuleMode': true,
         'capsuleSide': '',
         'capsuleMonitorDeviceName': '',
         'alwaysOnTop': false,
@@ -1070,6 +1085,8 @@ void main() {
         'height': 480.0,
         'isVisible': false,
         'isCollapsed': true,
+        'capsuleTopIsWorkAreaRelative': false,
+        'useDeepCapsuleMode': true,
         'capsuleSide': DeepCapsuleSides.left,
         'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
         'alwaysOnTop': true,
@@ -1097,6 +1114,10 @@ void main() {
       type: PaperTypes.note,
       title: 'Before',
       content: 'Before body',
+      x: 481,
+      y: 263,
+      width: 612,
+      height: 507,
     );
     await services.paperWindows.restoreAll(AppState(papers: [paper]));
     final update = services.paperWindows.paperEdits.first;
@@ -1123,6 +1144,456 @@ void main() {
     expect(changedPaper.content, 'Edited in its own Flutter engine');
     expect(paper.title, 'After');
     expect(paper.content, 'Edited in its own Flutter engine');
+    expect(paper.x, 481);
+    expect(paper.y, 263);
+    expect(paper.width, 612);
+    expect(paper.height, 507);
+  });
+
+  test('content edits never replay stale paper window geometry', () async {
+    const channel = MethodChannel('repapertodo/window_content_geometry_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final paper = PaperData(
+      id: 'dragged-paper',
+      type: PaperTypes.todo,
+      title: 'Before drag',
+      x: 140,
+      y: 48,
+      width: 360,
+      height: 420,
+    );
+    await services.paperWindows.restoreAll(AppState(papers: [paper]));
+    calls.clear();
+
+    final firstEdit = services.paperWindows.paperEdits.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        MethodCall('paperSurfaceChanged', {
+          'id': 'dragged-paper',
+          'type': PaperTypes.todo,
+          'title': 'Edited while the native drag event is pending',
+          'x': 140.0,
+          'y': 48.0,
+          'width': 360.0,
+          'height': 420.0,
+          'items': <Object?>[],
+          'noteCanvasElements': <Object?>[],
+        }),
+      ),
+      (_) {},
+    );
+    await services.paperWindows.updatePaperSurface(await firstEdit);
+
+    expect(
+      calls.where((call) => call.method == 'updatePaperWindow'),
+      hasLength(1),
+    );
+    expect(calls.where((call) => call.method == 'setBounds'), isEmpty);
+
+    final moved = services.paperWindows.surfaceUpdates.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        MethodCall('boundsChanged', {
+          'paperId': 'dragged-paper',
+          'bounds': {
+            'x': 612.0,
+            'y': 284.0,
+            'width': 516.0,
+            'height': 468.0,
+          },
+        }),
+      ),
+      (_) {},
+    );
+    await moved;
+    calls.clear();
+
+    final secondEdit = services.paperWindows.paperEdits.first;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        MethodCall('paperSurfaceChanged', {
+          'id': 'dragged-paper',
+          'type': PaperTypes.todo,
+          'title': 'Edited after drag',
+          'x': 140.0,
+          'y': 48.0,
+          'width': 360.0,
+          'height': 420.0,
+          'items': <Object?>[],
+          'noteCanvasElements': <Object?>[],
+        }),
+      ),
+      (_) {},
+    );
+    final editedAfterDrag = await secondEdit;
+    await services.paperWindows.updatePaperSurface(editedAfterDrag);
+
+    expect(editedAfterDrag.x, 612);
+    expect(editedAfterDrag.y, 284);
+    expect(editedAfterDrag.width, 516);
+    expect(editedAfterDrag.height, 468);
+    expect(calls.where((call) => call.method == 'setBounds'), isEmpty);
+
+    editedAfterDrag
+      ..x = 700
+      ..y = 320;
+    await services.paperWindows.updatePaperSurface(editedAfterDrag);
+    expect(
+      calls.where((call) => call.method == 'setBounds').single.arguments,
+      {
+        'paperId': 'dragged-paper',
+        'x': 700.0,
+        'y': 320.0,
+        'width': 516.0,
+        'height': 468.0,
+      },
+    );
+  });
+
+  test('collapsed native bounds never overwrite expanded paper geometry',
+      () async {
+    const channel = MethodChannel('repapertodo/window_collapsed_bounds_test');
+    final services = WindowsPlatformServices(channel: channel);
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return switch (call.method) {
+        'getWorkArea' => <String, Object?>{
+            'left': 0,
+            'top': 0,
+            'right': 1920,
+            'bottom': 1080,
+            'deviceName': r'\\.\DISPLAY1',
+          },
+        _ => null,
+      };
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final paper = PaperData(
+      id: 'collapsed-bounds-paper',
+      type: PaperTypes.todo,
+      x: 320,
+      y: 180,
+      width: 360,
+      height: 280,
+    );
+    await services.paperWindows.showPaper(paper);
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('boundsChanged', {
+          'paperId': 'collapsed-bounds-paper',
+          'isCollapsed': true,
+          'x': 2490,
+          'y': 180,
+          'width': 220,
+          'height': 160,
+        }),
+      ),
+      (_) {},
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(paper.x, 320);
+    expect(paper.y, 180);
+    expect(paper.width, 360);
+    expect(paper.height, 280);
+    expect(calls.where((call) => call.method == 'setBounds'), hasLength(1));
+  });
+
+  test(
+      'surface registry refresh reconciles native helpers without showing papers',
+      () async {
+    const channel = MethodChannel('test/windows-surface-registry-refresh');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      papers: [
+        PaperData(id: 'registry-paper', title: 'Registry'),
+      ],
+    )..normalize();
+
+    await services.paperWindows.refreshSurfaceRegistry(state);
+
+    expect(
+      calls.map((call) => call.method),
+      [
+        'setPaperWindowState',
+        'setPaperSurfaces',
+        'setNativeCapsuleSurfaces',
+      ],
+    );
+    expect(calls.where((call) => call.method == 'show'), isEmpty);
+    expect(calls.where((call) => call.method == 'setBounds'), isEmpty);
+  });
+
+  test('collapse all exposes persistent native master capsules and proxies',
+      () async {
+    const channel = MethodChannel('test/windows-collapse-all-master');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      collapseExpandedDeepCapsuleOnClick: true,
+      papers: [
+        PaperData(
+          id: 'master-paper',
+          title: 'Master source',
+          capsuleSide: DeepCapsuleSides.right,
+        ),
+        PaperData(
+          id: 'retracted-paper',
+          title: 'Retracted source',
+          capsuleSide: DeepCapsuleSides.right,
+        ),
+      ],
+    )..normalize();
+
+    await services.paperWindows.restoreAll(state);
+
+    final surfaceCall = calls.firstWhere(
+      (call) => call.method == 'setPaperSurfaces',
+    );
+    final surfaces = (surfaceCall.arguments as List).cast<Map>();
+    expect(surfaces[0]['isVisible'], false);
+    expect(surfaces[0]['isCollapsed'], false);
+    expect(surfaces[1]['isVisible'], false);
+    expect(surfaces[1]['isCollapsed'], false);
+    expect(surfaces.where((surface) => surface['isMasterCapsule'] == true),
+        isEmpty);
+    expect(calls.where((call) => call.method == 'show'), isEmpty);
+
+    final collapsedNative = (calls
+            .where((call) => call.method == 'setNativeCapsuleSurfaces')
+            .single
+            .arguments as List)
+        .cast<Map>();
+    expect(collapsedNative, hasLength(1));
+    expect(collapsedNative.single, containsPair('kind', 'master'));
+    expect(collapsedNative.single, containsPair('surfaceId', 'master:|right'));
+    expect(collapsedNative.single, containsPair('paperId', 'master-paper'));
+    expect(collapsedNative.single, containsPair('top', 48.0));
+    expect(collapsedNative.single, containsPair('isActive', true));
+    expect(collapsedNative.single, containsPair('count', 2));
+    expect(collapsedNative.single, containsPair('labelEn', 'Collapse all'));
+    expect(collapsedNative.single, containsPair('labelZh', '收起全部'));
+
+    state.setCapsuleCollapseAllActiveFor(state.papers.first, false);
+    await services.paperWindows.restoreAll(state);
+    final expandedSurfaces = (calls
+            .where((call) => call.method == 'setPaperSurfaces')
+            .last
+            .arguments as List)
+        .cast<Map>();
+    expect(
+      expandedSurfaces.where((surface) => surface['isVisible'] == true),
+      hasLength(2),
+    );
+    final expandedNative = (calls
+            .where((call) => call.method == 'setNativeCapsuleSurfaces')
+            .last
+            .arguments as List)
+        .cast<Map>();
+    expect(expandedNative, hasLength(3));
+    expect(
+      expandedNative.where((surface) => surface['kind'] == 'master'),
+      hasLength(1),
+    );
+    final proxies =
+        expandedNative.where((surface) => surface['kind'] == 'proxy').toList();
+    expect(proxies, hasLength(2));
+    expect(proxies.map((surface) => surface['top']), [98.0, 148.0]);
+    expect(
+      proxies.every((surface) => surface['collapseOnClick'] == true),
+      true,
+    );
+    expect(
+      expandedNative
+          .singleWhere((surface) => surface['kind'] == 'master')['isActive'],
+      false,
+    );
+  });
+
+  test(
+      'native master persists without expanded proxies and collapsed papers do not duplicate',
+      () async {
+    const channel = MethodChannel('test/windows-native-capsule-membership');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      showDeepCapsuleWhileExpanded: false,
+      papers: [
+        PaperData(
+          id: 'expanded-paper',
+          title: 'Expanded',
+          capsuleSide: DeepCapsuleSides.left,
+        ),
+        PaperData(
+          id: 'collapsed-paper',
+          title: 'Collapsed',
+          isCollapsed: true,
+          capsuleSide: DeepCapsuleSides.left,
+        ),
+      ],
+    )..normalize();
+
+    await services.paperWindows.restoreAll(state);
+    final native = (calls
+            .singleWhere((call) => call.method == 'setNativeCapsuleSurfaces')
+            .arguments as List)
+        .cast<Map>();
+    expect(
+        native.where((surface) => surface['kind'] == 'master'), hasLength(1));
+    expect(native.where((surface) => surface['kind'] == 'proxy'), isEmpty);
+    final real = (calls
+            .singleWhere((call) => call.method == 'setPaperSurfaces')
+            .arguments as List)
+        .cast<Map>();
+    expect(
+        real.singleWhere((surface) => surface['id'] == 'collapsed-paper')['y'],
+        98.0);
+  });
+
+  test('deep capsule queues stay independent across monitor work areas',
+      () async {
+    const channel = MethodChannel('test/windows-multi-monitor-capsule-queues');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'normalizeQueueMonitorDeviceName') {
+        return (call.arguments as Map<Object?, Object?>)['monitorDeviceName'];
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final primary = PaperData(
+      id: 'primary-right',
+      title: 'Primary right',
+      isCollapsed: true,
+      capsuleSide: DeepCapsuleSides.right,
+    );
+    final secondaryFirst = PaperData(
+      id: 'secondary-left-first',
+      title: 'Secondary first',
+      isCollapsed: true,
+      capsuleSide: DeepCapsuleSides.left,
+      capsuleMonitorDeviceName: r'\\.\DISPLAY2',
+    );
+    final secondarySecond = PaperData(
+      id: 'secondary-left-second',
+      title: 'Secondary second',
+      isCollapsed: true,
+      capsuleSide: DeepCapsuleSides.left,
+      capsuleMonitorDeviceName: r'\\.\DISPLAY2',
+    );
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      papers: [primary, secondaryFirst, secondarySecond],
+    );
+    state.deepCapsuleQueueStartTopMargins
+      ..[state.capsuleQueueKeyFor(primary)] = 48
+      ..[state.capsuleQueueKeyFor(secondaryFirst)] = 120;
+
+    final services = WindowsPlatformServices(channel: channel);
+    await services.paperWindows.restoreAll(state);
+
+    final paperSurfaces = (calls
+            .singleWhere((call) => call.method == 'setPaperSurfaces')
+            .arguments as List)
+        .cast<Map>();
+    expect(
+      paperSurfaces.map((surface) => surface['id']),
+      ['primary-right', 'secondary-left-first', 'secondary-left-second'],
+    );
+    expect(paperSurfaces.map((surface) => surface['y']), [98.0, 170.0, 220.0]);
+    expect(
+      paperSurfaces.every(
+        (surface) => surface['capsuleTopIsWorkAreaRelative'] == true,
+      ),
+      true,
+    );
+    expect(paperSurfaces.first['capsuleMonitorDeviceName'], '');
+    expect(
+      paperSurfaces.skip(1).map(
+            (surface) => surface['capsuleMonitorDeviceName'],
+          ),
+      [r'\\.\DISPLAY2', r'\\.\DISPLAY2'],
+    );
+
+    final nativeSurfaces = (calls
+            .singleWhere((call) => call.method == 'setNativeCapsuleSurfaces')
+            .arguments as List)
+        .cast<Map>();
+    final masters =
+        nativeSurfaces.where((surface) => surface['kind'] == 'master').toList();
+    expect(masters, hasLength(2));
+    expect(masters.map((surface) => surface['top']), [48.0, 120.0]);
+    expect(
+      masters.map((surface) => surface['capsuleSide']),
+      [DeepCapsuleSides.right, DeepCapsuleSides.left],
+    );
+    expect(
+      masters.map((surface) => surface['capsuleMonitorDeviceName']),
+      ['', r'\\.\DISPLAY2'],
+    );
   });
 
   test('paper host routes validated independent window actions', () async {
@@ -1156,6 +1627,56 @@ void main() {
     expect(request.paperId, 'action-note');
     expect(request.kind, PaperWindowActionKinds.openUri);
     expect(request.value, 'https://example.com/from-child');
+  });
+
+  test('paper host routes native capsule drops without rewriting geometry',
+      () async {
+    const channel = MethodChannel('repapertodo/window_capsule_drop_test');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final paper = PaperData(
+      id: 'capsule-drop-paper',
+      x: 240,
+      y: 180,
+      width: 360,
+      height: 280,
+      isCollapsed: true,
+    );
+    await services.paperWindows.restoreAll(AppState(papers: [paper]));
+    final drop = services.paperWindows.capsuleDrops.first;
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('capsuleDropped', {
+          'paperId': 'capsule-drop-paper',
+          'monitorDeviceName': r'\\.\DISPLAY2',
+          'side': 'left',
+          'dropTop': 330.0,
+          'workAreaTop': 40.0,
+          'isMasterCapsule': false,
+        }),
+      ),
+      (_) {},
+    );
+
+    final request = await drop;
+    expect(request.paperId, 'capsule-drop-paper');
+    expect(request.monitorDeviceName, r'\\.\DISPLAY2');
+    expect(request.side, DeepCapsuleSides.left);
+    expect(request.dropTop, 330);
+    expect(request.workAreaTop, 40);
+    expect(request.isMasterCapsule, false);
+    expect(paper.x, 240);
+    expect(paper.y, 180);
+    expect(paper.width, 360);
+    expect(paper.height, 280);
   });
 
   test('paper host keeps active routing for non-active hide and close events',

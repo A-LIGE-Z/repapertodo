@@ -477,6 +477,52 @@ void main() {
     expect(settings.isSecurelyConfigured, true);
   });
 
+  test('rejects Jianguoyun sandbox names longer than 30 characters', () {
+    WebDavSyncSettings settings({
+      required String presetId,
+      required String endpoint,
+      required String rootPath,
+    }) {
+      return WebDavSyncSettings(
+        presetId: presetId,
+        endpoint: endpoint,
+        username: 'user@example.com',
+        password: 'app-password',
+        encryptionPassphrase: 'shared sync secret',
+        rootPath: rootPath,
+      )..normalize();
+    }
+
+    final accepted = settings(
+      presetId: WebDavPresetIds.jianguoyun,
+      endpoint: WebDavPresets.jianguoyun.endpointText,
+      rootPath: List.filled(30, 'a').join(),
+    );
+    final rejectedPreset = settings(
+      presetId: WebDavPresetIds.jianguoyun,
+      endpoint: WebDavPresets.jianguoyun.endpointText,
+      rootPath: List.filled(31, 'a').join(),
+    );
+    final rejectedGenericEndpoint = settings(
+      presetId: WebDavPresetIds.custom,
+      endpoint: WebDavPresets.jianguoyun.endpointText,
+      rootPath: List.filled(31, 'a').join(),
+    );
+
+    expect(accepted.isSecurelyConfigured, true);
+    expect(accepted.providerRootPathFirstSegmentLengthLimit, 30);
+    expect(accepted.hasProviderRootPathLengthViolation, false);
+    for (final rejected in [rejectedPreset, rejectedGenericEndpoint]) {
+      expect(rejected.providerRootPathFirstSegmentLengthLimit, 30);
+      expect(rejected.hasProviderRootPathLengthViolation, true);
+      expect(
+        rejected.configurationIssues,
+        contains(WebDavSyncConfigurationIssue.rootPath),
+      );
+      expect(rejected.isSecurelyConfigured, false);
+    }
+  });
+
   test('uses preset root defaults only when imported WebDAV root is missing',
       () {
     final missingRoot = WebDavSyncSettings.fromJson({

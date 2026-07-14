@@ -72,6 +72,20 @@ void main() {
 
     expect(zh.get(PaperTodoStringKeys.dialogSyncSettings), '同步设置');
     expect(zh.get(PaperTodoStringKeys.webDavIssueSummary), contains('WebDAV'));
+    expect(
+      zh.format(
+        PaperTodoStringKeys.webDavIssueProviderRootPathTooLong,
+        [30],
+      ),
+      contains('30'),
+    );
+    expect(
+      unsupported.format(
+        PaperTodoStringKeys.webDavIssueProviderRootPathTooLong,
+        [30],
+      ),
+      'Jianguoyun requires the first remote-folder segment to be at most 30 characters.',
+    );
     expect(zh.get(PaperTodoStringKeys.menuFormat), '格式');
     expect(zh.get(PaperTodoStringKeys.menuText), '文本');
     expect(zh.get(PaperTodoStringKeys.menuTodoItem), '事项');
@@ -207,9 +221,14 @@ void main() {
     await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
 
-    expect(find.text('同步设置'), findsOneWidget);
+    expect(find.text('设置'), findsWidgets);
+    expect(find.byTooltip('待办与笔记'), findsOneWidget);
+    expect(find.byTooltip('胶囊'), findsOneWidget);
+    expect(find.byTooltip('通用与高级'), findsOneWidget);
     expect(find.text('跟随系统'), findsOneWidget);
-    expect(find.text('WebDAV 同步'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('settings-category-sync')));
+    await tester.pumpAndSettle();
+    expect(find.text('WebDAV 同步'), findsWidgets);
     expect(find.text('Sync settings'), findsNothing);
   });
 
@@ -315,9 +334,9 @@ void main() {
     expect(find.text('第 1 列'), findsOneWidget);
     expect(find.text('第 2 列'), findsOneWidget);
     expect(find.text('新事项'), findsOneWidget);
-    expect(find.text('编辑'), findsWidgets);
     expect(find.text('预览'), findsWidgets);
-    expect(find.text('分栏'), findsOneWidget);
+    expect(find.text('编辑'), findsNothing);
+    expect(find.text('分栏'), findsNothing);
     expect(find.textContaining('暂无笔记内容'), findsOneWidget);
     expect(find.text('Column 1'), findsNothing);
     expect(find.text('New item'), findsNothing);

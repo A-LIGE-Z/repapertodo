@@ -18,6 +18,7 @@
 #include "win32_window.h"
 
 class PaperFlutterWindow;
+class NativeCapsuleWindow;
 
 struct TrayMenuLabels {
   std::wstring new_todo = L"+ New todo paper";
@@ -101,6 +102,7 @@ class FlutterWindow : public Win32Window {
   void ApplyPaperWindowState(const flutter::EncodableValue& state);
   void ApplyPaperWindowUpdate(const flutter::EncodableValue& paper);
   void ReconcilePaperWindows(const flutter::EncodableList& papers);
+  void ReconcileNativeCapsuleWindows(const flutter::EncodableList& surfaces);
   PaperFlutterWindow* EnsurePaperWindow(
       const std::string& paper_id,
       const flutter::EncodableMap* surface = nullptr);
@@ -108,6 +110,7 @@ class FlutterWindow : public Win32Window {
   void SendPaperWindowEvent(const std::string& method,
                             const flutter::EncodableValue& arguments);
   void DestroyPaperWindows();
+  void DestroyNativeCapsuleWindows();
 
   // The project to run.
   flutter::DartProject project_;
@@ -158,6 +161,8 @@ class FlutterWindow : public Win32Window {
   flutter::EncodableValue paper_window_state_;
   std::map<std::string, flutter::EncodableMap> paper_window_surfaces_;
   std::map<std::string, std::unique_ptr<PaperFlutterWindow>> paper_windows_;
+  std::map<std::string, std::unique_ptr<NativeCapsuleWindow>>
+      native_capsule_windows_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

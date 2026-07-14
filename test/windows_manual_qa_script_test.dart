@@ -50,8 +50,11 @@ Future<ProcessResult> _runManualQa({
   required File exe,
   required File resultJson,
   required String fullscreenAvoidance,
+  String multiMonitorEdgeDocking = 'pass',
   String tester = ' qa-tester ',
+  String notes = '',
   bool allowSkipped = false,
+  bool deferMultiMonitor = false,
   String? resultJsonPath,
 }) {
   final arguments = [
@@ -66,7 +69,7 @@ Future<ProcessResult> _runManualQa({
     '-TaskSwitcherVisibility',
     'pass',
     '-MultiMonitorEdgeDocking',
-    'pass',
+    multiMonitorEdgeDocking,
     '-FullscreenAvoidance',
     fullscreenAvoidance,
     '-TrayAfterExplorerRestart',
@@ -77,6 +80,8 @@ Future<ProcessResult> _runManualQa({
     'pass',
     '-Tester',
     tester,
+    '-Notes',
+    notes,
     '-ExePath',
     exe.path,
     '-ResultJson',
@@ -84,6 +89,9 @@ Future<ProcessResult> _runManualQa({
   ];
   if (allowSkipped) {
     arguments.add('-AllowSkipped');
+  }
+  if (deferMultiMonitor) {
+    arguments.add('-DeferMultiMonitor');
   }
   return Process.run(
     powerShell,
@@ -134,9 +142,88 @@ void main() {
     expect(record['appSoBytes'], appSo.lengthSync());
     expect(record['appSoSha256'], _sha256File(appSo));
     expect(record['allowSkipped'], false);
+    expect(record['deferMultiMonitor'], false);
+    expect(record['deferredItemIds'], isEmpty);
     final items = (record['items'] as List).cast<Map<String, Object?>>();
     expect(items, hasLength(7));
     expect(items.every((item) => item['status'] == 'pass'), true);
+  });
+
+  test('Windows manual QA script records only multi-monitor as deferred',
+      () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for Windows manual QA tests.');
+      return;
+    }
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_windows_manual_qa_deferred_monitor_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final (:exe, :appSo) = await _writeReleaseFiles(temp);
+    final resultJson = File(p.join(temp.path, 'windows-manual-qa.json'));
+
+    final result = await _runManualQa(
+      powerShell: powerShell,
+      exe: exe,
+      resultJson: resultJson,
+      fullscreenAvoidance: 'pass',
+      multiMonitorEdgeDocking: 'skip',
+      notes: 'Single-monitor workstation; cross-screen behavior deferred.',
+      deferMultiMonitor: true,
+    );
+
+    expect(appSo.existsSync(), true);
+    expect(result.exitCode, 0, reason: result.stderr.toString());
+    final record =
+        jsonDecode(resultJson.readAsStringSync()) as Map<String, Object?>;
+    expect(record['status'], 'passedWithDeferredMultiMonitor');
+    expect(record['deferMultiMonitor'], true);
+    expect(record['deferredItemIds'], ['multiMonitorEdgeDocking']);
+    expect((record['notes'] as String).trim(), isNotEmpty);
+    final items = (record['items'] as List).cast<Map<String, Object?>>();
+    expect(
+      items.singleWhere(
+          (item) => item['id'] == 'multiMonitorEdgeDocking')['status'],
+      'skip',
+    );
+    expect(
+      items
+          .where((item) => item['id'] != 'multiMonitorEdgeDocking')
+          .every((item) => item['status'] == 'pass'),
+      true,
+    );
+  });
+
+  test('Windows manual QA script rejects deferring another item', () async {
+    final powerShell = _findPowerShellExecutable();
+    if (powerShell == null) {
+      markTestSkipped('PowerShell is unavailable for Windows manual QA tests.');
+      return;
+    }
+    final temp = await Directory.systemTemp.createTemp(
+      'repapertodo_windows_manual_qa_wrong_deferred_item_',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final (:exe, :appSo) = await _writeReleaseFiles(temp);
+    final resultJson = File(p.join(temp.path, 'windows-manual-qa.json'));
+
+    final result = await _runManualQa(
+      powerShell: powerShell,
+      exe: exe,
+      resultJson: resultJson,
+      fullscreenAvoidance: 'skip',
+      notes: 'Attempted wrong deferral.',
+      deferMultiMonitor: true,
+    );
+
+    expect(appSo.existsSync(), true);
+    expect(result.exitCode, isNot(0));
+    expect(resultJson.existsSync(), false);
+    expect(
+      result.stderr.toString(),
+      contains('requires multiMonitorEdgeDocking to be the only skipped'),
+    );
   });
 
   test('Windows manual QA script rejects skipped items by default', () async {

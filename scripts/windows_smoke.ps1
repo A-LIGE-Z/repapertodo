@@ -100,11 +100,65 @@ public static class RePaperTodoSmokeWindowEnumerator {
   [DllImport("user32.dll")]
   private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
 
+  [DllImport("kernel32.dll")]
+  private static extern uint GetCurrentThreadId();
+
   [DllImport("user32.dll")]
   private static extern bool IsWindowVisible(IntPtr window);
 
   [DllImport("user32.dll")]
   private static extern bool GetWindowRect(IntPtr window, out RECT bounds);
+
+  [DllImport("user32.dll")]
+  private static extern uint GetDpiForWindow(IntPtr window);
+
+  [DllImport("user32.dll")]
+  private static extern bool GetCursorPos(out POINT point);
+
+  [DllImport("user32.dll")]
+  private static extern bool SetCursorPos(int x, int y);
+
+  [DllImport("user32.dll")]
+  private static extern bool SetForegroundWindow(IntPtr window);
+
+  [DllImport("user32.dll")]
+  private static extern IntPtr GetForegroundWindow();
+
+  [DllImport("user32.dll")]
+  private static extern bool AttachThreadInput(uint attachThread,
+                                                uint attachToThread,
+                                                bool attach);
+
+  [DllImport("user32.dll")]
+  private static extern IntPtr SetActiveWindow(IntPtr window);
+
+  [DllImport("user32.dll")]
+  private static extern IntPtr SetFocus(IntPtr window);
+
+  [DllImport("user32.dll")]
+  private static extern bool ShowWindow(IntPtr window, int command);
+
+  [DllImport("user32.dll")]
+  private static extern void SwitchToThisWindow(IntPtr window, bool altTab);
+
+  [DllImport("user32.dll")]
+  private static extern bool BringWindowToTop(IntPtr window);
+
+  [DllImport("user32.dll")]
+  private static extern void mouse_event(uint flags, uint dx, uint dy,
+                                         uint data, UIntPtr extraInfo);
+
+  [DllImport("user32.dll", SetLastError = true)]
+  private static extern uint SendInput(uint inputCount, INPUT[] inputs,
+                                       int inputSize);
+
+  [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+  private static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
+
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  private static extern int GetWindowText(IntPtr window,
+                                          System.Text.StringBuilder text,
+                                          int maximum);
 
   [DllImport("user32.dll")]
   private static extern bool PostMessage(IntPtr window, uint message,
@@ -122,12 +176,103 @@ public static class RePaperTodoSmokeWindowEnumerator {
     public int Bottom;
   }
 
+  private struct POINT {
+    public int X;
+    public int Y;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct INPUT {
+    public uint Type;
+    public INPUTUNION Data;
+  }
+
+  [StructLayout(LayoutKind.Explicit)]
+  private struct INPUTUNION {
+    [FieldOffset(0)]
+    public MOUSEINPUT Mouse;
+
+    [FieldOffset(0)]
+    public KEYBDINPUT Keyboard;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct MOUSEINPUT {
+    public int X;
+    public int Y;
+    public uint MouseData;
+    public uint Flags;
+    public uint Time;
+    public UIntPtr ExtraInfo;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct KEYBDINPUT {
+    public ushort VirtualKey;
+    public ushort ScanCode;
+    public uint Flags;
+    public UIntPtr Time;
+    public IntPtr ExtraInfo;
+  }
+
+  private static bool IsIndependentPaperWindow(IntPtr window,
+                                                uint expectedProcessId) {
+    uint processId;
+    GetWindowThreadProcessId(window, out processId);
+    if (processId != expectedProcessId || !IsWindowVisible(window)) {
+      return false;
+    }
+    const long WS_THICKFRAME = 0x00040000L;
+    long style = GetWindowLongPtr(window, -16).ToInt64();
+    if ((style & WS_THICKFRAME) == 0) {
+      return false;
+    }
+    RECT bounds;
+    if (!GetWindowRect(window, out bounds)) {
+      return false;
+    }
+    // The settings coordinator uses the large desktop viewport. Independent
+    // paper windows in this smoke use compact persisted paper dimensions.
+    return bounds.Right - bounds.Left < 800 ||
+           bounds.Bottom - bounds.Top < 500;
+  }
+
   public static int CountVisibleTopLevelWindows(uint expectedProcessId) {
     var count = 0;
     EnumWindows((window, parameter) => {
       uint processId;
       GetWindowThreadProcessId(window, out processId);
       if (processId == expectedProcessId && IsWindowVisible(window)) {
+        count += 1;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return count;
+  }
+
+  public static int CountVisiblePaperWindows(uint expectedProcessId) {
+    var count = 0;
+    EnumWindows((window, parameter) => {
+      if (IsIndependentPaperWindow(window, expectedProcessId)) {
+        count += 1;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return count;
+  }
+
+  public static int CountVisibleNativeCapsuleWindows(uint expectedProcessId) {
+    var count = 0;
+    EnumWindows((window, parameter) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId != expectedProcessId || !IsWindowVisible(window)) {
+        return true;
+      }
+      var title = new System.Text.StringBuilder(256);
+      GetWindowText(window, title, title.Capacity);
+      if (title.ToString().StartsWith("RePaperTodo Native Capsule [",
+                                      StringComparison.Ordinal)) {
         count += 1;
       }
       return true;
@@ -158,15 +303,7 @@ public static class RePaperTodoSmokeWindowEnumerator {
   public static long FindVisiblePaperWindow(uint expectedProcessId) {
     IntPtr result = IntPtr.Zero;
     EnumWindows((window, parameter) => {
-      uint processId;
-      GetWindowThreadProcessId(window, out processId);
-      if (processId != expectedProcessId || !IsWindowVisible(window)) {
-        return true;
-      }
-      RECT bounds;
-      if (GetWindowRect(window, out bounds) &&
-          (bounds.Right - bounds.Left < 800 ||
-           bounds.Bottom - bounds.Top < 500)) {
+      if (IsIndependentPaperWindow(window, expectedProcessId)) {
         result = window;
         return false;
       }
@@ -184,6 +321,115 @@ public static class RePaperTodoSmokeWindowEnumerator {
                                       SWP_NOZORDER | SWP_NOACTIVATE);
   }
 
+  public static int[] GetBounds(long window) {
+    RECT bounds;
+    if (window == 0 ||
+        !GetWindowRect(new IntPtr(window), out bounds)) {
+      return null;
+    }
+    return new[] {
+      bounds.Left,
+      bounds.Top,
+      bounds.Right - bounds.Left,
+      bounds.Bottom - bounds.Top
+    };
+  }
+
+  public static int EditTodoText(long window, string text) {
+    if (window == 0 || String.IsNullOrEmpty(text)) {
+      return -1;
+    }
+    var handle = new IntPtr(window);
+    RECT bounds;
+    if (!GetWindowRect(handle, out bounds)) {
+      return -2;
+    }
+    var width = bounds.Right - bounds.Left;
+    var height = bounds.Bottom - bounds.Top;
+    if (width < 160 || height < 100) {
+      return -3;
+    }
+
+    POINT originalCursor;
+    var restoreCursor = GetCursorPos(out originalCursor);
+    uint processId;
+    var targetThread = GetWindowThreadProcessId(handle, out processId);
+    var currentThread = GetCurrentThreadId();
+    var attached = targetThread != 0 && targetThread != currentThread &&
+                   AttachThreadInput(currentThread, targetThread, true);
+    try {
+      ShowWindow(handle, 5);
+      BringWindowToTop(handle);
+      SwitchToThisWindow(handle, true);
+      SetForegroundWindow(handle);
+      SetActiveWindow(handle);
+      SetFocus(handle);
+      System.Threading.Thread.Sleep(200);
+
+      // PaperTodo's compact title bar is 31px high. The first todo text field
+      // begins immediately below it, after the leading checkbox hit area.
+      var dpi = GetDpiForWindow(handle);
+      var scale = dpi == 0 ? 1.0 : dpi / 96.0;
+      var logicalTextX = (int)Math.Round(92 * scale);
+      var logicalTextY = (int)Math.Round(56 * scale);
+      var clickX = bounds.Left +
+                   Math.Min(width - 64, Math.Max(logicalTextX, width / 3));
+      var clickY = bounds.Top + Math.Min(height - 40, logicalTextY);
+      if (!SetCursorPos(clickX, clickY)) {
+        return -4;
+      }
+      const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+      const uint MOUSEEVENTF_LEFTUP = 0x0004;
+      mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+      mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+      System.Threading.Thread.Sleep(250);
+      if (GetForegroundWindow() != handle) {
+        return -5;
+      }
+
+      const uint INPUT_KEYBOARD = 1;
+      const uint KEYEVENTF_KEYUP = 0x0002;
+      const uint KEYEVENTF_UNICODE = 0x0004;
+      var inputs = new INPUT[text.Length * 2];
+      for (var index = 0; index < text.Length; index += 1) {
+        inputs[index * 2] = new INPUT {
+          Type = INPUT_KEYBOARD,
+          Data = new INPUTUNION {
+            Keyboard = new KEYBDINPUT {
+              VirtualKey = 0,
+              ScanCode = text[index],
+              Flags = KEYEVENTF_UNICODE,
+              Time = UIntPtr.Zero,
+              ExtraInfo = IntPtr.Zero
+            }
+          }
+        };
+        inputs[(index * 2) + 1] = new INPUT {
+          Type = INPUT_KEYBOARD,
+          Data = new INPUTUNION {
+            Keyboard = new KEYBDINPUT {
+              VirtualKey = 0,
+              ScanCode = text[index],
+              Flags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
+              Time = UIntPtr.Zero,
+              ExtraInfo = IntPtr.Zero
+            }
+          }
+        };
+      }
+      var sent = SendInput((uint)inputs.Length, inputs,
+                           Marshal.SizeOf(typeof(INPUT)));
+      return sent == (uint)inputs.Length ? 1 : -6;
+    } finally {
+      if (restoreCursor) {
+        SetCursorPos(originalCursor.X, originalCursor.Y);
+      }
+      if (attached) {
+        AttachThreadInput(currentThread, targetThread, false);
+      }
+    }
+  }
+
   public static bool CloseWindow(long window) {
     return window != 0 && PostMessage(new IntPtr(window), 0x0010,
                                       IntPtr.Zero, IntPtr.Zero);
@@ -197,6 +443,22 @@ function Get-VisibleTopLevelWindowCount {
 
   Initialize-WindowEnumerator
   return [RePaperTodoSmokeWindowEnumerator]::CountVisibleTopLevelWindows(
+    [uint32]$ProcessId)
+}
+
+function Get-VisiblePaperWindowCount {
+  param([int]$ProcessId)
+
+  Initialize-WindowEnumerator
+  return [RePaperTodoSmokeWindowEnumerator]::CountVisiblePaperWindows(
+    [uint32]$ProcessId)
+}
+
+function Get-VisibleNativeCapsuleWindowCount {
+  param([int]$ProcessId)
+
+  Initialize-WindowEnumerator
+  return [RePaperTodoSmokeWindowEnumerator]::CountVisibleNativeCapsuleWindows(
     [uint32]$ProcessId)
 }
 
@@ -232,6 +494,53 @@ function Move-ResizePaperWindow {
   }
 }
 
+function Get-PaperWindowBounds {
+  param([long]$WindowHandle)
+
+  Initialize-WindowEnumerator
+  $bounds = [RePaperTodoSmokeWindowEnumerator]::GetBounds($WindowHandle)
+  if ($null -eq $bounds -or $bounds.Count -ne 4) {
+    return $null
+  }
+  return [ordered]@{
+    x = [int]$bounds[0]
+    y = [int]$bounds[1]
+    width = [int]$bounds[2]
+    height = [int]$bounds[3]
+  }
+}
+
+function Edit-PaperTodoTextField {
+  param(
+    [long]$WindowHandle,
+    [string]$Text
+  )
+
+  Initialize-WindowEnumerator
+  $result = [RePaperTodoSmokeWindowEnumerator]::EditTodoText(
+    $WindowHandle, $Text)
+  if ($result -ne 1) {
+    throw "Windows release smoke could not type into an independent paper content field (native input result $result)."
+  }
+}
+
+function Test-PaperWindowBounds {
+  param(
+    [long]$WindowHandle,
+    [int]$X,
+    [int]$Y,
+    [int]$Width,
+    [int]$Height
+  )
+
+  $bounds = Get-PaperWindowBounds -WindowHandle $WindowHandle
+  return $null -ne $bounds -and
+    [Math]::Abs([int]$bounds.x - $X) -le 1 -and
+    [Math]::Abs([int]$bounds.y - $Y) -le 1 -and
+    [Math]::Abs([int]$bounds.width - $Width) -le 1 -and
+    [Math]::Abs([int]$bounds.height - $Height) -le 1
+}
+
 function Test-PersistedPaperBounds {
   param(
     [string]$StateFile,
@@ -252,6 +561,45 @@ function Test-PersistedPaperBounds {
           [Math]::Abs([double]$paper.width - $Width) -le 1 -and
           [Math]::Abs([double]$paper.height - $Height) -le 1) {
         return $true
+      }
+    }
+  } catch {
+    return $false
+  }
+  return $false
+}
+
+function Test-PersistedPaperContentMarker {
+  param(
+    [string]$StateFile,
+    [string]$Marker
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Marker) -or
+      -not (Test-Path -LiteralPath $StateFile -PathType Leaf)) {
+    return $false
+  }
+  try {
+    $state = Get-Content -Raw -LiteralPath $StateFile | ConvertFrom-Json
+    foreach ($paper in @($state.papers)) {
+      if (([string]$paper.title).Contains($Marker) -or
+          ([string]$paper.content).Contains($Marker)) {
+        return $true
+      }
+      foreach ($item in @($paper.items)) {
+        if (([string]$item.text).Contains($Marker)) {
+          return $true
+        }
+        foreach ($column in @($item.todoExtraColumns)) {
+          if (([string]$column).Contains($Marker)) {
+            return $true
+          }
+        }
+      }
+      foreach ($element in @($paper.noteCanvasElements)) {
+        if (([string]$element.text).Contains($Marker)) {
+          return $true
+        }
       }
     }
   } catch {
@@ -422,6 +770,8 @@ $visiblePaperCountBeforeSettings = 0
 $visibleTopLevelWindowCountWhileSettingsOpen = 0
 $visibleTopLevelWindowCountAfterSettingsClose = 0
 $geometryPersistenceVerified = $false
+$contentEditGeometryStabilityVerified = $false
+$contentEditMarker = "SmokeEdit$([Guid]::NewGuid().ToString('N').Substring(0, 10))"
 $geometryTestBounds = [ordered]@{
   x = 180
   y = 140
@@ -465,11 +815,11 @@ try {
     -TimeoutSeconds $StartupTimeoutSeconds `
     -TimeoutMessage "Windows release smoke did not create one visible top-level window per initial paper." `
     -Condition {
-      $visibleWindowCount = Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+      $visibleWindowCount = Get-VisiblePaperWindowCount -ProcessId $primaryProcess.Id
       $visibleWindowCount -ge $initialPaperCount
     }
   $initialVisibleWindowCount =
-    Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+    Get-VisiblePaperWindowCount -ProcessId $primaryProcess.Id
 
   $paperWindow = Get-VisiblePaperWindow -ProcessId $primaryProcess.Id
   if ($paperWindow -eq 0) {
@@ -494,6 +844,36 @@ try {
     }
   $geometryPersistenceVerified = $true
 
+  Edit-PaperTodoTextField `
+    -WindowHandle $paperWindow `
+    -Text $contentEditMarker
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke could not persist the automated paper content edit." `
+    -Condition {
+      Test-PersistedPaperContentMarker `
+        -StateFile $smokeStateFile `
+        -Marker $contentEditMarker
+    }
+  Wait-ForCondition `
+    -TimeoutSeconds $StartupTimeoutSeconds `
+    -TimeoutMessage "Windows release smoke did not preserve paper geometry after a content edit." `
+    -Condition {
+      (Test-PersistedPaperBounds `
+        -StateFile $smokeStateFile `
+        -X $geometryTestBounds.x `
+        -Y $geometryTestBounds.y `
+        -Width $geometryTestBounds.width `
+        -Height $geometryTestBounds.height) -and
+      (Test-PaperWindowBounds `
+        -WindowHandle $paperWindow `
+        -X $geometryTestBounds.x `
+        -Y $geometryTestBounds.y `
+        -Width $geometryTestBounds.width `
+        -Height $geometryTestBounds.height)
+    }
+  $contentEditGeometryStabilityVerified = $true
+
   Invoke-SecondaryStartupCommand `
     -Executable $smokeExe `
     -WorkingDirectory $smokeReleaseDirectory `
@@ -510,7 +890,8 @@ try {
     -TimeoutSeconds $StartupTimeoutSeconds `
     -TimeoutMessage "Windows release smoke did not hide every independent paper window." `
     -Condition {
-      (Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id) -eq 0
+      (Get-VisiblePaperWindowCount -ProcessId $primaryProcess.Id) -eq 0 -and
+        (Get-VisibleNativeCapsuleWindowCount -ProcessId $primaryProcess.Id) -eq 0
     }
 
   Invoke-SecondaryStartupCommand `
@@ -553,11 +934,11 @@ try {
     -TimeoutMessage "Windows release smoke did not create one visible top-level HWND per visible paper." `
     -Condition {
       $visiblePapers = Get-VisiblePaperCount -StateFile $smokeStateFile
-      $visibleWindows = Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+      $visibleWindows = Get-VisiblePaperWindowCount -ProcessId $primaryProcess.Id
       $visiblePapers -ge 2 -and $visibleWindows -ge $visiblePapers
     }
   $finalVisibleWindowCount =
-    Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+    Get-VisiblePaperWindowCount -ProcessId $primaryProcess.Id
 
   $visiblePaperCountBeforeSettings =
     Get-VisiblePaperCount -StateFile $smokeStateFile
@@ -570,8 +951,8 @@ try {
     -TimeoutMessage "Windows release smoke forwarded --settings command did not reveal the coordinator window." `
     -Condition {
       (Get-VisibleCoordinatorWindow -ProcessId $primaryProcess.Id) -ne 0 -and
-        (Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id) -ge
-          ($visiblePaperCountBeforeSettings + 1)
+        (Get-VisiblePaperWindowCount -ProcessId $primaryProcess.Id) -eq
+          $visiblePaperCountBeforeSettings
     }
   $visibleTopLevelWindowCountWhileSettingsOpen =
     Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
@@ -583,13 +964,13 @@ try {
     -TimeoutMessage "Windows release smoke settings coordinator did not close without changing independent papers." `
     -Condition {
       (Get-VisibleCoordinatorWindow -ProcessId $primaryProcess.Id) -eq 0 -and
-        (Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id) -eq
+        (Get-VisiblePaperWindowCount -ProcessId $primaryProcess.Id) -eq
           $visiblePaperCountBeforeSettings -and
         (Get-VisiblePaperCount -StateFile $smokeStateFile) -eq
           $visiblePaperCountBeforeSettings
     }
   $visibleTopLevelWindowCountAfterSettingsClose =
-    Get-VisibleTopLevelWindowCount -ProcessId $primaryProcess.Id
+    Get-VisiblePaperWindowCount -ProcessId $primaryProcess.Id
 
   Invoke-SecondaryStartupCommand `
     -Executable $smokeExe `
@@ -631,6 +1012,8 @@ try {
       finalVisibleTopLevelWindowCount = $finalVisibleWindowCount
       independentPaperSurfaces = $true
       geometryPersistenceVerified = $geometryPersistenceVerified
+      contentEditGeometryStabilityVerified =
+        $contentEditGeometryStabilityVerified
       geometryTestBounds = $geometryTestBounds
       settingsCoordinatorLifecycle = $true
       settingsStartupCommands = $settingsStartupCommands

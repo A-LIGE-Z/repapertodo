@@ -106,6 +106,9 @@ matching the current `flutter --version --machine` output, metadata
 `pubspec.lock` byte/hash matching against the current dependency lock, and the
 runtime language set (`zh` and `en`). Add
 `-FailOnBlocked` only when a blocked audit should fail the command.
+It also emits `readyForLocalRelease` and `localBlockers`. A dirty worktree and
+an explicitly deferred multi-monitor QA item block GitHub publishing but do not
+block a local release candidate; use `-FailOnLocalBlocked` for that local gate.
 The Windows release smoke and Android smoke validation run inside release
 packaging. The Android smoke validation can also be run directly after an APK
 build:
@@ -240,9 +243,13 @@ process to verify topmost avoidance and restoration. The same policy smoke
 executes a persistent 20-second script capsule, opens settings while it is
 still running, and verifies the PowerShell worker is removed on app exit.
 Manual QA retains those checks as an end-user confirmation on the target
-desktop. Skipped items
-fail by default; `-AllowSkipped` is only for exploratory non-publishable
-records.
+desktop. Skipped items fail by default; `-AllowSkipped` is only for exploratory
+non-publishable records. When only a single-monitor workstation is available,
+pass `-MultiMonitorEdgeDocking skip`, `-DeferMultiMonitor`, `-Tester <name>`,
+and `-Notes <reason>`. This creates `passedWithDeferredMultiMonitor` evidence
+accepted only for a local release candidate. All other six items must pass, and
+public GitHub Release publishing continues to require the multi-monitor item to
+pass.
 Passed records also bind the observation to the concrete build by recording the
 source release directory plus byte counts and SHA-256 hashes for
 `repapertodo.exe` and `data/app.so`, and they require a non-empty tester name;

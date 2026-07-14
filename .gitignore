@@ -6,6 +6,7 @@
 .packages
 build/
 dist/
+.reference/
 android/.kotlin/
 .android-home/
 .android-sdk/

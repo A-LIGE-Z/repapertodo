@@ -413,8 +413,37 @@ class WebDavSyncSettings {
         WebDavSyncConfigurationIssue.username,
       if (!_isValidBasicAuthPassword(password))
         WebDavSyncConfigurationIssue.password,
-      if (rootPath.isEmpty) WebDavSyncConfigurationIssue.rootPath,
+      if (rootPath.isEmpty || hasProviderRootPathLengthViolation)
+        WebDavSyncConfigurationIssue.rootPath,
     };
+  }
+
+  int? get providerRootPathFirstSegmentLengthLimit {
+    final configuredPreset = WebDavPresets.configuredById(presetId);
+    if (configuredPreset?.maxRootPathFirstSegmentLength != null) {
+      return configuredPreset!.maxRootPathFirstSegmentLength;
+    }
+    final uri = endpointUri;
+    final jianguoyunEndpoint = WebDavPresets.jianguoyun.endpoint;
+    if (uri == null || jianguoyunEndpoint == null) {
+      return null;
+    }
+    final matchesJianguoyun =
+        uri.scheme.toLowerCase() == jianguoyunEndpoint.scheme.toLowerCase() &&
+            uri.host.toLowerCase() == jianguoyunEndpoint.host.toLowerCase() &&
+            uri.port == jianguoyunEndpoint.port &&
+            uri.path == jianguoyunEndpoint.path;
+    return matchesJianguoyun
+        ? WebDavPresets.jianguoyun.maxRootPathFirstSegmentLength
+        : null;
+  }
+
+  bool get hasProviderRootPathLengthViolation {
+    final limit = providerRootPathFirstSegmentLengthLimit;
+    if (limit == null || rootPath.isEmpty) {
+      return false;
+    }
+    return rootPath.split('/').first.runes.length > limit;
   }
 
   Set<WebDavSyncConfigurationIssue> get secureConfigurationIssues {

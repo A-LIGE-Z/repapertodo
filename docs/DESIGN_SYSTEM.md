@@ -29,6 +29,9 @@ The interface should stay close to PaperTodo's "sheets of paper" metaphor:
 - Respect reduced motion.
 - Avoid emoji as structural icons.
 - Make compact desktop UI and touch-friendly Android UI from the same design language, not the same exact density.
+- On Android, place the PaperTodo-colored sheets on a subtly darker neutral
+  canvas so each paper keeps the original floating-sheet hierarchy without
+  turning the screen into a generic Material card dashboard.
 
 ## Windows Priority
 
@@ -84,6 +87,18 @@ paper without moving the current window. When the active native surface is
 hidden or closed while another registered paper is still visible, the runner
 should retarget the host window to the next visible surface after the hidden
 paper in the latest Dart registry order instead of hiding the whole app window.
+For independent paper HWNDs, live Win32 bounds remain authoritative after a
+drag or resize: content edits, title refreshes, tray rebuilds, topmost changes,
+and desktop-pin refreshes must not replay stale model geometry. Only an
+explicit geometry operation may move or resize an existing expanded paper.
+Live bounds may override a registry refresh only when the native HWND is
+already expanded. During capsule-to-paper transitions, the saved normal paper
+geometry remains authoritative so capsule size and edge coordinates can never
+become the expanded paper's position or dimensions.
+The 8px paper-shadow chrome around Windows child HWNDs must remain genuinely
+transparent; the runner uses a reserved color key so Flutter's transparent
+scaffold pixels reveal the desktop instead of becoming a white rectangular
+frame around the rounded paper.
 Startup restore should use the dedicated `setPaperSurfaces` channel instead of
 depending on tray-menu rebuilds as a side effect. Registry payloads should also
 include

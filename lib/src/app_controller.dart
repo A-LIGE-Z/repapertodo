@@ -34,6 +34,9 @@ class RePaperTodoController {
   Stream<PaperWindowActionRequest> get paperWindowActionRequests =>
       _platform.paperWindows.actionRequests;
 
+  Stream<CapsuleDropRequest> get capsuleDrops =>
+      _platform.paperWindows.capsuleDrops;
+
   Stream<String> get paperOpenRequests =>
       _platform.paperWindows.paperOpenRequests;
 
@@ -224,6 +227,11 @@ class RePaperTodoController {
     await _platform.paperWindows.updatePaperSurface(paper);
   }
 
+  Future<void> refreshPaperSurfaces() async {
+    state.normalize();
+    await _platform.paperWindows.restoreAll(state);
+  }
+
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {
     await _platform.paperWindows.capturePaperSurfaceBounds(paper);
   }
@@ -362,6 +370,7 @@ class RePaperTodoController {
   Future<void> _showPaper(
     PaperData paper, {
     required bool rebuildTrayMenu,
+    bool refreshSurfaceRegistry = true,
   }) async {
     if (paper.isCollapsed && !_canPaperDisplayAsCapsule(paper)) {
       paper.isCollapsed = false;
@@ -370,6 +379,9 @@ class RePaperTodoController {
     state.normalize();
     await _prepareNewPaperForFirstShow(paper);
     await _platform.paperWindows.showPaper(paper);
+    if (refreshSurfaceRegistry) {
+      await _platform.paperWindows.refreshSurfaceRegistry(state);
+    }
     if (rebuildTrayMenu) {
       await _platform.tray.rebuildMenu(state);
     }
@@ -396,6 +408,7 @@ class RePaperTodoController {
     if (paper.isPinnedToDesktop) {
       await _prepareNewPaperForFirstShow(paper);
       await _platform.paperWindows.revealPinnedPaper(paper);
+      await _platform.paperWindows.refreshSurfaceRegistry(state);
       await _platform.tray.rebuildMenu(state);
       return;
     }
@@ -409,6 +422,7 @@ class RePaperTodoController {
   Future<void> _hidePaper(
     PaperData paper, {
     required bool rebuildTrayMenu,
+    bool refreshSurfaceRegistry = true,
   }) async {
     paper
       ..isPinnedToDesktop = false
@@ -416,6 +430,9 @@ class RePaperTodoController {
       ..isCollapsed = false;
     state.normalize();
     await _platform.paperWindows.hidePaper(paper);
+    if (refreshSurfaceRegistry) {
+      await _platform.paperWindows.refreshSurfaceRegistry(state);
+    }
     if (rebuildTrayMenu) {
       await _platform.tray.rebuildMenu(state);
     }
@@ -435,13 +452,23 @@ class RePaperTodoController {
         return;
       case StartupCommandKind.show:
         for (final paper in state.papers) {
-          await _showPaper(paper, rebuildTrayMenu: false);
+          await _showPaper(
+            paper,
+            rebuildTrayMenu: false,
+            refreshSurfaceRegistry: false,
+          );
         }
+        await _platform.paperWindows.refreshSurfaceRegistry(state);
         trayMenuNeedsRefresh = state.papers.isNotEmpty;
       case StartupCommandKind.hide:
         for (final paper in state.papers) {
-          await _hidePaper(paper, rebuildTrayMenu: false);
+          await _hidePaper(
+            paper,
+            rebuildTrayMenu: false,
+            refreshSurfaceRegistry: false,
+          );
         }
+        await _platform.paperWindows.refreshSurfaceRegistry(state);
         trayMenuNeedsRefresh = state.papers.isNotEmpty;
       case StartupCommandKind.toggle:
         final shouldHide = await _hasVisibleSurfacesForToggle();
@@ -502,7 +529,11 @@ class RePaperTodoController {
       if (hasVisibleSurface) {
         continue;
       }
-      await _showPaper(paper, rebuildTrayMenu: false);
+      await _showPaper(
+        paper,
+        rebuildTrayMenu: false,
+        refreshSurfaceRegistry: false,
+      );
     }
   }
 

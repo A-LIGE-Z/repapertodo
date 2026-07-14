@@ -92,11 +92,13 @@ void main() {
     expect(roadmap, contains('one top-level HWND and one Flutter engine'));
     expect(roadmap, contains('one visible HWND per visible\n  paper'));
     expect(roadmap, contains('Remaining native-window parity work'));
-    expect(roadmap, contains('live WebDAV QA against generic\n  WebDAV'));
-    expect(roadmap, contains('at least one domestic provider account'));
+    expect(roadmap, contains('generic WebDAV protocol coverage'));
+    expect(roadmap, contains('credentialed Jianguoyun'));
+    expect(roadmap, contains('unquoted opaque ETag conditional-write'));
     expect(roadmap, contains('Android 15/API 35 AOSP ATD emulator'));
     expect(roadmap, contains('real WorkManager background Dart'));
-    expect(roadmap, contains('credentialed external WebDAV providers'));
+    expect(roadmap, contains('signed release APK'));
+    expect(roadmap, contains('worker returned `SUCCESS`'));
     expect(roadmap, contains('signed Android release configuration'));
     expect(roadmap, contains('manual Windows parity QA'));
     expect(
@@ -1109,7 +1111,8 @@ void main() {
     expect(
         syncDesign, contains('without changing sync configuration restores'));
     expect(syncDesign, contains('platform setting application reports errors'));
-    expect(syncDesign, contains('saving sync setting changes clears'));
+    expect(syncDesign, contains('must clear the durable pending batch'));
+    expect(syncDesign, contains('scheduling-only changes preserve both'));
     expect(syncDesign, contains('Settings save failures must surface'));
     expect(syncDesign, contains('later local edits blocked'));
     expect(syncDesign, contains('accepted idempotently'));
@@ -1179,10 +1182,13 @@ void main() {
     expect(syncDesign, contains('negative or malformed values are ignored'));
     expect(syncDesign, contains('Missing or weak ETags must not be used for'));
     expect(syncDesign, contains('malformed quote structure'));
-    expect(syncDesign, contains('must quote them before transport'));
+    expect(syncDesign, contains('standards-compliant quoted'));
+    expect(syncDesign, contains('exact original unquoted opaque ETag'));
+    expect(syncDesign, contains('never degrade into an unconditional PUT'));
     expect(
       syncDesign,
-      contains('must reject weak, control-character, or malformed values'),
+      contains(
+          'Weak,\ncontrol-character, wildcard-only, or malformed values are rejected'),
     );
     expect(syncDesign, contains('Provider `409` or `412` create-only'));
     expect(syncDesign, contains('original create-only conflict is preserved'));
@@ -2047,8 +2053,10 @@ void main() {
     expect(app, contains('DengXian'));
     expect(platform, contains('normalizeInstalledFontFamilies'));
     expect(windowsPlatform, contains('listInstalledFontFamilies'));
-    expect(settingsDialog, contains('value: UiFontPresets.yaHei'));
-    expect(settingsDialog, contains('value: UiFontPresets.dengXian'));
+    expect(settingsDialog, isNot(contains('value: UiFontPresets.yaHei')));
+    expect(settingsDialog, isNot(contains('value: UiFontPresets.dengXian')));
+    expect(settingsDialog,
+        contains('_uiFontPreset = UiFontPresets.defaultPreset'));
     expect(settingsDialog, contains('RawAutocomplete<String>'));
     expect(settingsDialog, contains('loadInstalledFontFamilies'));
     expect(windowsRunner, contains('InstalledFontFamilies'));
@@ -2453,14 +2461,16 @@ void main() {
         strings, contains("PaperTodoStringKeys.topBarOpenSurface: '显示外部打开按钮'"));
   });
 
-  test('Todo compact item actions use paper width', () {
+  test('Todo compact item actions use phone form factor and paper width', () {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final app = _readProjectText('lib/src/app.dart');
 
     expect(design, contains('Todo compact item actions should switch'));
     expect(design, contains('current paper/editor width'));
     expect(app, contains('final availableWidth = constraints.hasBoundedWidth'));
-    expect(app, contains('final useCompactItemActions = availableWidth < 600'));
+    expect(app, contains('final useCompactItemActions ='));
+    expect(app, contains('MediaQuery.sizeOf(context).shortestSide < 600 ||'));
+    expect(app, contains('availableWidth < 600'));
     expect(app, contains('PaperTodoStringKeys.actionTodoItemActions'));
   });
 
@@ -3164,6 +3174,10 @@ void main() {
         _readProjectText('windows/runner/paper_flutter_window.cpp');
     final paperWindowHeader =
         _readProjectText('windows/runner/paper_flutter_window.h');
+    final nativeCapsule =
+        _readProjectText('windows/runner/native_capsule_window.cpp');
+    final nativeCapsuleHeader =
+        _readProjectText('windows/runner/native_capsule_window.h');
     final cmake = _readProjectText('windows/runner/CMakeLists.txt');
     final mainDart = _readProjectText('lib/main.dart');
     final paperWindowApp =
@@ -3176,13 +3190,21 @@ void main() {
     expect(runnerHeader,
         contains('std::map<std::string, std::unique_ptr<PaperFlutterWindow>>'));
     expect(runner, contains('ReconcilePaperWindows(*papers)'));
+    expect(runner, contains('ReconcileNativeCapsuleWindows(*surfaces)'));
     expect(runner, contains('child_project.set_dart_entrypoint_arguments'));
     expect(runner, contains('ShowWindow(GetHandle(), SW_HIDE)'));
     expect(paperWindowHeader, contains('class PaperFlutterWindow'));
+    expect(nativeCapsuleHeader, contains('class NativeCapsuleWindow'));
+    expect(nativeCapsuleHeader, contains('public Win32Window'));
+    expect(nativeCapsule, isNot(contains('FlutterViewController')));
+    expect(nativeCapsule, contains('WS_EX_NOACTIVATE'));
+    expect(nativeCapsule, contains('"toggleCollapseAll"'));
+    expect(nativeCapsule, contains('"capsuleDropped"'));
     expect(paperWindow,
         contains('std::make_unique<flutter::FlutterViewController>'));
     expect(paperWindow, contains('"repapertodo/paper_window"'));
-    expect(paperWindow, contains('collapsed_ ? 92.0'));
+    expect(paperWindow,
+        contains('CapsuleWindowWidth(capsule_title, deep_capsule_mode_)'));
     expect(paperWindow, contains('collapsed_ ? 46.0'));
     expect(paperWindow, contains('FindDesktopWorkerWindow'));
     expect(paperWindow, contains('SetHideFromWindowSwitcher'));
@@ -3192,33 +3214,80 @@ void main() {
     expect(paperWindow, contains('case WM_EXITSIZEMOVE:'));
     expect(paperWindow, contains('case WM_GETMINMAXINFO:'));
     expect(paperWindow, contains('GetDpiForWindow(window)'));
+    expect(paperWindow, contains('WS_EX_LAYERED'));
+    expect(paperWindow,
+        contains('SetLayeredWindowAttributes(window, RGB(1, 2, 3)'));
+    expect(paperWindowHeader, contains('void SetAlwaysOnTop(bool enabled);'));
+    expect(
+        paperWindowHeader, contains('void SetPinnedToDesktop(bool pinned);'));
+    expect(paperWindowHeader,
+        contains('void SetPaperTitle(const std::string& title);'));
+    expect(runner, contains('paper_window->SetAlwaysOnTop(enabled)'));
+    expect(runner, contains('paper_window->SetPinnedToDesktop(enabled)'));
+    expect(runner, contains('paper_window->SetPaperTitle(title)'));
+    expect(
+      runner,
+      contains(
+        'Native expanded-paper proxies must activate their paper synchronously',
+      ),
+    );
+    expect(runner, contains('kind == "openPaper" && target.valid'));
+    expect(runner, contains('paper_window->ShowPaper(true)'));
+    expect(runner, contains('existing_window->BoundsValue()'));
+    expect(runner, contains('flutter::EncodableMap resolved_surface'));
     expect(paperWindow, contains('WorkAreaForWindow(window, monitor_name)'));
-    expect(paperWindow, contains('side == "left"'));
+    expect(paperWindow, contains('capsuleTopIsWorkAreaRelative'));
+    expect(paperWindow, contains('static_cast<double>(work_area.top) + y'));
+    expect(paperWindow, contains('capsule_side_ == "left"'));
+    expect(paperWindow, contains('CapsuleRestingVisibleWidth'));
+    expect(paperWindow, contains('CapsuleHoverVisibleWidth'));
+    expect(paperWindow, contains('SetCapsuleHovered(*hovered)'));
+    expect(paperWindowApp, contains("'capsuleHoverChanged'"));
     expect(paperWindowHeader, contains('bool in_size_move_ = false;'));
     expect(cmake, contains('"paper_flutter_window.cpp"'));
+    expect(cmake, contains('"native_capsule_window.cpp"'));
     expect(mainDart, contains('PaperWindowArguments.tryParse(args)'));
     expect(paperWindowApp, contains("'paperChanged'"));
     expect(paperWindowApp, contains('paperWindowMode: true'));
     expect(windowsSmoke, contains('CountVisibleTopLevelWindows'));
+    expect(windowsSmoke, contains('CountVisiblePaperWindows'));
+    expect(windowsSmoke, contains('CountVisibleNativeCapsuleWindows'));
+    expect(windowsSmoke, contains('IsIndependentPaperWindow'));
+    expect(windowsSmoke, contains('WS_THICKFRAME'));
     expect(windowsSmoke, contains('MoveResizeWindow'));
     expect(windowsSmoke, contains('Test-PersistedPaperBounds'));
+    expect(windowsSmoke, contains('Test-PersistedPaperContentMarker'));
+    expect(windowsSmoke, contains('Test-PaperWindowBounds'));
+    expect(windowsSmoke, contains('EditTodoText'));
     expect(windowsSmoke, contains(r'geometryPersistenceVerified = $true'));
+    expect(
+      windowsSmoke,
+      contains(r'contentEditGeometryStabilityVerified = $true'),
+    );
     expect(windowsSmoke, contains('independentPaperSurfaces = \$true'));
     expect(windowsSmoke, contains('settingsCoordinatorLifecycle = \$true'));
     expect(windowsSmoke, contains('settingsStartupCommands'));
     expect(windowsSmoke, contains('Close-CoordinatorWindow'));
     expect(
       _readProjectText('scripts/release_readiness_audit.ps1'),
-      contains('must prove independent visible paper HWNDs'),
+      allOf(
+        contains('must prove independent visible paper HWNDs'),
+        contains('content-edit geometry stability'),
+      ),
     );
   });
 
   test('independent paper windows expose a visible native drag affordance', () {
     final app = _readProjectText('lib/src/app.dart');
     final strings = _readProjectText('lib/src/ui/papertodo_strings.dart');
+    final policySmoke = _readProjectText('scripts/windows_policy_smoke.ps1');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
-    expect(app, contains('_paperWindowDragStrip({bool compact = false})'));
-    expect(app, contains('onPanStart: (_) => unawaited(dragStarter())'));
+    expect(app, contains('final Future<void> Function()? onWindowDragStart;'));
+    expect(app,
+        contains('onPanStart: standaloneSurface && onWindowDragStart != null'));
+    expect(app, contains('unawaited(onWindowDragStart!())'));
+    expect(app, isNot(contains('_paperWindowDragStrip')));
     expect(app, contains('_paperWindowResizeHandles()'));
     expect(app, contains('unawaited(resizeStarter(direction))'));
     expect(app, contains('actionMovePaperWindow'));
@@ -3240,6 +3309,28 @@ void main() {
       _readProjectText('windows/runner/paper_flutter_window.cpp'),
       contains('WM_SYSCOMMAND, SC_MOVE | HTCAPTION'),
     );
+    expect(policySmoke, contains(r'DragPaperBy($paper, 140, 90)'));
+    expect(policySmoke, contains('contentEditGeometryStable'));
+    expect(
+      policySmoke,
+      contains('content edit replayed stale paper geometry'),
+    );
+    final eventStart = runner.indexOf(
+      'void FlutterWindow::SendPaperWindowEvent(',
+    );
+    final eventEnd = runner.indexOf(
+      'void FlutterWindow::DestroyPaperWindows()',
+      eventStart,
+    );
+    expect(eventStart, isNonNegative);
+    expect(eventEnd, greaterThan(eventStart));
+    final eventBlock = runner.substring(eventStart, eventEnd);
+    expect(eventBlock, contains('method == "boundsChanged"'));
+    expect(
+        eventBlock, contains('RememberPaperBounds(paper_id, native_bounds)'));
+    expect(eventBlock, contains('paper_window_surfaces_[paper_id]'));
+    expect(eventBlock.indexOf('RememberPaperBounds(paper_id, native_bounds)'),
+        lessThan(eventBlock.indexOf('window_channel_->InvokeMethod')));
   });
 
   test('Windows startup toggle checks the actual native surface visibility',
@@ -3846,6 +3937,19 @@ void main() {
     expect(windowsPolicySmokeScript, contains('borderlessResizableWindow'));
     expect(windowsPolicySmokeScript, contains('taskSwitcherVisibility'));
     expect(windowsPolicySmokeScript, contains('capsuleEdgeDocking'));
+    expect(windowsPolicySmokeScript, contains('capsuleWindowWidth'));
+    expect(windowsPolicySmokeScript, contains('capsuleRestingVisibleWidth'));
+    expect(windowsPolicySmokeScript, contains('capsuleHoverVisibleWidth'));
+    expect(
+      windowsPolicySmokeScript,
+      contains(
+        r'FindWindowByTitle([uint32]$primary.Id, "Policy")',
+      ),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains("Selecting by size made this assertion depend on"),
+    );
     expect(windowsPolicySmokeScript, contains('BroadcastTaskbarCreated'));
     expect(windowsPolicySmokeScript, contains('Start-FullscreenProbe'));
     expect(
@@ -4241,7 +4345,7 @@ void main() {
     expect(
       script,
       contains(
-          "Windows manual QA record must have status 'passed' or 'skipped'."),
+          "Windows manual QA record must have status 'passed', 'passedWithDeferredMultiMonitor', or 'skipped'."),
     );
     expect(
       script,
@@ -5701,6 +5805,8 @@ void main() {
     expect(windowsManualQaScript, contains('LongRunningScriptCapsule'));
     expect(windowsManualQaScript, contains('IndependentPaperSurfaces'));
     expect(windowsManualQaScript, contains('AllowSkipped'));
+    expect(windowsManualQaScript, contains('DeferMultiMonitor'));
+    expect(windowsManualQaScript, contains('passedWithDeferredMultiMonitor'));
     expect(
         windowsManualQaScript,
         contains(
@@ -5764,6 +5870,11 @@ void main() {
     expect(
       windowsManualQaTest,
       contains('Windows manual QA script rejects skipped items by default'),
+    );
+    expect(
+      windowsManualQaTest,
+      contains(
+          'Windows manual QA script records only multi-monitor as deferred'),
     );
     expect(
       windowsManualQaTest,
@@ -6410,6 +6521,8 @@ try {
         _readProjectText('test/release_readiness_audit_test.dart');
 
     expect(script, contains('readyForGitHubRelease'));
+    expect(script, contains('readyForLocalRelease'));
+    expect(script, contains('localBlockers'));
     expect(script, contains('webDav.liveSmoke'));
     expect(script, contains('releaseMetadataRecord.webDav.liveSmoke'));
     expect(script, contains('releaseMetadataRecord.android.deviceSmoke'));
@@ -6443,7 +6556,8 @@ try {
     );
     expect(
       script,
-      contains('Windows manual QA evidence must have status passed.'),
+      contains(
+          'Windows manual QA evidence must have status passed or passedWithDeferredMultiMonitor.'),
     );
     expect(
       script,

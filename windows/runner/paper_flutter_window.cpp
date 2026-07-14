@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <utility>
 #include <variant>
 
@@ -43,6 +44,21 @@ bool BoolValue(const flutter::EncodableMap& map, const char* key,
   return fallback;
 }
 
+int64_t IntegerValue(const flutter::EncodableMap& map, const char* key,
+                     int64_t fallback) {
+  const auto iterator = map.find(flutter::EncodableValue(key));
+  if (iterator == map.end()) {
+    return fallback;
+  }
+  if (const auto* value = std::get_if<int32_t>(&iterator->second)) {
+    return *value;
+  }
+  if (const auto* value = std::get_if<int64_t>(&iterator->second)) {
+    return *value;
+  }
+  return fallback;
+}
+
 std::string StringValue(const flutter::EncodableMap& map, const char* key,
                         const std::string& fallback) {
   const auto iterator = map.find(flutter::EncodableValue(key));
@@ -69,6 +85,91 @@ std::wstring Utf8WindowTitle(const std::string& value) {
   MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
                       static_cast<int>(value.size()), result.data(), length);
   return result;
+}
+
+std::string WideToUtf8(const std::wstring& value) {
+  if (value.empty()) {
+    return std::string();
+  }
+  const int length = WideCharToMultiByte(
+      CP_UTF8, WC_ERR_INVALID_CHARS, value.data(),
+      static_cast<int>(value.size()), nullptr, 0, nullptr, nullptr);
+  if (length <= 0) {
+    return std::string();
+  }
+  std::string result(static_cast<size_t>(length), '\0');
+  WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(),
+                      static_cast<int>(value.size()), result.data(), length,
+                      nullptr, nullptr);
+  return result;
+}
+
+COLORREF ColorRefFromArgb(int64_t value, COLORREF fallback) {
+  if (value < 0 || value > 0xFFFFFFFFLL) {
+    return fallback;
+  }
+  const uint32_t argb = static_cast<uint32_t>(value);
+  return RGB((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
+}
+
+int ScaleForDpi(HWND window, int logical_pixels) {
+  const UINT dpi = window ? GetDpiForWindow(window) : 96;
+  return MulDiv(logical_pixels, dpi ? static_cast<int>(dpi) : 96, 96);
+}
+
+constexpr wchar_t kReminderBubbleWindowClass[] =
+    L"RePaperTodo.ReminderBubble";
+constexpr UINT_PTR kReminderBubbleTimerId = 1;
+constexpr UINT kDeferredPaperActionMessage = WM_APP + 0x351;
+
+bool IsWideCapsuleCharacter(wchar_t value) {
+  const unsigned int code = static_cast<unsigned int>(value);
+  return code >= 0x1100 &&
+         (code <= 0x115F || code == 0x2329 || code == 0x232A ||
+          (code >= 0x2E80 && code <= 0xA4CF) ||
+          (code >= 0xAC00 && code <= 0xD7A3) ||
+          (code >= 0xF900 && code <= 0xFAFF) ||
+          (code >= 0xFE10 && code <= 0xFE6F) ||
+          (code >= 0xFF00 && code <= 0xFF60) ||
+          (code >= 0xFFE0 && code <= 0xFFE6) ||
+          (code >= 0xD800 && code <= 0xDBFF));
+}
+
+double CapsuleTitleWidth(const std::string& title) {
+  const std::wstring text = Utf8WindowTitle(title);
+  double width = 0.0;
+  for (size_t index = 0; index < text.size(); ++index) {
+    const wchar_t value = text[index];
+    if (value >= 0xDC00 && value <= 0xDFFF) {
+      continue;
+    }
+    width += IsWideCapsuleCharacter(value) ? 11.0 : 6.2;
+  }
+  return width;
+}
+
+double CapsuleWindowWidth(const std::string& title, bool deep) {
+  // PaperTodo measures the rendered 11 px label and adds the capsule's fixed
+  // icon, gaps, close target, padding, and 8 px transparent chrome per side.
+  const double fixed_width = deep ? 73.0 : 64.0;
+  const double minimum_width = deep ? 92.0 : 76.0;
+  return std::ceil(std::max(minimum_width,
+                            fixed_width + CapsuleTitleWidth(title)));
+}
+
+double CapsuleRestingVisibleWidth(const std::string& title,
+                                  double capsule_width) {
+  const double title_width = CapsuleTitleWidth(title);
+  const double desired = 33.0 + title_width;
+  return std::clamp(desired, 34.0,
+                    std::max(34.0, capsule_width - 32.0));
+}
+
+double CapsuleHoverVisibleWidth(double capsule_width,
+                                double resting_visible_width) {
+  const double halfway = resting_visible_width +
+                         ((capsule_width - resting_visible_width) * 0.5);
+  return std::clamp(halfway, std::min(54.0, capsule_width), capsule_width);
 }
 
 BOOL CALLBACK FindDesktopWorkerCallback(HWND window, LPARAM parameter) {
@@ -256,7 +357,13 @@ bool PaperFlutterWindow::OnCreate() {
         }
         if (call.method_name() == "actionRequested") {
           if (call.arguments()) {
-            SendEvent("paperActionRequested", *call.arguments());
+            auto* deferred =
+                new flutter::EncodableValue(*call.arguments());
+            if (!GetHandle() ||
+                !PostMessageW(GetHandle(), kDeferredPaperActionMessage, 0,
+                              reinterpret_cast<LPARAM>(deferred))) {
+              delete deferred;
+            }
           }
           result->Success();
           return;
@@ -268,6 +375,30 @@ bool PaperFlutterWindow::OnCreate() {
             ReleaseCapture();
             SendMessageW(window, WM_SYSCOMMAND, SC_MOVE | HTCAPTION,
                          MAKELPARAM(cursor.x, cursor.y));
+          }
+          result->Success();
+          return;
+        }
+        if (call.method_name() == "capsuleHoverChanged") {
+          if (call.arguments()) {
+            if (const auto* hovered =
+                    std::get_if<bool>(call.arguments())) {
+              SetCapsuleHovered(*hovered);
+            }
+          }
+          result->Success();
+          return;
+        }
+        if (call.method_name() == "showReminder") {
+          if (call.arguments()) {
+            if (const auto* reminder =
+                    std::get_if<flutter::EncodableMap>(call.arguments())) {
+              if (BoolValue(*reminder, "visible", true)) {
+                ShowReminderBubble(*reminder);
+              } else {
+                HideReminderBubble();
+              }
+            }
           }
           result->Success();
           return;
@@ -312,6 +443,7 @@ bool PaperFlutterWindow::OnCreate() {
 }
 
 void PaperFlutterWindow::OnDestroy() {
+  HideReminderBubble();
   channel_.reset();
   if (flutter_controller_) {
     flutter_controller_.reset();
@@ -323,6 +455,14 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
                                            WPARAM const wparam,
                                            LPARAM const lparam) noexcept {
   switch (message) {
+    case kDeferredPaperActionMessage: {
+      std::unique_ptr<flutter::EncodableValue> arguments(
+          reinterpret_cast<flutter::EncodableValue*>(lparam));
+      if (arguments) {
+        SendEvent("paperActionRequested", *arguments);
+      }
+      return 0;
+    }
     case WM_CLOSE:
       HidePaper();
       SendEvent("closeRequested", flutter::EncodableMap{
@@ -331,8 +471,13 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
                                   });
       return 0;
     case WM_MOVE:
+      if (reminder_bubble_) {
+        PlaceReminderBubble();
+      }
+      [[fallthrough]];
     case WM_SIZE:
-      if (surface_initialized_ && !applying_bounds_ && !in_size_move_ &&
+      if (surface_initialized_ && !collapsed_ && !applying_bounds_ &&
+          !in_size_move_ &&
           wparam != SIZE_MINIMIZED) {
         SendBoundsChanged();
       }
@@ -343,13 +488,20 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
     case WM_EXITSIZEMOVE:
       in_size_move_ = false;
       if (surface_initialized_) {
-        SendBoundsChanged();
+        if (collapsed_ && deep_capsule_mode_) {
+          SendCapsuleDropped();
+        } else {
+          SendBoundsChanged();
+        }
       }
       break;
     case WM_GETMINMAXINFO: {
       auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
       if (info) {
-        info->ptMinTrackSize.x = collapsed_ ? 92 : 220;
+        info->ptMinTrackSize.x = collapsed_
+                                     ? std::max(1, static_cast<int>(
+                                                       std::round(capsule_width_)))
+                                     : 220;
         info->ptMinTrackSize.y = collapsed_ ? 46 : 160;
         return 0;
       }
@@ -430,14 +582,23 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       surface, "width", std::max<LONG>(1, current.right - current.left));
   const double height = NumberValue(
       surface, "height", std::max<LONG>(1, current.bottom - current.top));
+  const std::string title = StringValue(surface, "title", "RePaperTodo");
+  const std::string capsule_title =
+      StringValue(surface, "capsuleTitle", title);
   collapsed_ = BoolValue(surface, "isCollapsed", collapsed_);
+  deep_capsule_mode_ =
+      BoolValue(surface, "useDeepCapsuleMode", deep_capsule_mode_);
+  if (!collapsed_) {
+    capsule_hovered_ = false;
+  }
   hide_when_covered_ =
       BoolValue(surface, "hideWhenCovered", hide_when_covered_);
   hide_when_fullscreen_ =
       BoolValue(surface, "hideWhenFullscreen", hide_when_fullscreen_);
   SetHideFromWindowSwitcher(BoolValue(
       surface, "hideFromWindowSwitcher", hide_from_window_switcher_));
-  const double native_width = collapsed_ ? 92.0 : width;
+  const double native_width =
+      collapsed_ ? CapsuleWindowWidth(capsule_title, deep_capsule_mode_) : width;
   const double native_height = collapsed_ ? 46.0 : height;
   double native_x = x;
   double native_y = y;
@@ -445,12 +606,30 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
     const std::string monitor_name =
         StringValue(surface, "capsuleMonitorDeviceName", "");
     const RECT work_area = WorkAreaForWindow(window, monitor_name);
-    const std::string side = StringValue(surface, "capsuleSide", "right");
-    native_x = side == "left"
-                   ? static_cast<double>(work_area.left)
-                   : static_cast<double>(work_area.right) - native_width;
+    capsule_side_ = StringValue(surface, "capsuleSide", "right");
+    capsule_work_area_ = work_area;
+    capsule_width_ = native_width;
+    capsule_resting_visible_width_ =
+        CapsuleRestingVisibleWidth(capsule_title, native_width);
+    capsule_hover_visible_width_ = CapsuleHoverVisibleWidth(
+        native_width, capsule_resting_visible_width_);
+    const double visible_width = deep_capsule_mode_
+                                     ? (capsule_hovered_
+                                            ? capsule_hover_visible_width_
+                                            : capsule_resting_visible_width_)
+                                     : native_width;
+    native_x = capsule_side_ == "left"
+                   ? static_cast<double>(work_area.left) -
+                         (native_width - visible_width)
+                   : static_cast<double>(work_area.right) - visible_width;
+    const bool top_is_work_area_relative = BoolValue(
+        surface, "capsuleTopIsWorkAreaRelative", false);
+    const double requested_top =
+        top_is_work_area_relative
+            ? static_cast<double>(work_area.top) + y
+            : y;
     native_y = std::clamp(
-        y, static_cast<double>(work_area.top),
+        requested_top, static_cast<double>(work_area.top),
         std::max(static_cast<double>(work_area.top),
                  static_cast<double>(work_area.bottom) - native_height));
   }
@@ -464,7 +643,6 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
     applying_bounds_ = false;
   }
   surface_initialized_ = true;
-  const std::string title = StringValue(surface, "title", "RePaperTodo");
   SetWindowTextW(window, Utf8WindowTitle(title).c_str());
   always_on_top_ = BoolValue(surface, "alwaysOnTop", always_on_top_);
   pinned_to_desktop_ =
@@ -478,6 +656,321 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       RefreshZOrder();
     }
   }
+}
+
+void PaperFlutterWindow::SetAlwaysOnTop(bool enabled) {
+  always_on_top_ = enabled;
+  RefreshZOrder();
+}
+
+void PaperFlutterWindow::SetPinnedToDesktop(bool pinned) {
+  pinned_to_desktop_ = pinned;
+  RefreshZOrder();
+}
+
+void PaperFlutterWindow::SetPaperTitle(const std::string& title) {
+  HWND window = GetHandle();
+  if (!window) {
+    return;
+  }
+  SetWindowTextW(window, Utf8WindowTitle(title).c_str());
+}
+
+void PaperFlutterWindow::SetCapsuleHovered(bool hovered) {
+  if (!collapsed_ || !deep_capsule_mode_ || capsule_hovered_ == hovered) {
+    return;
+  }
+  capsule_hovered_ = hovered;
+  ApplyCapsuleHorizontalPosition();
+}
+
+void PaperFlutterWindow::ApplyCapsuleHorizontalPosition() {
+  HWND window = GetHandle();
+  if (!window || !collapsed_ || !deep_capsule_mode_ || in_size_move_) {
+    return;
+  }
+  RECT current = {};
+  if (!GetWindowRect(window, &current)) {
+    return;
+  }
+  const double visible_width = capsule_hovered_
+                                   ? capsule_hover_visible_width_
+                                   : capsule_resting_visible_width_;
+  const double x = capsule_side_ == "left"
+                       ? static_cast<double>(capsule_work_area_.left) -
+                             (capsule_width_ - visible_width)
+                       : static_cast<double>(capsule_work_area_.right) -
+                             visible_width;
+  applying_bounds_ = true;
+  SetWindowPos(window, nullptr, static_cast<int>(std::round(x)), current.top,
+               0, 0,
+               SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_FRAMECHANGED);
+  applying_bounds_ = false;
+}
+
+void PaperFlutterWindow::ShowReminderBubble(
+    const flutter::EncodableMap& reminder) {
+  reminder_title_ = Utf8WindowTitle(StringValue(reminder, "title", "Reminder"));
+  reminder_message_ = Utf8WindowTitle(StringValue(reminder, "message", ""));
+  reminder_duration_seconds_ = std::clamp(
+      static_cast<int>(IntegerValue(reminder, "durationSeconds", 5)), 1, 600);
+  reminder_background_color_ = ColorRefFromArgb(
+      IntegerValue(reminder, "backgroundColor", -1),
+      reminder_background_color_);
+  reminder_border_color_ = ColorRefFromArgb(
+      IntegerValue(reminder, "borderColor", -1), reminder_border_color_);
+  reminder_accent_color_ = ColorRefFromArgb(
+      IntegerValue(reminder, "accentColor", -1), reminder_accent_color_);
+  reminder_text_color_ = ColorRefFromArgb(
+      IntegerValue(reminder, "textColor", -1), reminder_text_color_);
+  reminder_weak_text_color_ = ColorRefFromArgb(
+      IntegerValue(reminder, "weakTextColor", -1),
+      reminder_weak_text_color_);
+
+  if (!reminder_bubble_) {
+    WNDCLASSEXW window_class = {};
+    window_class.cbSize = sizeof(window_class);
+    if (!GetClassInfoExW(GetModuleHandleW(nullptr),
+                         kReminderBubbleWindowClass, &window_class)) {
+      window_class.style = CS_HREDRAW | CS_VREDRAW;
+      window_class.lpfnWndProc = ReminderBubbleWindowProc;
+      window_class.hInstance = GetModuleHandleW(nullptr);
+      window_class.hCursor = LoadCursorW(nullptr, IDC_HAND);
+      window_class.lpszClassName = kReminderBubbleWindowClass;
+      if (!RegisterClassExW(&window_class) &&
+          GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        return;
+      }
+    }
+    reminder_bubble_ = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+        kReminderBubbleWindowClass, L"RePaperTodo reminder", WS_POPUP,
+        CW_USEDEFAULT, CW_USEDEFAULT, 1, 1, GetHandle(), nullptr,
+        GetModuleHandleW(nullptr), this);
+    if (!reminder_bubble_) {
+      return;
+    }
+    const DWORD corner_attribute = 33;  // DWMWA_WINDOW_CORNER_PREFERENCE.
+    const int rounded_corner = 2;       // DWMWCP_ROUND.
+    DwmSetWindowAttribute(reminder_bubble_, corner_attribute,
+                          &rounded_corner, sizeof(rounded_corner));
+  }
+
+  const int width = ScaleForDpi(reminder_bubble_, 260);
+  const int height = ScaleForDpi(reminder_bubble_, 104);
+  const int radius = ScaleForDpi(reminder_bubble_, 14);
+  SetWindowRgn(reminder_bubble_,
+               CreateRoundRectRgn(0, 0, width + 1, height + 1,
+                                  radius * 2, radius * 2),
+               TRUE);
+  SetWindowPos(reminder_bubble_, HWND_TOPMOST, 0, 0, width, height,
+               SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+  PlaceReminderBubble();
+  InvalidateRect(reminder_bubble_, nullptr, TRUE);
+  KillTimer(reminder_bubble_, kReminderBubbleTimerId);
+  SetTimer(reminder_bubble_, kReminderBubbleTimerId,
+           static_cast<UINT>(reminder_duration_seconds_ * 1000), nullptr);
+}
+
+void PaperFlutterWindow::HideReminderBubble() {
+  if (!reminder_bubble_) {
+    return;
+  }
+  HWND bubble = reminder_bubble_;
+  reminder_bubble_ = nullptr;
+  KillTimer(bubble, kReminderBubbleTimerId);
+  DestroyWindow(bubble);
+}
+
+void PaperFlutterWindow::PlaceReminderBubble() {
+  HWND anchor_window = GetHandle();
+  if (!anchor_window || !reminder_bubble_) {
+    return;
+  }
+  RECT anchor = {};
+  RECT bubble = {};
+  if (!GetWindowRect(anchor_window, &anchor) ||
+      !GetWindowRect(reminder_bubble_, &bubble)) {
+    return;
+  }
+  HMONITOR monitor = MonitorFromWindow(anchor_window, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO info = {};
+  info.cbSize = sizeof(info);
+  if (!monitor || !GetMonitorInfoW(monitor, &info)) {
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &info.rcWork, 0);
+  }
+  const int margin = ScaleForDpi(reminder_bubble_, 8);
+  const int width = bubble.right - bubble.left;
+  const int height = bubble.bottom - bubble.top;
+  const bool prefer_left =
+      anchor.left + ((anchor.right - anchor.left) / 2) >
+      info.rcWork.left + ((info.rcWork.right - info.rcWork.left) / 2);
+  const int work_left = static_cast<int>(info.rcWork.left);
+  const int work_top = static_cast<int>(info.rcWork.top);
+  const int work_right = static_cast<int>(info.rcWork.right);
+  const int work_bottom = static_cast<int>(info.rcWork.bottom);
+  int left = prefer_left ? static_cast<int>(anchor.left) - width - margin
+                         : static_cast<int>(anchor.right) + margin;
+  int top = static_cast<int>(anchor.top) +
+            std::min(margin, std::max(
+                                 0, (static_cast<int>(anchor.bottom -
+                                                      anchor.top) -
+                                     height) /
+                                        2));
+  left = std::clamp(left, work_left + margin,
+                    std::max(work_left + margin,
+                             work_right - width - margin));
+  top = std::clamp(top, work_top + margin,
+                   std::max(work_top + margin,
+                            work_bottom - height - margin));
+  SetWindowPos(reminder_bubble_, HWND_TOPMOST, left, top, 0, 0,
+               SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+
+LRESULT CALLBACK PaperFlutterWindow::ReminderBubbleWindowProc(
+    HWND window, UINT message, WPARAM wparam, LPARAM lparam) noexcept {
+  PaperFlutterWindow* owner = reinterpret_cast<PaperFlutterWindow*>(
+      GetWindowLongPtrW(window, GWLP_USERDATA));
+  if (message == WM_NCCREATE) {
+    const auto* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+    owner = create ? static_cast<PaperFlutterWindow*>(create->lpCreateParams)
+                   : nullptr;
+    SetWindowLongPtrW(window, GWLP_USERDATA,
+                      reinterpret_cast<LONG_PTR>(owner));
+  }
+  if (owner) {
+    return owner->ReminderBubbleMessageHandler(window, message, wparam,
+                                                lparam);
+  }
+  return DefWindowProcW(window, message, wparam, lparam);
+}
+
+LRESULT PaperFlutterWindow::ReminderBubbleMessageHandler(
+    HWND window, UINT message, WPARAM wparam, LPARAM lparam) noexcept {
+  switch (message) {
+    case WM_ERASEBKGND:
+      return 1;
+    case WM_MOUSEMOVE: {
+      KillTimer(window, kReminderBubbleTimerId);
+      TRACKMOUSEEVENT tracking = {};
+      tracking.cbSize = sizeof(tracking);
+      tracking.dwFlags = TME_LEAVE;
+      tracking.hwndTrack = window;
+      TrackMouseEvent(&tracking);
+      return 0;
+    }
+    case WM_MOUSELEAVE:
+      SetTimer(window, kReminderBubbleTimerId,
+               static_cast<UINT>(reminder_duration_seconds_ * 1000), nullptr);
+      return 0;
+    case WM_TIMER:
+      if (wparam == kReminderBubbleTimerId) {
+        HideReminderBubble();
+        return 0;
+      }
+      break;
+    case WM_LBUTTONUP: {
+      HideReminderBubble();
+      SendEvent("paperActionRequested",
+                flutter::EncodableMap{
+                    {flutter::EncodableValue("paperId"),
+                     flutter::EncodableValue(paper_id_)},
+                    {flutter::EncodableValue("kind"),
+                     flutter::EncodableValue("openReminderPaper")},
+                    {flutter::EncodableValue("value"),
+                     flutter::EncodableValue(paper_id_)},
+                });
+      return 0;
+    }
+    case WM_NCDESTROY:
+      if (reminder_bubble_ == window) {
+        reminder_bubble_ = nullptr;
+      }
+      SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+      break;
+    case WM_PAINT: {
+      PAINTSTRUCT paint = {};
+      HDC target = BeginPaint(window, &paint);
+      RECT bounds = {};
+      GetClientRect(window, &bounds);
+      HDC buffer = CreateCompatibleDC(target);
+      HBITMAP bitmap = CreateCompatibleBitmap(
+          target, std::max(1L, bounds.right), std::max(1L, bounds.bottom));
+      HGDIOBJ old_bitmap = SelectObject(buffer, bitmap);
+      const int radius = ScaleForDpi(window, 14);
+      HBRUSH background = CreateSolidBrush(reminder_background_color_);
+      HPEN border = CreatePen(PS_SOLID, std::max(1, ScaleForDpi(window, 1)),
+                              reminder_border_color_);
+      HGDIOBJ old_brush = SelectObject(buffer, background);
+      HGDIOBJ old_pen = SelectObject(buffer, border);
+      RoundRect(buffer, 0, 0, bounds.right, bounds.bottom, radius * 2,
+                radius * 2);
+
+      const int icon_left = ScaleForDpi(window, 13);
+      const int icon_top = ScaleForDpi(window, 12);
+      const int icon_size = ScaleForDpi(window, 28);
+      HBRUSH accent = CreateSolidBrush(reminder_accent_color_);
+      SelectObject(buffer, accent);
+      SelectObject(buffer, GetStockObject(NULL_PEN));
+      Ellipse(buffer, icon_left, icon_top, icon_left + icon_size,
+              icon_top + icon_size);
+
+      SetBkMode(buffer, TRANSPARENT);
+      SetTextColor(buffer, reminder_background_color_);
+      HFONT icon_font = CreateFontW(
+          -ScaleForDpi(window, 16), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+          DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+          CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+      HGDIOBJ old_font = SelectObject(buffer, icon_font);
+      RECT icon_text = {icon_left, icon_top, icon_left + icon_size,
+                        icon_top + icon_size};
+      DrawTextW(buffer, L"!", 1, &icon_text,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+      const int text_left = ScaleForDpi(window, 51);
+      const int text_right = bounds.right - ScaleForDpi(window, 13);
+      SetTextColor(buffer, reminder_text_color_);
+      HFONT title_font = CreateFontW(
+          -ScaleForDpi(window, 13), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE,
+          FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+          CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+      SelectObject(buffer, title_font);
+      RECT title_rect = {text_left, ScaleForDpi(window, 11), text_right,
+                         ScaleForDpi(window, 34)};
+      DrawTextW(buffer, reminder_title_.c_str(), -1, &title_rect,
+                DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+
+      SetTextColor(buffer, reminder_weak_text_color_);
+      HFONT message_font = CreateFontW(
+          -ScaleForDpi(window, 12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+          DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+          CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+      SelectObject(buffer, message_font);
+      RECT message_rect = {text_left, ScaleForDpi(window, 39), text_right,
+                           bounds.bottom - ScaleForDpi(window, 9)};
+      DrawTextW(buffer, reminder_message_.c_str(), -1, &message_rect,
+                DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
+
+      BitBlt(target, 0, 0, bounds.right, bounds.bottom, buffer, 0, 0,
+             SRCCOPY);
+      SelectObject(buffer, old_font);
+      SelectObject(buffer, old_pen);
+      SelectObject(buffer, old_brush);
+      SelectObject(buffer, old_bitmap);
+      DeleteObject(message_font);
+      DeleteObject(title_font);
+      DeleteObject(icon_font);
+      DeleteObject(accent);
+      DeleteObject(border);
+      DeleteObject(background);
+      DeleteObject(bitmap);
+      DeleteDC(buffer);
+      EndPaint(window, &paint);
+      return 0;
+    }
+  }
+  return DefWindowProcW(window, message, wparam, lparam);
 }
 
 flutter::EncodableValue PaperFlutterWindow::BoundsValue() const {
@@ -617,12 +1110,53 @@ void PaperFlutterWindow::SendBoundsChanged() {
   flutter::EncodableMap arguments = {
       {flutter::EncodableValue("paperId"),
        flutter::EncodableValue(paper_id_)},
+      {flutter::EncodableValue("isCollapsed"),
+       flutter::EncodableValue(collapsed_)},
   };
   const auto bounds = BoundsValue();
   if (const auto* map = std::get_if<flutter::EncodableMap>(&bounds)) {
     arguments.insert(map->begin(), map->end());
   }
   SendEvent("boundsChanged", flutter::EncodableValue(arguments));
+}
+
+void PaperFlutterWindow::SendCapsuleDropped() {
+  HWND window = GetHandle();
+  if (!window) {
+    return;
+  }
+  POINT cursor = {};
+  RECT bounds = {};
+  if (!GetCursorPos(&cursor) || !GetWindowRect(window, &bounds)) {
+    return;
+  }
+  HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+  MONITORINFOEXW info = {};
+  info.cbSize = sizeof(info);
+  if (!monitor ||
+      !GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO*>(&info))) {
+    return;
+  }
+  const LONG center = info.rcWork.left +
+                      ((info.rcWork.right - info.rcWork.left) / 2);
+  const std::string side = cursor.x < center ? "left" : "right";
+  SendEvent(
+      "capsuleDropped",
+      flutter::EncodableMap{
+          {flutter::EncodableValue("paperId"),
+           flutter::EncodableValue(paper_id_)},
+          {flutter::EncodableValue("surfaceId"),
+           flutter::EncodableValue(paper_id_)},
+          {flutter::EncodableValue("monitorDeviceName"),
+           flutter::EncodableValue(WideToUtf8(info.szDevice))},
+          {flutter::EncodableValue("side"), flutter::EncodableValue(side)},
+          {flutter::EncodableValue("dropTop"),
+           flutter::EncodableValue(static_cast<double>(bounds.top))},
+          {flutter::EncodableValue("workAreaTop"),
+           flutter::EncodableValue(static_cast<double>(info.rcWork.top))},
+          {flutter::EncodableValue("isMasterCapsule"),
+           flutter::EncodableValue(false)},
+      });
 }
 
 void PaperFlutterWindow::SendEvent(
@@ -639,6 +1173,10 @@ void PaperFlutterWindow::ApplyNativeStyle() {
   }
   const LONG_PTR style = WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN;
   SetWindowLongPtrW(window, GWL_STYLE, style);
+  const LONG_PTR extended_style =
+      GetWindowLongPtrW(window, GWL_EXSTYLE) | WS_EX_LAYERED;
+  SetWindowLongPtrW(window, GWL_EXSTYLE, extended_style);
+  SetLayeredWindowAttributes(window, RGB(1, 2, 3), 0, LWA_COLORKEY);
   MARGINS margins = {-1};
   DwmExtendFrameIntoClientArea(window, &margins);
   SetWindowPos(window, nullptr, 0, 0, 0, 0,

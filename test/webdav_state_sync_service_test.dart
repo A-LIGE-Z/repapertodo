@@ -1350,7 +1350,11 @@ void main() {
       httpClient: MockClient((request) async {
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1407,7 +1411,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1459,7 +1467,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1510,7 +1522,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1561,7 +1577,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1611,7 +1631,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1656,7 +1680,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1702,7 +1730,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1748,7 +1780,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1794,7 +1830,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1841,7 +1881,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -1888,7 +1932,11 @@ void main() {
         requests.add(request);
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
-          return http.Response('', 200);
+          return http.Response(
+            '',
+            200,
+            headers: {'etag': '"manifest-v1"'},
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -2073,7 +2121,7 @@ void main() {
     }
   });
 
-  test('sync uses PROPFIND metadata etag when HEAD is unsupported', () async {
+  test('sync retries raw PROPFIND etags after a quoted provider 412', () async {
     final requests = <http.Request>[];
     final webDavClient = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),
@@ -2130,7 +2178,10 @@ void main() {
         }
         if (request.method == 'PUT' &&
             request.url.path.endsWith('/manifest.json')) {
-          expect(request.headers['if-match'], '"manifest-v1"');
+          if (request.headers['if-match'] == '"manifest-v1"') {
+            return http.Response('quoted ETag rejected', 412);
+          }
+          expect(request.headers['if-match'], 'manifest-v1');
           return http.Response('', 204);
         }
         return http.Response(
@@ -2163,13 +2214,24 @@ void main() {
         'MKCOL',
         'PUT',
         'PUT',
+        'PUT',
         'PUT'
       ],
     );
-    final manifestRequest = requests.firstWhere((request) =>
-        request.method == 'PUT' && request.url.path.endsWith('/manifest.json'));
-    expect(manifestRequest.headers['if-match'], '"manifest-v1"');
-    expect(manifestRequest.headers, isNot(contains('if-none-match')));
+    final manifestRequests = requests
+        .where((request) =>
+            request.method == 'PUT' &&
+            request.url.path.endsWith('/manifest.json'))
+        .toList();
+    expect(manifestRequests, hasLength(2));
+    expect(manifestRequests[0].headers['if-match'], '"manifest-v1"');
+    expect(manifestRequests[1].headers['if-match'], 'manifest-v1');
+    expect(
+      manifestRequests.every(
+        (request) => !request.headers.containsKey('if-none-match'),
+      ),
+      true,
+    );
   });
 
   test('sync uses PROPFIND metadata when HEAD falsely reports missing',
@@ -2587,6 +2649,24 @@ void main() {
         if (request.method == 'HEAD' &&
             request.url.path.endsWith('/manifest.json')) {
           return http.Response('', 200);
+        }
+        if (request.method == 'PROPFIND' &&
+            request.url.path.endsWith('/manifest.json')) {
+          return http.Response(
+            '''
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/remote.php/dav/files/user/repapertodo/manifest.json</D:href>
+    <D:propstat>
+      <D:prop><D:getcontentlength>42</D:getcontentlength></D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>
+''',
+            207,
+          );
         }
         if (request.method == 'GET' &&
             request.url.path.endsWith('/manifest.json')) {
@@ -6648,6 +6728,142 @@ void main() {
             .authorizationHeader,
       ),
     );
+  });
+
+  test(
+      'durable operation upload advances sequence before combined local HTTP sync',
+      () async {
+    final server = await _LocalWebDavServer.start();
+    addTearDown(server.close);
+    final directory = await Directory.systemTemp
+        .createTemp('repapertodo_durable_combined_http_');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = StateStore(filePath: '${directory.path}/data.json');
+    final verifierStore =
+        StateStore(filePath: '${directory.path}/verifier-data.json');
+    final deviceIdPath = '${directory.path}/device-id';
+    final verifierDeviceIdPath = '${directory.path}/verifier-device-id';
+    await File(deviceIdPath).writeAsString('device-local');
+    await File(verifierDeviceIdPath).writeAsString('device-verifier');
+    const passphrase = 'durable combined sync secret';
+    final syncSettings = SyncSettings(
+      enabled: true,
+      provider: SyncProviderIds.webDav,
+      webDav: WebDavSyncSettings(
+        endpoint: server.baseUri.toString(),
+        username: 'user',
+        password: 'pass',
+        encryptionPassphrase: passphrase,
+        rootPath: 'durable-combined',
+      ),
+    );
+    WebDavStateSyncService webDavFactory(
+      WebDavSyncSettings settings, {
+      String? deviceId,
+    }) {
+      return WebDavStateSyncService.fromSettings(
+        settings,
+        deviceId: deviceId,
+      );
+    }
+
+    final service = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: deviceIdPath),
+      webDavFactory: webDavFactory,
+    );
+    final initial = AppState(
+      sync: syncSettings.copy(),
+      papers: [
+        PaperData(
+          id: 'durable-note',
+          type: PaperTypes.note,
+          title: 'Durable',
+          content: 'Before',
+        ),
+      ],
+    );
+    final initialResult = await service.syncAndMergeNow(
+      localState: initial,
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 14, 1),
+    );
+    expect(initialResult.syncResult.status, AppSyncStatus.uploaded);
+    expect(initialResult.state.sync.operationDeviceSequences, {
+      'device-local': 1,
+    });
+
+    final beforeEdit = await store.load();
+    final afterEdit = AppState.fromJson(beforeEdit.toJson());
+    afterEdit.papers.single.content = 'After durable edit';
+    final prepared = await service.preparePendingLocalOperationBatch(
+      beforeState: beforeEdit,
+      afterState: afterEdit,
+      store: store,
+      createdAtUtc: DateTime.utc(2026, 7, 14, 1, 5),
+    );
+    await store.save(prepared);
+    expect(prepared.sync.pendingOperationBatch, isNotNull);
+    expect(prepared.sync.pendingOperationBatch?.startSequence, 1);
+
+    final durableResult = await service.syncAndMergeNow(
+      localState: await store.load(),
+      store: store,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 14, 1, 5),
+    );
+
+    expect(durableResult.syncResult.status, AppSyncStatus.uploaded);
+    expect(durableResult.state.papers.single.content, 'After durable edit');
+    expect(durableResult.state.sync.pendingOperationBatch, isNull);
+    expect(durableResult.state.sync.operationDeviceSequences, {
+      'device-local': 3,
+    });
+    final stored = await store.load();
+    expect(stored.sync.pendingOperationBatch, isNull);
+    expect(stored.sync.operationDeviceSequences, {'device-local': 3});
+
+    final operationPath =
+        'dav/durable-combined/ops/device-local-000000000002.jsonl';
+    final durableOperationFile = server._files[operationPath];
+    expect(durableOperationFile, isNotNull);
+    final durableOperations = await EncryptedWebDavPayloadCodec(
+      passphrase: passphrase,
+    ).decodeOperationLog(durableOperationFile!.bytes);
+    expect(durableOperations, hasLength(1));
+    expect(
+      durableOperations.single.kind,
+      SyncOperationKind.updateNoteContent,
+    );
+    expect(
+      durableOperations.single.payload['content'],
+      'After durable edit',
+    );
+    expect(
+      server._files,
+      contains('dav/durable-combined/ops/device-local-000000000003.jsonl'),
+    );
+    final manifestFile = server._files['dav/durable-combined/manifest.json'];
+    expect(manifestFile, isNotNull);
+    final manifest = SyncManifest.fromJson(
+      Map<String, Object?>.from(
+        jsonDecode(utf8.decode(manifestFile!.bytes)) as Map,
+      ),
+    );
+    expect(manifest.deviceSequences, {'device-local': 3});
+
+    final verifier = AppSyncService(
+      deviceIdStore: SyncDeviceIdStore(filePath: verifierDeviceIdPath),
+      webDavFactory: webDavFactory,
+    );
+    final verified = await verifier.syncAndMergeNow(
+      localState: AppState(sync: syncSettings.copy()),
+      store: verifierStore,
+      localUpdatedAtUtc: DateTime.utc(2026, 7, 14),
+    );
+    expect(verified.syncResult.status, AppSyncStatus.downloaded);
+    expect(verified.state.papers.single.content, 'After durable edit');
+    expect(verified.state.sync.operationDeviceSequences, {
+      'device-local': 3,
+    });
   });
 
   test('creates a sync service from Jianguoyun WebDAV settings', () async {

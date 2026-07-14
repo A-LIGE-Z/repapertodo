@@ -5,6 +5,7 @@ class WebDavPreset {
     required this.label,
     this.endpoint,
     this.defaultRemotePath = '',
+    this.maxRootPathFirstSegmentLength,
   });
 
   final String id;
@@ -12,6 +13,7 @@ class WebDavPreset {
   final String label;
   final Uri? endpoint;
   final String defaultRemotePath;
+  final int? maxRootPathFirstSegmentLength;
 
   bool get isCustom => id == WebDavPresetIds.custom;
 
@@ -42,6 +44,7 @@ abstract final class WebDavPresets {
     label: '坚果云',
     endpoint: Uri.parse('https://dav.jianguoyun.com/dav/'),
     defaultRemotePath: '/RePaperTodo/',
+    maxRootPathFirstSegmentLength: 30,
   );
 
   static final recommended = List<WebDavPreset>.unmodifiable([

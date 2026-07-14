@@ -28,6 +28,7 @@ void main() {
     expect(preset.name, 'Jianguoyun WebDAV');
     expect(preset.endpointText, 'https://dav.jianguoyun.com/dav/');
     expect(preset.defaultRootPath, 'RePaperTodo');
+    expect(preset.maxRootPathFirstSegmentLength, 30);
   });
 
   test('keeps generic WebDAV as an explicit fallback preset', () {
@@ -50,6 +51,7 @@ void main() {
     expect(preset.name, 'Generic WebDAV');
     expect(preset.endpointText, isEmpty);
     expect(preset.defaultRootPath, isEmpty);
+    expect(preset.maxRootPathFirstSegmentLength, isNull);
   });
 
   test('uses preset defaults for Jianguoyun sync settings', () {

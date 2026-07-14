@@ -1232,11 +1232,39 @@ function Assert-WindowsManualQaRecord {
     }
     return
   }
-  if ($status -ne "passed") {
-    throw "Windows manual QA record must have status 'passed' or 'skipped'."
+  if ($status -ne "passed" -and
+      $status -ne "passedWithDeferredMultiMonitor") {
+    throw "Windows manual QA record must have status 'passed', 'passedWithDeferredMultiMonitor', or 'skipped'."
   }
   if ([bool](Get-RecordPropertyValue -Record $Record -Name "allowSkipped") -ne $false) {
     throw "Windows manual QA record used -AllowSkipped and cannot prove release parity."
+  }
+  $deferMultiMonitor =
+    [bool](Get-RecordPropertyValue -Record $Record -Name "deferMultiMonitor")
+  $deferredItemValue =
+    Get-RecordPropertyValue -Record $Record -Name "deferredItemIds"
+  $deferredItemIds = @()
+  if ($null -ne $deferredItemValue) {
+    $deferredItemIds = @($deferredItemValue)
+  }
+  if ($status -eq "passedWithDeferredMultiMonitor") {
+    if (-not $deferMultiMonitor) {
+      throw "Deferred multi-monitor Windows manual QA record must set deferMultiMonitor."
+    }
+    if ($deferredItemIds.Count -ne 1 -or
+        [string]$deferredItemIds[0] -ne "multiMonitorEdgeDocking") {
+      throw "Deferred multi-monitor Windows manual QA record must identify only multiMonitorEdgeDocking."
+    }
+    if ([string]::IsNullOrWhiteSpace(
+        [string](Get-RecordPropertyValue -Record $Record -Name "reason"))) {
+      throw "Deferred multi-monitor Windows manual QA record must include a reason."
+    }
+    if ([string]::IsNullOrWhiteSpace(
+        [string](Get-RecordPropertyValue -Record $Record -Name "notes"))) {
+      throw "Deferred multi-monitor Windows manual QA record must include notes."
+    }
+  } elseif ($deferMultiMonitor -or $deferredItemIds.Count -ne 0) {
+    throw "Passed Windows manual QA record must not contain deferred items."
   }
   if ([string]::IsNullOrWhiteSpace(
       [string](Get-RecordPropertyValue -Record $Record -Name "tester"))) {
@@ -1298,8 +1326,14 @@ function Assert-WindowsManualQaRecord {
     if ($matches.Count -ne 1) {
       throw "Windows manual QA record must include exactly one '$id' item."
     }
-    if ([string]$matches[0].status -ne "pass") {
-      throw "Windows manual QA item '$id' must be pass."
+    $expectedStatus = if ($status -eq "passedWithDeferredMultiMonitor" -and
+        $id -eq "multiMonitorEdgeDocking") {
+      "skip"
+    } else {
+      "pass"
+    }
+    if ([string]$matches[0].status -ne $expectedStatus) {
+      throw "Windows manual QA item '$id' must be $expectedStatus."
     }
   }
 }
@@ -1542,6 +1576,12 @@ function Assert-WindowsSmokeRecord {
   }
   if ((Get-RecordPropertyValue -Record $Record -Name "independentPaperSurfaces") -ne $true) {
     throw "Windows smoke record independentPaperSurfaces must be true."
+  }
+  if ((Get-RecordPropertyValue -Record $Record -Name "geometryPersistenceVerified") -ne $true) {
+    throw "Windows smoke record geometryPersistenceVerified must be true."
+  }
+  if ((Get-RecordPropertyValue -Record $Record -Name "contentEditGeometryStabilityVerified") -ne $true) {
+    throw "Windows smoke record contentEditGeometryStabilityVerified must be true."
   }
   if ((Get-RecordPropertyValue -Record $Record -Name "settingsCoordinatorLifecycle") -ne $true) {
     throw "Windows smoke record settingsCoordinatorLifecycle must be true."
@@ -2450,6 +2490,8 @@ function New-ReleaseNotes {
   $windowsManualQaSummary = if ($windowsManualQaStatus -eq "passed") {
     $windowsManualQaItems = @(Get-RecordPropertyValue -Record $windowsManualQaRecord -Name "items")
     "passed at $windowsManualQaCheckedAtUtc with $($windowsManualQaItems.Count) desktop parity item(s)"
+  } elseif ($windowsManualQaStatus -eq "passedWithDeferredMultiMonitor") {
+    "passed for a local release candidate at $windowsManualQaCheckedAtUtc with multi-monitor edge docking explicitly deferred ($([string](Get-RecordPropertyValue -Record $windowsManualQaRecord -Name "notes")))"
   } else {
     "skipped at $windowsManualQaCheckedAtUtc ($([string](Get-RecordPropertyValue -Record $windowsManualQaRecord -Name "reason")))"
   }
@@ -2498,7 +2540,7 @@ Runtime UI languages: $($supportedRuntimeLanguages -join ', ').
 Flutter toolchain: Flutter $flutterFrameworkVersion ($flutterChannel), Dart $dartSdkVersion.
 
 Verification summary:
-- Windows smoke: $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "status")); exe $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "exeFileName")); persisted papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalPaperCount")); independent visible HWNDs $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalVisibleTopLevelWindowCount")); todo papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialTodoPaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalTodoPaperCount")); note papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialNotePaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalNotePaperCount")).
+- Windows smoke: $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "status")); exe $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "exeFileName")); persisted papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalPaperCount")); independent visible HWNDs $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalVisibleTopLevelWindowCount")); native geometry persistence $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "geometryPersistenceVerified")); content-edit geometry stability $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "contentEditGeometryStabilityVerified")); todo papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialTodoPaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalTodoPaperCount")); note papers $([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "initialNotePaperCount"))->$([string](Get-RecordPropertyValue -Record $windowsSmokeRecord -Name "finalNotePaperCount")).
 - Windows policy smoke: $([string](Get-RecordPropertyValue -Record $windowsPolicySmokeRecord -Name "status")); tray recovery $([string](Get-RecordPropertyValue -Record $windowsPolicySmokeRecord -Name "trayIconRecoveredAfterTaskbarCreated")); fullscreen avoidance $([string](Get-RecordPropertyValue -Record $windowsPolicySmokeRecord -Name "fullscreenAvoidance")); topmost restoration $([string](Get-RecordPropertyValue -Record $windowsPolicySmokeRecord -Name "fullscreenTopmostRestored")).
 - Windows manual QA: $windowsManualQaSummary.
 - WebDAV static smoke: $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "status")); generic WebDAV $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "genericWebDavSupported")); Jianguoyun preset $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "jianguoyunPresetSupported")); operation logs $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "operationLogsSupported")); Windows/Android round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "crossDeviceOperationRoundTripCovered")); local HTTP WebDAV protocol round trip $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "localHttpWebDavRoundTripCovered")); Android background shared Dart sync path $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncSharedDartPath")); Android background absolute state path gate $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncAbsoluteStatePathCovered")); Android background data.json state path gate $([string](Get-RecordPropertyValue -Record $webDavSmokeRecord -Name "androidBackgroundSyncDataJsonStatePathCovered")).

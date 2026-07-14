@@ -10,7 +10,8 @@ param(
   [Alias("ReleaseChecksumsPath")]
   [string]$ReleaseChecksumsFile = "",
   [string]$ResultJson = "",
-  [switch]$FailOnBlocked
+  [switch]$FailOnBlocked,
+  [switch]$FailOnLocalBlocked
 )
 
 $ErrorActionPreference = "Stop"
@@ -95,6 +96,7 @@ function Add-Check {
     Out-Null
   if ($Status -eq "blocked") {
     $script:blockers.Add($Summary) | Out-Null
+    $script:localBlockers.Add($Summary) | Out-Null
   }
 }
 
@@ -333,9 +335,10 @@ function Test-WindowsManualQaRecord {
     [string]$ExpectedWindowsReleaseDirectory = ""
   )
 
-  if (([string](Get-RecordPropertyValue -Record $Record -Name "status")) -ne
-      "passed") {
-    return "Windows manual QA evidence must have status passed."
+  $status = [string](Get-RecordPropertyValue -Record $Record -Name "status")
+  if ($status -ne "passed" -and
+      $status -ne "passedWithDeferredMultiMonitor") {
+    return "Windows manual QA evidence must have status passed or passedWithDeferredMultiMonitor."
   }
   if (-not (Test-UtcTimestamp -Value ([string](Get-RecordPropertyValue -Record $Record -Name "checkedAtUtc")))) {
     return "Windows manual QA evidence must include a UTC checkedAtUtc timestamp."
@@ -343,6 +346,33 @@ function Test-WindowsManualQaRecord {
   if ([bool](Get-RecordPropertyValue -Record $Record -Name "allowSkipped") -ne
       $false) {
     return "Windows manual QA evidence must not use -AllowSkipped."
+  }
+  $deferMultiMonitor =
+    [bool](Get-RecordPropertyValue -Record $Record -Name "deferMultiMonitor")
+  $deferredItemValue =
+    Get-RecordPropertyValue -Record $Record -Name "deferredItemIds"
+  $deferredItemIds = @()
+  if ($null -ne $deferredItemValue) {
+    $deferredItemIds = @($deferredItemValue)
+  }
+  if ($status -eq "passedWithDeferredMultiMonitor") {
+    if (-not $deferMultiMonitor) {
+      return "Deferred multi-monitor Windows manual QA evidence must set deferMultiMonitor."
+    }
+    if ($deferredItemIds.Count -ne 1 -or
+        [string]$deferredItemIds[0] -ne "multiMonitorEdgeDocking") {
+      return "Deferred multi-monitor Windows manual QA evidence must identify only multiMonitorEdgeDocking."
+    }
+    if ([string]::IsNullOrWhiteSpace(
+        [string](Get-RecordPropertyValue -Record $Record -Name "reason"))) {
+      return "Deferred multi-monitor Windows manual QA evidence must include a reason."
+    }
+    if ([string]::IsNullOrWhiteSpace(
+        [string](Get-RecordPropertyValue -Record $Record -Name "notes"))) {
+      return "Deferred multi-monitor Windows manual QA evidence must include notes."
+    }
+  } elseif ($deferMultiMonitor -or $deferredItemIds.Count -ne 0) {
+    return "Passed Windows manual QA evidence must not contain deferred items."
   }
   if ([string]::IsNullOrWhiteSpace(
       [string](Get-RecordPropertyValue -Record $Record -Name "tester"))) {
@@ -440,8 +470,15 @@ function Test-WindowsManualQaRecord {
   }
   foreach ($id in $expectedIds) {
     $matches = @($items | Where-Object { [string]$_.id -eq $id })
-    if ($matches.Count -ne 1 -or [string]$matches[0].status -ne "pass") {
-      return "Windows manual QA item '$id' must be present and pass."
+    $expectedStatus = if ($status -eq "passedWithDeferredMultiMonitor" -and
+        $id -eq "multiMonitorEdgeDocking") {
+      "skip"
+    } else {
+      "pass"
+    }
+    if ($matches.Count -ne 1 -or
+        [string]$matches[0].status -ne $expectedStatus) {
+      return "Windows manual QA item '$id' must be present and $expectedStatus."
     }
   }
   return ""
@@ -924,6 +961,11 @@ function Test-ReleaseMetadataRecord {
       [int]$Record.windows.smoke.finalVisibleTopLevelWindowCount -lt 2) {
     return "Release metadata Windows smoke must prove independent visible paper HWNDs."
   }
+  if ([bool]$Record.windows.smoke.geometryPersistenceVerified -ne $true -or
+      [bool]$Record.windows.smoke.contentEditGeometryStabilityVerified -ne
+        $true) {
+    return "Release metadata Windows smoke must prove native geometry persistence and content-edit geometry stability."
+  }
   $visiblePaperCountBeforeSettings =
     [int]$Record.windows.smoke.visiblePaperCountBeforeSettings
   if ([bool]$Record.windows.smoke.settingsCoordinatorLifecycle -ne $true -or
@@ -1115,6 +1157,7 @@ $resultJsonFullPath = Resolve-ResultJsonPath -Path $ResultJson
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $checks = New-Object System.Collections.Generic.List[object]
 $blockers = New-Object System.Collections.Generic.List[string]
+$localBlockers = New-Object System.Collections.Generic.List[string]
 
 try {
   $languages = Get-RuntimeSupportedLanguages -RepoRoot $repoRoot
@@ -1178,7 +1221,9 @@ try {
   if (Test-CleanGitTree -RepoRoot $repoRoot) {
     Add-Check "cleanGitTree" "passed" "Working tree is clean."
   } else {
-    Add-Check "cleanGitTree" "blocked" "GitHub Release publishing requires a clean working tree."
+    $summary = "Working tree is dirty; local release candidates are allowed, but GitHub Release publishing requires a clean working tree."
+    Add-Check "cleanGitTree" "deferred" $summary
+    $blockers.Add($summary) | Out-Null
   }
 } catch {
   Add-Check "cleanGitTree" "blocked" $_.Exception.Message
@@ -1192,7 +1237,14 @@ try {
     -Record $record `
     -ExpectedWindowsReleaseDirectory $ExpectedWindowsReleaseDirectory
   if ([string]::IsNullOrWhiteSpace($issue)) {
-    Add-Check "windowsManualQa" "passed" "Windows manual QA evidence is publishable."
+    $qaStatus = [string](Get-RecordPropertyValue -Record $record -Name "status")
+    if ($qaStatus -eq "passedWithDeferredMultiMonitor") {
+      $summary = "Windows manual QA is valid for a local release candidate; multi-monitor edge docking is explicitly deferred."
+      Add-Check "windowsManualQa" "deferred" $summary
+      $blockers.Add("GitHub Release publishing requires multi-monitor edge docking QA to pass.") | Out-Null
+    } else {
+      Add-Check "windowsManualQa" "passed" "Windows manual QA evidence is publishable."
+    }
   } else {
     Add-Check "windowsManualQa" "blocked" $issue
   }
@@ -1284,15 +1336,21 @@ try {
 }
 
 $ready = $blockers.Count -eq 0
+$readyForLocalRelease = $localBlockers.Count -eq 0
 $status = if ($ready) { "ready" } else { "blocked" }
+$localStatus = if ($readyForLocalRelease) { "ready" } else { "blocked" }
 $checkedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
 $blockerRecords = @($blockers.ToArray())
+$localBlockerRecords = @($localBlockers.ToArray())
 $checkRecords = @($checks.ToArray())
 $record = [ordered]@{
   status = $status
+  localStatus = $localStatus
   checkedAtUtc = $checkedAtUtc
   readyForGitHubRelease = $ready
+  readyForLocalRelease = $readyForLocalRelease
   blockers = $blockerRecords
+  localBlockers = $localBlockerRecords
   checks = $checkRecords
 }
 
@@ -1309,4 +1367,7 @@ Write-Output $json
 
 if (-not $ready -and $FailOnBlocked) {
   throw "Release readiness audit is blocked: $($blockers -join '; ')"
+}
+if (-not $readyForLocalRelease -and $FailOnLocalBlocked) {
+  throw "Local release readiness audit is blocked: $($localBlockers -join '; ')"
 }

@@ -14,6 +14,7 @@ param(
   [ValidateSet("", "pass", "fail", "skip")]
   [string]$IndependentPaperSurfaces = "",
   [switch]$AllowSkipped,
+  [switch]$DeferMultiMonitor,
   [string]$Tester = "",
   [string]$Notes = "",
   [string]$ExePath = "build\windows\x64\runner\Release\repapertodo.exe",
@@ -135,12 +136,30 @@ $items = @(
 
 $failed = @($items | Where-Object { $_.status -eq "fail" })
 $skipped = @($items | Where-Object { $_.status -eq "skip" })
-if ($skipped.Count -gt 0 -and -not $AllowSkipped) {
+if ($AllowSkipped -and $DeferMultiMonitor) {
+  throw "Windows manual QA cannot combine -AllowSkipped with -DeferMultiMonitor."
+}
+if ($DeferMultiMonitor) {
+  if ($failed.Count -gt 0) {
+    throw "Windows manual QA cannot defer multi-monitor validation while another item failed."
+  }
+  if ($skipped.Count -ne 1 -or [string]$skipped[0].id -ne "multiMonitorEdgeDocking") {
+    throw "-DeferMultiMonitor requires multiMonitorEdgeDocking to be the only skipped Windows manual QA item."
+  }
+  if ([string]::IsNullOrWhiteSpace($Tester)) {
+    throw "Deferred multi-monitor Windows manual QA records require -Tester."
+  }
+  if ([string]::IsNullOrWhiteSpace($Notes)) {
+    throw "Deferred multi-monitor Windows manual QA records require -Notes explaining the deferral."
+  }
+} elseif ($skipped.Count -gt 0 -and -not $AllowSkipped) {
   throw "Windows manual QA contains skipped items. Pass -AllowSkipped only for non-publishable exploratory records."
 }
 
 $recordStatus = if ($failed.Count -gt 0) {
   "failed"
+} elseif ($DeferMultiMonitor) {
+  "passedWithDeferredMultiMonitor"
 } elseif ($skipped.Count -gt 0) {
   "skipped"
 } else {
@@ -149,11 +168,20 @@ $recordStatus = if ($failed.Count -gt 0) {
 if ($recordStatus -eq "passed" -and [string]::IsNullOrWhiteSpace($Tester)) {
   throw "Windows manual QA passed records require -Tester so release evidence is attributable."
 }
-$recordReason = if ($recordStatus -eq "skipped") {
-  "one or more Windows manual QA items were skipped; non-publishable exploratory record"
-} else {
-  ""
+$recordReason = switch ($recordStatus) {
+  "passedWithDeferredMultiMonitor" {
+    "multi-monitor edge docking was explicitly deferred; local release candidate only"
+  }
+  "skipped" {
+    "one or more Windows manual QA items were skipped; non-publishable exploratory record"
+  }
+  default { "" }
 }
+$deferredItemIds = @(
+  if ($recordStatus -eq "passedWithDeferredMultiMonitor") {
+    "multiMonitorEdgeDocking"
+  }
+)
 
 $record = [ordered]@{
   status = $recordStatus
@@ -170,6 +198,8 @@ $record = [ordered]@{
   appSoBytes = $appSoItem.Length
   appSoSha256 = $appSoHash.Hash.ToLowerInvariant()
   allowSkipped = [bool]$AllowSkipped
+  deferMultiMonitor = [bool]$DeferMultiMonitor
+  deferredItemIds = $deferredItemIds
   notes = $Notes.Trim()
   items = $items
 }

@@ -202,7 +202,7 @@ void main() {
     await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(find.text('System'), findsOneWidget);
     expect(find.text('Light'), findsOneWidget);
     expect(find.text('Dark'), findsOneWidget);
@@ -211,7 +211,7 @@ void main() {
     expect(find.text('Forest'), findsOneWidget);
     expect(find.text('Rose'), findsOneWidget);
     expect(find.text('Custom theme color'), findsOneWidget);
-    expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Appearance'), findsWidgets);
     expect(find.text('Markdown off'), findsOneWidget);
     expect(find.text('Basic'), findsOneWidget);
     expect(find.text('Enhanced'), findsOneWidget);
@@ -219,8 +219,8 @@ void main() {
     expect(find.text('Medium'), findsOneWidget);
     expect(find.text('Large'), findsOneWidget);
     expect(find.text('XL'), findsOneWidget);
-    expect(find.text('Font preset'), findsOneWidget);
-    expect(find.text('Default'), findsOneWidget);
+    expect(find.text('Font preset'), findsNothing);
+    expect(find.text('Default'), findsNothing);
     expect(find.text('Custom font family'), findsOneWidget);
     expect(find.text('External markdown extension'), findsOneWidget);
     expect(find.text('Zoom'), findsOneWidget);
@@ -236,6 +236,7 @@ void main() {
     expect(find.text('Top bar new todo'), findsOneWidget);
     expect(find.text('Top bar new note'), findsOneWidget);
     expect(find.text('Show external open button'), findsOneWidget);
+    await _selectSettingsCategory(tester, 'capsules');
     expect(find.text('Capsule mode'), findsOneWidget);
     expect(find.text('Deep capsule mode'), findsOneWidget);
     expect(find.text('Collapse all control'), findsOneWidget);
@@ -246,6 +247,7 @@ void main() {
     expect(
         find.text('Collapse expanded deep capsule on click'), findsOneWidget);
     expect(find.text('Hide covered deep capsules'), findsOneWidget);
+    await _selectSettingsCategory(tester, 'todoAndNotes');
     expect(find.text('Todo reminders'), findsOneWidget);
     expect(find.text('Reminder interval'), findsOneWidget);
     expect(find.text('Minutes'), findsOneWidget);
@@ -253,6 +255,7 @@ void main() {
     expect(find.text('All due'), findsOneWidget);
     expect(find.text('Nearest'), findsOneWidget);
     expect(find.text('Reminder display seconds'), findsOneWidget);
+    await _selectSettingsCategory(tester, 'general');
     expect(find.text('Start at login'), findsOneWidget);
     expect(find.text('Hide from task switcher'), findsOneWidget);
     expect(find.text('Avoid fullscreen'), findsOneWidget);
@@ -263,11 +266,13 @@ void main() {
     expect(find.text('Persistent PowerShell process'), findsOneWidget);
     expect(find.text('Prefer PowerShell 7'), findsOneWidget);
     expect(find.text('Hide script run window'), findsOneWidget);
+    await _selectSettingsCategory(tester, 'todoAndNotes');
     expect(find.text('Todo-note links'), findsOneWidget);
     expect(find.text('Show linked note name'), findsOneWidget);
     expect(find.text('Allow long linked note titles'), findsOneWidget);
     expect(find.text('Hide linked note capsules'), findsOneWidget);
-    expect(find.text('WebDAV sync'), findsOneWidget);
+    await _selectSettingsCategory(tester, 'sync');
+    expect(find.text('WebDAV sync'), findsWidgets);
     expect(find.text('坚果云'), findsOneWidget);
     expect(find.text('Generic'), findsOneWidget);
   });
@@ -349,6 +354,189 @@ void main() {
     expect(find.byType(AppBar), findsNothing);
   });
 
+  testWidgets('paper window chrome and todo dragging match PaperTodo defaults',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(280, 340));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'paper-window-parity',
+      type: PaperTypes.todo,
+      title: 'Todo1',
+      items: [
+        PaperItem(id: 'paper-window-first', text: 'First'),
+        PaperItem(id: 'paper-window-second', text: 'Second', order: 1),
+        PaperItem(id: 'paper-window-third', text: 'Third', order: 2),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        theme: 'light',
+        papers: [paper],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    var windowDragStarts = 0;
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+        paperWindowDragStarter: () async {
+          windowDragStarts += 1;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('paper-window-parity-new-todo')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('paper-window-parity-new-note')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('paper-window-parity-desktop-pin')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('paper-window-parity-close')),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.more_horiz), findsNothing);
+    expect(find.text('Add item'), findsNothing);
+
+    final chromeMargin = find.byKey(
+      const ValueKey('paper-window-parity-paper-window-chrome-margin'),
+    );
+    expect(chromeMargin, findsOneWidget);
+    expect(tester.getTopLeft(chromeMargin), Offset.zero);
+    final previewRect = tester.getRect(find.byType(PaperPreview));
+    expect(previewRect.left, 8);
+    expect(previewRect.top, 8);
+    expect(previewRect.right, 272);
+    expect(previewRect.bottom, 332);
+
+    final paperHeader = find.byKey(
+      const ValueKey('paper-window-parity-paper-header'),
+    );
+    expect(tester.getSize(paperHeader).height, 31);
+    await tester.timedDragFrom(
+      tester.getCenter(paperHeader),
+      const Offset(24, 0),
+      const Duration(milliseconds: 200),
+    );
+    await tester.pump();
+    expect(windowDragStarts, 1);
+
+    final topmostButton =
+        find.byKey(const ValueKey('paper-window-parity-topmost'));
+    expect(topmostButton, findsOneWidget);
+    expect(tester.getSize(topmostButton), const Size(23, 24));
+    final topmostIconButton = find.descendant(
+      of: topmostButton,
+      matching: find.byType(IconButton),
+    );
+    expect(topmostIconButton, findsOneWidget);
+
+    final dragHandle = find.byKey(
+      const ValueKey('paper-window-parity-paper-window-first-drag-handle'),
+    );
+    final thirdRow = find.byKey(
+      const ValueKey('paper-window-parity-paper-window-third-row'),
+    );
+    expect(dragHandle, findsOneWidget);
+    expect(thirdRow, findsOneWidget);
+    expect(
+      tester
+          .getSize(find.byKey(
+            const ValueKey('paper-window-parity-todo-delete-drop-target'),
+          ))
+          .height,
+      38,
+    );
+    await tester.timedDragFrom(
+      tester.getCenter(dragHandle),
+      tester.getCenter(thirdRow) - tester.getCenter(dragHandle),
+      const Duration(milliseconds: 300),
+    );
+    await tester.pumpAndSettle();
+
+    expect(paper.items.map((item) => item.id), [
+      'paper-window-second',
+      'paper-window-third',
+      'paper-window-first',
+    ]);
+
+    final topmostAction =
+        tester.widget<IconButton>(topmostIconButton).onPressed;
+    expect(topmostAction, isNotNull);
+    topmostAction!();
+    await tester.pumpAndSettle();
+    expect(paper.alwaysOnTop, true);
+    expect(
+      find.byKey(const ValueKey('paper-window-parity-topmost')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('paper window chrome honors PaperTodo top bar preferences',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(280, 340));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'paper-window-hidden-actions',
+      type: PaperTypes.todo,
+      title: 'Focused paper',
+      items: [PaperItem(id: 'focused-item', text: 'Only paper controls')],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        showTopBarNewTodoButton: false,
+        showTopBarNewNoteButton: false,
+        showTopBarExternalOpenButton: false,
+        papers: [paper],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('paper-window-hidden-actions-new-todo')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('paper-window-hidden-actions-new-note')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('paper-window-hidden-actions-topmost')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('paper-window-hidden-actions-desktop-pin')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('paper-window-hidden-actions-close')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('settings can choose an installed system font family',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -372,9 +560,22 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.settings_outlined).last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Default').first);
+    expect(
+      find.byKey(const ValueKey('settings-category-navigation')),
+      findsOneWidget,
+    );
+    expect(find.text('Font preset'), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey('settings-category-capsules')),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Custom').last);
+    expect(
+      find.widgetWithText(CheckboxListTile, 'Capsule mode'),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings-category-display')),
+    );
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -389,7 +590,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(controller.state.uiFontPreset, UiFontPresets.custom);
+    expect(controller.state.uiFontPreset, UiFontPresets.defaultPreset);
     expect(controller.state.systemFontFamilyName, 'Paper Sans');
   });
 
@@ -609,9 +810,9 @@ void main() {
       ),
     );
 
-    expect(find.text('Edit'), findsOneWidget);
+    expect(find.text('Edit'), findsNothing);
     expect(find.byKey(const ValueKey('note-paper-preview')), findsOneWidget);
-    expect(find.text('Split'), findsOneWidget);
+    expect(find.text('Split'), findsNothing);
     expect(find.byKey(const ValueKey('note-status-mode')), findsOneWidget);
     expect(find.text('Research note'), findsOneWidget);
     expect(find.text('Extract claims'), findsOneWidget);
@@ -1605,7 +1806,7 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('note-status-bar')), findsOneWidget);
-    expect(find.text('Split'), findsOneWidget);
+    expect(find.text('Split'), findsNothing);
     expect(find.text('12 chars | 1 line | 2 elements'), findsOneWidget);
     expect(find.byKey(const ValueKey('note-status-zoom')), findsOneWidget);
 
@@ -2689,19 +2890,70 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
 
+    final pickedColor = Theme.of(
+      tester.element(find.byKey(const ValueKey('settings-theme-color-swatch'))),
+    ).colorScheme.primary;
+    await tester.tap(find.byKey(const ValueKey('settings-theme-color-pick')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-theme-color-apply')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.customThemeColorHex, _testColorHex(pickedColor));
+    final theme = Theme.of(tester.element(find.byType(Scaffold)));
+    expect(
+      theme.colorScheme.primary,
+      ColorScheme.fromSeed(seedColor: pickedColor).primary,
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-theme-color-clear')));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(controller.state.customThemeColorHex, isEmpty);
+  });
+
+  testWidgets('line spacing settings accept keyboard input and clamp',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(id: 'spacing-settings-paper', type: PaperTypes.todo),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('settings-todo-line-spacing')),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.enterText(
-      find.widgetWithText(TextField, 'Custom theme color'),
-      '336699',
+      find.byKey(const ValueKey('settings-todo-line-spacing')),
+      '9',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-note-line-spacing')),
+      '0.1',
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(controller.state.customThemeColorHex, '#336699');
-    final theme = Theme.of(tester.element(find.byType(Scaffold)));
-    expect(
-      theme.colorScheme.primary,
-      ColorScheme.fromSeed(seedColor: const Color(0xFF336699)).primary,
-    );
+    expect(controller.state.todoLineSpacing, 5);
+    expect(controller.state.noteLineSpacing, 0.8);
   });
 
   testWidgets('rejects invalid external markdown extensions in settings',
@@ -2742,7 +2994,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(
       find.textContaining('Use an extension such as .md, .txt, or .todo.md'),
       findsOneWidget,
@@ -2757,7 +3009,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsNothing);
+    expect(find.text('Settings'), findsNothing);
     expect(controller.state.externalMarkdownExtension, '.txt');
   });
 
@@ -2798,7 +3050,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsNothing);
+    expect(find.text('Settings'), findsNothing);
     expect(controller.state.externalMarkdownExtension, '.notes.todo.md');
   });
 
@@ -2843,6 +3095,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.text('Sync encryption passphrase'),
       240,
@@ -2925,6 +3178,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.text('Sync encryption passphrase'),
       240,
@@ -2946,7 +3200,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsNothing);
+    expect(find.text('Settings'), findsNothing);
     expect(configuredStateFilePaths, [store.filePath]);
     expect(configuredSyncs.single.enabled, true);
     expect(configuredSyncs.single.provider, SyncProviderIds.webDav);
@@ -3003,6 +3257,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.text('Interval minutes'),
       240,
@@ -3069,6 +3324,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.text('Interval minutes'),
       240,
@@ -3132,6 +3388,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.text('Sync encryption passphrase'),
       240,
@@ -3140,7 +3397,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Enter a sync encryption passphrase.'), findsOneWidget);
     expect(
       find.textContaining('Complete the WebDAV URL'),
@@ -3207,6 +3464,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.widgetWithText(TextField, 'Username'),
       240,
@@ -3219,7 +3477,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Enter a WebDAV username.'), findsOneWidget);
     expect(
       find.textContaining('Complete the WebDAV URL'),
@@ -3272,6 +3530,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.widgetWithText(TextField, 'Password'),
       240,
@@ -3284,7 +3543,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(
         find.text('Enter a WebDAV password or app password.'), findsOneWidget);
     expect(
@@ -3338,6 +3597,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.widgetWithText(TextField, 'Username'),
       240,
@@ -3402,6 +3662,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.widgetWithText(TextField, 'Sync encryption passphrase'),
       240,
@@ -3414,7 +3675,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Enter a sync encryption passphrase.'), findsOneWidget);
     expect(
       find.textContaining('Complete the WebDAV URL'),
@@ -3477,6 +3738,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.widgetWithText(TextField, 'WebDAV URL'),
       240,
@@ -3505,7 +3767,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(find.text(endpointErrorText), findsOneWidget);
     expect(find.text(rootPathErrorText), findsOneWidget);
     expect(
@@ -3644,7 +3906,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsNothing);
+    expect(find.text('Settings'), findsNothing);
     expect(
       controller.state.sync.webDav.endpoint,
       'https://dav.example.test/dav/',
@@ -3656,6 +3918,78 @@ void main() {
       controller.state.sync.webDav.encryptionPassphrase,
       'shared sync secret 2',
     );
+  });
+
+  testWidgets('rejects overlong Jianguoyun sandbox names inline',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        sync: SyncSettings(
+          enabled: true,
+          provider: SyncProviderIds.webDav,
+          webDav: WebDavSyncSettings.jianguoyun(
+            username: 'user@example.com',
+            password: 'app-password',
+            encryptionPassphrase: 'shared sync secret',
+          ),
+        ),
+        papers: [
+          PaperData(
+            id: 'jianguoyun-root-limit-paper',
+            type: PaperTypes.todo,
+            title: 'Jianguoyun root limit',
+            items: [
+              PaperItem(
+                id: 'jianguoyun-root-limit-item',
+                text: 'Validate before upload',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
+    await tester.scrollUntilVisible(
+      find.widgetWithText(TextField, 'Remote folder'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Remote folder'),
+      List.filled(31, 'a').join(),
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settings'), findsOneWidget);
+    expect(
+      find.text(
+        'Jianguoyun requires the first remote-folder segment to be at most 30 characters.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Remote folder'))
+          .focusNode
+          ?.hasFocus,
+      true,
+    );
+    expect(controller.state.sync.webDav.rootPath, 'RePaperTodo');
   });
 
   testWidgets('uses compact WebDAV preset selector on narrow screens',
@@ -3695,6 +4029,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('compact-webdav-preset-selector')),
       480,
@@ -3852,6 +4187,7 @@ void main() {
     await tester.tap(find.text('Enhanced').last);
     await tester.pumpAndSettle();
 
+    await _selectSettingsCategory(tester, 'todoAndNotes');
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('settings-reminder-unit-selector')),
       480,
@@ -4714,7 +5050,7 @@ void main() {
     await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
   });
 
   testWidgets('recovery snapshots retry after list failures', (tester) async {
@@ -4964,7 +5300,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Recovery snapshots'), findsNothing);
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
   });
 
   testWidgets('recovery snapshot format list failure shows a readable message',
@@ -5101,7 +5437,7 @@ void main() {
     await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
   });
 
   testWidgets('recovery snapshot malformed encrypted payload keeps message',
@@ -5470,7 +5806,7 @@ void main() {
     await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(find.textContaining('Sync failed:'), findsNothing);
   });
 
@@ -6722,7 +7058,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(syncService.calls, 0);
 
     await tester.pump(const Duration(minutes: 1));
@@ -8537,7 +8873,7 @@ void main() {
     expect(platform.paperWindows.shownTitles, isEmpty);
     expect(platform.systemIntegration.exitApplicationCount, 0);
     expect(platform.tray.disposeCount, 0);
-    expect(find.text('Sync settings'), findsNothing);
+    expect(find.text('Settings'), findsNothing);
     expect(find.text('Note1'), findsNothing);
 
     firstSyncGate.complete();
@@ -8884,12 +9220,13 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
-      find.text('WebDAV sync'),
+      find.widgetWithText(CheckboxListTile, 'WebDAV sync'),
       240,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('WebDAV sync'));
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'WebDAV sync'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
@@ -8899,12 +9236,13 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
     await tester.scrollUntilVisible(
-      find.text('WebDAV sync'),
+      find.widgetWithText(CheckboxListTile, 'WebDAV sync'),
       240,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('WebDAV sync'));
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'WebDAV sync'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
@@ -9107,10 +9445,6 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Custom theme color'),
-      '336699',
-    );
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -9308,6 +9642,82 @@ void main() {
     );
   });
 
+  testWidgets('changing WebDAV target clears stale durable remote progress',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final pendingBatch = _pendingSyncBatchForTest(
+      deviceId: 'device-old-root',
+      title: 'Old root base',
+      startSequence: 7,
+    );
+    final initialState = AppState(
+      sync: SyncSettings(
+        enabled: true,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings(
+          endpoint: 'https://dav.example.test/',
+          username: 'user',
+          password: 'pass',
+          encryptionPassphrase: 'shared sync secret',
+          rootPath: 'old-root',
+        ),
+      )
+        ..operationDeviceSequences = const {'device-old-root': 7}
+        ..pendingOperationBatch = pendingBatch
+        ..deletedPaperTombstones = const {
+          'deleted-paper': '2026-07-11T08:00:00.000Z',
+        },
+      papers: [
+        PaperData(
+          id: 'sync-target-change-note',
+          type: PaperTypes.note,
+          title: 'Local',
+          content: 'Keep local content',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState.fromJson(initialState.toJson()),
+      platform: _RecordingPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(initialState);
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'sync');
+    await tester.scrollUntilVisible(
+      find.widgetWithText(TextField, 'Remote folder'),
+      240,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Remote folder'),
+      'new-root',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    for (final sync in [controller.state.sync, store.savedState.sync]) {
+      expect(sync.webDav.rootPath, 'new-root');
+      expect(sync.operationDeviceSequences, isEmpty);
+      expect(sync.pendingOperationBatch, isNull);
+      expect(sync.deletedPaperTombstones, const {
+        'deleted-paper': '2026-07-11T08:00:00.000Z',
+      });
+    }
+    expect(controller.state.papers.single.content, 'Keep local content');
+  });
+
   testWidgets('unchanged sync settings save restores pending local edit upload',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -9498,6 +9908,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'general');
     await tester.scrollUntilVisible(
       find.text('Pinned todo hotkey'),
       240,
@@ -9618,10 +10029,6 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Custom theme color'),
-      '336699',
-    );
     store.nextSaveError =
         const StateStoreException('settings save failed', 'disk full');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
@@ -9723,10 +10130,6 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Custom theme color'),
-      '336699',
-    );
     store.nextSaveError =
         const StateStoreException('settings save failed', 'disk full');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
@@ -9885,6 +10288,7 @@ void main() {
     await tester.tap(
       find.byKey(const ValueKey('external-current-editor-note-preview')),
     );
+    await tester.pump();
     await tester.pump();
     await tester.enterText(
       find.byKey(const ValueKey('external-current-editor-note-content')),
@@ -10072,6 +10476,151 @@ void main() {
     );
     expect(find.textContaining('PlatformException'), findsNothing);
     expect(find.textContaining('NO_VIEWER'), findsNothing);
+  });
+
+  testWidgets('Windows coordinator leaves reminders to paper windows',
+      (tester) async {
+    final dueAt = DateTime.now().subtract(const Duration(minutes: 5));
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        papers: [
+          PaperData(
+            id: 'coordinator-reminder-paper',
+            title: 'Coordinator reminder',
+            items: [
+              PaperItem(
+                id: 'coordinator-reminder-item',
+                text: 'Must stay on its paper',
+                dueAtLocal: dueAt.toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        coordinatorWindowMode: true,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('independent paper reminders stay on their owning paper',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final dueAt = DateTime.now().subtract(const Duration(minutes: 5));
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        todoReminderBubbleDurationSeconds: 5,
+        papers: [
+          PaperData(
+            id: 'owning-reminder-paper',
+            title: 'Owning paper',
+            items: [
+              PaperItem(
+                id: 'owning-reminder-item',
+                text: 'Visible reminder',
+                dueAtLocal: dueAt.toIso8601String(),
+              ),
+            ],
+          ),
+          PaperData(
+            id: 'other-reminder-paper',
+            title: 'Other paper',
+            items: [
+              PaperItem(
+                id: 'other-reminder-item',
+                text: 'Duplicate reminder must stay hidden',
+                dueAtLocal: dueAt.toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: 'owning-reminder-paper',
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Visible reminder'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.textContaining('Visible reminder'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Duplicate reminder must stay hidden'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Windows paper reminders use a native adjacent bubble',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final dueAt = DateTime.now().subtract(const Duration(minutes: 5));
+    final presented = <Map<String, Object?>>[];
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useTodoReminderInterval: true,
+        todoReminderBubbleDurationSeconds: 7,
+        papers: [
+          PaperData(
+            id: 'native-reminder-paper',
+            title: 'Native reminder',
+            isCollapsed: true,
+            items: [
+              PaperItem(
+                id: 'native-reminder-item',
+                text: 'Show beside the capsule',
+                dueAtLocal: dueAt.toIso8601String(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: 'native-reminder-paper',
+        paperWindowMode: true,
+        paperWindowReminderPresenter: (reminder) async {
+          presented.add(Map<String, Object?>.from(reminder));
+        },
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(SnackBar), findsNothing);
+    expect(presented, hasLength(1));
+    expect(presented.single['visible'], true);
+    expect(presented.single['title'], contains('Show beside the capsule'));
+    expect(presented.single['message'], contains('Due'));
+    expect(presented.single['durationSeconds'], 7);
   });
 
   testWidgets('shows due todo reminders', (tester) async {
@@ -13489,6 +14038,104 @@ void main() {
     expect(controller.state.papers.single.alwaysOnTop, false);
   });
 
+  testWidgets(
+      'mobile paper board stays single-layer and touch-safe in both orientations',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'mobile-layout',
+            type: PaperTypes.todo,
+            title: 'PaperTodo mobile',
+            items: [
+              PaperItem(
+                id: 'mobile-layout-item',
+                text: 'One paper, one visual surface',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    Future<void> verifyAt(Size size) async {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(
+        RePaperTodoApp(
+          controller: controller,
+          store: _MemoryStateStore(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight, 52);
+      expect(
+        tester
+            .getSize(
+              find.byKey(const ValueKey('mobile-layout-paper-header')),
+            )
+            .height,
+        56,
+      );
+
+      final surface = tester.widget<DecoratedBox>(
+        find.byKey(const ValueKey('mobile-layout-paper-surface')),
+      );
+      final decoration = surface.decoration as BoxDecoration;
+      expect(decoration.borderRadius, BorderRadius.circular(18));
+      expect(decoration.boxShadow, hasLength(1));
+      expect(decoration.boxShadow!.single.blurRadius, 22);
+
+      expect(
+        tester.getSize(
+          find.byKey(const ValueKey('mobile-layout-paper-actions')),
+        ),
+        const Size(48, 48),
+      );
+      expect(
+        tester.getSize(
+          find.byKey(
+            const ValueKey('mobile-layout-mobile-layout-item-actions'),
+          ),
+        ),
+        const Size(48, 48),
+      );
+      expect(
+        tester
+            .getSize(
+              find.byKey(const ValueKey('mobile-layout-mobile-add-item')),
+            )
+            .height,
+        greaterThanOrEqualTo(44),
+      );
+
+      final screen = Offset.zero & size;
+      for (final finder in [
+        find.byKey(const ValueKey('mobile-layout-paper-surface')),
+        find.byKey(const ValueKey('mobile-layout-paper-actions')),
+        find.byKey(
+          const ValueKey('mobile-layout-mobile-layout-item-actions'),
+        ),
+        find.byKey(const ValueKey('mobile-layout-mobile-add-item')),
+      ]) {
+        expect(screen.contains(tester.getRect(finder).topLeft), true);
+        expect(screen.contains(tester.getRect(finder).bottomRight), true);
+      }
+    }
+
+    await verifyAt(const Size(375, 667));
+    await verifyAt(const Size(667, 375));
+  });
+
   testWidgets('opens paper context menu from header right click like PaperTodo',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -14145,6 +14792,7 @@ void main() {
       ),
       findsOneWidget,
     );
+    await _selectSettingsCategory(tester, 'general');
     await tester.scrollUntilVisible(
       find.text('Pinned todo hotkey'),
       240,
@@ -14427,12 +15075,15 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'capsules');
+    final capsuleModeToggle =
+        find.widgetWithText(CheckboxListTile, 'Capsule mode');
     await tester.scrollUntilVisible(
-      find.text('Capsule mode'),
+      capsuleModeToggle,
       240,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('Capsule mode'));
+    await tester.tap(capsuleModeToggle);
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -14482,6 +15133,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'capsules');
 
     await tester.scrollUntilVisible(
       find.text('Show deep capsule while expanded'),
@@ -14537,6 +15189,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'general');
 
     await tester.scrollUntilVisible(
       find.text('Run linked script capsules on click'),
@@ -14591,14 +15244,15 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
 
+    await _selectSettingsCategory(tester, 'general');
     await tester.scrollUntilVisible(
       find.text('Run linked script capsules on click'),
       240,
       scrollable: find.byType(Scrollable).last,
     );
-    final runLinkedTile = tester.widget<SwitchListTile>(
+    final runLinkedTile = tester.widget<CheckboxListTile>(
       find.widgetWithText(
-        SwitchListTile,
+        CheckboxListTile,
         'Run linked script capsules on click',
       ),
     );
@@ -14649,6 +15303,7 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
 
+    await _selectSettingsCategory(tester, 'todoAndNotes');
     await tester.scrollUntilVisible(
       find.text('Todo-note links'),
       240,
@@ -14657,8 +15312,8 @@ void main() {
     await tester.tap(find.text('Todo-note links'));
     await tester.pump();
 
-    final hideLinkedNotesTile = tester.widget<SwitchListTile>(
-      find.widgetWithText(SwitchListTile, 'Hide linked note capsules'),
+    final hideLinkedNotesTile = tester.widget<CheckboxListTile>(
+      find.widgetWithText(CheckboxListTile, 'Hide linked note capsules'),
     );
     expect(hideLinkedNotesTile.value, true);
     expect(hideLinkedNotesTile.onChanged, isNull);
@@ -14706,6 +15361,9 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'todoAndNotes');
+    await _selectSettingsCategory(tester, 'general');
+    await _selectSettingsCategory(tester, 'general');
 
     await tester.scrollUntilVisible(
       find.text('Prefer PowerShell 7'),
@@ -14758,6 +15416,7 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
 
+    await _selectSettingsCategory(tester, 'general');
     await tester.scrollUntilVisible(
       find.text('Pinned todo hotkey'),
       240,
@@ -14819,6 +15478,7 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
 
+    await _selectSettingsCategory(tester, 'general');
     await tester.scrollUntilVisible(
       find.text('Pinned todo hotkey'),
       240,
@@ -14884,6 +15544,9 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'general');
+    await _selectSettingsCategory(tester, 'general');
+    await _selectSettingsCategory(tester, 'general');
     await tester.scrollUntilVisible(
       find.text('Pinned todo hotkey'),
       240,
@@ -14944,6 +15607,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'general');
     await tester.scrollUntilVisible(
       find.text('Hide from task switcher'),
       240,
@@ -15001,6 +15665,8 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'general');
+    await _selectSettingsCategory(tester, 'general');
     await tester.scrollUntilVisible(
       find.text('Pinned todo hotkey'),
       240,
@@ -15068,6 +15734,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'general');
 
     expect(find.text('Start at login'), findsNothing);
     expect(find.text('Hide from task switcher'), findsNothing);
@@ -15201,7 +15868,7 @@ void main() {
     startup.addCommand(const StartupCommand(StartupCommandKind.settings));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
   });
 
   testWidgets('opens settings requested during initial startup',
@@ -15238,7 +15905,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Sync settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
   });
 
   testWidgets('runtime visibility startup commands are saved', (tester) async {
@@ -15502,9 +16169,226 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump(Duration.zero);
 
     expect(platform.uriOpener.openedUris,
         ['https://example.com/from-independent-paper']);
+  });
+
+  testWidgets('routes native reminder bubble clicks to the owning paper',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      papers: [
+        PaperData(
+          id: 'native-reminder-action-paper',
+          type: PaperTypes.todo,
+          title: 'Reminder action',
+          isCollapsed: true,
+        ),
+      ],
+    );
+    await store.save(state);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+
+    platform.paperWindows.emitAction(
+      const PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.openReminderPaper,
+        paperId: 'native-reminder-action-paper',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(controller.state.papers.single.isCollapsed, false);
+    expect(controller.state.capsuleCollapseAllActive, false);
+    expect(platform.paperWindows.shownTitles, contains('Reminder action'));
+    expect(store.savedState.papers.single.isCollapsed, false);
+  });
+
+  testWidgets('expanded native proxy can collapse its owning paper',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final state = AppState(
+      collapseExpandedDeepCapsuleOnClick: true,
+      papers: [
+        PaperData(
+          id: 'expanded-proxy-paper',
+          type: PaperTypes.todo,
+          title: 'Expanded proxy',
+        ),
+      ],
+    );
+    await store.save(state);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    await tester.pumpAndSettle();
+
+    platform.paperWindows.emitAction(
+      const PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.collapsePaper,
+        paperId: 'expanded-proxy-paper',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(controller.state.papers.single.isCollapsed, true);
+    expect(store.savedState.papers.single.isCollapsed, true);
+    expect(platform.paperWindows.restoredTitleSnapshots, isNotEmpty);
+  });
+
+  testWidgets(
+      'coordinator expands a collapse-all queue from its master capsule',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      papers: [
+        PaperData(
+          id: 'collapse-all-master',
+          title: 'Master',
+          capsuleSide: DeepCapsuleSides.right,
+        ),
+        PaperData(
+          id: 'collapse-all-peer',
+          title: 'Peer',
+          capsuleSide: DeepCapsuleSides.right,
+        ),
+      ],
+    );
+    await store.save(state);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    await tester.pumpAndSettle();
+    final restoreCount = platform.paperWindows.restoredTitleSnapshots.length;
+
+    platform.paperWindows.emitAction(
+      const PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.toggleCollapseAll,
+        paperId: 'collapse-all-master',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(controller.state.capsuleCollapseAllActive, false);
+    expect(
+      platform.paperWindows.restoredTitleSnapshots.length,
+      greaterThan(restoreCount),
+    );
+    expect(store.savedState.capsuleCollapseAllActive, false);
+  });
+
+  testWidgets('dragging a master capsule changes its queue start height',
+      (tester) async {
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final paper = PaperData(
+      id: 'master-drag-paper',
+      title: 'Master drag',
+      isCollapsed: true,
+      capsuleSide: DeepCapsuleSides.right,
+    );
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      papers: [paper],
+    );
+    final queueKey = state.capsuleQueueKeyFor(paper);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+
+    platform.paperWindows.emitCapsuleDrop(
+      const CapsuleDropRequest(
+        paperId: 'master-drag-paper',
+        monitorDeviceName: r'\\.\DISPLAY2',
+        side: DeepCapsuleSides.left,
+        dropTop: 220,
+        workAreaTop: 40,
+        isMasterCapsule: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(controller.state.deepCapsuleQueueStartTopMargins[queueKey], 180);
+    expect(paper.capsuleSide, DeepCapsuleSides.right);
+    expect(store.savedState.deepCapsuleQueueStartTopMargins[queueKey], 180);
+  });
+
+  testWidgets('dragging edge capsules reassigns and reorders their queue',
+      (tester) async {
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleCollapseAll: true,
+        papers: [
+          PaperData(id: 'queue-first', title: 'First', isCollapsed: true),
+          PaperData(id: 'queue-second', title: 'Second', isCollapsed: true),
+          PaperData(id: 'queue-third', title: 'Third', isCollapsed: true),
+        ],
+      ),
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+
+    platform.paperWindows.emitCapsuleDrop(
+      const CapsuleDropRequest(
+        paperId: 'queue-third',
+        monitorDeviceName: '',
+        side: DeepCapsuleSides.right,
+        dropTop: 98,
+        workAreaTop: 0,
+        isMasterCapsule: false,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(
+      controller.state.papers.map((paper) => paper.id),
+      ['queue-third', 'queue-first', 'queue-second'],
+    );
+    expect(
+      store.savedState.papers.map((paper) => paper.id),
+      ['queue-third', 'queue-first', 'queue-second'],
+    );
   });
 
   testWidgets('keeps local geometry when copied platform surface is invalid',
@@ -16394,6 +17278,91 @@ void main() {
     expect(controller.state.papers.single.isCollapsed, false);
   });
 
+  testWidgets('independent paper capsule has a dedicated hide area',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(92, 46));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final paper = PaperData(
+      id: 'independent-hide-capsule',
+      type: PaperTypes.todo,
+      title: 'Hide',
+      isCollapsed: true,
+      items: [PaperItem(id: 'hide-item', text: 'Hide this paper')],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(papers: [paper]),
+      platform: NoopPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final close = find.byKey(
+      const ValueKey('independent-hide-capsule-paper-window-capsule-close'),
+    );
+    expect(close, findsOneWidget);
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+
+    expect(paper.isVisible, false);
+  });
+
+  testWidgets('independent collapse-all master capsule expands its queue',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(126, 46));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleCollapseAll: true,
+        capsuleCollapseAllActive: true,
+        papers: [
+          PaperData(
+            id: 'master-capsule-paper',
+            title: 'Master source',
+            capsuleSide: DeepCapsuleSides.right,
+          ),
+          PaperData(
+            id: 'retracted-capsule-paper',
+            title: 'Retracted source',
+            capsuleSide: DeepCapsuleSides.right,
+          ),
+        ],
+      ),
+      platform: NoopPlatformServices(),
+    );
+    final actions = <String>[];
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: 'master-capsule-paper',
+        paperWindowMode: true,
+        paperWindowActionSender: (kind, {value = ''}) async {
+          actions.add(kind);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final master = find.byKey(
+      const ValueKey('master-capsule-paper-paper-window-master-capsule'),
+    );
+    expect(master, findsOneWidget);
+    await tester.tap(master);
+    await tester.pump();
+    expect(actions, [PaperWindowActionKinds.toggleCollapseAll]);
+    expect(find.text('Expand all'), findsOneWidget);
+  });
+
   testWidgets('reports linked script capsule failures', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -16620,6 +17589,23 @@ Future<void> _pressShiftShortcut(
   await tester.sendKeyDownEvent(key);
   await tester.sendKeyUpEvent(key);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+}
+
+Future<void> _selectSettingsCategory(
+  WidgetTester tester,
+  String category,
+) async {
+  await tester.tap(
+    find.byKey(ValueKey('settings-category-$category')),
+  );
+  await tester.pumpAndSettle();
+}
+
+String _testColorHex(Color color) {
+  String channel(double value) =>
+      (value * 255).round().toRadixString(16).padLeft(2, '0');
+  return '#${channel(color.r)}${channel(color.g)}${channel(color.b)}'
+      .toUpperCase();
 }
 
 Future<void> _captureSettingsHotKey(
@@ -17060,6 +18046,7 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final _paperEdits = StreamController<PaperData>.broadcast();
   final _actionRequests =
       StreamController<PaperWindowActionRequest>.broadcast();
+  final _capsuleDrops = StreamController<CapsuleDropRequest>.broadcast();
   final _paperOpenRequests = StreamController<String>.broadcast();
   final _paperDeleteRequests = StreamController<String>.broadcast();
   PaperWorkArea? workArea;
@@ -17072,6 +18059,9 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
 
   @override
   Stream<PaperWindowActionRequest> get actionRequests => _actionRequests.stream;
+
+  @override
+  Stream<CapsuleDropRequest> get capsuleDrops => _capsuleDrops.stream;
 
   @override
   Stream<String> get paperOpenRequests => _paperOpenRequests.stream;
@@ -17089,6 +18079,10 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
 
   void emitAction(PaperWindowActionRequest request) {
     _actionRequests.add(request);
+  }
+
+  void emitCapsuleDrop(CapsuleDropRequest request) {
+    _capsuleDrops.add(request);
   }
 
   void emitPaperOpenRequest(String paperId) {

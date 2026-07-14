@@ -270,10 +270,20 @@ class AppSyncService {
     );
     previousSequences[batch.deviceId] = batch.startSequence;
     try {
-      await context.client.uploadOperationLogs(
+      final uploadResult = await context.client.uploadOperationLogs(
         pendingBatch.operations,
         previousDeviceSequences: previousSequences,
       );
+      final uploadedSequences = _mergeDeviceSequences(
+        previousSequences,
+        uploadResult.deviceSequences,
+        uploadResult.acceptedDeviceSequences,
+      );
+      uploadState.sync.operationDeviceSequences = uploadedSequences;
+      uploadState.normalize();
+      if (!_deviceSequencesEqual(previousSequences, uploadedSequences)) {
+        await store.save(uploadState);
+      }
       return uploadState;
     } finally {
       context.client.close();
@@ -467,7 +477,7 @@ class AppSyncService {
       store: store,
       localUpdatedAtUtc: localUpdatedAtUtc,
     );
-    var state = syncResult.state ?? localState;
+    var state = syncResult.state ?? syncInputState;
     AppSyncOperationMergeResult? operationMergeResult;
 
     switch (syncResult.status) {

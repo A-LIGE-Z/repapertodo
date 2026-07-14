@@ -80,6 +80,8 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       StreamController<PaperData>.broadcast();
   final StreamController<PaperWindowActionRequest> _actionRequests =
       StreamController<PaperWindowActionRequest>.broadcast();
+  final StreamController<CapsuleDropRequest> _capsuleDrops =
+      StreamController<CapsuleDropRequest>.broadcast();
   final StreamController<String> _paperOpenRequests =
       StreamController<String>.broadcast();
   final StreamController<String> _paperDeleteRequests =
@@ -87,6 +89,8 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   final StreamController<void> _coordinatorCloseRequests =
       StreamController<void>.broadcast();
   final Map<String, PaperData> _knownPapers = <String, PaperData>{};
+  final Map<String, _PaperSurfaceBounds> _synchronizedBounds =
+      <String, _PaperSurfaceBounds>{};
   PaperData? _activePaper;
 
   @override
@@ -97,6 +101,9 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Stream<PaperWindowActionRequest> get actionRequests => _actionRequests.stream;
+
+  @override
+  Stream<CapsuleDropRequest> get capsuleDrops => _capsuleDrops.stream;
 
   @override
   Stream<String> get paperOpenRequests => _paperOpenRequests.stream;
@@ -155,6 +162,34 @@ class WindowsPaperWindowHost implements PaperWindowHost {
           _applyBoundsToPaper(paper, bounds);
           _surfaceUpdates.add(paper);
         }
+      case 'capsuleDropped':
+        final map = _argumentMap(call.arguments);
+        if (map == null) {
+          return;
+        }
+        final paperId = _paperIdFromArguments(call.arguments);
+        final side = map['side'];
+        final monitor = map['monitorDeviceName'];
+        final dropTop = map['dropTop'];
+        final workAreaTop = map['workAreaTop'];
+        final isMaster = map['isMasterCapsule'];
+        if (paperId == null ||
+            !_knownPapers.containsKey(paperId) ||
+            side is! String ||
+            monitor is! String ||
+            dropTop is! num ||
+            workAreaTop is! num ||
+            isMaster is! bool) {
+          return;
+        }
+        _capsuleDrops.add(CapsuleDropRequest(
+          paperId: paperId,
+          monitorDeviceName: monitor,
+          side: DeepCapsuleSides.normalize(side),
+          dropTop: dropTop.toDouble(),
+          workAreaTop: workAreaTop.toDouble(),
+          isMasterCapsule: isMaster,
+        ));
       case 'paperSurfaceChanged':
         final map = _argumentMap(call.arguments);
         if (map == null) {
@@ -170,7 +205,11 @@ class WindowsPaperWindowHost implements PaperWindowHost {
         }
         changedPaper.id = paperId;
         final knownPaper = _knownPapers[paperId]!;
-        _copyPaperData(changedPaper, knownPaper);
+        // The child Flutter engine owns paper content, but native Win32 owns
+        // the live window geometry.  A child edit can arrive with a stale
+        // snapshot of x/y/width/height after the user has just dragged or
+        // resized the native window, so never let that snapshot move it back.
+        _copyPaperEditData(changedPaper, knownPaper);
         if (normalizeLocalModelId(_activePaper?.id) == paperId) {
           _activePaper = knownPaper;
         }
@@ -302,11 +341,10 @@ class WindowsPaperWindowHost implements PaperWindowHost {
 
   @override
   Future<void> restoreAll(AppState state) async {
-    await _normalizeStateForPlatform(state);
-    _syncKnownPapers(state);
-    await _syncPaperSurfaceRegistry(state);
-    final visiblePapers =
-        state.papers.where((paper) => paper.isVisible).toList();
+    await refreshSurfaceRegistry(state);
+    final visiblePapers = state.papers.where((paper) {
+      return paper.isVisible && !state.isCapsuleCollapseAllActiveFor(paper);
+    }).toList();
     if (visiblePapers.isEmpty) {
       _activePaper = null;
       await _channel.invokeMethod<void>('hide');
@@ -336,6 +374,13 @@ class WindowsPaperWindowHost implements PaperWindowHost {
         visiblePapers.first.alwaysOnTop,
       ),
     );
+  }
+
+  @override
+  Future<void> refreshSurfaceRegistry(AppState state) async {
+    await _normalizeStateForPlatform(state);
+    _syncKnownPapers(state);
+    await _syncPaperSurfaceRegistry(state);
   }
 
   @override
@@ -384,13 +429,21 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> updatePaperSurface(PaperData paper) async {
     await _normalizePaperForPlatform(paper);
+    final shouldApplyBounds = _hasUnsynchronizedBounds(paper);
     _rememberPaper(paper);
     if (!paper.isVisible) {
       _retargetActivePaperAfterLocalHide(paper);
       return;
     }
     await _channel.invokeMethod<void>('updatePaperWindow', paper.toJson());
-    await _applyBounds(paper);
+    // Win32 owns the live position while the user is moving or resizing a
+    // paper. Content edits can be delivered before the final boundsChanged
+    // event, so replaying unchanged model bounds here would snap the HWND back
+    // to its pre-drag position. Only explicit model geometry changes may move
+    // an existing window.
+    if (shouldApplyBounds) {
+      await _applyBounds(paper);
+    }
     await _channel.invokeMethod<void>(
       'setPinnedToDesktop',
       _paperSurfaceFlagArguments(paper, paper.isPinnedToDesktop),
@@ -435,6 +488,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       'width': paper.width,
       'height': paper.height,
     });
+    _rememberSynchronizedBounds(paper);
   }
 
   Future<void> _syncPaperSurfaceRegistry(AppState state) async {
@@ -443,6 +497,13 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       'setPaperSurfaces',
       _paperSurfaceRegistryEntries(state),
     );
+    await _channel.invokeMethod<void>(
+      'setNativeCapsuleSurfaces',
+      _nativeCapsuleSurfaceEntries(state),
+    );
+    for (final paper in state.papers) {
+      _rememberSynchronizedBounds(paper);
+    }
   }
 
   Future<void> _normalizeStateForPlatform(AppState state) async {
@@ -490,16 +551,20 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     _knownPapers[paperId] = paper;
   }
 
-  void _copyPaperData(PaperData source, PaperData target) {
+  void _copyPaperEditData(PaperData source, PaperData target) {
     final copy = PaperData.fromJson(source.toJson());
+    final x = target.x;
+    final y = target.y;
+    final width = target.width;
+    final height = target.height;
     target
       ..id = copy.id
       ..type = copy.type
       ..title = copy.title
-      ..x = copy.x
-      ..y = copy.y
-      ..width = copy.width
-      ..height = copy.height
+      ..x = x
+      ..y = y
+      ..width = width
+      ..height = height
       ..isVisible = copy.isVisible
       ..alwaysOnTop = copy.alwaysOnTop
       ..isCollapsed = copy.isCollapsed
@@ -518,6 +583,9 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     for (final paper in state.papers) {
       _rememberPaper(paper);
     }
+    _synchronizedBounds.removeWhere(
+      (paperId, _) => !_knownPapers.containsKey(paperId),
+    );
     final activePaperId = normalizeLocalModelId(_activePaper?.id);
     if (activePaperId.isNotEmpty && _knownPapers.containsKey(activePaperId)) {
       final activePaper = _knownPapers[activePaperId]!;
@@ -631,7 +699,8 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     }
     if (map['isMinimized'] == true ||
         map['minimized'] == true ||
-        map['windowState'] == 'minimized') {
+        map['windowState'] == 'minimized' ||
+        map['isCollapsed'] == true) {
       return true;
     }
 
@@ -709,6 +778,22 @@ class WindowsPaperWindowHost implements PaperWindowHost {
       ..width = _doubleValue(bounds['width'], paper.width)
       ..height = _doubleValue(bounds['height'], paper.height);
     paper.normalize();
+    _rememberSynchronizedBounds(paper);
+  }
+
+  bool _hasUnsynchronizedBounds(PaperData paper) {
+    final paperId = normalizeLocalModelId(paper.id);
+    final synchronized = _synchronizedBounds[paperId];
+    return synchronized == null ||
+        synchronized != _PaperSurfaceBounds.of(paper);
+  }
+
+  void _rememberSynchronizedBounds(PaperData paper) {
+    final paperId = normalizeLocalModelId(paper.id);
+    if (paperId.isEmpty) {
+      return;
+    }
+    _synchronizedBounds[paperId] = _PaperSurfaceBounds.of(paper);
   }
 
   PaperWorkArea? _workAreaFromMap(Map<Object?, Object?> map) {
@@ -720,6 +805,39 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     );
     return workArea.isUsable ? workArea : null;
   }
+}
+
+class _PaperSurfaceBounds {
+  const _PaperSurfaceBounds({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  factory _PaperSurfaceBounds.of(PaperData paper) => _PaperSurfaceBounds(
+        x: paper.x,
+        y: paper.y,
+        width: paper.width,
+        height: paper.height,
+      );
+
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _PaperSurfaceBounds &&
+        other.x == x &&
+        other.y == y &&
+        other.width == width &&
+        other.height == height;
+  }
+
+  @override
+  int get hashCode => Object.hash(x, y, width, height);
 }
 
 class WindowsTrayHost implements TrayHost {
@@ -749,7 +867,10 @@ class WindowsTrayHost implements TrayHost {
 }
 
 Object _trayMenuPayload(AppState state, TrayMenuLabels? labels) {
-  final papers = _paperSurfaceRegistryEntries(state, labels: labels);
+  final paperIds = state.papers.map((paper) => paper.id).toSet();
+  final papers = _paperSurfaceRegistryEntries(state, labels: labels)
+      .where((surface) => paperIds.contains(surface['id']))
+      .toList();
   if (labels == null) {
     return papers;
   }
@@ -764,19 +885,162 @@ List<Map<String, Object?>> _paperSurfaceRegistryEntries(
   TrayMenuLabels? labels,
 }) {
   final typeCounts = <String, int>{};
-  return [
-    for (final paper in state.papers)
-      _paperSurfaceRegistryEntry(
-        paper,
-        state: state,
-        labels: labels,
-        fallbackNumber: typeCounts.update(
-          PaperTypes.normalize(paper.type),
-          (value) => value + 1,
-          ifAbsent: () => 1,
+  final queuePapers = _capsuleQueueOccupants(state);
+  final queueSlots = _capsuleQueueSlots(state, queuePapers);
+  final surfaces = <Map<String, Object?>>[];
+
+  for (final paper in state.papers) {
+    final queueKey = state.capsuleQueueKeyFor(paper);
+    final queueY = queueSlots[queueKey]?[paper.id];
+    final collapseAllActive = state.isCapsuleCollapseAllActiveFor(paper);
+    final fallbackNumber = typeCounts.update(
+      PaperTypes.normalize(paper.type),
+      (value) => value + 1,
+      ifAbsent: () => 1,
+    );
+    surfaces.add(_paperSurfaceRegistryEntry(
+      paper,
+      state: state,
+      labels: labels,
+      fallbackNumber: fallbackNumber,
+      collapseAllActive: collapseAllActive,
+      capsuleY: paper.isCollapsed ? queueY : null,
+    ));
+  }
+  return surfaces;
+}
+
+Map<String, List<PaperData>> _capsuleQueueMembers(AppState state) {
+  final linkedNoteIds = state.papers
+      .where((paper) => paper.isTodo)
+      .expand((paper) => paper.items)
+      .map((item) => item.linkedNoteId)
+      .whereType<String>()
+      .toSet();
+  final queuePapers = <String, List<PaperData>>{};
+  for (final paper in state.papers) {
+    final linkedNoteCapsuleHidden = state.enableTodoNoteLinks &&
+        state.hideLinkedNotesFromCapsules &&
+        paper.isNote &&
+        linkedNoteIds.contains(paper.id);
+    final belongsToQueue = paper.isVisible &&
+        !linkedNoteCapsuleHidden &&
+        state.useCapsuleMode &&
+        state.useDeepCapsuleMode;
+    if (!belongsToQueue) {
+      continue;
+    }
+    final queueKey = state.capsuleQueueKeyFor(paper);
+    queuePapers.putIfAbsent(queueKey, () => <PaperData>[]).add(paper);
+  }
+  return queuePapers;
+}
+
+Map<String, List<PaperData>> _capsuleQueueOccupants(AppState state) {
+  final members = _capsuleQueueMembers(state);
+  return <String, List<PaperData>>{
+    for (final entry in members.entries)
+      entry.key: entry.value.where((paper) {
+        return paper.isCollapsed ||
+            paper.isPinnedToDesktop ||
+            state.showDeepCapsuleWhileExpanded;
+      }).toList(),
+  }..removeWhere((_, papers) => papers.isEmpty);
+}
+
+Map<String, Map<String, double>> _capsuleQueueSlots(
+  AppState state,
+  Map<String, List<PaperData>> queuePapers,
+) {
+  const slotHeight = 50.0;
+  final queueSlots = <String, Map<String, double>>{};
+  for (final entry in queuePapers.entries) {
+    final startTop = state.deepCapsuleQueueStartTopMargins[entry.key] ??
+        state.deepCapsuleStartTopMargin;
+    final firstRealSlot = state.useCapsuleCollapseAll ? 1 : 0;
+    queueSlots[entry.key] = <String, double>{
+      for (var index = 0; index < entry.value.length; index += 1)
+        entry.value[index].id:
+            startTop + ((index + firstRealSlot) * slotHeight),
+    };
+  }
+  return queueSlots;
+}
+
+List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(AppState state) {
+  if (!state.useCapsuleMode || !state.useDeepCapsuleMode) {
+    return const [];
+  }
+  final queueMembers = _capsuleQueueMembers(state);
+  final queueOccupants = _capsuleQueueOccupants(state);
+  final queueSlots = _capsuleQueueSlots(state, queueOccupants);
+  final surfaces = <Map<String, Object?>>[];
+  for (final entry in queueMembers.entries) {
+    if (entry.value.isEmpty) {
+      continue;
+    }
+    final firstPaper = entry.value.first;
+    final collapseAllActive = state.isCapsuleCollapseAllActiveFor(firstPaper);
+    final startTop = state.deepCapsuleQueueStartTopMargins[entry.key] ??
+        state.deepCapsuleStartTopMargin;
+    if (state.useCapsuleCollapseAll) {
+      surfaces.add(<String, Object?>{
+        'surfaceId': 'master:${entry.key}',
+        'kind': 'master',
+        'paperId': firstPaper.id,
+        'title': collapseAllActive ? '${entry.value.length}' : '',
+        'labelEn': 'Collapse all',
+        'labelZh': '收起全部',
+        'countLabelEn': '${entry.value.length} papers',
+        'countLabelZh': '${entry.value.length} 张',
+        'top': startTop,
+        'capsuleSide': firstPaper.capsuleSide,
+        'capsuleMonitorDeviceName': firstPaper.capsuleMonitorDeviceName,
+        'isVisible': true,
+        'isActive': collapseAllActive,
+        'count': entry.value.length,
+        'hideWhenCovered': state.hideDeepCapsulesWhenCovered,
+        'hideWhenFullscreen': state.hideDeepCapsulesWhenFullscreen,
+        'theme': state.theme,
+        'colorScheme': state.colorScheme,
+        'customThemeColorHex': state.customThemeColorHex,
+      });
+    }
+    if (collapseAllActive || !state.showDeepCapsuleWhileExpanded) {
+      continue;
+    }
+    for (final paper in queueOccupants[entry.key] ?? const <PaperData>[]) {
+      if (paper.isCollapsed || paper.isPinnedToDesktop) {
+        continue;
+      }
+      final top = queueSlots[entry.key]?[paper.id];
+      if (top == null) {
+        continue;
+      }
+      surfaces.add(<String, Object?>{
+        'surfaceId': 'proxy:${paper.id}',
+        'kind': 'proxy',
+        'paperId': paper.id,
+        'title': PaperTitles.effectiveTitle(
+          paperType: paper.type,
+          title: paper.title,
+          fallbackNumber: 1,
         ),
-      ),
-  ];
+        'paperType': paper.type,
+        'top': top,
+        'capsuleSide': paper.capsuleSide,
+        'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
+        'isVisible': paper.isVisible,
+        'collapseOnClick': state.collapseExpandedDeepCapsuleOnClick,
+        'hideWhenCovered': state.hideDeepCapsulesWhenCovered,
+        'hideWhenFullscreen': state.hideDeepCapsulesWhenFullscreen,
+        'theme': state.theme,
+        'colorScheme': state.colorScheme,
+        'customThemeColorHex': state.customThemeColorHex,
+      });
+    }
+  }
+  return surfaces;
 }
 
 Map<String, Object?> _paperSurfaceRegistryEntry(
@@ -784,6 +1048,8 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
   required AppState state,
   TrayMenuLabels? labels,
   required int fallbackNumber,
+  required bool collapseAllActive,
+  double? capsuleY,
 }) {
   final title = PaperTitles.effectiveTitle(
     paperType: paper.type,
@@ -795,11 +1061,13 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
     'title': title,
     'type': paper.type,
     'x': paper.x,
-    'y': paper.y,
+    'y': capsuleY ?? paper.y,
     'width': paper.width,
     'height': paper.height,
-    'isVisible': paper.isVisible,
+    'isVisible': paper.isVisible && !collapseAllActive,
     'isCollapsed': paper.isCollapsed,
+    'capsuleTopIsWorkAreaRelative': capsuleY != null,
+    'useDeepCapsuleMode': state.useCapsuleMode && state.useDeepCapsuleMode,
     'capsuleSide': paper.capsuleSide,
     'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
     'alwaysOnTop': paper.alwaysOnTop,

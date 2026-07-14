@@ -300,12 +300,16 @@ class WebDavStateSyncService {
   }) async {
     final remoteManifest = await _loadManifestWithMetadata();
     final manifest = remoteManifest?.manifest;
+    final combinedDeviceSequences = _mergeOperationDeviceSequences(
+      manifest?.deviceSequences,
+      localState.sync.operationDeviceSequences,
+    );
     if (manifest == null || manifest.latestSnapshotPath.isEmpty) {
       return push(
         localState,
         updatedAtUtc: localUpdatedAtUtc,
         manifestKnownMissing: remoteManifest == null,
-        previousDeviceSequences: manifest?.deviceSequences,
+        previousDeviceSequences: combinedDeviceSequences,
       );
     }
 
@@ -319,7 +323,7 @@ class WebDavStateSyncService {
       localState,
       updatedAtUtc: localStamp,
       expectedManifestEtag: remoteManifest?.etag,
-      previousDeviceSequences: manifest.deviceSequences,
+      previousDeviceSequences: combinedDeviceSequences,
       requireManifestCondition: true,
     );
   }
@@ -1261,6 +1265,20 @@ Map<String, int> _operationDeviceSequences(Iterable<SyncOperation> operations) {
   return normalizeSyncDeviceSequences(sequences);
 }
 
+Map<String, int> _mergeOperationDeviceSequences(
+  Map<String, int>? remoteSequences,
+  Map<String, int>? localSequences,
+) {
+  final merged = normalizeSyncDeviceSequences(remoteSequences);
+  for (final entry in normalizeSyncDeviceSequences(localSequences).entries) {
+    final current = merged[entry.key] ?? 0;
+    if (entry.value > current) {
+      merged[entry.key] = entry.value;
+    }
+  }
+  return merged;
+}
+
 int _snapshotMetadataScore(WebDavSnapshotRecord record) {
   return (record.etag == null ? 0 : 4) +
       (record.contentLength == null ? 0 : 2) +
@@ -1297,10 +1315,10 @@ String? _ifMatchHeaderValue(String etag) {
       !_hasValidRemoteEtagShape(trimmed)) {
     return null;
   }
-  if (trimmed.startsWith('"') || trimmed.contains('"')) {
-    return trimmed;
-  }
-  return '"$trimmed"';
+  // Preserve the provider's original strong ETag representation. The WebDAV
+  // client sends the standards-compliant quoted form first and can retry the
+  // original unquoted opaque value on a 412 for providers such as Jianguoyun.
+  return trimmed;
 }
 
 bool _hasValidRemoteEtagShape(String value) {

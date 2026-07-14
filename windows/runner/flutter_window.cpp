@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "native_capsule_window.h"
 #include "paper_flutter_window.h"
 #include "resource.h"
 #include "utils.h"
@@ -2202,6 +2203,12 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "hasVisibleSurfaces") {
+          for (const auto& entry : native_capsule_windows_) {
+            if (entry.second->IsVisible()) {
+              result->Success(flutter::EncodableValue(true));
+              return;
+            }
+          }
           for (const auto& entry : paper_windows_) {
             if (entry.second->IsVisible()) {
               result->Success(flutter::EncodableValue(true));
@@ -2219,6 +2226,13 @@ bool FlutterWindow::OnCreate() {
             return;
           }
           const std::string requested_paper_id = paper_id_argument.value;
+          for (const auto& entry : native_capsule_windows_) {
+            if (entry.second->paper_id() == requested_paper_id &&
+                entry.second->IsVisible()) {
+              result->Success(flutter::EncodableValue(true));
+              return;
+            }
+          }
           if (PaperFlutterWindow* paper_window =
                   PaperWindowForId(requested_paper_id)) {
             result->Success(
@@ -2255,7 +2269,7 @@ bool FlutterWindow::OnCreate() {
                 flutter::EncodableValue(enabled);
             if (PaperFlutterWindow* paper_window =
                     PaperWindowForId(target_paper_id)) {
-              paper_window->ApplySurface(surface);
+              paper_window->SetAlwaysOnTop(enabled);
             }
           }
           if (target_paper_id.empty() || target_paper_id == active_paper_id_) {
@@ -2290,7 +2304,7 @@ bool FlutterWindow::OnCreate() {
                 flutter::EncodableValue(enabled);
             if (PaperFlutterWindow* paper_window =
                     PaperWindowForId(target_paper_id)) {
-              paper_window->ApplySurface(surface);
+              paper_window->SetPinnedToDesktop(enabled);
             }
           }
           if (target_paper_id.empty() || target_paper_id == active_paper_id_) {
@@ -2335,7 +2349,7 @@ bool FlutterWindow::OnCreate() {
                 flutter::EncodableValue(title);
             if (PaperFlutterWindow* paper_window =
                     PaperWindowForId(requested_paper_id)) {
-              paper_window->ApplySurface(surface);
+              paper_window->SetPaperTitle(title);
             }
           }
           result->Success();
@@ -2370,6 +2384,16 @@ bool FlutterWindow::OnCreate() {
                     std::get_if<flutter::EncodableList>(call.arguments())) {
               ApplyPaperSurfaceRegistry(*papers, false);
               ReconcilePaperWindows(*papers);
+            }
+          }
+          result->Success();
+          return;
+        }
+        if (method == "setNativeCapsuleSurfaces") {
+          if (call.arguments()) {
+            if (const auto* surfaces =
+                    std::get_if<flutter::EncodableList>(call.arguments())) {
+              ReconcileNativeCapsuleWindows(*surfaces);
             }
           }
           result->Success();
@@ -2467,6 +2491,10 @@ bool FlutterWindow::OnCreate() {
             }
           }
           for (auto& entry : paper_windows_) {
+            entry.second->SetAvoidFullscreenTopmost(
+                avoid_fullscreen_topmost_);
+          }
+          for (auto& entry : native_capsule_windows_) {
             entry.second->SetAvoidFullscreenTopmost(
                 avoid_fullscreen_topmost_);
           }
@@ -3499,18 +3527,55 @@ void FlutterWindow::ReconcilePaperWindows(
     if (!paper_id || !ValidatePaperIdArgumentValue(*paper_id).valid) {
       continue;
     }
-    next_surfaces[*paper_id] = *surface;
-    const bool visible = GetBoolArgument(*surface, "isVisible", false);
+    flutter::EncodableMap resolved_surface = *surface;
+    PaperFlutterWindow* existing_window = PaperWindowForId(*paper_id);
+    const bool collapsed =
+        GetBoolArgument(resolved_surface, "isCollapsed", false);
+    // Live HWND bounds are authoritative only while both the incoming model
+    // and the native surface are already expanded. During capsule -> paper
+    // transitions the HWND still has capsule geometry; replaying that geometry
+    // would replace the saved paper bounds with the Win32 minimum size.
+    if (existing_window && !collapsed && !existing_window->IsCollapsed()) {
+      const auto live_bounds = existing_window->BoundsValue();
+      if (const auto* bounds =
+              std::get_if<flutter::EncodableMap>(&live_bounds)) {
+        for (const char* key : {"x", "y", "width", "height"}) {
+          const auto bounds_entry =
+              bounds->find(flutter::EncodableValue(key));
+          if (bounds_entry != bounds->end()) {
+            resolved_surface[flutter::EncodableValue(key)] =
+                bounds_entry->second;
+          }
+        }
+        const double x = GetNumberArgument(resolved_surface, "x", 0);
+        const double y = GetNumberArgument(resolved_surface, "y", 0);
+        const double width =
+            GetNumberArgument(resolved_surface, "width", 0);
+        const double height =
+            GetNumberArgument(resolved_surface, "height", 0);
+        if (width > 0 && height > 0) {
+          RememberPaperBounds(
+              *paper_id,
+              {static_cast<LONG>(std::round(x)),
+               static_cast<LONG>(std::round(y)),
+               static_cast<LONG>(std::round(x + width)),
+               static_cast<LONG>(std::round(y + height))});
+        }
+      }
+    }
+    next_surfaces[*paper_id] = resolved_surface;
+    const bool visible =
+        GetBoolArgument(resolved_surface, "isVisible", false);
     if (visible) {
       has_visible_paper = true;
-      PaperFlutterWindow* paper_window = EnsurePaperWindow(*paper_id, surface);
+      PaperFlutterWindow* paper_window =
+          EnsurePaperWindow(*paper_id, &resolved_surface);
       if (paper_window) {
         paper_window->ApplyState(paper_window_state_);
-        paper_window->ApplySurface(*surface);
+        paper_window->ApplySurface(resolved_surface);
       }
-    } else if (PaperFlutterWindow* paper_window =
-                   PaperWindowForId(*paper_id)) {
-      paper_window->ApplySurface(*surface);
+    } else if (existing_window) {
+      existing_window->ApplySurface(resolved_surface);
     }
   }
   paper_window_surfaces_ = std::move(next_surfaces);
@@ -3526,6 +3591,59 @@ void FlutterWindow::ReconcilePaperWindows(
   }
   if (has_visible_paper && GetHandle()) {
     ShowWindow(GetHandle(), SW_HIDE);
+  }
+}
+
+void FlutterWindow::ReconcileNativeCapsuleWindows(
+    const flutter::EncodableList& surfaces) {
+  std::map<std::string, flutter::EncodableMap> next_surfaces;
+  for (const auto& value : surfaces) {
+    const auto* surface = std::get_if<flutter::EncodableMap>(&value);
+    if (!surface) {
+      continue;
+    }
+    const auto id_iterator =
+        surface->find(flutter::EncodableValue("surfaceId"));
+    if (id_iterator == surface->end()) {
+      continue;
+    }
+    const auto* surface_id =
+        std::get_if<std::string>(&id_iterator->second);
+    if (!surface_id || surface_id->empty() || surface_id->size() > 512 ||
+        (surface_id->rfind("master:", 0) != 0 &&
+         surface_id->rfind("proxy:", 0) != 0)) {
+      continue;
+    }
+    next_surfaces[*surface_id] = *surface;
+    auto existing = native_capsule_windows_.find(*surface_id);
+    if (existing == native_capsule_windows_.end()) {
+      auto capsule = std::make_unique<NativeCapsuleWindow>(
+          [this](const std::string& method,
+                 const flutter::EncodableValue& arguments) {
+            SendPaperWindowEvent(method, arguments);
+          });
+      Win32Window::Point origin(0, 0);
+      Win32Window::Size size(112, 46);
+      if (!capsule->Create(L"RePaperTodo Native Capsule", origin, size)) {
+        continue;
+      }
+      capsule->SetQuitOnClose(false);
+      capsule->SetAvoidFullscreenTopmost(avoid_fullscreen_topmost_);
+      existing = native_capsule_windows_
+                     .emplace(*surface_id, std::move(capsule))
+                     .first;
+    }
+    existing->second->ApplySurface(*surface);
+  }
+
+  for (auto iterator = native_capsule_windows_.begin();
+       iterator != native_capsule_windows_.end();) {
+    if (next_surfaces.find(iterator->first) != next_surfaces.end()) {
+      ++iterator;
+      continue;
+    }
+    iterator->second->Destroy();
+    iterator = native_capsule_windows_.erase(iterator);
   }
 }
 
@@ -3576,6 +3694,62 @@ PaperFlutterWindow* FlutterWindow::PaperWindowForId(
 
 void FlutterWindow::SendPaperWindowEvent(
     const std::string& method, const flutter::EncodableValue& arguments) {
+  // Native expanded-paper proxies must activate their paper synchronously
+  // while handling the real mouse input. Waiting for the event to cross the
+  // platform channel and return through Dart can miss Windows' foreground
+  // activation window, leaving the previously focused app in front even
+  // though the proxy click was accepted.
+  if (method == "paperActionRequested") {
+    if (const auto* action =
+            std::get_if<flutter::EncodableMap>(&arguments)) {
+      const std::string kind = GetStringArgument(*action, "kind", "");
+      const std::string target_id = GetStringArgument(*action, "value", "");
+      const PaperIdArgument target = ValidatePaperIdArgumentValue(target_id);
+      if (kind == "openPaper" && target.valid) {
+        if (PaperFlutterWindow* paper_window =
+                PaperWindowForId(target.value)) {
+          paper_window->ShowPaper(true);
+        }
+      }
+    }
+  }
+
+  // A child HWND owns its live geometry. Keep both coordinator-side caches in
+  // sync before Dart handles the event so a content/title refresh that races
+  // the final WM_EXITSIZEMOVE notification can never replay stale bounds via
+  // ApplySurface.
+  if (method == "boundsChanged") {
+    if (const auto* bounds =
+            std::get_if<flutter::EncodableMap>(&arguments)) {
+      const PaperIdArgument paper_id_argument =
+          GetPaperIdArgument(&arguments);
+      if (paper_id_argument.valid) {
+        const std::string& paper_id = paper_id_argument.value;
+        const double x = GetNumberArgument(*bounds, "x", 0);
+        const double y = GetNumberArgument(*bounds, "y", 0);
+        const double width = GetNumberArgument(*bounds, "width", 0);
+        const double height = GetNumberArgument(*bounds, "height", 0);
+        if (width > 0 && height > 0) {
+          const RECT native_bounds = {
+              static_cast<LONG>(std::round(x)),
+              static_cast<LONG>(std::round(y)),
+              static_cast<LONG>(std::round(x + width)),
+              static_cast<LONG>(std::round(y + height)),
+          };
+          RememberPaperBounds(paper_id, native_bounds);
+          auto& surface = paper_window_surfaces_[paper_id];
+          surface[flutter::EncodableValue("id")] =
+              flutter::EncodableValue(paper_id);
+          surface[flutter::EncodableValue("x")] = flutter::EncodableValue(x);
+          surface[flutter::EncodableValue("y")] = flutter::EncodableValue(y);
+          surface[flutter::EncodableValue("width")] =
+              flutter::EncodableValue(width);
+          surface[flutter::EncodableValue("height")] =
+              flutter::EncodableValue(height);
+        }
+      }
+    }
+  }
   if (!window_channel_) {
     return;
   }
@@ -3590,7 +3764,15 @@ void FlutterWindow::DestroyPaperWindows() {
   paper_windows_.clear();
 }
 
+void FlutterWindow::DestroyNativeCapsuleWindows() {
+  for (auto& entry : native_capsule_windows_) {
+    entry.second->Destroy();
+  }
+  native_capsule_windows_.clear();
+}
+
 void FlutterWindow::OnDestroy() {
+  DestroyNativeCapsuleWindows();
   DestroyPaperWindows();
   StopSingleInstanceListener();
   StopPersistentScriptProcesses();
@@ -3697,6 +3879,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       break;
     case WM_TIMER:
       if (wparam == kFullscreenTopmostRefreshTimerId) {
+        for (auto& entry : native_capsule_windows_) {
+          entry.second->RefreshVisibility();
+        }
         for (auto& entry : paper_windows_) {
           entry.second->RefreshZOrder();
         }
