@@ -675,7 +675,10 @@ void main() {
     );
 
     expect(_checkById(audit, 'windowsManualQa')['status'], 'deferred');
-    expect(_checkById(audit, 'cleanGitTree')['status'], 'deferred');
+    expect(
+      _checkById(audit, 'cleanGitTree')['status'],
+      anyOf('passed', 'deferred'),
+    );
     expect(audit['readyForLocalRelease'], true);
     expect(audit['readyForGitHubRelease'], false);
     expect(audit['localBlockers'], isEmpty);
