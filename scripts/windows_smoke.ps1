@@ -898,8 +898,16 @@ try {
   if ($paperWindow -eq 0) {
     throw "Windows release smoke could not find the initial independent paper window."
   }
-  $interactiveResizeDelta =
-    Invoke-NativePaperEdgeResize -WindowHandle $paperWindow -Delta 80
+  $interactiveResizeDelta = [int]::MinValue
+  for ($resizeAttempt = 1; $resizeAttempt -le 3; $resizeAttempt += 1) {
+    $interactiveResizeDelta =
+      Invoke-NativePaperEdgeResize -WindowHandle $paperWindow -Delta 80
+    if ($interactiveResizeDelta -ge 40) { break }
+    # Windows can consume the first pointer press while granting foreground
+    # activation to a freshly created Flutter HWND. Retry the real mouse drag;
+    # the width-change assertion below remains the success criterion.
+    Start-Sleep -Milliseconds 500
+  }
   if ($interactiveResizeDelta -lt 40) {
     $resizeHitTest = Get-LastNativeResizeHitTest -WindowHandle $paperWindow
     throw "Windows release smoke could not resize a paper through a real right-edge mouse drag (width delta $interactiveResizeDelta, native hit test $resizeHitTest)."
