@@ -69,6 +69,7 @@ public static class RePaperTodoPolicyNative {
   [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr window);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window, out RECT bounds);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, System.Text.StringBuilder name, int maximum);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr window, System.Text.StringBuilder text, int maximum);
@@ -144,6 +145,21 @@ public static class RePaperTodoPolicyNative {
       return true;
     }, IntPtr.Zero);
     return result;
+  }
+
+  public static bool IsVisibleInteractiveDesktopPaper(IntPtr window) {
+    if (window == IntPtr.Zero || !IsWindowVisible(window) ||
+        GetParent(window) != IntPtr.Zero) return false;
+    const long WS_CHILD = 0x40000000L;
+    const long WS_POPUP = unchecked((long)0x80000000L);
+    const long WS_THICKFRAME = 0x00040000L;
+    const long WS_EX_TRANSPARENT = 0x00000020L;
+    long style = GetWindowLongPtr(window, -16).ToInt64();
+    long extended = GetWindowLongPtr(window, -20).ToInt64();
+    return (style & WS_CHILD) == 0 &&
+           (style & WS_POPUP) != 0 &&
+           (style & WS_THICKFRAME) != 0 &&
+           (extended & WS_EX_TRANSPARENT) == 0;
   }
 
   public static IntPtr FindWindowByTitleFragment(uint pid, string fragment) {
@@ -536,12 +552,48 @@ $reminderBubbleHoverPause = $false
 $reminderBubbleClickOpensPaper = $false
 $capsuleDropRouting = $false
 $contentEditGeometryStable = $false
+$desktopPinnedPaperVisible = $false
+$desktopPinnedPaperInteractive = $false
 $scriptStartedPath = Join-Path $smokeRoot "script-started.txt"
 $scriptCompletedPath = Join-Path $smokeRoot "script-completed.txt"
 
 try {
   New-Item -ItemType Directory -Force -Path (Join-Path $smokeRoot "Release") | Out-Null
   Copy-Item -Path (Join-Path $releaseFull "*") -Destination (Join-Path $smokeRoot "Release") -Recurse -Force
+  $desktopPinSeed = [ordered]@{
+    papers = @([ordered]@{
+      id = "pinned-policy-paper"; type = "note"; title = "Pinned QA"; x = 640.0; y = 260.0
+      width = 320.0; height = 260.0; isVisible = $true; alwaysOnTop = $false
+      isCollapsed = $false; isPinnedToDesktop = $true; items = @()
+      content = "Pinned paper must remain visible and keep its unpin interaction."
+    })
+    fullscreenTopmostMode = "avoid"; theme = "light"; colorScheme = "warm"
+    maxTitleLength = 64
+  }
+  $desktopPinSeed | ConvertTo-Json -Depth 10 |
+    Set-Content -LiteralPath $stateFile -Encoding ascii
+  $primary = Start-Process -FilePath $smokeExe -WorkingDirectory (Split-Path $smokeExe) -WindowStyle Hidden -PassThru
+  Wait-ForCondition -TimeoutSeconds $StartupTimeoutSeconds -Message "Policy smoke desktop-pinned paper disappeared from the top-level window list." -Condition {
+    [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
+      [uint32]$primary.Id, "Pinned QA") -ne [IntPtr]::Zero
+  }
+  $pinnedPaper = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
+    [uint32]$primary.Id, "Pinned QA")
+  $desktopPinnedPaperVisible = $true
+  $desktopPinnedPaperInteractive =
+    [RePaperTodoPolicyNative]::IsVisibleInteractiveDesktopPaper($pinnedPaper)
+  if (-not $desktopPinnedPaperInteractive) {
+    throw "Policy smoke desktop-pinned paper was reparented or made click-through."
+  }
+  $desktopPinExit = Start-Process -FilePath $smokeExe -ArgumentList "--exit" -WorkingDirectory (Split-Path $smokeExe) -WindowStyle Hidden -PassThru
+  if (-not $desktopPinExit.WaitForExit($ExitTimeoutSeconds * 1000)) {
+    throw "Policy smoke desktop-pin preflight exit command did not return."
+  }
+  if (-not $primary.WaitForExit($ExitTimeoutSeconds * 1000)) {
+    throw "Policy smoke desktop-pin preflight app did not exit."
+  }
+  $primary = $null
+
   $seed = [ordered]@{
     papers = @(
       [ordered]@{
@@ -855,6 +907,8 @@ try {
       reminderBubbleClickOpensPaper = $reminderBubbleClickOpensPaper
       capsuleDropRouting = $capsuleDropRouting
       contentEditGeometryStable = $contentEditGeometryStable
+      desktopPinnedPaperVisible = $desktopPinnedPaperVisible
+      desktopPinnedPaperInteractive = $desktopPinnedPaperInteractive
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $resultPath -Encoding ascii
   }
   Write-Host "Windows policy smoke passed: tray recovery, fullscreen avoidance, and long-running script capsules verified."

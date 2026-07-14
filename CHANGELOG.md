@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Restored normal Windows edge and corner resizing for both Todo and Note paper
+  HWNDs by starting the native resize loop immediately on pointer-down and
+  widening the visible resize target.
+- Fixed desktop-pinned papers disappearing behind the Windows 11 wallpaper by
+  keeping them as interactive top-level windows at `HWND_BOTTOM` instead of
+  reparenting them into an unreliable `WorkerW` desktop layer.
+
 - Made Jianguoyun conditional manifest updates compatible with its unquoted
   opaque ETags: sync still tries the standard quoted `If-Match` first, then
   retries the provider's original conditional value only after a 412, without

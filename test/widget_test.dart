@@ -484,6 +484,93 @@ void main() {
     );
   });
 
+  testWidgets('todo and note paper windows resize from every native edge',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const directions = [
+      'left',
+      'right',
+      'top',
+      'bottom',
+      'topLeft',
+      'topRight',
+      'bottomLeft',
+      'bottomRight',
+    ];
+
+    for (final type in [PaperTypes.todo, PaperTypes.note]) {
+      final paper = PaperData(
+        id: 'resize-$type',
+        type: type,
+        title: 'Resizable $type',
+        content: type == PaperTypes.note ? 'Resizable note body' : '',
+        items: type == PaperTypes.todo
+            ? [PaperItem(id: 'resize-todo-item', text: 'Resizable todo')]
+            : [],
+      );
+      final started = <String>[];
+      await tester.pumpWidget(
+        RePaperTodoApp(
+          key: ValueKey('resize-app-$type'),
+          controller: RePaperTodoController(
+            initialState: AppState(papers: [paper]),
+            platform: NoopPlatformServices(),
+          ),
+          store: _MemoryStateStore(),
+          initialSurfacePaperId: paper.id,
+          paperWindowMode: true,
+          paperWindowResizeStarter: (direction) async {
+            started.add(direction);
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final direction in directions) {
+        final handle = find.byKey(
+          ValueKey('paper-window-resize-$direction'),
+        );
+        expect(handle, findsOneWidget);
+        await tester.tap(handle);
+        await tester.pump();
+      }
+      expect(started, directions, reason: '$type must expose all HWND edges');
+    }
+  });
+
+  testWidgets('desktop-pinned paper windows do not expose resize handles',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'pinned-no-resize',
+      title: 'Pinned paper',
+      isPinnedToDesktop: true,
+      items: [PaperItem(id: 'pinned-item', text: 'Desktop locked')],
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(papers: [paper]),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+        paperWindowResizeStarter: (_) async {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('paper-window-resize-bottomRight')),
+      findsNothing,
+    );
+    expect(find.byTooltip('Unpin from desktop'), findsOneWidget);
+  });
+
   testWidgets('paper window chrome honors PaperTodo top bar preferences',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(280, 340));

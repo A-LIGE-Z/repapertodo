@@ -3206,7 +3206,12 @@ void main() {
     expect(paperWindow,
         contains('CapsuleWindowWidth(capsule_title, deep_capsule_mode_)'));
     expect(paperWindow, contains('collapsed_ ? 46.0'));
-    expect(paperWindow, contains('FindDesktopWorkerWindow'));
+    expect(paperWindow, isNot(contains('FindDesktopWorkerWindow')));
+    expect(paperWindow, isNot(contains('SetParent(window, desktop_parent_)')));
+    expect(paperWindow, contains('SetWindowPos(window, HWND_BOTTOM'));
+    expect(paperWindow, contains('WS_CLIPCHILDREN |'));
+    expect(paperWindow, contains('WS_VISIBLE'));
+    expect(paperWindow, isNot(contains('WS_EX_TRANSPARENT')));
     expect(paperWindow, contains('SetHideFromWindowSwitcher'));
     expect(paperWindow, contains('IsExternalFullscreenWindow'));
     expect(paperWindow, contains('IsCoveredByAnotherWindow'));
@@ -3289,7 +3294,9 @@ void main() {
     expect(app, contains('unawaited(onWindowDragStart!())'));
     expect(app, isNot(contains('_paperWindowDragStrip')));
     expect(app, contains('_paperWindowResizeHandles()'));
+    expect(app, contains('onPointerDown: (_) =>'));
     expect(app, contains('unawaited(resizeStarter(direction))'));
+    expect(app, contains("ValueKey('paper-window-resize-\$direction')"));
     expect(app, contains('actionMovePaperWindow'));
     expect(app, contains('actionResizePaperWindow'));
     expect(app, contains('standaloneSurface: widget.paperWindowMode'));

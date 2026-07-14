@@ -164,6 +164,12 @@ public static class RePaperTodoSmokeWindowEnumerator {
   private static extern bool PostMessage(IntPtr window, uint message,
                                          IntPtr wParam, IntPtr lParam);
 
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  private static extern IntPtr GetProp(IntPtr window, string name);
+
+  [DllImport("user32.dll")]
+  private static extern IntPtr GetWindow(IntPtr window, uint command);
+
   [DllImport("user32.dll", SetLastError = true)]
   private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter,
                                           int x, int y, int width, int height,
@@ -319,6 +325,54 @@ public static class RePaperTodoSmokeWindowEnumerator {
     return window != 0 && SetWindowPos(new IntPtr(window), IntPtr.Zero,
                                       x, y, width, height,
                                       SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+
+  public static int DragRightEdgeToResize(long window, int delta) {
+    if (window == 0 || delta < 20) return Int32.MinValue;
+    var handle = new IntPtr(window);
+    RECT before;
+    if (!GetWindowRect(handle, out before)) return Int32.MinValue + 1;
+    const uint GW_CHILD = 5;
+    var child = GetWindow(handle, GW_CHILD);
+    RECT interactiveBounds;
+    if (child == IntPtr.Zero || !GetWindowRect(child, out interactiveBounds)) {
+      return Int32.MinValue + 2;
+    }
+    POINT original;
+    var restoreCursor = GetCursorPos(out original);
+    var x = interactiveBounds.Right - 10;
+    var y = interactiveBounds.Top +
+            ((interactiveBounds.Bottom - interactiveBounds.Top) / 2);
+    try {
+      ShowWindow(handle, 5);
+      BringWindowToTop(handle);
+      SwitchToThisWindow(handle, true);
+      SetForegroundWindow(handle);
+      SetCursorPos(x, y);
+      System.Threading.Thread.Sleep(250);
+      const uint MOUSEEVENTF_MOVE = 0x0001;
+      const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+      const uint MOUSEEVENTF_LEFTUP = 0x0004;
+      mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+      System.Threading.Thread.Sleep(700);
+      for (var step = 1; step <= 8; step += 1) {
+        SetCursorPos(x + ((delta * step) / 8), y);
+        mouse_event(MOUSEEVENTF_MOVE, 1, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(100);
+      }
+      mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+      System.Threading.Thread.Sleep(400);
+    } finally {
+      if (restoreCursor) SetCursorPos(original.X, original.Y);
+    }
+    RECT after;
+    if (!GetWindowRect(handle, out after)) return Int32.MinValue + 3;
+    return (after.Right - after.Left) - (before.Right - before.Left);
+  }
+
+  public static int LastResizeHitTest(long window) {
+    if (window == 0) return 0;
+    return GetProp(new IntPtr(window), "RePaperTodo.ResizeHitTest").ToInt32();
   }
 
   public static int[] GetBounds(long window) {
@@ -492,6 +546,24 @@ function Move-ResizePaperWindow {
       $WindowHandle, $X, $Y, $Width, $Height)) {
     throw "Windows release smoke could not move and resize an independent paper window."
   }
+}
+
+function Invoke-NativePaperEdgeResize {
+  param(
+    [long]$WindowHandle,
+    [int]$Delta = 80
+  )
+
+  Initialize-WindowEnumerator
+  return [RePaperTodoSmokeWindowEnumerator]::DragRightEdgeToResize(
+    $WindowHandle, $Delta)
+}
+
+function Get-LastNativeResizeHitTest {
+  param([long]$WindowHandle)
+
+  Initialize-WindowEnumerator
+  return [RePaperTodoSmokeWindowEnumerator]::LastResizeHitTest($WindowHandle)
 }
 
 function Get-PaperWindowBounds {
@@ -771,6 +843,7 @@ $visibleTopLevelWindowCountWhileSettingsOpen = 0
 $visibleTopLevelWindowCountAfterSettingsClose = 0
 $geometryPersistenceVerified = $false
 $contentEditGeometryStabilityVerified = $false
+$interactiveEdgeResizeVerified = $false
 $contentEditMarker = "SmokeEdit$([Guid]::NewGuid().ToString('N').Substring(0, 10))"
 $geometryTestBounds = [ordered]@{
   x = 180
@@ -825,6 +898,13 @@ try {
   if ($paperWindow -eq 0) {
     throw "Windows release smoke could not find the initial independent paper window."
   }
+  $interactiveResizeDelta =
+    Invoke-NativePaperEdgeResize -WindowHandle $paperWindow -Delta 80
+  if ($interactiveResizeDelta -lt 40) {
+    $resizeHitTest = Get-LastNativeResizeHitTest -WindowHandle $paperWindow
+    throw "Windows release smoke could not resize a paper through a real right-edge mouse drag (width delta $interactiveResizeDelta, native hit test $resizeHitTest)."
+  }
+  $interactiveEdgeResizeVerified = $true
   Move-ResizePaperWindow `
     -WindowHandle $paperWindow `
     -X $geometryTestBounds.x `
@@ -1014,6 +1094,7 @@ try {
       geometryPersistenceVerified = $geometryPersistenceVerified
       contentEditGeometryStabilityVerified =
         $contentEditGeometryStabilityVerified
+      interactiveEdgeResizeVerified = $interactiveEdgeResizeVerified
       geometryTestBounds = $geometryTestBounds
       settingsCoordinatorLifecycle = $true
       settingsStartupCommands = $settingsStartupCommands

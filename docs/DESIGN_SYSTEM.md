@@ -204,6 +204,11 @@ Expanded desktop-pinned paper surfaces should be interaction-locked like
 PaperTodo: the title and paper body ignore editing, chrome actions such as
 hide/delete/collapse/zoom/always-on-top are unavailable, and the desktop unpin
 control remains reachable.
+On Windows, pinned papers remain top-level `WS_POPUP | WS_THICKFRAME` windows
+placed at `HWND_BOTTOM`; they must not be reparented into `WorkerW`, because the
+selected worker can sit behind the wallpaper compositor and hide the paper.
+Desktop pinning does not enable native click-through, so the unpin control stays
+usable while the PaperTodo interaction lock is active.
 Activating a collapsed desktop-pinned paper should follow PaperTodo's capsule
 path by clearing desktop pinning and restoring the paper expanded instead of
 leaving a pinned expanded surface behind.

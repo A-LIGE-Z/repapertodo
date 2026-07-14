@@ -50,6 +50,7 @@ class PaperFlutterWindow : public Win32Window {
                  const flutter::EncodableValue& arguments);
   void FlushInitialState();
   void ApplyNativeStyle();
+  int ResizeBorderHitTest(LPARAM lparam) const;
   void SetCapsuleHovered(bool hovered);
   void ApplyCapsuleHorizontalPosition();
   void SendCapsuleDropped();
@@ -89,7 +90,6 @@ class PaperFlutterWindow : public Win32Window {
   bool hide_when_covered_ = false;
   bool hide_when_fullscreen_ = false;
   bool in_size_move_ = false;
-  HWND desktop_parent_ = nullptr;
   HWND reminder_bubble_ = nullptr;
   std::wstring reminder_title_;
   std::wstring reminder_message_;

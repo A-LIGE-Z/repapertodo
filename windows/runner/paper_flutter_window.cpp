@@ -172,27 +172,6 @@ double CapsuleHoverVisibleWidth(double capsule_width,
   return std::clamp(halfway, std::min(54.0, capsule_width), capsule_width);
 }
 
-BOOL CALLBACK FindDesktopWorkerCallback(HWND window, LPARAM parameter) {
-  HWND shell_view = FindWindowExW(window, nullptr, L"SHELLDLL_DefView", nullptr);
-  if (!shell_view) {
-    return TRUE;
-  }
-  HWND* result = reinterpret_cast<HWND*>(parameter);
-  *result = FindWindowExW(nullptr, window, L"WorkerW", nullptr);
-  return *result == nullptr;
-}
-
-HWND FindDesktopWorkerWindow() {
-  HWND program_manager = FindWindowW(L"Progman", nullptr);
-  if (program_manager) {
-    SendMessageTimeoutW(program_manager, 0x052C, 0, 0, SMTO_NORMAL, 1000,
-                        nullptr);
-  }
-  HWND worker = nullptr;
-  EnumWindows(FindDesktopWorkerCallback, reinterpret_cast<LPARAM>(&worker));
-  return worker ? worker : program_manager;
-}
-
 bool IsExternalFullscreenWindow(HWND app_window) {
   HWND foreground = GetForegroundWindow();
   if (!foreground || foreground == app_window || IsIconic(foreground)) {
@@ -420,6 +399,9 @@ bool PaperFlutterWindow::OnCreate() {
           }
           if (hit_test != 0) {
             if (HWND window = GetHandle()) {
+              SetPropW(window, L"RePaperTodo.ResizeHitTest",
+                       reinterpret_cast<HANDLE>(
+                           static_cast<INT_PTR>(hit_test)));
               POINT cursor = {};
               GetCursorPos(&cursor);
               ReleaseCapture();
@@ -513,26 +495,10 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       }
       break;
     case WM_NCHITTEST: {
-      RECT rect = {};
-      GetWindowRect(window, &rect);
-      const int x = GET_X_LPARAM(lparam);
-      const int y = GET_Y_LPARAM(lparam);
-      const UINT dpi = GetDpiForWindow(window);
-      const int edge = std::max(
-          10, static_cast<int>(std::lround(
-                  10.0 * static_cast<double>(dpi ? dpi : 96) / 96.0)));
-      const bool left = x < rect.left + edge;
-      const bool right = x >= rect.right - edge;
-      const bool top = y < rect.top + edge;
-      const bool bottom = y >= rect.bottom - edge;
-      if (top && left) return HTTOPLEFT;
-      if (top && right) return HTTOPRIGHT;
-      if (bottom && left) return HTBOTTOMLEFT;
-      if (bottom && right) return HTBOTTOMRIGHT;
-      if (left) return HTLEFT;
-      if (right) return HTRIGHT;
-      if (top) return HTTOP;
-      if (bottom) return HTBOTTOM;
+      const int resize_hit = ResizeBorderHitTest(lparam);
+      if (resize_hit != HTCLIENT) {
+        return resize_hit;
+      }
       break;
     }
   }
@@ -1061,23 +1027,14 @@ void PaperFlutterWindow::RefreshZOrder() {
                pinned_to_desktop_ ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL);
   }
   if (pinned_to_desktop_) {
-    if (!desktop_parent_) {
-      RECT screen_bounds = {};
-      GetWindowRect(window, &screen_bounds);
-      desktop_parent_ = FindDesktopWorkerWindow();
-      if (desktop_parent_) {
-        SetParent(window, desktop_parent_);
-        SetWindowLongPtrW(window, GWL_STYLE,
-                          WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN);
-        POINT points[2] = {{screen_bounds.left, screen_bounds.top},
-                           {screen_bounds.right, screen_bounds.bottom}};
-        MapWindowPoints(HWND_DESKTOP, desktop_parent_, points, 2);
-        SetWindowPos(window, HWND_BOTTOM, points[0].x, points[0].y,
-                     points[1].x - points[0].x,
-                     points[1].y - points[0].y,
-                     SWP_NOACTIVATE | SWP_FRAMECHANGED);
-      }
-    }
+    // Keep pinned papers as ordinary top-level windows. Parenting them to a
+    // WorkerW is unreliable on Windows 11 because the selected WorkerW may sit
+    // behind the wallpaper compositor, making the paper appear to disappear.
+    // HWND_BOTTOM gives the expected desktop-layer behavior while preserving
+    // normal hit testing for the always-available unpin control.
+    SetWindowLongPtrW(window, GWL_STYLE,
+                      WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN |
+                          WS_VISIBLE);
     const bool configured_hidden = hide_from_window_switcher_;
     SetHideFromWindowSwitcher(true);
     hide_from_window_switcher_ = configured_hidden;
@@ -1085,19 +1042,6 @@ void PaperFlutterWindow::RefreshZOrder() {
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                      SWP_FRAMECHANGED);
     return;
-  }
-  if (desktop_parent_) {
-    RECT screen_bounds = {};
-    GetWindowRect(window, &screen_bounds);
-    SetParent(window, nullptr);
-    desktop_parent_ = nullptr;
-    SetWindowLongPtrW(window, GWL_STYLE,
-                      WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN);
-    SetHideFromWindowSwitcher(hide_from_window_switcher_);
-    SetWindowPos(window, nullptr, screen_bounds.left, screen_bounds.top,
-                 screen_bounds.right - screen_bounds.left,
-                 screen_bounds.bottom - screen_bounds.top,
-                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
   }
   const HWND z_order =
       always_on_top_ && !fullscreen_blocked_ ? HWND_TOPMOST : HWND_NOTOPMOST;
@@ -1182,4 +1126,34 @@ void PaperFlutterWindow::ApplyNativeStyle() {
   SetWindowPos(window, nullptr, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                    SWP_FRAMECHANGED);
+}
+
+int PaperFlutterWindow::ResizeBorderHitTest(LPARAM lparam) const {
+  if (collapsed_ || pinned_to_desktop_) {
+    return HTCLIENT;
+  }
+  HWND window = const_cast<PaperFlutterWindow*>(this)->GetHandle();
+  if (!window) {
+    return HTCLIENT;
+  }
+  RECT rect = {};
+  if (!GetWindowRect(window, &rect)) {
+    return HTCLIENT;
+  }
+  const int x = GET_X_LPARAM(lparam);
+  const int y = GET_Y_LPARAM(lparam);
+  const int edge = std::max(12, ScaleForDpi(window, 12));
+  const bool left = x < rect.left + edge;
+  const bool right = x >= rect.right - edge;
+  const bool top = y < rect.top + edge;
+  const bool bottom = y >= rect.bottom - edge;
+  if (top && left) return HTTOPLEFT;
+  if (top && right) return HTTOPRIGHT;
+  if (bottom && left) return HTBOTTOMLEFT;
+  if (bottom && right) return HTBOTTOMRIGHT;
+  if (left) return HTLEFT;
+  if (right) return HTRIGHT;
+  if (top) return HTTOP;
+  if (bottom) return HTBOTTOM;
+  return HTCLIENT;
 }

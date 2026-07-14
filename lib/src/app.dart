@@ -980,7 +980,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
               padding: const EdgeInsets.all(8),
               child: _paperPreview(surfacePaper, notePapers),
             ),
-            ..._paperWindowResizeHandles(),
+            if (!surfacePaper.isPinnedToDesktop) ..._paperWindowResizeHandles(),
           ],
         ),
       );
@@ -1361,17 +1361,21 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           label: strings.get(PaperTodoStringKeys.actionResizePaperWindow),
           child: MouseRegion(
             cursor: cursor,
-            child: GestureDetector(
+            child: Listener(
+              key: ValueKey('paper-window-resize-$direction'),
               behavior: HitTestBehavior.opaque,
-              onPanStart: (_) => unawaited(resizeStarter(direction)),
+              onPointerDown: (_) => unawaited(resizeStarter(direction)),
             ),
           ),
         ),
       );
     }
 
-    const edge = 8.0;
-    const corner = 14.0;
+    // The visible paper starts 8 px inside the transparent window chrome.
+    // A 12/18 px native-like hit zone covers both the outer HWND edge and the
+    // visible paper border without stealing ordinary content interaction.
+    const edge = 12.0;
+    const corner = 18.0;
     return [
       handle(
         direction: 'left',
