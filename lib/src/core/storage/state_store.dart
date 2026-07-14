@@ -7,19 +7,19 @@ import '../state/app_state_codec.dart';
 
 class StateStore {
   StateStore({
-    required this.filePath,
+    required String filePath,
     AppStateCodec codec = const AppStateCodec(),
     Future<void> Function(String encodedState)? beforeWrite,
     Future<void> Function(File source, String targetPath)? recoveryCopy,
-  })  : backupPath = p.join(p.dirname(filePath), 'data.backup.json'),
-        tempPath = '$filePath.tmp',
+  })  : _filePath = filePath,
         _codec = codec,
         _beforeWrite = beforeWrite,
         _recoveryCopy = recoveryCopy;
 
-  final String filePath;
-  final String backupPath;
-  final String tempPath;
+  String _filePath;
+  String get filePath => _filePath;
+  String get backupPath => p.join(p.dirname(filePath), 'data.backup.json');
+  String get tempPath => '$filePath.tmp';
   final AppStateCodec _codec;
   final Future<void> Function(String encodedState)? _beforeWrite;
   final Future<void> Function(File source, String targetPath)? _recoveryCopy;
@@ -102,6 +102,24 @@ class StateStore {
     });
     _saveQueue = save;
     await save;
+  }
+
+  Future<void> relocate(String nextFilePath, AppState state) async {
+    final normalized = p.normalize(p.absolute(nextFilePath.trim()));
+    if (normalized == p.normalize(p.absolute(filePath))) {
+      return;
+    }
+    await _saveQueue.catchError((_) {});
+    final target = StateStore(
+      filePath: normalized,
+      codec: _codec,
+      beforeWrite: _beforeWrite,
+      recoveryCopy: _recoveryCopy,
+    );
+    await target.save(state);
+    _filePath = normalized;
+    _saveQueue = Future<void>.value();
+    _skipNextBackupRotationAfterRecovery = false;
   }
 
   Future<void> _writeEncodedState(String encodedState) async {

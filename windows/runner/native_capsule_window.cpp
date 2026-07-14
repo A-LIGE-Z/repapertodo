@@ -434,8 +434,7 @@ void NativeCapsuleWindow::RefreshVisibility() {
   if (!window) return;
   const bool fullscreen = IsExternalFullscreenWindow();
   const bool policy_hidden =
-      (hide_when_fullscreen_ && fullscreen) ||
-      (hide_when_covered_ && IsCoveredByHigherWindow());
+      fullscreen || (hide_when_covered_ && IsCoveredByHigherWindow());
   if (!intended_visible_ || policy_hidden) {
     ShowWindow(window, SW_HIDE);
     return;

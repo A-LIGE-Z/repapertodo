@@ -7,6 +7,28 @@ import 'package:path/path.dart' as p;
 import 'package:repapertodo/repapertodo.dart';
 
 void main() {
+  test('relocates current state to a new data directory', () async {
+    final source =
+        await Directory.systemTemp.createTemp('repapertodo_store_source_');
+    final target =
+        await Directory.systemTemp.createTemp('repapertodo_store_target_');
+    addTearDown(() async {
+      await source.delete(recursive: true);
+      await target.delete(recursive: true);
+    });
+    final sourcePath = p.join(source.path, 'data.json');
+    final targetPath = p.join(target.path, 'data.json');
+    final store = StateStore(filePath: sourcePath);
+    final state = AppState(theme: 'dark');
+    await store.save(state);
+
+    await store.relocate(targetPath, state);
+
+    expect(store.filePath, p.normalize(p.absolute(targetPath)));
+    expect(await File(sourcePath).exists(), true);
+    expect(await File(targetPath).readAsString(), contains('"theme": "dark"'));
+  });
+
   test('saves primary data and rotates backup', () async {
     final directory =
         await Directory.systemTemp.createTemp('repapertodo_store_test_');
@@ -179,8 +201,7 @@ void main() {
     final sourceNote = sourcePapers.last! as Map<String, Object?>;
     final sourceCanvasElements =
         sourceNote['noteCanvasElements']! as List<Object?>;
-    final sourceCanvas =
-        sourceCanvasElements.single! as Map<String, Object?>;
+    final sourceCanvas = sourceCanvasElements.single! as Map<String, Object?>;
     sourceCanvas['futureCanvasField'] = 'keep-canvas';
 
     final store = StateStore(filePath: p.join(directory.path, 'data.json'));
@@ -196,8 +217,7 @@ void main() {
     final canonicalPapers = canonical['papers']! as List<Object?>;
     final canonicalTodo = canonicalPapers.first! as Map<String, Object?>;
     final canonicalTodoItems = canonicalTodo['items']! as List<Object?>;
-    final canonicalTodoItem =
-        canonicalTodoItems.first! as Map<String, Object?>;
+    final canonicalTodoItem = canonicalTodoItems.first! as Map<String, Object?>;
     final canonicalNote = canonicalPapers.last! as Map<String, Object?>;
     final canonicalCanvasElements =
         canonicalNote['noteCanvasElements']! as List<Object?>;

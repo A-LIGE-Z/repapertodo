@@ -2860,8 +2860,7 @@ void main() {
     expect(settingsCaseEnd, greaterThan(settingsCaseStart));
     final settingsCase = runner.substring(settingsCaseStart, settingsCaseEnd);
     expect(settingsCase, contains('SendStartupCommandRequested("settings");'));
-    expect(settingsCase, contains('ShowWindow(window, SW_SHOWNORMAL);'));
-    expect(settingsCase, contains('SetForegroundWindow(window);'));
+    expect(settingsCase, contains('ShowSettingsCoordinatorWindow(window);'));
   });
 
   test('Windows forwarded settings command reveals the coordinator window', () {
@@ -2878,8 +2877,7 @@ void main() {
     expect(
         forwardedCommand, contains('SendStartupCommandRequested(*command);'));
     expect(forwardedCommand, contains('if (*command == "settings")'));
-    expect(forwardedCommand, contains('ShowWindow(hwnd, SW_SHOWNORMAL);'));
-    expect(forwardedCommand, contains('SetForegroundWindow(hwnd);'));
+    expect(forwardedCommand, contains('ShowSettingsCoordinatorWindow(hwnd);'));
   });
 
   test('Windows coordinator closes without becoming a duplicate paper window',
@@ -3212,6 +3210,12 @@ void main() {
     expect(paperWindow, contains('WS_CLIPCHILDREN |'));
     expect(paperWindow, contains('WS_VISIBLE'));
     expect(paperWindow, isNot(contains('WS_EX_TRANSPARENT')));
+    expect(paperWindow, contains('taskbar->DeleteTab(window)'));
+    expect(paperWindow, contains('WS_EX_NOACTIVATE'));
+    expect(paperWindow, contains('case WM_MOUSEACTIVATE:'));
+    expect(paperWindow, contains('return MA_NOACTIVATE;'));
+    expect(paperWindow, contains('case WM_WINDOWPOSCHANGING:'));
+    expect(paperWindow, contains('position->hwndInsertAfter = HWND_BOTTOM'));
     expect(paperWindow, contains('SetHideFromWindowSwitcher'));
     expect(paperWindow, contains('IsExternalFullscreenWindow'));
     expect(paperWindow, contains('IsCoveredByAnotherWindow'));
@@ -3247,6 +3251,8 @@ void main() {
     expect(paperWindow, contains('CapsuleRestingVisibleWidth'));
     expect(paperWindow, contains('CapsuleHoverVisibleWidth'));
     expect(paperWindow, contains('SetCapsuleHovered(*hovered)'));
+    expect(nativeCapsule, contains('fullscreen ||'));
+    expect(runner, contains('kFullscreenTopmostRefreshIntervalMs = 250'));
     expect(paperWindowApp, contains("'capsuleHoverChanged'"));
     expect(paperWindowHeader, contains('bool in_size_move_ = false;'));
     expect(cmake, contains('"paper_flutter_window.cpp"'));
@@ -3289,8 +3295,7 @@ void main() {
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
 
     expect(app, contains('final Future<void> Function()? onWindowDragStart;'));
-    expect(app,
-        contains('onPanStart: standaloneSurface && onWindowDragStart != null'));
+    expect(app, contains('!desktopInteractionLocked &&'));
     expect(app, contains('unawaited(onWindowDragStart!())'));
     expect(app, isNot(contains('_paperWindowDragStrip')));
     expect(app, contains('_paperWindowResizeHandles()'));
@@ -3300,6 +3305,8 @@ void main() {
     expect(app, contains('actionMovePaperWindow'));
     expect(app, contains('actionResizePaperWindow'));
     expect(app, contains('standaloneSurface: widget.paperWindowMode'));
+    expect(app, contains('PaperWindowActionKinds.expandPaper'));
+    expect(app, contains('onPointerDown: widget.paperWindowDragStarter'));
     expect(strings, contains("'Drag to move paper'"));
     expect(strings, contains("'Drag an edge to resize paper'"));
     expect(strings, contains("'拖动以移动纸张'"));
@@ -3338,6 +3345,22 @@ void main() {
     expect(eventBlock, contains('paper_window_surfaces_[paper_id]'));
     expect(eventBlock.indexOf('RememberPaperBounds(paper_id, native_bounds)'),
         lessThan(eventBlock.indexOf('window_channel_->InvokeMethod')));
+  });
+
+  test('Windows data directory uses a native folder picker and relocation', () {
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final storage = _readProjectText('lib/src/core/storage/state_store.dart');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final singleExe = _readProjectText('scripts/build_windows_single_exe.ps1');
+
+    expect(runner, contains('FOS_PICKFOLDERS'));
+    expect(runner, contains('storage-path.txt'));
+    expect(runner, contains('method == "getDataDirectory"'));
+    expect(runner, contains('method == "commitDataDirectory"'));
+    expect(storage, contains('Future<void> relocate('));
+    expect(settings, contains("ValueKey('settings-data-directory')"));
+    expect(singleExe, contains('payload.zip'));
+    expect(singleExe, contains('iexpress.exe'));
   });
 
   test('Windows startup toggle checks the actual native surface visibility',

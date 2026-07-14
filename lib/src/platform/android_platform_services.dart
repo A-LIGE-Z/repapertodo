@@ -137,6 +137,9 @@ class AndroidAppStorageHost implements AppStorageHost {
   final MethodChannel _channel;
 
   @override
+  bool get supportsDataDirectorySelection => false;
+
+  @override
   Future<String> documentsDirectoryPath() async {
     final path = await _channel.invokeMethod<String>('getFilesDirectory');
     final trimmedPath = path?.trim();
@@ -153,6 +156,13 @@ class AndroidAppStorageHost implements AppStorageHost {
     }
     return trimmedPath;
   }
+
+  @override
+  Future<String?> chooseDataDirectory(String currentDirectoryPath) async =>
+      null;
+
+  @override
+  Future<void> commitDataDirectory(String directoryPath) async {}
 }
 
 bool _hasUnsafeExternalFilePathCharacter(String value) {

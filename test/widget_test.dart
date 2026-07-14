@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:repapertodo/src/app.dart';
 import 'package:repapertodo/src/app_controller.dart';
 import 'package:repapertodo/src/core/model/app_state.dart';
@@ -571,6 +572,51 @@ void main() {
     expect(find.byTooltip('Unpin from desktop'), findsOneWidget);
   });
 
+  testWidgets('desktop-pinned paper window only exposes unpin interaction',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'pinned-window-lock',
+      title: 'Pinned window lock',
+      isPinnedToDesktop: true,
+      items: [PaperItem(id: 'pinned-lock-item', text: 'Locked')],
+    );
+    var dragStarts = 0;
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(papers: [paper]),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+        paperWindowDragStarter: () async => dragStarts += 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final typeButton = find.descendant(
+      of: find.byKey(const ValueKey('pinned-window-lock-topmost')),
+      matching: find.byType(IconButton),
+    );
+    expect(tester.widget<IconButton>(typeButton).onPressed, isNull);
+
+    final header = find.byKey(
+      const ValueKey('pinned-window-lock-paper-header'),
+    );
+    await tester.drag(header, const Offset(50, 20));
+    await tester.pump();
+    expect(dragStarts, 0);
+    expect(paper.isPinnedToDesktop, true);
+
+    await tester.tap(find.byTooltip('Unpin from desktop'));
+    await tester.pumpAndSettle();
+    expect(paper.isPinnedToDesktop, false);
+  });
+
   testWidgets('paper window chrome honors PaperTodo top bar preferences',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(280, 340));
@@ -622,6 +668,40 @@ void main() {
       find.byKey(const ValueKey('paper-window-hidden-actions-close')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('paper window actions remain anchored to the resized right edge',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'right-edge-actions',
+      title: 'Right edge actions',
+      items: [PaperItem(id: 'right-edge-item', text: 'Resize')],
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(papers: [paper]),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final close = find.byKey(const ValueKey('right-edge-actions-close'));
+    final narrowRight = tester.getTopRight(close).dx;
+
+    await tester.binding.setSurfaceSize(const Size(520, 420));
+    await tester.pumpAndSettle();
+    final wideRight = tester.getTopRight(close).dx;
+
+    expect(wideRight - narrowRight, closeTo(160, 1));
+    expect(wideRight, closeTo(504, 1));
   });
 
   testWidgets('settings can choose an installed system font family',
@@ -10598,6 +10678,55 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SnackBar), findsNothing);
+    expect(
+      find.byKey(const ValueKey('windows-settings-window-surface')),
+      findsOneWidget,
+    );
+    expect(find.text('Must stay on its paper'), findsNothing);
+  });
+
+  testWidgets('Windows settings browses for a data directory', (tester) async {
+    final selectedDirectory = Directory(
+      p.join('build', 'test-widget-selected-data-directory'),
+    ).absolute.path;
+    final storage = _SelectableAppStorageHost(selectedDirectory);
+    final platform = _RecordingPlatformServices(storage: storage);
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'data-directory-paper',
+            title: 'Data directory',
+            items: [PaperItem(id: 'data-directory-item', text: 'Preserve me')],
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: _MemoryStateStore()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'general');
+    await tester.tap(
+      find.byKey(const ValueKey('settings-data-directory-browse')),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('settings-data-directory')),
+          )
+          .controller
+          ?.text,
+      selectedDirectory,
+    );
+    expect(storage.committedDirectories, isEmpty);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pump();
   });
 
   testWidgets('independent paper reminders stay on their owning paper',
@@ -17402,6 +17531,52 @@ void main() {
     expect(paper.isVisible, false);
   });
 
+  testWidgets('independent todo capsule delegates one expand and starts drag',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(126, 46));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'delegated-expand-capsule',
+      title: 'Expand once',
+      isCollapsed: true,
+      items: [PaperItem(id: 'delegated-item', text: 'Open once')],
+    );
+    final actions = <String>[];
+    var dragStarts = 0;
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(papers: [paper]),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+        paperWindowActionSender: (kind, {value = ''}) async {
+          actions.add(kind);
+        },
+        paperWindowDragStarter: () async => dragStarts += 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(
+      const ValueKey('delegated-expand-capsule-paper-window-capsule'),
+    ));
+    await tester.pump();
+    expect(actions, [PaperWindowActionKinds.expandPaper]);
+    expect(paper.isCollapsed, true,
+        reason: 'the child engine must wait for coordinator state');
+
+    final gesture = await tester.press(find.byKey(
+      const ValueKey('delegated-expand-capsule-capsule-drag-handle'),
+    ));
+    await tester.pump();
+    await gesture.up();
+    expect(dragStarts, 1);
+  });
+
   testWidgets('independent collapse-all master capsule expands its queue',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(126, 46));
@@ -18047,10 +18222,12 @@ class _MemoryStateStore extends StateStore {
 class _RecordingPlatformServices implements PlatformServices {
   _RecordingPlatformServices({
     StartupHost? startup,
+    AppStorageHost? storage,
     bool supportsStartupAtLogin = true,
     bool supportsDesktopIntegration = true,
     List<String> installedFontFamilies = const [],
   })  : startup = startup ?? NoopStartupHost(),
+        storage = storage ?? _RecordingAppStorageHost(),
         systemIntegration = _RecordingSystemIntegrationHost(
           supportsStartupAtLogin: supportsStartupAtLogin,
           supportsWindowSwitcherVisibility: supportsDesktopIntegration,
@@ -18084,13 +18261,45 @@ class _RecordingPlatformServices implements PlatformServices {
   final _RecordingScriptCapsuleHost scriptCapsules;
 
   @override
-  final AppStorageHost storage = _RecordingAppStorageHost();
+  final AppStorageHost storage;
 }
 
 class _RecordingAppStorageHost implements AppStorageHost {
   @override
+  bool get supportsDataDirectorySelection => false;
+
+  @override
   Future<String> documentsDirectoryPath() async {
     return Directory('build/test-widget-storage').absolute.path;
+  }
+
+  @override
+  Future<String?> chooseDataDirectory(String currentDirectoryPath) async =>
+      null;
+
+  @override
+  Future<void> commitDataDirectory(String directoryPath) async {}
+}
+
+class _SelectableAppStorageHost implements AppStorageHost {
+  _SelectableAppStorageHost(this.selectedDirectory);
+
+  final String selectedDirectory;
+  final committedDirectories = <String>[];
+
+  @override
+  bool get supportsDataDirectorySelection => true;
+
+  @override
+  Future<String> documentsDirectoryPath() async => selectedDirectory;
+
+  @override
+  Future<String?> chooseDataDirectory(String currentDirectoryPath) async =>
+      selectedDirectory;
+
+  @override
+  Future<void> commitDataDirectory(String directoryPath) async {
+    committedDirectories.add(directoryPath);
   }
 }
 

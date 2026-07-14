@@ -1,6 +1,7 @@
 #include "paper_flutter_window.h"
 
 #include <dwmapi.h>
+#include <shobjidl.h>
 #include <windowsx.h>
 
 #include <algorithm>
@@ -252,6 +253,19 @@ BOOL CALLBACK FindMonitorWorkArea(HMONITOR monitor, HDC, LPRECT,
   return TRUE;
 }
 
+void RemoveTaskbarButton(HWND window) {
+  ITaskbarList* taskbar = nullptr;
+  if (SUCCEEDED(CoCreateInstance(CLSID_TaskbarList, nullptr,
+                                 CLSCTX_INPROC_SERVER,
+                                 IID_PPV_ARGS(&taskbar))) &&
+      taskbar) {
+    if (SUCCEEDED(taskbar->HrInit())) {
+      taskbar->DeleteTab(window);
+    }
+    taskbar->Release();
+  }
+}
+
 RECT WorkAreaForWindow(HWND window, const std::string& device_name) {
   MonitorWorkAreaLookup lookup;
   lookup.device_name = Utf8WindowTitle(device_name);
@@ -348,12 +362,14 @@ bool PaperFlutterWindow::OnCreate() {
           return;
         }
         if (call.method_name() == "startDrag") {
-          if (HWND window = GetHandle()) {
-            POINT cursor = {};
-            GetCursorPos(&cursor);
-            ReleaseCapture();
-            SendMessageW(window, WM_SYSCOMMAND, SC_MOVE | HTCAPTION,
-                         MAKELPARAM(cursor.x, cursor.y));
+          if (!pinned_to_desktop_) {
+            if (HWND window = GetHandle()) {
+              POINT cursor = {};
+              GetCursorPos(&cursor);
+              ReleaseCapture();
+              SendMessageW(window, WM_SYSCOMMAND, SC_MOVE | HTCAPTION,
+                           MAKELPARAM(cursor.x, cursor.y));
+            }
           }
           result->Success();
           return;
@@ -501,6 +517,21 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       }
       break;
     }
+    case WM_MOUSEACTIVATE:
+      if (pinned_to_desktop_) {
+        return MA_NOACTIVATE;
+      }
+      break;
+    case WM_WINDOWPOSCHANGING:
+      if (pinned_to_desktop_) {
+        auto* position = reinterpret_cast<WINDOWPOS*>(lparam);
+        if (position) {
+          position->hwndInsertAfter = HWND_BOTTOM;
+          position->flags &= ~SWP_NOZORDER;
+          position->flags |= SWP_NOACTIVATE;
+        }
+      }
+      break;
   }
   return Win32Window::MessageHandler(window, message, wparam, lparam);
 }
@@ -613,6 +644,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
   always_on_top_ = BoolValue(surface, "alwaysOnTop", always_on_top_);
   pinned_to_desktop_ =
       BoolValue(surface, "isPinnedToDesktop", pinned_to_desktop_);
+  SetHideFromWindowSwitcher(hide_from_window_switcher_);
   RefreshZOrder();
   const auto visibility =
       surface.find(flutter::EncodableValue("isVisible"));
@@ -631,6 +663,7 @@ void PaperFlutterWindow::SetAlwaysOnTop(bool enabled) {
 
 void PaperFlutterWindow::SetPinnedToDesktop(bool pinned) {
   pinned_to_desktop_ = pinned;
+  SetHideFromWindowSwitcher(hide_from_window_switcher_);
   RefreshZOrder();
 }
 
@@ -990,15 +1023,21 @@ void PaperFlutterWindow::SetHideFromWindowSwitcher(bool hidden) {
     return;
   }
   LONG_PTR extended_style = GetWindowLongPtrW(window, GWL_EXSTYLE);
-  if (hidden || pinned_to_desktop_) {
+  if (pinned_to_desktop_) {
+    extended_style = (extended_style | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) &
+                     ~WS_EX_APPWINDOW;
+  } else if (hidden) {
     extended_style = (extended_style | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
+    extended_style &= ~WS_EX_NOACTIVATE;
   } else {
     extended_style = (extended_style | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW;
+    extended_style &= ~WS_EX_NOACTIVATE;
   }
   SetWindowLongPtrW(window, GWL_EXSTYLE, extended_style);
   SetWindowPos(window, nullptr, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                    SWP_FRAMECHANGED);
+  RemoveTaskbarButton(window);
 }
 
 void PaperFlutterWindow::SetAvoidFullscreenTopmost(bool avoid) {
@@ -1014,8 +1053,7 @@ void PaperFlutterWindow::RefreshZOrder() {
   fullscreen_blocked_ =
       avoid_fullscreen_topmost_ && IsExternalFullscreenWindow(window);
   const bool policy_hidden = collapsed_ &&
-                             ((hide_when_fullscreen_ &&
-                               IsExternalFullscreenWindow(window)) ||
+                             (IsExternalFullscreenWindow(window) ||
                               (hide_when_covered_ &&
                                IsCoveredByAnotherWindow(window)));
   if (!intended_visible_ || policy_hidden) {
@@ -1026,6 +1064,7 @@ void PaperFlutterWindow::RefreshZOrder() {
     ShowWindow(window,
                pinned_to_desktop_ ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL);
   }
+  RemoveTaskbarButton(window);
   if (pinned_to_desktop_) {
     // Keep pinned papers as ordinary top-level windows. Parenting them to a
     // WorkerW is unreliable on Windows 11 because the selected WorkerW may sit
@@ -1035,9 +1074,7 @@ void PaperFlutterWindow::RefreshZOrder() {
     SetWindowLongPtrW(window, GWL_STYLE,
                       WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN |
                           WS_VISIBLE);
-    const bool configured_hidden = hide_from_window_switcher_;
-    SetHideFromWindowSwitcher(true);
-    hide_from_window_switcher_ = configured_hidden;
+    SetHideFromWindowSwitcher(hide_from_window_switcher_);
     SetWindowPos(window, HWND_BOTTOM, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                      SWP_FRAMECHANGED);

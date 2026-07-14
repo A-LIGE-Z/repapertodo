@@ -9,6 +9,7 @@ import '../platform/platform_services.dart';
 import 'papertodo_strings.dart';
 
 typedef InstalledFontFamilyLoader = Future<List<String>> Function();
+typedef DataDirectoryPicker = Future<String?> Function(String currentPath);
 
 class SyncSettingsDialogResult {
   const SyncSettingsDialogResult({
@@ -61,6 +62,7 @@ class SyncSettingsDialogResult {
     required this.showLinkedNoteName,
     required this.allowLongLinkedNoteTitles,
     required this.hideLinkedNotesFromCapsules,
+    required this.dataDirectoryPath,
   });
 
   final SyncSettings sync;
@@ -112,6 +114,7 @@ class SyncSettingsDialogResult {
   final bool showLinkedNoteName;
   final bool allowLongLinkedNoteTitles;
   final bool hideLinkedNotesFromCapsules;
+  final String dataDirectoryPath;
 }
 
 Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
@@ -170,6 +173,9 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool initialShowLinkedNoteName,
   required bool initialAllowLongLinkedNoteTitles,
   required bool initialHideLinkedNotesFromCapsules,
+  required String initialDataDirectoryPath,
+  required bool supportsDataDirectorySelection,
+  DataDirectoryPicker? selectDataDirectory,
   InstalledFontFamilyLoader? loadInstalledFontFamilies,
 }) {
   return showDialog<SyncSettingsDialogResult>(
@@ -234,6 +240,9 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialShowLinkedNoteName: initialShowLinkedNoteName,
       initialAllowLongLinkedNoteTitles: initialAllowLongLinkedNoteTitles,
       initialHideLinkedNotesFromCapsules: initialHideLinkedNotesFromCapsules,
+      initialDataDirectoryPath: initialDataDirectoryPath,
+      supportsDataDirectorySelection: supportsDataDirectorySelection,
+      selectDataDirectory: selectDataDirectory,
       loadInstalledFontFamilies: loadInstalledFontFamilies,
     ),
   );
@@ -295,6 +304,9 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialShowLinkedNoteName,
     required this.initialAllowLongLinkedNoteTitles,
     required this.initialHideLinkedNotesFromCapsules,
+    required this.initialDataDirectoryPath,
+    required this.supportsDataDirectorySelection,
+    this.selectDataDirectory,
     this.loadInstalledFontFamilies,
     super.key,
   });
@@ -353,6 +365,9 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool initialShowLinkedNoteName;
   final bool initialAllowLongLinkedNoteTitles;
   final bool initialHideLinkedNotesFromCapsules;
+  final String initialDataDirectoryPath;
+  final bool supportsDataDirectorySelection;
+  final DataDirectoryPicker? selectDataDirectory;
   final InstalledFontFamilyLoader? loadInstalledFontFamilies;
 
   @override
@@ -433,6 +448,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late final TextEditingController _reminderDurationController;
   late final TextEditingController _todoLineSpacingController;
   late final TextEditingController _noteLineSpacingController;
+  late final TextEditingController _dataDirectoryController;
   String? _errorText;
   String? _endpointErrorText;
   String? _rootPathErrorText;
@@ -558,6 +574,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _noteLineSpacingController = TextEditingController(
       text: _noteLineSpacing.toStringAsFixed(1),
     );
+    _dataDirectoryController = TextEditingController(
+      text: widget.initialDataDirectoryPath,
+    );
     _loadInstalledFontFamilies();
   }
 
@@ -588,7 +607,20 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _reminderDurationController.dispose();
     _todoLineSpacingController.dispose();
     _noteLineSpacingController.dispose();
+    _dataDirectoryController.dispose();
     super.dispose();
+  }
+
+  Future<void> _chooseDataDirectory() async {
+    final picker = widget.selectDataDirectory;
+    if (picker == null) {
+      return;
+    }
+    final selected = await picker(_dataDirectoryController.text);
+    if (!mounted || selected == null || selected.trim().isEmpty) {
+      return;
+    }
+    setState(() => _dataDirectoryController.text = selected.trim());
   }
 
   Future<void> _loadInstalledFontFamilies() async {
@@ -1147,6 +1179,30 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                         ),
                         if (_hasDesktopIntegrationSettings)
                           const SizedBox(height: 4),
+                        if (widget.supportsDataDirectorySelection) ...[
+                          TextField(
+                            key: const ValueKey('settings-data-directory'),
+                            controller: _dataDirectoryController,
+                            readOnly: true,
+                            onTap: _chooseDataDirectory,
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              labelText: strings
+                                  .get(PaperTodoStringKeys.dataDirectory),
+                              helperText: strings
+                                  .get(PaperTodoStringKeys.dataDirectoryHelp),
+                              prefixIcon: const Icon(Icons.folder_outlined),
+                              suffixIcon: TextButton(
+                                key: const ValueKey(
+                                    'settings-data-directory-browse'),
+                                onPressed: _chooseDataDirectory,
+                                child: Text(strings
+                                    .get(PaperTodoStringKeys.actionBrowse)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         if (widget.supportsStartAtLogin)
                           _SettingsCheckboxTile(
                             contentPadding: EdgeInsets.zero,
@@ -2531,6 +2587,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
 
     Navigator.of(context).pop(
       SyncSettingsDialogResult(
+        dataDirectoryPath: _dataDirectoryController.text.trim(),
         sync: settings,
         theme: _theme,
         colorScheme: _colorScheme,

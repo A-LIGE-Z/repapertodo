@@ -79,6 +79,7 @@ abstract final class PaperWindowActionKinds {
   static const openReminderPaper = 'openReminderPaper';
   static const toggleCollapseAll = 'toggleCollapseAll';
   static const collapsePaper = 'collapsePaper';
+  static const expandPaper = 'expandPaper';
 
   static const values = {
     openPaper,
@@ -90,6 +91,7 @@ abstract final class PaperWindowActionKinds {
     openReminderPaper,
     toggleCollapseAll,
     collapsePaper,
+    expandPaper,
   };
 }
 
@@ -240,7 +242,11 @@ abstract interface class ScriptCapsuleHost {
 }
 
 abstract interface class AppStorageHost {
+  bool get supportsDataDirectorySelection;
+
   Future<String> documentsDirectoryPath();
+  Future<String?> chooseDataDirectory(String currentDirectoryPath);
+  Future<void> commitDataDirectory(String directoryPath);
 }
 
 List<String> normalizeInstalledFontFamilies(Iterable<Object?> values) {

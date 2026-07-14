@@ -7,6 +7,7 @@ abstract final class PaperTodoStringKeys {
   static const actionAddItem = 'actionAddItem';
   static const actionAddTextBlock = 'actionAddTextBlock';
   static const actionBackToBoard = 'actionBackToBoard';
+  static const actionBrowse = 'actionBrowse';
   static const actionCancel = 'actionCancel';
   static const actionChangeDueDate = 'actionChangeDueDate';
   static const actionChangeReminder = 'actionChangeReminder';
@@ -150,6 +151,8 @@ abstract final class PaperTodoStringKeys {
   static const settingsTodoAndNotes = 'settingsTodoAndNotes';
   static const settingsCapsules = 'settingsCapsules';
   static const settingsGeneralAdvanced = 'settingsGeneralAdvanced';
+  static const dataDirectory = 'dataDirectory';
+  static const dataDirectoryHelp = 'dataDirectoryHelp';
   static const dueLabel = 'dueLabel';
   static const dueTomorrow = 'dueTomorrow';
   static const dueYearDisplay = 'dueYearDisplay';
@@ -604,6 +607,10 @@ const _enStrings = {
   PaperTodoStringKeys.settingsTodoAndNotes: 'Todo & notes',
   PaperTodoStringKeys.settingsCapsules: 'Capsules',
   PaperTodoStringKeys.settingsGeneralAdvanced: 'General & advanced',
+  PaperTodoStringKeys.actionBrowse: 'Browse',
+  PaperTodoStringKeys.dataDirectory: 'Data folder',
+  PaperTodoStringKeys.dataDirectoryHelp:
+      'Stores data.json, backups, and recovery files. Existing data is copied when this folder changes.',
   PaperTodoStringKeys.dueLabel: 'Due {0}',
   PaperTodoStringKeys.dueTomorrow: 'Tomorrow {0}',
   PaperTodoStringKeys.dueYearDisplay: 'Due year display',
@@ -984,6 +991,9 @@ const _zhStrings = {
   PaperTodoStringKeys.settingsTodoAndNotes: '待办与笔记',
   PaperTodoStringKeys.settingsCapsules: '胶囊',
   PaperTodoStringKeys.settingsGeneralAdvanced: '通用与高级',
+  PaperTodoStringKeys.actionBrowse: '浏览',
+  PaperTodoStringKeys.dataDirectory: '数据保存目录',
+  PaperTodoStringKeys.dataDirectoryHelp: '用于保存 data.json、备份和恢复文件。修改目录时会复制当前数据。',
   PaperTodoStringKeys.dueLabel: '到期 {0}',
   PaperTodoStringKeys.dueTomorrow: '明天 {0}',
   PaperTodoStringKeys.dueYearDisplay: '到期年份显示',

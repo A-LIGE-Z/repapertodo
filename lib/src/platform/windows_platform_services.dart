@@ -40,7 +40,7 @@ class WindowsPlatformServices implements PlatformServices {
         externalFiles = WindowsExternalFileHost(channel),
         uriOpener = WindowsUriOpenHost(channel),
         scriptCapsules = WindowsScriptCapsuleHost(channel),
-        storage = WindowsAppStorageHost();
+        storage = WindowsAppStorageHost(channel: channel);
 
   @override
   final PaperWindowHost paperWindows;
@@ -1358,13 +1358,30 @@ class WindowsScriptCapsuleHost implements ScriptCapsuleHost {
 }
 
 class WindowsAppStorageHost implements AppStorageHost {
-  const WindowsAppStorageHost({String? executablePath})
-      : _executablePath = executablePath;
+  const WindowsAppStorageHost({
+    MethodChannel channel = const MethodChannel('repapertodo/window'),
+    String? executablePath,
+  })  : _channel = channel,
+        _executablePath = executablePath;
 
+  final MethodChannel _channel;
   final String? _executablePath;
 
   @override
+  bool get supportsDataDirectorySelection => true;
+
+  @override
   Future<String> documentsDirectoryPath() async {
+    try {
+      final selected = await _channel.invokeMethod<String>('getDataDirectory');
+      if (selected != null &&
+          selected.trim().isNotEmpty &&
+          !_hasUnsafeExternalFilePathCharacter(selected)) {
+        return selected.trim();
+      }
+    } on MissingPluginException {
+      // Unit tests and non-runner hosts use the executable-directory fallback.
+    }
     final rawExecutablePath = _executablePath ?? Platform.resolvedExecutable;
     if (_hasUnsafeExternalFilePathCharacter(rawExecutablePath)) {
       throw StateError(
@@ -1376,6 +1393,24 @@ class WindowsAppStorageHost implements AppStorageHost {
       throw StateError('Windows executable path is unavailable.');
     }
     return p.dirname(executablePath);
+  }
+
+  @override
+  Future<String?> chooseDataDirectory(String currentDirectoryPath) async {
+    final selected = await _channel.invokeMethod<String>(
+      'chooseDataDirectory',
+      currentDirectoryPath,
+    );
+    final normalized = selected?.trim() ?? '';
+    if (normalized.isEmpty || _hasUnsafeExternalFilePathCharacter(normalized)) {
+      return null;
+    }
+    return normalized;
+  }
+
+  @override
+  Future<void> commitDataDirectory(String directoryPath) async {
+    await _channel.invokeMethod<void>('commitDataDirectory', directoryPath);
   }
 }
 

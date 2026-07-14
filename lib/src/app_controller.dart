@@ -329,6 +329,17 @@ class RePaperTodoController {
     return _platform.storage.documentsDirectoryPath();
   }
 
+  bool get supportsDataDirectorySelection =>
+      _platform.storage.supportsDataDirectorySelection;
+
+  Future<String?> chooseDataDirectory(String currentDirectoryPath) {
+    return _platform.storage.chooseDataDirectory(currentDirectoryPath);
+  }
+
+  Future<void> commitDataDirectory(String directoryPath) {
+    return _platform.storage.commitDataDirectory(directoryPath);
+  }
+
   Future<void> openUri(String uri) async {
     await _platform.uriOpener.openUri(uri);
   }

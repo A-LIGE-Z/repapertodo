@@ -195,7 +195,17 @@ class NoopScriptCapsuleHost implements ScriptCapsuleHost {
 
 class NoopAppStorageHost implements AppStorageHost {
   @override
+  bool get supportsDataDirectorySelection => false;
+
+  @override
   Future<String> documentsDirectoryPath() async {
     return Directory.current.path;
   }
+
+  @override
+  Future<String?> chooseDataDirectory(String currentDirectoryPath) async =>
+      null;
+
+  @override
+  Future<void> commitDataDirectory(String directoryPath) async {}
 }

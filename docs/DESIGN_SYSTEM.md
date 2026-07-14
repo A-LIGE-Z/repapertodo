@@ -41,6 +41,10 @@ The Windows platform channel treats each paper as an addressable surface. The
 custom runner owns one child Flutter engine and one top-level HWND per visible
 paper; the primary coordinator HWND stays hidden during normal paper use and
 remains responsible for the tray, startup commands, persistence, and sync.
+Opening settings temporarily presents that coordinator as a dedicated settings
+window; settings must never be embedded into a paper surface. Paper HWNDs are
+removed from the taskbar through the native taskbar API without coupling that
+policy to the separately configurable Alt+Tab visibility setting.
 Child engines receive canonical state for rendering but return only their own
 normalized `PaperData`, so concurrent paper edits cannot overwrite global state
 from a stale child snapshot. The release smoke enumerates visible top-level
@@ -209,6 +213,10 @@ placed at `HWND_BOTTOM`; they must not be reparented into `WorkerW`, because the
 selected worker can sit behind the wallpaper compositor and hide the paper.
 Desktop pinning does not enable native click-through, so the unpin control stays
 usable while the PaperTodo interaction lock is active.
+Pinned HWNDs use no-activate behavior, reject native move requests, and enforce
+`HWND_BOTTOM` during window-position changes so clicks cannot raise or move
+them. Every paper control except unpin must be disabled while this mode is
+active.
 Activating a collapsed desktop-pinned paper should follow PaperTodo's capsule
 path by clearing desktop pinning and restoring the paper expanded instead of
 leaving a pinned expanded surface behind.
@@ -482,6 +490,10 @@ affordance: when zoom differs from 100%, clicking the status resets the paper
 `TextZoom` to 100% through the same surface-update path.
 Settings saves should keep ordinary app preferences while surfacing native
 integration failures such as hotkey, startup, or script-process errors.
+Windows data location changes use the native folder picker, write the current
+state successfully before switching the active path, and retain the old file
+as a recovery copy. A first run without portable data asks for the data folder;
+an existing `data.json` beside the executable remains compatible.
 On narrow screens, keep one primary sync action directly reachable and move
 secondary board actions such as create, recovery, hidden papers, and settings
 into an overflow menu so the app bar never depends on desktop-width space.

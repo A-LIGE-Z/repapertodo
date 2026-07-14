@@ -960,6 +960,13 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final notePapers =
         controller.state.papers.where((paper) => paper.isNote).toList();
     final surfacePaper = _surfacePaper();
+    if (widget.coordinatorWindowMode) {
+      return Scaffold(
+        key: const ValueKey('windows-settings-window-surface'),
+        backgroundColor: colorScheme.surface,
+        body: const SizedBox.expand(),
+      );
+    }
     if (widget.paperWindowMode) {
       if (surfacePaper == null) {
         return const SizedBox.shrink();
@@ -1140,16 +1147,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                   padding: const EdgeInsets.symmetric(horizontal: 9),
                   child: Row(
                     children: [
-                      GestureDetector(
+                      Listener(
                         key: ValueKey('${paper.id}-master-capsule-drag-handle'),
                         behavior: HitTestBehavior.opaque,
-                        onPanStart: widget.paperWindowDragStarter == null
+                        onPointerDown: widget.paperWindowDragStarter == null
                             ? null
                             : (_) => unawaited(
                                   widget.paperWindowDragStarter!(),
                                 ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: SizedBox(
+                          width: 26,
+                          height: double.infinity,
                           child: Icon(
                             collapseAllActive
                                 ? Icons.unfold_more_outlined
@@ -1194,6 +1202,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     final scriptCapsuleSpec =
         paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
     void expandForEditing() {
+      final sender = widget.paperWindowActionSender;
+      if (sender != null) {
+        unawaited(sender(PaperWindowActionKinds.expandPaper));
+        return;
+      }
       setState(() => paper.isCollapsed = false);
       unawaited(_saveState());
       unawaited(controller.updatePaperSurface(paper));
@@ -1253,19 +1266,20 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                               padding: const EdgeInsets.only(left: 6),
                               child: Row(
                                 children: [
-                                  GestureDetector(
+                                  Listener(
                                     key: ValueKey(
                                         '${paper.id}-capsule-drag-handle'),
                                     behavior: HitTestBehavior.opaque,
-                                    onPanStart: widget.paperWindowDragStarter ==
+                                    onPointerDown: widget
+                                                .paperWindowDragStarter ==
                                             null
                                         ? null
                                         : (_) => unawaited(
                                               widget.paperWindowDragStarter!(),
                                             ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 2),
+                                    child: SizedBox(
+                                      width: 26,
+                                      height: double.infinity,
                                       child: Icon(
                                         paper.isTodo
                                             ? Icons.check_outlined
@@ -2499,6 +2513,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           unawaited(controller.refreshPaperSurfaces());
           unawaited(_saveState());
         }
+      case PaperWindowActionKinds.expandPaper:
+        if (paper.isCollapsed) {
+          setState(() {
+            paper.isCollapsed = false;
+            controller.state.normalize();
+          });
+          unawaited(controller.refreshPaperSurfaces());
+          unawaited(_saveState());
+        }
     }
   }
 
@@ -3010,6 +3033,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           controller.state.allowLongLinkedNoteTitles,
       initialHideLinkedNotesFromCapsules:
           controller.state.hideLinkedNotesFromCapsules,
+      initialDataDirectoryPath: p.dirname(widget.store.filePath),
+      supportsDataDirectorySelection: controller.supportsDataDirectorySelection,
+      selectDataDirectory: controller.chooseDataDirectory,
       loadInstalledFontFamilies: controller.installedFontFamilies,
     );
     try {
@@ -3145,6 +3171,29 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         platformSettingErrors.add(
           '${strings.get(labelKey)}: '
           '${_readableFailureMessage(error, strings: strings)}',
+        );
+      }
+    }
+
+    if (controller.supportsDataDirectorySelection) {
+      final previousFilePath = widget.store.filePath;
+      final previousDirectory = p.dirname(previousFilePath);
+      final selectedDirectory = result.dataDirectoryPath.trim();
+      if (selectedDirectory.isNotEmpty &&
+          p.normalize(selectedDirectory).toLowerCase() !=
+              p.normalize(previousDirectory).toLowerCase()) {
+        await applyPlatformSetting(
+          PaperTodoStringKeys.dataDirectory,
+          () async {
+            final nextFilePath = p.join(selectedDirectory, 'data.json');
+            await widget.store.relocate(nextFilePath, controller.state);
+            try {
+              await controller.commitDataDirectory(selectedDirectory);
+            } catch (_) {
+              await widget.store.relocate(previousFilePath, controller.state);
+              rethrow;
+            }
+          },
         );
       }
     }
@@ -4844,7 +4893,9 @@ class PaperPreview extends StatelessWidget {
                         : null,
                     child: GestureDetector(
                       behavior: HitTestBehavior.translucent,
-                      onPanStart: standaloneSurface && onWindowDragStart != null
+                      onPanStart: standaloneSurface &&
+                              !desktopInteractionLocked &&
+                              onWindowDragStart != null
                           ? (_) => unawaited(onWindowDragStart!())
                           : null,
                       child: Listener(
@@ -4882,48 +4933,49 @@ class PaperPreview extends StatelessWidget {
                               _noteLinkDragHandle(context),
                             ],
                             SizedBox(width: standaloneSurface ? 1 : 5),
-                            Flexible(
-                              fit: standaloneSurface
-                                  ? FlexFit.loose
-                                  : FlexFit.tight,
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  minWidth: standaloneSurface ? 30 : 0,
-                                  maxWidth:
-                                      standaloneSurface ? 86 : double.infinity,
-                                ),
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    border: standaloneSurface
-                                        ? Border(
-                                            bottom: BorderSide(
-                                              color: colorScheme.outlineVariant
-                                                  .withValues(alpha: 0.38),
-                                            ),
-                                          )
-                                        : null,
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minWidth: standaloneSurface ? 30 : 0,
+                                    maxWidth: standaloneSurface
+                                        ? 86
+                                        : double.infinity,
                                   ),
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: standaloneSurface ? 4 : 0,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      border: standaloneSurface
+                                          ? Border(
+                                              bottom: BorderSide(
+                                                color: colorScheme
+                                                    .outlineVariant
+                                                    .withValues(alpha: 0.38),
+                                              ),
+                                            )
+                                          : null,
                                     ),
-                                    child: _PaperTitleEditor(
-                                      paper: paper,
-                                      titleText: titleText,
-                                      textZoom: textZoom,
-                                      enabled: !desktopInteractionLocked &&
-                                          !isCollapsed,
-                                      fieldEnabled: !desktopInteractionLocked,
-                                      enableToolTips: enableToolTips,
-                                      compact: standaloneSurface,
-                                      onTitleChanged: onTitleChanged,
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: standaloneSurface ? 4 : 0,
+                                      ),
+                                      child: _PaperTitleEditor(
+                                        paper: paper,
+                                        titleText: titleText,
+                                        textZoom: textZoom,
+                                        enabled: !desktopInteractionLocked &&
+                                            !isCollapsed,
+                                        fieldEnabled: !desktopInteractionLocked,
+                                        enableToolTips: enableToolTips,
+                                        compact: standaloneSurface,
+                                        onTitleChanged: onTitleChanged,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
                             if (standaloneSurface) ...[
-                              const Spacer(),
                               ..._standalonePaperHeaderActions(
                                 context: context,
                                 isCollapsed: isCollapsed,
@@ -5487,7 +5539,7 @@ class PaperPreview extends StatelessWidget {
       tooltip: active
           ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
           : strings.get(PaperTodoStringKeys.actionKeepOnTop),
-      onPressed: _toggleAlwaysOnTop,
+      onPressed: _desktopInteractionLocked ? null : _toggleAlwaysOnTop,
       child: Icon(
         paper.isTodo
             ? Icons.check_box
@@ -5571,7 +5623,8 @@ class PaperPreview extends StatelessWidget {
     BuildContext context,
     PointerDownEvent event,
   ) {
-    if (event.buttons & kSecondaryMouseButton == 0) {
+    if (_desktopInteractionLocked ||
+        event.buttons & kSecondaryMouseButton == 0) {
       return;
     }
     unawaited(_showPaperContextMenu(context, event.position));

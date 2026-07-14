@@ -1,12 +1,16 @@
 #include "flutter_window.h"
 
 #include <dwmapi.h>
+#include <shlobj.h>
+#include <shobjidl.h>
 
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -561,6 +565,160 @@ std::optional<std::string> WideToUtf8Strict(const std::wstring& value) {
     return std::nullopt;
   }
   return utf8_value;
+}
+
+std::optional<std::filesystem::path> KnownFolderPath(
+    REFKNOWNFOLDERID folder_id) {
+  PWSTR raw_path = nullptr;
+  if (FAILED(SHGetKnownFolderPath(folder_id, KF_FLAG_CREATE, nullptr,
+                                  &raw_path)) ||
+      !raw_path) {
+    return std::nullopt;
+  }
+  std::filesystem::path result(raw_path);
+  CoTaskMemFree(raw_path);
+  return result;
+}
+
+std::filesystem::path DataDirectoryConfigPath() {
+  const auto local_app_data = KnownFolderPath(FOLDERID_LocalAppData);
+  if (!local_app_data) {
+    return {};
+  }
+  return *local_app_data / L"RePaperTodo" / L"storage-path.txt";
+}
+
+std::optional<std::filesystem::path> ReadConfiguredDataDirectory() {
+  const std::filesystem::path config_path = DataDirectoryConfigPath();
+  if (config_path.empty()) {
+    return std::nullopt;
+  }
+  std::ifstream input(config_path, std::ios::binary);
+  if (!input) {
+    return std::nullopt;
+  }
+  const std::string encoded((std::istreambuf_iterator<char>(input)),
+                            std::istreambuf_iterator<char>());
+  const auto decoded = Utf8ToWideStrict(encoded);
+  if (!decoded || decoded->empty()) {
+    return std::nullopt;
+  }
+  std::filesystem::path directory(*decoded);
+  if (!directory.is_absolute()) {
+    return std::nullopt;
+  }
+  std::error_code error;
+  std::filesystem::create_directories(directory, error);
+  return error ? std::nullopt
+               : std::optional<std::filesystem::path>(directory);
+}
+
+bool WriteConfiguredDataDirectory(const std::filesystem::path& directory) {
+  if (directory.empty() || !directory.is_absolute()) {
+    return false;
+  }
+  std::error_code error;
+  std::filesystem::create_directories(directory, error);
+  if (error) {
+    return false;
+  }
+  const std::filesystem::path config_path = DataDirectoryConfigPath();
+  if (config_path.empty()) {
+    return false;
+  }
+  std::filesystem::create_directories(config_path.parent_path(), error);
+  if (error) {
+    return false;
+  }
+  const auto encoded = WideToUtf8Strict(directory.wstring());
+  if (!encoded) {
+    return false;
+  }
+  std::ofstream output(config_path,
+                       std::ios::binary | std::ios::trunc);
+  if (!output) {
+    return false;
+  }
+  output.write(encoded->data(), static_cast<std::streamsize>(encoded->size()));
+  return output.good();
+}
+
+std::optional<std::filesystem::path> PickDataDirectory(
+    HWND owner, const std::filesystem::path& initial_directory) {
+  IFileOpenDialog* dialog = nullptr;
+  if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                              CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog))) ||
+      !dialog) {
+    return std::nullopt;
+  }
+  DWORD options = 0;
+  dialog->GetOptions(&options);
+  dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM |
+                     FOS_PATHMUSTEXIST);
+  dialog->SetTitle(L"选择 RePaperTodo 数据目录 / Choose data folder");
+  IShellItem* initial_item = nullptr;
+  if (!initial_directory.empty() &&
+      SUCCEEDED(SHCreateItemFromParsingName(initial_directory.c_str(), nullptr,
+                                            IID_PPV_ARGS(&initial_item))) &&
+      initial_item) {
+    dialog->SetFolder(initial_item);
+    initial_item->Release();
+  }
+  const HRESULT shown = dialog->Show(owner);
+  if (FAILED(shown)) {
+    dialog->Release();
+    return std::nullopt;
+  }
+  IShellItem* selected_item = nullptr;
+  if (FAILED(dialog->GetResult(&selected_item)) || !selected_item) {
+    dialog->Release();
+    return std::nullopt;
+  }
+  PWSTR selected_path = nullptr;
+  const HRESULT path_result =
+      selected_item->GetDisplayName(SIGDN_FILESYSPATH, &selected_path);
+  selected_item->Release();
+  dialog->Release();
+  if (FAILED(path_result) || !selected_path) {
+    return std::nullopt;
+  }
+  std::filesystem::path result(selected_path);
+  CoTaskMemFree(selected_path);
+  return result;
+}
+
+std::filesystem::path ResolveDataDirectory(HWND owner) {
+  if (const auto configured = ReadConfiguredDataDirectory()) {
+    return *configured;
+  }
+  std::array<wchar_t, 32768> executable_path = {};
+  const DWORD executable_length = GetModuleFileNameW(
+      nullptr, executable_path.data(), static_cast<DWORD>(executable_path.size()));
+  if (executable_length > 0 && executable_length < executable_path.size()) {
+    const std::filesystem::path legacy_directory =
+        std::filesystem::path(executable_path.data()).parent_path();
+    std::error_code legacy_error;
+    if (std::filesystem::is_regular_file(legacy_directory / L"data.json",
+                                         legacy_error) &&
+        !legacy_error) {
+      return legacy_directory;
+    }
+  }
+  std::filesystem::path fallback;
+  if (const auto documents = KnownFolderPath(FOLDERID_Documents)) {
+    fallback = *documents / L"RePaperTodo";
+  } else if (const auto local_app_data = KnownFolderPath(FOLDERID_LocalAppData)) {
+    fallback = *local_app_data / L"RePaperTodo" / L"Data";
+  }
+  MessageBoxW(owner,
+              L"请选择 data.json 和备份文件的保存目录。\nChoose where "
+              L"RePaperTodo should save data.json and backups.",
+              L"RePaperTodo 首次运行 / First run",
+              MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
+  const auto selected = PickDataDirectory(owner, fallback);
+  const std::filesystem::path resolved = selected.value_or(fallback);
+  WriteConfiguredDataDirectory(resolved);
+  return resolved;
 }
 
 std::wstring TrimWide(const std::wstring& value) {
@@ -1405,6 +1563,29 @@ bool SetHideFromWindowSwitcher(HWND window, bool enabled) {
                           SWP_NOACTIVATE | SWP_FRAMECHANGED) != 0;
 }
 
+void ShowSettingsCoordinatorWindow(HWND window) {
+  if (!window) {
+    return;
+  }
+  SetHideFromWindowSwitcher(window, true);
+  HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO info = {};
+  info.cbSize = sizeof(info);
+  if (monitor && GetMonitorInfoW(monitor, &info)) {
+    const LONG work_width = info.rcWork.right - info.rcWork.left;
+    const LONG work_height = info.rcWork.bottom - info.rcWork.top;
+    const LONG width = std::min<LONG>(920, std::max<LONG>(640, work_width - 80));
+    const LONG height =
+        std::min<LONG>(720, std::max<LONG>(520, work_height - 80));
+    const LONG x = info.rcWork.left + (work_width - width) / 2;
+    const LONG y = info.rcWork.top + (work_height - height) / 2;
+    SetWindowPos(window, HWND_TOP, x, y, width, height,
+                 SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  }
+  ShowWindow(window, SW_SHOWNORMAL);
+  SetForegroundWindow(window);
+}
+
 bool IsEmptyRect(const RECT& rect) {
   return rect.right <= rect.left || rect.bottom <= rect.top;
 }
@@ -2019,7 +2200,7 @@ constexpr UINT kTrayPaperDeleteCommandBase = 45000;
 constexpr int kPinnedTodoHotkeyId = 42001;
 constexpr int kPinnedNoteHotkeyId = 42002;
 constexpr UINT_PTR kFullscreenTopmostRefreshTimerId = 43001;
-constexpr UINT kFullscreenTopmostRefreshIntervalMs = 1000;
+constexpr UINT kFullscreenTopmostRefreshIntervalMs = 250;
 constexpr wchar_t kSingleInstancePipeName[] =
     L"\\\\.\\pipe\\RePaperTodo-SingleInstance-Activate";
 constexpr size_t kMaxSingleInstanceCommandBytes = 4096;
@@ -2043,6 +2224,7 @@ bool FlutterWindow::OnCreate() {
   }
   CleanupOldScriptCapsuleTempFiles();
   taskbar_created_message_ = RegisterWindowMessageW(L"TaskbarCreated");
+  SetHideFromWindowSwitcher(GetHandle(), true);
 
   RECT frame = GetClientArea();
 
@@ -2070,6 +2252,60 @@ bool FlutterWindow::OnCreate() {
         }
 
         const std::string& method = call.method_name();
+        if (method == "getDataDirectory") {
+          const std::filesystem::path directory = ResolveDataDirectory(window);
+          const auto encoded = WideToUtf8Strict(directory.wstring());
+          if (!encoded || encoded->empty()) {
+            result->Error("data_directory_unavailable",
+                          "Unable to resolve the Windows data directory.");
+            return;
+          }
+          result->Success(flutter::EncodableValue(*encoded));
+          return;
+        }
+        if (method == "chooseDataDirectory") {
+          std::filesystem::path initial_directory;
+          if (call.arguments()) {
+            if (const auto* value =
+                    std::get_if<std::string>(call.arguments())) {
+              const auto decoded = Utf8ToWideStrict(*value);
+              if (decoded) {
+                initial_directory = *decoded;
+              }
+            }
+          }
+          const auto selected = PickDataDirectory(window, initial_directory);
+          if (!selected) {
+            result->Success(flutter::EncodableValue());
+            return;
+          }
+          const auto encoded = WideToUtf8Strict(selected->wstring());
+          if (!encoded) {
+            result->Error("data_directory_invalid",
+                          "The selected data directory is invalid.");
+            return;
+          }
+          result->Success(flutter::EncodableValue(*encoded));
+          return;
+        }
+        if (method == "commitDataDirectory") {
+          if (!call.arguments()) {
+            result->Error("data_directory_invalid",
+                          "The data directory is required.");
+            return;
+          }
+          const auto* value =
+              std::get_if<std::string>(call.arguments());
+          const auto decoded = value ? Utf8ToWideStrict(*value) : std::nullopt;
+          if (!decoded ||
+              !WriteConfiguredDataDirectory(std::filesystem::path(*decoded))) {
+            result->Error("data_directory_save_failed",
+                          "Unable to save the Windows data directory.");
+            return;
+          }
+          result->Success();
+          return;
+        }
         if (method == "show") {
           if (!RememberActivePaperId(call.arguments())) {
             result->Success();
@@ -2830,8 +3066,8 @@ bool FlutterWindow::OnCreate() {
            kFullscreenTopmostRefreshIntervalMs, nullptr);
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    if (paper_windows_.empty()) {
-      this->Show();
+    if (GetHandle()) {
+      ShowWindow(GetHandle(), SW_HIDE);
     }
   });
 
@@ -3046,13 +3282,10 @@ void FlutterWindow::ShowTrayMenu() {
       break;
     case kTraySettingsCommand:
       SendStartupCommandRequested("settings");
-      ShowWindow(window, SW_SHOWNORMAL);
-      SetForegroundWindow(window);
+      ShowSettingsCoordinatorWindow(window);
       break;
     case kTrayShowCommand:
       SendStartupCommandRequested("show");
-      ShowWindow(window, SW_SHOWNORMAL);
-      SetForegroundWindow(window);
       break;
     case kTrayHideCommand:
       SendStartupCommandRequested("hide");
@@ -3895,8 +4128,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       if (command && !command->empty()) {
         SendStartupCommandRequested(*command);
         if (*command == "settings") {
-          ShowWindow(hwnd, SW_SHOWNORMAL);
-          SetForegroundWindow(hwnd);
+          ShowSettingsCoordinatorWindow(hwnd);
         }
       }
       return 0;
@@ -3905,8 +4137,6 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       switch (LOWORD(lparam)) {
         case WM_LBUTTONDBLCLK:
           SendStartupCommandRequested("show");
-          ShowWindow(hwnd, SW_SHOWNORMAL);
-          SetForegroundWindow(hwnd);
           return 0;
         case WM_RBUTTONUP:
           ShowTrayMenu();

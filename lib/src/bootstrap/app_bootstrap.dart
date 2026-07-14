@@ -103,6 +103,15 @@ class AppBootstrap {
     PlatformServices? platform,
     Future<String> Function()? mobileDocumentsDirectoryPath,
   }) async {
+    if (Platform.isWindows) {
+      final directory = await (platform ?? _defaultPlatformServices())
+          .storage
+          .documentsDirectoryPath();
+      if (directory.trim().isEmpty || _hasControlCharacter(directory)) {
+        throw StateError('Windows data directory is unavailable.');
+      }
+      return p.join(directory.trim(), 'data.json');
+    }
     return defaultStateFilePathForPlatform(
       isDesktop: Platform.isWindows || Platform.isLinux || Platform.isMacOS,
       desktopExecutablePath: Platform.resolvedExecutable,

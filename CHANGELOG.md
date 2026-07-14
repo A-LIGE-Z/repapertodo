@@ -8,6 +8,18 @@
 - Fixed desktop-pinned papers disappearing behind the Windows 11 wallpaper by
   keeping them as interactive top-level windows at `HWND_BOTTOM` instead of
   reparenting them into an unreliable `WorkerW` desktop layer.
+- Locked desktop-pinned papers to the bottom layer without activation or
+  dragging, leaving only the unpin control interactive and preventing the Todo
+  header checkbox from accidentally unpinning the paper.
+- Kept paper chrome anchored during native resizing, made capsules start native
+  dragging on pointer-down, and removed the double-click and flash races when a
+  capsule restores its paper.
+- Moved Windows settings onto the hidden coordinator's dedicated window,
+  removed paper taskbar buttons, and refresh capsule fullscreen hiding every
+  250 ms for prompt restoration.
+- Added a native Windows folder picker for first-run and settings-driven data
+  directory selection with safe state relocation, plus a self-extracting
+  single-EXE build that carries the Flutter runtime payload.
 
 - Made Jianguoyun conditional manifest updates compatible with its unquoted
   opaque ETags: sync still tries the standard quoted `If-Match` first, then
