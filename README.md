@@ -62,7 +62,8 @@ lowercase SHA-256 values. The
 generated Windows zip and Android APK are also opened before
 checksumming so the packages must actually contain a non-empty
 `repapertodo.exe`, the Flutter Windows runtime files
-(`flutter_windows.dll`, `data/app.so`, `data/icudtl.dat`, and
+(`flutter_windows.dll`, the app-local MSVC/Universal CRT DLLs,
+`data/app.so`, `data/icudtl.dat`, and
 `data/flutter_assets/FontManifest.json`), and Android APK runtime entries:
 `AndroidManifest.xml`, `assets/flutter_assets/AssetManifest.bin`,
 `assets/flutter_assets/FontManifest.json`, `lib/*/libapp.so`, and

@@ -20,6 +20,9 @@
 - Added a native Windows folder picker for first-run and settings-driven data
   directory selection with safe state relocation; Windows packaging remains the
   conventional release directory/zip containing the EXE and Flutter runtime.
+- Added app-local MSVC and Universal CRT runtime libraries to Windows builds so
+  the packaged application starts on Windows 10 without requiring a separately
+  installed Visual C++ Redistributable.
 
 - Made Jianguoyun conditional manifest updates compatible with its unquoted
   opaque ETags: sync still tries the standard quoted `If-Match` first, then

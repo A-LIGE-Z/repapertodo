@@ -216,6 +216,9 @@ the settings coordinator lifecycle counts, timeout settings, and UTC check time.
 Release packaging records this Windows smoke result in metadata by
 default and revalidates that the recorded source release directory is the current
 Windows build output with `repapertodo.exe`, `flutter_windows.dll`, and `data`.
+The Release directory also carries the app-local MSVC and Universal CRT DLLs,
+so a clean Windows 10 machine does not need a separate Visual C++ Redistributable
+installation before starting the application.
 
 For focused Windows parity QA on a real desktop session, first build the
 Windows release exe, manually exercise the current build, then record the

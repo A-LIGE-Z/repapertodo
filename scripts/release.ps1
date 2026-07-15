@@ -2932,6 +2932,16 @@ Invoke-Step "Package release artifacts" {
   Assert-FileExists `
     -Path $windowsReleaseExe `
     -Message "Windows release executable was not found. Run without -SkipBuild to create it."
+  foreach ($windowsRuntimeLibrary in @(
+    "msvcp140.dll",
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "ucrtbase.dll"
+  )) {
+    Assert-FileExists `
+      -Path (Join-Path $windowsReleaseDir $windowsRuntimeLibrary) `
+      -Message "Windows release runtime dependency was not found: $windowsRuntimeLibrary"
+  }
   Assert-WindowsManualQaRecord `
     -Record $windowsManualQaRecord `
     -ExpectedExePath $windowsReleaseExe `
@@ -2971,6 +2981,17 @@ Invoke-Step "Package release artifacts" {
     -ZipPath $windowsZip `
     -FileName "flutter_windows.dll" `
     -Message "Windows release zip does not contain flutter_windows.dll."
+  foreach ($windowsRuntimeLibrary in @(
+    "msvcp140.dll",
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "ucrtbase.dll"
+  )) {
+    Assert-ZipContainsFile `
+      -ZipPath $windowsZip `
+      -FileName $windowsRuntimeLibrary `
+      -Message "Windows release zip does not contain $windowsRuntimeLibrary."
+  }
   Assert-ZipContainsFile `
     -ZipPath $windowsZip `
     -FileName "data/app.so" `

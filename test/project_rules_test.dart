@@ -3360,6 +3360,20 @@ void main() {
     expect(settings, contains("ValueKey('settings-data-directory')"));
   });
 
+  test('Windows release deploys app-local runtime dependencies', () {
+    final cmake = _readProjectText('windows/CMakeLists.txt');
+    final release = _readProjectText('scripts/release.ps1');
+    final readme = _readProjectText('README.md');
+
+    expect(cmake, contains('include(InstallRequiredSystemLibraries)'));
+    expect(cmake, contains('CMAKE_INSTALL_UCRT_LIBRARIES TRUE'));
+    expect(release, contains('msvcp140.dll'));
+    expect(release, contains('vcruntime140.dll'));
+    expect(release, contains('vcruntime140_1.dll'));
+    expect(release, contains('ucrtbase.dll'));
+    expect(readme, contains('app-local MSVC/Universal CRT DLLs'));
+  });
+
   test('Windows startup toggle checks the actual native surface visibility',
       () {
     final controller = _readProjectText('lib/src/app_controller.dart');
