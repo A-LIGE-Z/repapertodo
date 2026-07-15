@@ -2237,6 +2237,9 @@ void main() {
   test('PaperTodo todo due date time precision is preserved', () {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final app = _readProjectText('lib/src/app.dart');
+    final paperWindow =
+        _readProjectText('windows/runner/paper_flutter_window.cpp');
+    final runnerCmake = _readProjectText('windows/runner/CMakeLists.txt');
     final dueDateHelper =
         _readProjectText('lib/src/core/model/todo_due_date.dart');
 
@@ -2266,6 +2269,10 @@ void main() {
     expect(design, contains('{duration} overdue'));
     expect(design, contains('visible countdown text does not go stale'));
     expect(app, contains('_TodoDueSelectionDialog'));
+    expect(app, contains("'pickDateTime'"));
+    expect(paperWindow, contains('DATETIMEPICK_CLASSW'));
+    expect(paperWindow, contains('ShowNativeDateTimePicker'));
+    expect(runnerCmake, contains('comctl32.lib'));
     expect(app, contains('CallbackShortcuts'));
     expect(app, contains('SingleActivator(LogicalKeyboardKey.enter)'));
     expect(app, contains('SingleActivator(LogicalKeyboardKey.escape)'));
@@ -3208,6 +3215,8 @@ void main() {
     expect(nativeCapsule, contains('WS_EX_NOACTIVATE'));
     expect(nativeCapsule, contains('"toggleCollapseAll"'));
     expect(nativeCapsule, contains('"capsuleDropped"'));
+    expect(nativeCapsule, contains('"capsuleMasterDragUpdated"'));
+    expect(runner, contains('ApplyQueueDragOffset(delta_y)'));
     expect(paperWindow,
         contains('std::make_unique<flutter::FlutterViewController>'));
     expect(paperWindow, contains('"repapertodo/paper_window"'));
@@ -3224,8 +3233,7 @@ void main() {
     expect(paperWindow, contains('WS_EX_NOACTIVATE'));
     expect(paperWindow, contains('case WM_MOUSEACTIVATE:'));
     expect(paperWindow, contains('return MA_NOACTIVATE;'));
-    expect(paperWindow, contains('case WM_WINDOWPOSCHANGING:'));
-    expect(paperWindow, contains('position->hwndInsertAfter = HWND_BOTTOM'));
+    expect(paperWindow, isNot(contains('case WM_WINDOWPOSCHANGING:')));
     expect(paperWindow, contains('SetHideFromWindowSwitcher'));
     expect(paperWindow, contains('IsExternalFullscreenWindow'));
     expect(paperWindow, contains('IsCoveredByAnotherWindow'));
@@ -3254,7 +3262,10 @@ void main() {
     expect(runner, contains('paper_window->ShowPaper(true)'));
     expect(runner, contains('existing_window->BoundsValue()'));
     expect(runner, contains('flutter::EncodableMap resolved_surface'));
-    expect(paperWindow, contains('WorkAreaForWindow(window, monitor_name)'));
+    expect(
+      paperWindow,
+      contains('WorkAreaForWindow(window, capsule_monitor_device_name_)'),
+    );
     expect(paperWindow, contains('capsuleTopIsWorkAreaRelative'));
     expect(paperWindow, contains('static_cast<double>(work_area.top) + y'));
     expect(paperWindow, contains('capsule_side_ == "left"'));
@@ -3364,6 +3375,8 @@ void main() {
 
     expect(runner, contains('FOS_PICKFOLDERS'));
     expect(runner, contains('storage-path.txt'));
+    expect(runner, contains('EnsureLogDirectory'));
+    expect(runner, contains('directory / L"LOG"'));
     expect(runner, contains('method == "getDataDirectory"'));
     expect(runner, contains('method == "commitDataDirectory"'));
     expect(storage, contains('Future<void> relocate('));

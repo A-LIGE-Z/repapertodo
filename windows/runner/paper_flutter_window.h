@@ -27,6 +27,10 @@ class PaperFlutterWindow : public Win32Window {
   void ApplyPaper(const flutter::EncodableValue& paper);
   void ApplySurface(const flutter::EncodableMap& surface);
   bool IsCollapsed() const { return collapsed_; }
+  bool IsInCapsuleQueue(const std::string& monitor_device_name,
+                        const std::string& side) const;
+  void ApplyQueueDragOffset(int delta_y);
+  void FinishQueueDrag(bool commit);
   void SetAlwaysOnTop(bool enabled);
   void SetPinnedToDesktop(bool pinned);
   void SetPaperTitle(const std::string& title);
@@ -83,6 +87,7 @@ class PaperFlutterWindow : public Win32Window {
   bool deep_capsule_mode_ = false;
   bool capsule_hovered_ = false;
   std::string capsule_side_ = "right";
+  std::string capsule_monitor_device_name_;
   RECT capsule_work_area_ = {};
   double capsule_width_ = 92.0;
   double capsule_resting_visible_width_ = 54.0;
@@ -90,6 +95,8 @@ class PaperFlutterWindow : public Win32Window {
   bool hide_when_covered_ = false;
   bool hide_when_fullscreen_ = false;
   bool in_size_move_ = false;
+  bool queue_drag_offset_active_ = false;
+  int queue_drag_base_top_ = 0;
   HWND reminder_bubble_ = nullptr;
   std::wstring reminder_title_;
   std::wstring reminder_message_;

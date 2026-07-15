@@ -227,7 +227,9 @@ and AOT data are stored under `runtime/`.
 Runtime diagnostics are written as daily `.txt` files under `LOG` beside the
 configured `data.json`. Entries record settings, paper lifecycle/state, startup,
 and sync events without card text or credential values, and files older than
-seven calendar days are deleted automatically.
+seven calendar days are deleted automatically. Windows creates `LOG` as soon as
+the native data directory is resolved, and Dart repeats that initialization
+before state loading so early startup failures still leave a diagnostic path.
 
 For focused Windows parity QA on a real desktop session, first build the
 Windows release exe, manually exercise the current build, then record the

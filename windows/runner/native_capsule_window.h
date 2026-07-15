@@ -24,6 +24,11 @@ class NativeCapsuleWindow : public Win32Window {
 
   const std::string& surface_id() const { return surface_id_; }
   const std::string& paper_id() const { return paper_id_; }
+  bool is_master() const { return master_; }
+  bool IsInQueue(const std::string& monitor_device_name,
+                 const std::string& side) const;
+  void ApplyQueueDragOffset(int delta_y);
+  void FinishQueueDrag(bool commit);
   bool IsVisible() const;
 
  protected:
@@ -79,6 +84,8 @@ class NativeCapsuleWindow : public Win32Window {
   bool dragging_ = false;
   POINT drag_start_cursor_ = {};
   RECT drag_start_bounds_ = {};
+  bool queue_drag_offset_active_ = false;
+  int queue_drag_base_top_ = 0;
 };
 
 #endif  // RUNNER_NATIVE_CAPSULE_WINDOW_H_

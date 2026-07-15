@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../app_controller.dart';
 import '../core/model/sync_settings.dart';
+import '../core/logging/usage_log.dart';
 import '../core/storage/state_store.dart';
 import '../core/startup/startup_command.dart';
 import '../platform/android_platform_services.dart';
@@ -43,6 +44,13 @@ class AppBootstrap {
         StateStore(
           filePath: await defaultStateFilePath(platform: resolvedPlatform),
         );
+    // Create the diagnostic directory before loading state so a startup
+    // failure still leaves a LOG folder for diagnosis.
+    try {
+      await UsageLog.instance.configureForStateFile(resolvedStore.filePath);
+    } catch (_) {
+      // Diagnostics must never prevent the local-first app from opening.
+    }
     final state = await resolvedStore.load();
     final startupCommand = StartupCommand.parse(args);
     final controller = RePaperTodoController(

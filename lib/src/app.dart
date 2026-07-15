@@ -44,6 +44,8 @@ import 'ui/papertodo_strings.dart';
 import 'ui/runtime_custom_font.dart';
 import 'ui/sync_settings_dialog.dart';
 
+const _paperWindowMethodChannel = MethodChannel('repapertodo/paper_window');
+
 const _externalMarkdownExportRetention = Duration(days: 7);
 const _maxExternalMarkdownPaperIdFileNameLength = 96;
 const _maxTodoReminderDetailLines = 4;
@@ -1864,7 +1866,6 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   Future<void> _activatePaperFromCapsule(PaperData paper) async {
     setState(() {
-      controller.state.setCapsuleCollapseAllActiveFor(paper, false);
       paper
         ..isVisible = true
         ..isCollapsed = false;
@@ -2649,9 +2650,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             .any((item) => item.linkedNoteId == paper.id)) {
       return false;
     }
-    return paper.isCollapsed ||
-        paper.isPinnedToDesktop ||
-        state.showDeepCapsuleWhileExpanded;
+    return true;
   }
 
   void _applyPlatformSurfaceUpdate(PaperData target, PaperData source) {
@@ -9507,6 +9506,11 @@ class _TodoEditorState extends State<_TodoEditor> {
         : difference <= const Duration(hours: 1)
             ? colorScheme.tertiary
             : colorScheme.onSurfaceVariant;
+    final statusBackground = difference.isNegative
+        ? colorScheme.errorContainer.withValues(alpha: 0.72)
+        : difference <= const Duration(hours: 1)
+            ? colorScheme.tertiaryContainer.withValues(alpha: 0.72)
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.76);
     final absolute = _formatAbsoluteDueDate(dueAt);
     final relative = _formatRelativeDueDate(dueAt);
     final label = strings.format(PaperTodoStringKeys.dueLabel, [
@@ -9519,74 +9523,66 @@ class _TodoEditorState extends State<_TodoEditor> {
         key: ValueKey('${widget.paper.id}-${item.id}-due-absolute'),
         borderRadius: BorderRadius.circular(6),
         onTap: () => unawaited(_pickDueDate(context, item)),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minWidth: widget.standaloneSurface ? 74 : 88,
-            maxWidth: widget.standaloneSurface ? 98 : 122,
-            minHeight: widget.standaloneSurface ? 34 : 44,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: statusBackground,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: statusColor.withValues(alpha: 0.28)),
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Icon(
-                  difference.isNegative
-                      ? Icons.warning_amber_rounded
-                      : Icons.schedule_outlined,
-                  size: visualSpec.chipIconSize,
-                  color: statusColor,
-                ),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (widget.showDueRelativeTime)
-                        Text(
-                          relative,
-                          key: ValueKey(
-                            '${widget.paper.id}-${item.id}-due-relative',
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: widget.standaloneSurface ? 62 : 72,
+              maxWidth: widget.standaloneSurface ? 106 : 118,
+              minHeight: widget.standaloneSurface ? 30 : 36,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Icon(
+                    difference.isNegative
+                        ? Icons.warning_amber_rounded
+                        : Icons.schedule_outlined,
+                    size: visualSpec.chipIconSize,
+                    color: statusColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (widget.showDueRelativeTime)
+                          Text(
+                            relative,
+                            key: ValueKey(
+                              '${widget.paper.id}-${item.id}-due-relative',
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: _todoChipTextStyle(visualSpec)?.copyWith(
+                              color: statusColor,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
+                        Text(
+                          absolute,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.right,
                           style: _todoChipTextStyle(visualSpec)?.copyWith(
-                            color: statusColor,
-                            fontWeight: FontWeight.w700,
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                      Text(
-                        absolute,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: _todoChipTextStyle(visualSpec)?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                IconButton(
-                  key: ValueKey('${widget.paper.id}-${item.id}-due-clear'),
-                  onPressed: () => _clearDueDate(item),
-                  tooltip: _tooltipLabel(
-                    widget.enableToolTips,
-                    strings.get(PaperTodoStringKeys.actionClearDueDate),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 24,
-                    minHeight: 24,
-                  ),
-                  iconSize: 14,
-                  icon: const Icon(Icons.close_outlined),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -11557,21 +11553,65 @@ class _TodoEditorState extends State<_TodoEditor> {
     final now = DateTime.now();
     final initialDate = parsePaperTodoDueAtLocal(item.dueAtLocal) ??
         now.add(const Duration(hours: 1));
-    final result = await showDialog<_TodoDueSelection>(
-      context: context,
-      builder: (context) => _TodoDueSelectionDialog(initialDate: initialDate),
-    );
-    if (result == null) {
+    _TodoDueSelection? result;
+    if (widget.standaloneSurface && Platform.isWindows) {
+      result = await _pickNativeWindowsDueDate(initialDate);
+    }
+    result ??= await showDialog<_TodoDueSelection>(
+        context: context,
+        builder: (context) =>
+            _TodoDueSelectionDialog(initialDate: initialDate));
+    final selection = result;
+    if (selection == null) {
       return;
     }
     _pushTodoUndoSnapshot();
     setState(() {
-      item.dueAtLocal = result.clear
+      item.dueAtLocal = selection.clear
           ? null
-          : _formatDueAtLocalValue(result.dueAt ?? initialDate);
+          : _formatDueAtLocalValue(selection.dueAt ?? initialDate);
     });
     widget.onReminderReset(item);
     unawaited(widget.onChanged());
+  }
+
+  Future<_TodoDueSelection?> _pickNativeWindowsDueDate(
+    DateTime initialDate,
+  ) async {
+    try {
+      final result =
+          await _paperWindowMethodChannel.invokeMapMethod<String, Object?>(
+        'pickDateTime',
+        <String, Object?>{
+          'year': initialDate.year,
+          'month': initialDate.month,
+          'day': initialDate.day,
+          'hour': initialDate.hour,
+          'minute': initialDate.minute,
+        },
+      );
+      if (result == null) return null;
+      if (result['clear'] == true) return const _TodoDueSelection.clear();
+      final year = result['year'];
+      final month = result['month'];
+      final day = result['day'];
+      final hour = result['hour'];
+      final minute = result['minute'];
+      if ([year, month, day, hour, minute].any((value) => value is! num)) {
+        return null;
+      }
+      return _TodoDueSelection.set(DateTime(
+        (year as num).toInt(),
+        (month as num).toInt(),
+        (day as num).toInt(),
+        (hour as num).toInt(),
+        (minute as num).toInt(),
+      ));
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
   }
 
   void _clearDueDate(PaperItem item) {

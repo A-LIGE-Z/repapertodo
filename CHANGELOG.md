@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Prevented desktop-pinned papers from flashing on ordinary clicks by keeping
+  no-activate behavior without repeatedly rewriting their Z order.
+- Matched PaperTodo's capsule queue behavior: dragging a master moves its
+  visible queue, individual capsules can be reordered, master collapse/expand
+  affects capsules only, and opening a paper keeps its edge capsule available.
+- Create the seven-day `LOG` diagnostics folder as soon as the configured data
+  directory is resolved, including before state loading completes.
+- Added a separate native Windows date/time picker window and tightened the
+  right-edge due badge so relative and absolute due information stays readable.
 - Restored normal Windows edge and corner resizing for both Todo and Note paper
   HWNDs by starting the native resize loop immediately on pointer-down and
   widening the visible resize target.

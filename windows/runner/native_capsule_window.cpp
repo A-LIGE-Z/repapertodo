@@ -169,6 +169,7 @@ void NativeCapsuleWindow::ApplyNativeStyle() {
 
 void NativeCapsuleWindow::ApplySurface(
     const flutter::EncodableMap& surface) {
+  queue_drag_offset_active_ = false;
   surface_id_ = StringValue(surface, "surfaceId", surface_id_);
   kind_ = StringValue(surface, "kind", kind_);
   master_ = kind_ == "master";
@@ -297,6 +298,38 @@ void NativeCapsuleWindow::SetAvoidFullscreenTopmost(bool avoid) {
 bool NativeCapsuleWindow::IsVisible() const {
   HWND window = const_cast<NativeCapsuleWindow*>(this)->GetHandle();
   return window && IsWindowVisible(window);
+}
+
+bool NativeCapsuleWindow::IsInQueue(
+    const std::string& monitor_device_name, const std::string& side) const {
+  return monitor_device_name_ == monitor_device_name &&
+         capsule_side_ == (side == "left" ? "left" : "right");
+}
+
+void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
+  if (master_) return;
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!window || !GetWindowRect(window, &bounds)) return;
+  if (!queue_drag_offset_active_) {
+    queue_drag_offset_active_ = true;
+    queue_drag_base_top_ = bounds.top;
+  }
+  SetWindowPos(window, nullptr, bounds.left, queue_drag_base_top_ + delta_y,
+               bounds.right - bounds.left, bounds.bottom - bounds.top,
+               SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
+  if (!queue_drag_offset_active_) return;
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!commit && window && GetWindowRect(window, &bounds)) {
+    SetWindowPos(window, nullptr, bounds.left, queue_drag_base_top_,
+                 bounds.right - bounds.left, bounds.bottom - bounds.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+  queue_drag_offset_active_ = false;
 }
 
 bool NativeCapsuleWindow::IsChineseLocale() const {
@@ -584,6 +617,19 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
                        maximum_top);
         SetWindowPos(window, nullptr, drag_start_bounds_.left, target_top,
                      width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+        if (event_callback_) {
+          event_callback_(
+              "capsuleMasterDragUpdated",
+              flutter::EncodableMap{
+                  {flutter::EncodableValue("monitorDeviceName"),
+                   flutter::EncodableValue(monitor_device_name_)},
+                  {flutter::EncodableValue("side"),
+                   flutter::EncodableValue(capsule_side_)},
+                  {flutter::EncodableValue("deltaY"),
+                   flutter::EncodableValue(target_top -
+                                           drag_start_bounds_.top)},
+              });
+        }
       } else {
         SetWindowPos(window, HWND_TOPMOST,
                      drag_start_bounds_.left + delta_x,
@@ -611,6 +657,18 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       if (GetCapture() == window) ReleaseCapture();
       if (was_dragging) {
         SendDrop();
+        if (master_ && event_callback_) {
+          event_callback_(
+              "capsuleMasterDragFinished",
+              flutter::EncodableMap{
+                  {flutter::EncodableValue("monitorDeviceName"),
+                   flutter::EncodableValue(monitor_device_name_)},
+                  {flutter::EncodableValue("side"),
+                   flutter::EncodableValue(capsule_side_)},
+                  {flutter::EncodableValue("commit"),
+                   flutter::EncodableValue(true)},
+              });
+        }
       } else {
         SendClick();
       }
@@ -618,6 +676,18 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       return 0;
     }
     case WM_CAPTURECHANGED:
+      if (master_ && dragging_ && event_callback_) {
+        event_callback_(
+            "capsuleMasterDragFinished",
+            flutter::EncodableMap{
+                {flutter::EncodableValue("monitorDeviceName"),
+                 flutter::EncodableValue(monitor_device_name_)},
+                {flutter::EncodableValue("side"),
+                 flutter::EncodableValue(capsule_side_)},
+                {flutter::EncodableValue("commit"),
+                 flutter::EncodableValue(false)},
+            });
+      }
       pointer_down_ = false;
       dragging_ = false;
       return 0;

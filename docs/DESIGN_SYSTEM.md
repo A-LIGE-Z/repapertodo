@@ -141,6 +141,13 @@ linked-note cleanup, undo, surface hiding, and tray refresh stay consistent.
 Deep-capsule collapse-all follows PaperTodo's queue model: the master capsule
 acts on one `(monitor, side)` queue, while the board-level fallback may still
 toggle all papers for compatibility with the current Flutter surface.
+Dragging that master vertically moves every visible capsule in its queue as one
+stack. Dragging an individual capsule may reorder it inside the queue or move it
+to another monitor edge, but neither operation writes capsule coordinates into
+the paper's saved `X/Y/Width/Height`. Clicking the master retracts or restores
+only the queue's capsules; expanded paper HWND visibility and geometry remain
+unchanged. Opening an individual capsule keeps its edge proxy present until an
+explicit capsule visibility policy hides it.
 Imported or restored collapse-all queue maps should normalize queue aliases
 with exact canonical `(monitor|side)` entries taking precedence over legacy
 aliases, including canonical `false` values that remove an older alias.
@@ -213,10 +220,11 @@ placed at `HWND_BOTTOM`; they must not be reparented into `WorkerW`, because the
 selected worker can sit behind the wallpaper compositor and hide the paper.
 Desktop pinning does not enable native click-through, so the unpin control stays
 usable while the PaperTodo interaction lock is active.
-Pinned HWNDs use no-activate behavior, reject native move requests, and enforce
-`HWND_BOTTOM` during window-position changes so clicks cannot raise or move
-them. Every paper control except unpin must be disabled while this mode is
-active.
+Pinned HWNDs use no-activate behavior, reject native move requests, and are
+placed at `HWND_BOTTOM` when their surface mode changes. Ordinary mouse input
+must not repeatedly rewrite the window position or Z order, because doing so
+causes the pinned paper to flash. Every paper control except unpin must be
+disabled while this mode is active.
 Activating a collapsed desktop-pinned paper should follow PaperTodo's capsule
 path by clearing desktop pinning and restoring the paper expanded instead of
 leaving a pinned expanded surface behind.
@@ -587,7 +595,9 @@ new due time to roughly one hour from now, and save local values as
 `yyyy-MM-ddTHH:mm:ss` without milliseconds and with seconds reset to `00`.
 The due date and reminder interval dialogs should keep PaperTodo's keyboard
 dialog behavior: Enter saves through the same OK path, while Escape cancels
-without changing the item.
+without changing the item. Independent Windows paper HWNDs use a separate
+native date/time picker window; other platforms retain the compact Flutter
+picker fallback.
 The reminder interval dialog should focus the interval value field on open and
 select the full value so typing immediately replaces the previous interval.
 PaperTodo-compatible due dates read from storage should accept common

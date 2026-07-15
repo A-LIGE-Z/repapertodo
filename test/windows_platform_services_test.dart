@@ -1398,9 +1398,9 @@ void main() {
       (call) => call.method == 'setPaperSurfaces',
     );
     final surfaces = (surfaceCall.arguments as List).cast<Map>();
-    expect(surfaces[0]['isVisible'], false);
+    expect(surfaces[0]['isVisible'], true);
     expect(surfaces[0]['isCollapsed'], false);
-    expect(surfaces[1]['isVisible'], false);
+    expect(surfaces[1]['isVisible'], true);
     expect(surfaces[1]['isCollapsed'], false);
     expect(surfaces.where((surface) => surface['isMasterCapsule'] == true),
         isEmpty);
@@ -1447,7 +1447,7 @@ void main() {
     expect(proxies, hasLength(2));
     expect(proxies.map((surface) => surface['top']), [98.0, 148.0]);
     expect(
-      proxies.every((surface) => surface['collapseOnClick'] == true),
+      proxies.every((surface) => surface['collapseOnClick'] == false),
       true,
     );
     expect(
@@ -1458,7 +1458,7 @@ void main() {
   });
 
   test(
-      'native master persists without expanded proxies and collapsed papers do not duplicate',
+      'native master keeps expanded proxies and collapsed papers do not duplicate',
       () async {
     const channel = MethodChannel('test/windows-native-capsule-membership');
     final calls = <MethodCall>[];
@@ -1497,14 +1497,18 @@ void main() {
         .cast<Map>();
     expect(
         native.where((surface) => surface['kind'] == 'master'), hasLength(1));
-    expect(native.where((surface) => surface['kind'] == 'proxy'), isEmpty);
+    final proxies =
+        native.where((surface) => surface['kind'] == 'proxy').toList();
+    expect(proxies, hasLength(1));
+    expect(proxies.single['paperId'], 'expanded-paper');
+    expect(proxies.single['collapseOnClick'], false);
     final real = (calls
             .singleWhere((call) => call.method == 'setPaperSurfaces')
             .arguments as List)
         .cast<Map>();
     expect(
         real.singleWhere((surface) => surface['id'] == 'collapsed-paper')['y'],
-        98.0);
+        148.0);
   });
 
   test('deep capsule queues stay independent across monitor work areas',

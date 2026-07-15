@@ -941,9 +941,7 @@ Map<String, List<PaperData>> _capsuleQueueOccupants(AppState state) {
   return <String, List<PaperData>>{
     for (final entry in members.entries)
       entry.key: entry.value.where((paper) {
-        return paper.isCollapsed ||
-            paper.isPinnedToDesktop ||
-            state.showDeepCapsuleWhileExpanded;
+        return paper.isVisible;
       }).toList(),
   }..removeWhere((_, papers) => papers.isEmpty);
 }
@@ -1006,11 +1004,11 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(AppState state) {
         'customThemeColorHex': state.customThemeColorHex,
       });
     }
-    if (collapseAllActive || !state.showDeepCapsuleWhileExpanded) {
+    if (collapseAllActive) {
       continue;
     }
     for (final paper in queueOccupants[entry.key] ?? const <PaperData>[]) {
-      if (paper.isCollapsed || paper.isPinnedToDesktop) {
+      if (paper.isCollapsed) {
         continue;
       }
       final top = queueSlots[entry.key]?[paper.id];
@@ -1031,7 +1029,7 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(AppState state) {
         'capsuleSide': paper.capsuleSide,
         'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
         'isVisible': paper.isVisible,
-        'collapseOnClick': state.collapseExpandedDeepCapsuleOnClick,
+        'collapseOnClick': false,
         'hideWhenCovered': state.hideDeepCapsulesWhenCovered,
         'hideWhenFullscreen': state.hideDeepCapsulesWhenFullscreen,
         'theme': state.theme,
@@ -1064,7 +1062,7 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
     'y': capsuleY ?? paper.y,
     'width': paper.width,
     'height': paper.height,
-    'isVisible': paper.isVisible && !collapseAllActive,
+    'isVisible': paper.isVisible && (!collapseAllActive || !paper.isCollapsed),
     'isCollapsed': paper.isCollapsed,
     'capsuleTopIsWorkAreaRelative': capsuleY != null,
     'useDeepCapsuleMode': state.useCapsuleMode && state.useDeepCapsuleMode,

@@ -1,12 +1,14 @@
 #include "paper_flutter_window.h"
 
 #include <dwmapi.h>
+#include <commctrl.h>
 #include <shobjidl.h>
 #include <windowsx.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <utility>
 #include <variant>
 
@@ -285,6 +287,189 @@ RECT WorkAreaForWindow(HWND window, const std::string& device_name) {
   return fallback;
 }
 
+struct DateTimePickerDialogState {
+  HWND dialog = nullptr;
+  HWND date = nullptr;
+  HWND time = nullptr;
+  SYSTEMTIME initial = {};
+  SYSTEMTIME selected = {};
+  bool accepted = false;
+  bool clear = false;
+};
+
+constexpr int kDatePickerDateId = 1001;
+constexpr int kDatePickerTimeId = 1002;
+constexpr int kDatePickerClearId = 1003;
+constexpr int kDatePickerCancelId = 1004;
+constexpr int kDatePickerOkId = 1005;
+constexpr wchar_t kDatePickerClass[] = L"RePaperTodo.DateTimePicker";
+
+bool IsChineseUserLocale() {
+  wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {};
+  return GetUserDefaultLocaleName(locale, LOCALE_NAME_MAX_LENGTH) > 1 &&
+         (locale[0] == L'z' || locale[0] == L'Z') &&
+         (locale[1] == L'h' || locale[1] == L'H');
+}
+
+LRESULT CALLBACK DateTimePickerWindowProc(HWND window, UINT message,
+                                           WPARAM wparam,
+                                           LPARAM lparam) noexcept {
+  auto* state = reinterpret_cast<DateTimePickerDialogState*>(
+      GetWindowLongPtrW(window, GWLP_USERDATA));
+  if (message == WM_NCCREATE) {
+    const auto* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+    state = create ? static_cast<DateTimePickerDialogState*>(create->lpCreateParams)
+                   : nullptr;
+    SetWindowLongPtrW(window, GWLP_USERDATA,
+                      reinterpret_cast<LONG_PTR>(state));
+    if (state) state->dialog = window;
+  }
+  if (!state) return DefWindowProcW(window, message, wparam, lparam);
+  switch (message) {
+    case WM_CREATE: {
+      const HFONT font = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+      const bool chinese = IsChineseUserLocale();
+      state->date = CreateWindowExW(
+          0, DATETIMEPICK_CLASSW, L"", WS_CHILD | WS_VISIBLE |
+          DTS_SHORTDATEFORMAT, 20, 24, 250, 28, window,
+          reinterpret_cast<HMENU>(static_cast<INT_PTR>(kDatePickerDateId)), GetModuleHandleW(nullptr),
+          nullptr);
+      state->time = CreateWindowExW(
+          0, DATETIMEPICK_CLASSW, L"", WS_CHILD | WS_VISIBLE | DTS_TIMEFORMAT |
+          DTS_UPDOWN, 280, 24, 110, 28, window,
+          reinterpret_cast<HMENU>(static_cast<INT_PTR>(kDatePickerTimeId)), GetModuleHandleW(nullptr),
+          nullptr);
+      const HWND clear = CreateWindowW(
+          L"BUTTON", chinese ? L"\u6E05\u9664" : L"Clear",
+          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 20, 88,
+          82, 28, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kDatePickerClearId)),
+          GetModuleHandleW(nullptr), nullptr);
+      const HWND cancel = CreateWindowW(
+          L"BUTTON", chinese ? L"\u53D6\u6D88" : L"Cancel",
+          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 220,
+          88, 82, 28, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kDatePickerCancelId)),
+          GetModuleHandleW(nullptr), nullptr);
+      const HWND ok = CreateWindowW(
+          L"BUTTON", chinese ? L"\u4FDD\u5B58" : L"Save",
+          WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 310,
+          88, 82, 28, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kDatePickerOkId)),
+          GetModuleHandleW(nullptr), nullptr);
+      for (HWND child : {state->date, state->time, clear, cancel, ok}) {
+        SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+      }
+      DateTime_SetSystemtime(state->date, GDT_VALID, &state->initial);
+      DateTime_SetSystemtime(state->time, GDT_VALID, &state->initial);
+      SetFocus(state->date);
+      return 0;
+    }
+    case WM_COMMAND: {
+      const int command = LOWORD(wparam);
+      if (command == kDatePickerCancelId) {
+        DestroyWindow(window);
+        return 0;
+      }
+      if (command == kDatePickerClearId) {
+        state->clear = true;
+        state->accepted = true;
+        DestroyWindow(window);
+        return 0;
+      }
+      if (command == kDatePickerOkId) {
+        SYSTEMTIME date = {};
+        SYSTEMTIME time = {};
+        if (DateTime_GetSystemtime(state->date, &date) == GDT_VALID &&
+            DateTime_GetSystemtime(state->time, &time) == GDT_VALID) {
+          state->selected = date;
+          state->selected.wHour = time.wHour;
+          state->selected.wMinute = time.wMinute;
+          state->selected.wSecond = 0;
+          state->accepted = true;
+        }
+        DestroyWindow(window);
+        return 0;
+      }
+      break;
+    }
+    case WM_CLOSE:
+      DestroyWindow(window);
+      return 0;
+    case WM_KEYDOWN:
+      if (wparam == VK_ESCAPE) {
+        DestroyWindow(window);
+        return 0;
+      }
+      if (wparam == VK_RETURN) {
+        SendMessageW(window, WM_COMMAND, kDatePickerOkId, 0);
+        return 0;
+      }
+      break;
+  }
+  return DefWindowProcW(window, message, wparam, lparam);
+}
+
+std::optional<flutter::EncodableMap> ShowNativeDateTimePicker(
+    HWND owner, const flutter::EncodableMap& arguments) {
+  INITCOMMONCONTROLSEX controls = {sizeof(controls), ICC_DATE_CLASSES};
+  InitCommonControlsEx(&controls);
+  static bool registered = false;
+  if (!registered) {
+    WNDCLASSW klass = {};
+    klass.lpfnWndProc = DateTimePickerWindowProc;
+    klass.hInstance = GetModuleHandleW(nullptr);
+    klass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    klass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    klass.lpszClassName = kDatePickerClass;
+    registered = RegisterClassW(&klass) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+  }
+  if (!registered) return std::nullopt;
+
+  DateTimePickerDialogState state;
+  state.initial.wYear = static_cast<WORD>(std::clamp<int64_t>(IntegerValue(arguments, "year", 2026), 1601, 9999));
+  state.initial.wMonth = static_cast<WORD>(std::clamp<int64_t>(IntegerValue(arguments, "month", 1), 1, 12));
+  state.initial.wDay = static_cast<WORD>(std::clamp<int64_t>(IntegerValue(arguments, "day", 1), 1, 31));
+  state.initial.wHour = static_cast<WORD>(std::clamp<int64_t>(IntegerValue(arguments, "hour", 0), 0, 23));
+  state.initial.wMinute = static_cast<WORD>(std::clamp<int64_t>(IntegerValue(arguments, "minute", 0), 0, 59));
+  RECT owner_bounds = {};
+  if (!owner || !GetWindowRect(owner, &owner_bounds)) {
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &owner_bounds, 0);
+  }
+  const int left = owner_bounds.left +
+                   ((owner_bounds.right - owner_bounds.left - 430) / 2);
+  const int top = owner_bounds.top +
+                  ((owner_bounds.bottom - owner_bounds.top - 160) / 2);
+  HWND dialog = CreateWindowExW(
+      WS_EX_DLGMODALFRAME, kDatePickerClass,
+      IsChineseUserLocale() ? L"RePaperTodo - \u65E5\u671F\u548C\u65F6\u95F4"
+                            : L"RePaperTodo - Due date and time",
+      WS_POPUP | WS_CAPTION | WS_SYSMENU, left, top, 430, 160, owner, nullptr,
+      GetModuleHandleW(nullptr), &state);
+  if (!dialog) return std::nullopt;
+  if (owner) EnableWindow(owner, FALSE);
+  ShowWindow(dialog, SW_SHOW);
+  UpdateWindow(dialog);
+  MSG message = {};
+  while (IsWindow(dialog) && GetMessageW(&message, nullptr, 0, 0) > 0) {
+    TranslateMessage(&message);
+    DispatchMessageW(&message);
+  }
+  if (owner) {
+    EnableWindow(owner, TRUE);
+    SetForegroundWindow(owner);
+  }
+  if (!state.accepted) return std::nullopt;
+  if (state.clear) {
+    return flutter::EncodableMap{
+        {flutter::EncodableValue("clear"), flutter::EncodableValue(true)}};
+  }
+  return flutter::EncodableMap{
+      {flutter::EncodableValue("year"), flutter::EncodableValue(static_cast<int32_t>(state.selected.wYear))},
+      {flutter::EncodableValue("month"), flutter::EncodableValue(static_cast<int32_t>(state.selected.wMonth))},
+      {flutter::EncodableValue("day"), flutter::EncodableValue(static_cast<int32_t>(state.selected.wDay))},
+      {flutter::EncodableValue("hour"), flutter::EncodableValue(static_cast<int32_t>(state.selected.wHour))},
+      {flutter::EncodableValue("minute"), flutter::EncodableValue(static_cast<int32_t>(state.selected.wMinute))},
+  };
+}
+
 }  // namespace
 
 PaperFlutterWindow::PaperFlutterWindow(const flutter::DartProject& project,
@@ -321,6 +506,23 @@ bool PaperFlutterWindow::OnCreate() {
         if (call.method_name() == "ready") {
           child_ready_ = true;
           FlushInitialState();
+          result->Success();
+          return;
+        }
+        if (call.method_name() == "pickDateTime") {
+          if (call.arguments()) {
+            if (const auto* arguments =
+                    std::get_if<flutter::EncodableMap>(call.arguments())) {
+              const auto picked =
+                  ShowNativeDateTimePicker(GetHandle(), *arguments);
+              if (picked.has_value()) {
+                result->Success(flutter::EncodableValue(*picked));
+              } else {
+                result->Success();
+              }
+              return;
+            }
+          }
           result->Success();
           return;
         }
@@ -522,16 +724,6 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
         return MA_NOACTIVATE;
       }
       break;
-    case WM_WINDOWPOSCHANGING:
-      if (pinned_to_desktop_) {
-        auto* position = reinterpret_cast<WINDOWPOS*>(lparam);
-        if (position) {
-          position->hwndInsertAfter = HWND_BOTTOM;
-          position->flags &= ~SWP_NOZORDER;
-          position->flags |= SWP_NOACTIVATE;
-        }
-      }
-      break;
   }
   return Win32Window::MessageHandler(window, message, wparam, lparam);
 }
@@ -567,6 +759,7 @@ void PaperFlutterWindow::FlushInitialState() {
 }
 
 void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
+  queue_drag_offset_active_ = false;
   HWND window = GetHandle();
   if (!window) {
     return;
@@ -600,9 +793,10 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
   double native_x = x;
   double native_y = y;
   if (collapsed_) {
-    const std::string monitor_name =
+    capsule_monitor_device_name_ =
         StringValue(surface, "capsuleMonitorDeviceName", "");
-    const RECT work_area = WorkAreaForWindow(window, monitor_name);
+    const RECT work_area =
+        WorkAreaForWindow(window, capsule_monitor_device_name_);
     capsule_side_ = StringValue(surface, "capsuleSide", "right");
     capsule_work_area_ = work_area;
     capsule_width_ = native_width;
@@ -654,6 +848,39 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       RefreshZOrder();
     }
   }
+}
+
+bool PaperFlutterWindow::IsInCapsuleQueue(
+    const std::string& monitor_device_name, const std::string& side) const {
+  return collapsed_ &&
+         capsule_monitor_device_name_ == monitor_device_name &&
+         capsule_side_ == (side == "left" ? "left" : "right");
+}
+
+void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
+  if (!collapsed_) return;
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!window || !GetWindowRect(window, &bounds)) return;
+  if (!queue_drag_offset_active_) {
+    queue_drag_offset_active_ = true;
+    queue_drag_base_top_ = bounds.top;
+  }
+  SetWindowPos(window, nullptr, bounds.left, queue_drag_base_top_ + delta_y,
+               bounds.right - bounds.left, bounds.bottom - bounds.top,
+               SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void PaperFlutterWindow::FinishQueueDrag(bool commit) {
+  if (!queue_drag_offset_active_) return;
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!commit && window && GetWindowRect(window, &bounds)) {
+    SetWindowPos(window, nullptr, bounds.left, queue_drag_base_top_,
+                 bounds.right - bounds.left, bounds.bottom - bounds.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+  queue_drag_offset_active_ = false;
 }
 
 void PaperFlutterWindow::SetAlwaysOnTop(bool enabled) {

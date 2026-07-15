@@ -687,9 +687,15 @@ std::optional<std::filesystem::path> PickDataDirectory(
   return result;
 }
 
+std::filesystem::path EnsureLogDirectory(std::filesystem::path directory) {
+  std::error_code error;
+  std::filesystem::create_directories(directory / L"LOG", error);
+  return directory;
+}
+
 std::filesystem::path ResolveDataDirectory(HWND owner) {
   if (const auto configured = ReadConfiguredDataDirectory()) {
-    return *configured;
+    return EnsureLogDirectory(*configured);
   }
   std::array<wchar_t, 32768> executable_path = {};
   const DWORD executable_length = GetModuleFileNameW(
@@ -701,7 +707,7 @@ std::filesystem::path ResolveDataDirectory(HWND owner) {
     if (std::filesystem::is_regular_file(legacy_directory / L"data.json",
                                          legacy_error) &&
         !legacy_error) {
-      return legacy_directory;
+      return EnsureLogDirectory(legacy_directory);
     }
   }
   std::filesystem::path fallback;
@@ -718,7 +724,7 @@ std::filesystem::path ResolveDataDirectory(HWND owner) {
   const auto selected = PickDataDirectory(owner, fallback);
   const std::filesystem::path resolved = selected.value_or(fallback);
   WriteConfiguredDataDirectory(resolved);
-  return resolved;
+  return EnsureLogDirectory(resolved);
 }
 
 std::wstring TrimWide(const std::wstring& value) {
@@ -3927,6 +3933,44 @@ PaperFlutterWindow* FlutterWindow::PaperWindowForId(
 
 void FlutterWindow::SendPaperWindowEvent(
     const std::string& method, const flutter::EncodableValue& arguments) {
+  if (method == "capsuleMasterDragUpdated" ||
+      method == "capsuleMasterDragFinished") {
+    if (const auto* drag = std::get_if<flutter::EncodableMap>(&arguments)) {
+      const std::string monitor =
+          GetStringArgument(*drag, "monitorDeviceName", "");
+      const std::string side = GetStringArgument(*drag, "side", "right");
+      if (method == "capsuleMasterDragUpdated") {
+        const int delta_y = static_cast<int>(
+            std::round(GetNumberArgument(*drag, "deltaY", 0)));
+        for (auto& entry : native_capsule_windows_) {
+          if (!entry.second->is_master() &&
+              entry.second->IsInQueue(monitor, side)) {
+            entry.second->ApplyQueueDragOffset(delta_y);
+          }
+        }
+        for (auto& entry : paper_windows_) {
+          if (entry.second->IsInCapsuleQueue(monitor, side)) {
+            entry.second->ApplyQueueDragOffset(delta_y);
+          }
+        }
+      } else {
+        const bool commit = GetBoolArgument(*drag, "commit", false);
+        for (auto& entry : native_capsule_windows_) {
+          if (!entry.second->is_master() &&
+              entry.second->IsInQueue(monitor, side)) {
+            entry.second->FinishQueueDrag(commit);
+          }
+        }
+        for (auto& entry : paper_windows_) {
+          if (entry.second->IsInCapsuleQueue(monitor, side)) {
+            entry.second->FinishQueueDrag(commit);
+          }
+        }
+      }
+    }
+    return;
+  }
+
   // Native expanded-paper proxies must activate their paper synchronously
   // while handling the real mouse input. Waiting for the event to cross the
   // platform channel and return through Dart can miss Windows' foreground

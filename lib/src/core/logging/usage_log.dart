@@ -26,7 +26,11 @@ class UsageLog {
     if (trimmed.isEmpty) {
       return;
     }
-    _directoryPath = p.join(p.dirname(trimmed), 'LOG');
+    final directoryPath = p.join(p.dirname(trimmed), 'LOG');
+    // Do this outside the queued cleanup so the folder exists immediately,
+    // even when the first state load fails or the app exits during startup.
+    await Directory(directoryPath).create(recursive: true);
+    _directoryPath = directoryPath;
     await _enqueue(() async {
       final directory = Directory(_directoryPath!);
       await directory.create(recursive: true);
