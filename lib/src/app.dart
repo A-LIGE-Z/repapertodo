@@ -1860,17 +1860,32 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         controller.state.toggleCapsuleCollapseAllFor(paper);
       }
     });
+    await UsageLog.instance.record('capsule', 'master-toggle', details: {
+      'queueKey': queueKey.trim(),
+      'paperId': paper?.id ?? '',
+      'active': paper == null
+          ? controller.state.capsuleCollapseAllActive
+          : controller.state.isCapsuleCollapseAllActiveFor(paper),
+    });
     await controller.refreshPaperSurfaces();
     await _saveState();
   }
 
   Future<void> _activatePaperFromCapsule(PaperData paper) async {
+    final wasPinned = paper.isPinnedToDesktop;
+    final wasCollapsed = paper.isCollapsed;
     setState(() {
       paper
         ..isVisible = true
-        ..isCollapsed = false;
+        ..isCollapsed = false
+        ..isPinnedToDesktop = false;
       controller.state.normalize();
       _surfacePaperId = paper.id;
+    });
+    await UsageLog.instance.record('capsule', 'paper-activate', details: {
+      'paperId': paper.id,
+      'wasPinnedToDesktop': wasPinned,
+      'wasCollapsed': wasCollapsed,
     });
     await controller.refreshPaperSurfaces();
     await controller.showPaper(paper);
@@ -2164,6 +2179,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   Future<void> _setPaperPinnedToDesktop(PaperData paper, bool pinned) async {
     setState(() => controller.setPaperPinnedToDesktop(paper, pinned));
+    await UsageLog.instance.record('paper', 'desktop-pin-changed', details: {
+      'paperId': paper.id,
+      'enabled': pinned,
+    });
     await controller.updatePaperSurface(paper);
     await _saveState();
   }
@@ -2552,6 +2571,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             paper.isCollapsed = true;
             controller.state.normalize();
           });
+          unawaited(
+            UsageLog.instance.record('capsule', 'paper-collapse', details: {
+              'paperId': paper.id,
+              'wasPinnedToDesktop': paper.isPinnedToDesktop,
+            }),
+          );
           unawaited(controller.refreshPaperSurfaces());
           unawaited(_saveState());
         }
@@ -2593,6 +2618,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       }
       controller.state.normalize();
     });
+    unawaited(
+      UsageLog.instance.record('capsule', 'dropped', details: {
+        'paperId': request.paperId,
+        'isMasterCapsule': request.isMasterCapsule,
+        'monitorDeviceName': request.monitorDeviceName,
+        'side': request.side,
+        'dropTop': request.dropTop.round(),
+      }),
+    );
     unawaited(controller.refreshPaperSurfaces());
     unawaited(_saveState());
   }

@@ -3985,6 +3985,14 @@ void FlutterWindow::SendPaperWindowEvent(
       if (kind == "openPaper" && target.valid) {
         if (PaperFlutterWindow* paper_window =
                 PaperWindowForId(target.value)) {
+          // A proxy click on a desktop-pinned paper is the explicit escape
+          // route from desktop mode. Clear the native pin before activation so
+          // the HWND does not flash at HWND_BOTTOM and then fail to foreground.
+          RememberPaperPinnedToDesktop(target.value, false);
+          auto& surface = paper_window_surfaces_[target.value];
+          surface[flutter::EncodableValue("isPinnedToDesktop")] =
+              flutter::EncodableValue(false);
+          paper_window->SetPinnedToDesktop(false);
           paper_window->ShowPaper(true);
         }
       }

@@ -3226,8 +3226,7 @@ void main() {
     expect(paperWindow, isNot(contains('FindDesktopWorkerWindow')));
     expect(paperWindow, isNot(contains('SetParent(window, desktop_parent_)')));
     expect(paperWindow, contains('SetWindowPos(window, HWND_BOTTOM'));
-    expect(paperWindow, contains('WS_CLIPCHILDREN |'));
-    expect(paperWindow, contains('WS_VISIBLE'));
+    expect(paperWindow, contains('(current_style & WS_VISIBLE)'));
     expect(paperWindow, isNot(contains('WS_EX_TRANSPARENT')));
     expect(paperWindow, contains('taskbar->DeleteTab(window)'));
     expect(paperWindow, contains('WS_EX_NOACTIVATE'));
@@ -3259,6 +3258,9 @@ void main() {
       ),
     );
     expect(runner, contains('kind == "openPaper" && target.valid'));
+    expect(
+        runner, contains('RememberPaperPinnedToDesktop(target.value, false)'));
+    expect(runner, contains('paper_window->SetPinnedToDesktop(false)'));
     expect(runner, contains('paper_window->ShowPaper(true)'));
     expect(runner, contains('existing_window->BoundsValue()'));
     expect(runner, contains('flutter::EncodableMap resolved_surface'));
@@ -3272,7 +3274,8 @@ void main() {
     expect(paperWindow, contains('CapsuleRestingVisibleWidth'));
     expect(paperWindow, contains('CapsuleHoverVisibleWidth'));
     expect(paperWindow, contains('SetCapsuleHovered(*hovered)'));
-    expect(nativeCapsule, contains('fullscreen ||'));
+    expect(nativeCapsule, contains('!hovered_ && !pointer_down_'));
+    expect(paperWindow, contains('collapsed_ && !capsule_hovered_'));
     expect(runner, contains('kFullscreenTopmostRefreshIntervalMs = 250'));
     expect(paperWindowApp, contains("'capsuleHoverChanged'"));
     expect(paperWindowHeader, contains('bool in_size_move_ = false;'));

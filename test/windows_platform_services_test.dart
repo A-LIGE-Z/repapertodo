@@ -1447,7 +1447,7 @@ void main() {
     expect(proxies, hasLength(2));
     expect(proxies.map((surface) => surface['top']), [98.0, 148.0]);
     expect(
-      proxies.every((surface) => surface['collapseOnClick'] == false),
+      proxies.every((surface) => surface['collapseOnClick'] == true),
       true,
     );
     expect(
@@ -1501,7 +1501,7 @@ void main() {
         native.where((surface) => surface['kind'] == 'proxy').toList();
     expect(proxies, hasLength(1));
     expect(proxies.single['paperId'], 'expanded-paper');
-    expect(proxies.single['collapseOnClick'], false);
+    expect(proxies.single['collapseOnClick'], true);
     final real = (calls
             .singleWhere((call) => call.method == 'setPaperSurfaces')
             .arguments as List)
@@ -1509,6 +1509,40 @@ void main() {
     expect(
         real.singleWhere((surface) => surface['id'] == 'collapsed-paper')['y'],
         148.0);
+  });
+
+  test('desktop-pinned expanded proxy opens instead of collapsing', () async {
+    const channel = MethodChannel('test/windows-pinned-native-proxy');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      papers: [
+        PaperData(
+          id: 'pinned-expanded-paper',
+          title: 'Pinned expanded',
+          isPinnedToDesktop: true,
+        ),
+      ],
+    )..normalize();
+
+    await services.paperWindows.restoreAll(state);
+    final native = (calls
+            .singleWhere((call) => call.method == 'setNativeCapsuleSurfaces')
+            .arguments as List)
+        .cast<Map>();
+    final proxy = native.singleWhere((surface) => surface['kind'] == 'proxy');
+    expect(proxy['paperId'], 'pinned-expanded-paper');
+    expect(proxy['collapseOnClick'], false);
   });
 
   test('deep capsule queues stay independent across monitor work areas',

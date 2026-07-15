@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Kept capsules visible while hovered, restored per-paper capsule click
+  behavior for pinned and unpinned papers, and ensured the master capsule only
+  collapses or expands the capsule queue without changing paper state.
 - Prevented desktop-pinned papers from flashing on ordinary clicks by keeping
   no-activate behavior without repeatedly rewriting their Z order.
 - Matched PaperTodo's capsule queue behavior: dragging a master moves its

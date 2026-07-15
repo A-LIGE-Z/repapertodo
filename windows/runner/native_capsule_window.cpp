@@ -469,8 +469,14 @@ void NativeCapsuleWindow::RefreshVisibility() {
   HWND window = GetHandle();
   if (!window) return;
   const bool fullscreen = IsExternalFullscreenWindow();
-  const bool policy_hidden =
-      fullscreen || (hide_when_covered_ && IsCoveredByHigherWindow());
+  // Never hide a capsule while the pointer is interacting with it. Because
+  // capsule HWNDs are no-activate windows, the previously focused fullscreen
+  // or overlapping app can otherwise remain foreground and make the capsule
+  // disappear directly under the cursor.
+  const bool policy_hidden = !hovered_ && !pointer_down_ &&
+                             (fullscreen ||
+                              (hide_when_covered_ &&
+                               IsCoveredByHigherWindow()));
   if (!intended_visible_ || policy_hidden) {
     ShowWindow(window, SW_HIDE);
     return;

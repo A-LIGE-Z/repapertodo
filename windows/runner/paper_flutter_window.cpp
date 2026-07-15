@@ -1260,10 +1260,13 @@ void PaperFlutterWindow::SetHideFromWindowSwitcher(bool hidden) {
     extended_style = (extended_style | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW;
     extended_style &= ~WS_EX_NOACTIVATE;
   }
-  SetWindowLongPtrW(window, GWL_EXSTYLE, extended_style);
-  SetWindowPos(window, nullptr, 0, 0, 0, 0,
-               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                   SWP_FRAMECHANGED);
+  const LONG_PTR current_style = GetWindowLongPtrW(window, GWL_EXSTYLE);
+  if (extended_style != current_style) {
+    SetWindowLongPtrW(window, GWL_EXSTYLE, extended_style);
+    SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                     SWP_FRAMECHANGED);
+  }
   RemoveTaskbarButton(window);
 }
 
@@ -1279,7 +1282,7 @@ void PaperFlutterWindow::RefreshZOrder() {
   }
   fullscreen_blocked_ =
       avoid_fullscreen_topmost_ && IsExternalFullscreenWindow(window);
-  const bool policy_hidden = collapsed_ &&
+  const bool policy_hidden = collapsed_ && !capsule_hovered_ &&
                              (IsExternalFullscreenWindow(window) ||
                               (hide_when_covered_ &&
                                IsCoveredByAnotherWindow(window)));
@@ -1298,13 +1301,18 @@ void PaperFlutterWindow::RefreshZOrder() {
     // behind the wallpaper compositor, making the paper appear to disappear.
     // HWND_BOTTOM gives the expected desktop-layer behavior while preserving
     // normal hit testing for the always-available unpin control.
-    SetWindowLongPtrW(window, GWL_STYLE,
-                      WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN |
-                          WS_VISIBLE);
-    SetHideFromWindowSwitcher(hide_from_window_switcher_);
+    const LONG_PTR current_style = GetWindowLongPtrW(window, GWL_STYLE);
+    const LONG_PTR desired_style =
+        WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN |
+        (current_style & WS_VISIBLE);
+    if (current_style != desired_style) {
+      SetWindowLongPtrW(window, GWL_STYLE, desired_style);
+      SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                       SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
     SetWindowPos(window, HWND_BOTTOM, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                     SWP_FRAMECHANGED);
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     return;
   }
   const HWND z_order =

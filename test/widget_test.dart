@@ -16649,6 +16649,17 @@ void main() {
     );
     await tester.pumpAndSettle();
     final restoreCount = platform.paperWindows.restoredTitleSnapshots.length;
+    final before = controller.state.papers
+        .map((paper) => <Object?>[
+              paper.isVisible,
+              paper.isCollapsed,
+              paper.isPinnedToDesktop,
+              paper.x,
+              paper.y,
+              paper.width,
+              paper.height,
+            ])
+        .toList();
 
     platform.paperWindows.emitAction(
       PaperWindowActionRequest(
@@ -16666,6 +16677,20 @@ void main() {
       greaterThan(restoreCount),
     );
     expect(store.savedState.capsuleCollapseAllActive, false);
+    expect(
+      controller.state.papers
+          .map((paper) => <Object?>[
+                paper.isVisible,
+                paper.isCollapsed,
+                paper.isPinnedToDesktop,
+                paper.x,
+                paper.y,
+                paper.width,
+                paper.height,
+              ])
+          .toList(),
+      before,
+    );
 
     controller.state.papers.last.isCollapsed = true;
     platform.paperWindows.emitAction(

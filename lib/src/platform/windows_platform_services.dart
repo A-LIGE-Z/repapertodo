@@ -1029,7 +1029,7 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(AppState state) {
         'capsuleSide': paper.capsuleSide,
         'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
         'isVisible': paper.isVisible,
-        'collapseOnClick': false,
+        'collapseOnClick': !paper.isPinnedToDesktop,
         'hideWhenCovered': state.hideDeepCapsulesWhenCovered,
         'hideWhenFullscreen': state.hideDeepCapsulesWhenFullscreen,
         'theme': state.theme,
