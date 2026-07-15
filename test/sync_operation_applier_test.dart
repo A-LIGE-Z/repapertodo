@@ -2490,16 +2490,10 @@ void main() {
     expect(result.state.pinnedNoteHotKey, longHotKey.substring(0, 64));
     expect(
         result.state.fullscreenTopmostMode, FullscreenTopmostModes.stayOnTop);
-    expect(result.state.deepCapsuleSide, DeepCapsuleSides.left);
-    expect(result.state.deepCapsuleMonitorDeviceName, 'Primary');
-    expect(result.state.capsuleCollapseAllActiveQueues, {
-      '|left': true,
-      'Primary|right': true,
-    });
-    expect(result.state.deepCapsuleQueueStartTopMargins, {
-      '|left': 16.25,
-      'Primary|right': 8.0,
-    });
+    expect(result.state.deepCapsuleSide, DeepCapsuleSides.right);
+    expect(result.state.deepCapsuleMonitorDeviceName, isEmpty);
+    expect(result.state.capsuleCollapseAllActiveQueues, isEmpty);
+    expect(result.state.deepCapsuleQueueStartTopMargins, isEmpty);
   });
 
   test('settings operations apply canonical queue alias precedence', () {
@@ -2543,13 +2537,8 @@ void main() {
     expect(result.appliedCount, 1);
     expect(result.deviceSequences, {'device-a': 1});
     expect(result.state.capsuleCollapseAllActive, true);
-    expect(result.state.capsuleCollapseAllActiveQueues, {
-      'Primary|right': true,
-    });
-    expect(result.state.deepCapsuleQueueStartTopMargins, {
-      '|right': 8.0,
-      'Primary|left': 10000.0,
-    });
+    expect(result.state.capsuleCollapseAllActiveQueues, {'|left': true});
+    expect(result.state.deepCapsuleQueueStartTopMargins, {'|left': 32.0});
   });
 
   test('settings operations disabling capsule mode restore collapsed papers',
@@ -2590,13 +2579,14 @@ void main() {
 
     expect(result.appliedCount, 1);
     expect(result.deviceSequences, {'device-a': 1});
-    expect(result.state.useCapsuleMode, false);
-    expect(result.state.useDeepCapsuleMode, false);
-    expect(result.state.useCapsuleCollapseAll, false);
-    expect(result.state.capsuleCollapseAllActive, false);
-    expect(result.state.capsuleCollapseAllActiveQueues, isEmpty);
-    expect(result.state.deepCapsuleQueueStartTopMargins, isEmpty);
-    expect(result.state.papers.single.isCollapsed, false);
+    expect(result.state.useCapsuleMode, true);
+    expect(result.state.useDeepCapsuleMode, true);
+    expect(result.state.useCapsuleCollapseAll, true);
+    expect(result.state.capsuleCollapseAllActive, true);
+    expect(result.state.capsuleCollapseAllActiveQueues, {'Primary|left': true});
+    expect(
+        result.state.deepCapsuleQueueStartTopMargins, {'Primary|left': 96.0});
+    expect(result.state.papers.single.isCollapsed, true);
   });
 
   test('settings operations hide linked notes from capsules like PaperTodo',
@@ -2725,7 +2715,7 @@ void main() {
     expect(result.state.showTopBarNewTodoButton, false);
     expect(result.state.showTopBarNewNoteButton, false);
     expect(result.state.hideDeepCapsulesWhenCovered, true);
-    expect(result.state.hideDeepCapsulesWhenFullscreen, false);
+    expect(result.state.hideDeepCapsulesWhenFullscreen, true);
   });
 
   test('skips snapshot markers and already applied sequences', () {

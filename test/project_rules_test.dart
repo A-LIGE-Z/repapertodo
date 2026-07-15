@@ -2921,6 +2921,9 @@ void main() {
     expect(app, contains('Future<void> _handlePaperOpenRequest'));
     expect(app, contains('await _hidePaper(paper);'));
     expect(app, contains('await _openPaper(paper);'));
+    expect(app, contains('final isCollapsed = paper.isCollapsed;'));
+    expect(app, isNot(contains('collapseAllActive || paper.isCollapsed')));
+    expect(app, contains('_applyDueSelection(item, result, initialDate)'));
   });
 
   test('Windows tray visibility state is refreshed without bounds noise', () {

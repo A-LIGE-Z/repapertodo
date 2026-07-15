@@ -28,6 +28,16 @@ class AppStateCodec {
     state.normalize();
     final json = state.toJson();
     json.remove('startAtLogin');
+    for (final key in _localCapsuleSettingKeys) {
+      json.remove(key);
+    }
+    json['papers'] = [
+      for (final paper in jsonMapList(json['papers']))
+        Map<String, Object?>.from(paper)
+          ..remove('isCollapsed')
+          ..remove('capsuleSide')
+          ..remove('capsuleMonitorDeviceName'),
+    ];
     json['sync'] = _remoteSnapshotSyncJson(state.sync);
     return _prettyJson.convert(json);
   }
@@ -39,6 +49,22 @@ class AppStateCodec {
     return decode(source);
   }
 }
+
+const _localCapsuleSettingKeys = {
+  'useCapsuleMode',
+  'useDeepCapsuleMode',
+  'useCapsuleCollapseAll',
+  'capsuleCollapseAllActive',
+  'capsuleCollapseAllActiveQueues',
+  'showDeepCapsuleWhileExpanded',
+  'collapseExpandedDeepCapsuleOnClick',
+  'hideDeepCapsulesWhenCovered',
+  'hideDeepCapsulesWhenFullscreen',
+  'deepCapsuleStartTopMargin',
+  'deepCapsuleQueueStartTopMargins',
+  'deepCapsuleSide',
+  'deepCapsuleMonitorDeviceName',
+};
 
 JsonMap decodeJsonObject(String source) {
   final decoded = jsonDecode(source);

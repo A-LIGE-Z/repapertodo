@@ -1232,6 +1232,10 @@ void PaperFlutterWindow::ShowPaper(bool activate) {
   intended_visible_ = true;
   RefreshZOrder();
   if (activate && IsWindowVisible(window)) {
+    ShowWindow(window, SW_RESTORE);
+    SetWindowPos(window, always_on_top_ ? HWND_TOPMOST : HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    BringWindowToTop(window);
     SetForegroundWindow(window);
   }
 }

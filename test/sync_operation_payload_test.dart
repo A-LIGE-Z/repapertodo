@@ -260,15 +260,12 @@ void main() {
       },
     });
     expect(areSyncOperationsEquivalent(retiredTopBar, splitTopBar), true);
-    expect(canonicalSyncOperationPayload(legacyFullscreen), {
-      'settings': {'hideDeepCapsulesWhenFullscreen': true},
-    });
-    expect(areSyncOperationsEquivalent(legacyFullscreen, covered), false);
-    expect(canonicalSyncOperationPayload(legacyFullscreenOff), {
-      'settings': {'hideDeepCapsulesWhenFullscreen': false},
-    });
+    expect(canonicalSyncOperationPayload(legacyFullscreen), {'settings': {}});
+    expect(areSyncOperationsEquivalent(legacyFullscreen, covered), true);
+    expect(
+        canonicalSyncOperationPayload(legacyFullscreenOff), {'settings': {}});
     expect(canonicalSyncOperationPayload(legacyFullscreenString), {
-      'settings': {'hideDeepCapsulesWhenFullscreen': true},
+      'settings': {},
     });
   });
 
@@ -536,19 +533,8 @@ void main() {
       },
     );
 
-    expect(canonicalSyncOperationPayload(rawDisabledCapsules), {
-      'settings': {
-        'useCapsuleMode': false,
-        'useDeepCapsuleMode': false,
-        'useCapsuleCollapseAll': false,
-        'capsuleCollapseAllActive': false,
-        'capsuleCollapseAllActiveQueues': const <String, bool>{},
-        'deepCapsuleStartTopMargin': 48.0,
-        'deepCapsuleQueueStartTopMargins': const <String, double>{},
-        'hideDeepCapsulesWhenCovered': false,
-        'hideDeepCapsulesWhenFullscreen': false,
-      },
-    });
+    expect(
+        canonicalSyncOperationPayload(rawDisabledCapsules), {'settings': {}});
     expect(
       areSyncOperationsEquivalent(
         rawDisabledCapsules,
@@ -556,15 +542,7 @@ void main() {
       ),
       true,
     );
-    expect(canonicalSyncOperationPayload(activeDeepQueues), {
-      'settings': {
-        'useCapsuleMode': true,
-        'useDeepCapsuleMode': true,
-        'useCapsuleCollapseAll': true,
-        'capsuleCollapseAllActive': true,
-        'capsuleCollapseAllActiveQueues': {'|left': true},
-      },
-    });
+    expect(canonicalSyncOperationPayload(activeDeepQueues), {'settings': {}});
   });
 
   test('canonical queue map settings override legacy aliases', () {
@@ -600,17 +578,7 @@ void main() {
       },
     );
 
-    expect(canonicalSyncOperationPayload(rawQueues), {
-      'settings': {
-        'useCapsuleMode': true,
-        'useDeepCapsuleMode': true,
-        'useCapsuleCollapseAll': true,
-        'capsuleCollapseAllActive': true,
-        'capsuleCollapseAllActiveQueues': {
-          'Primary|right': true,
-        },
-      },
-    });
+    expect(canonicalSyncOperationPayload(rawQueues), {'settings': {}});
     expect(areSyncOperationsEquivalent(rawQueues, canonicalQueues), true);
   });
 
@@ -646,17 +614,7 @@ void main() {
       },
     );
 
-    expect(canonicalSyncOperationPayload(rawMargins), {
-      'settings': {
-        'useCapsuleMode': true,
-        'useDeepCapsuleMode': true,
-        'useCapsuleCollapseAll': true,
-        'deepCapsuleQueueStartTopMargins': {
-          '|right': 8.0,
-          'Primary|left': 10000.0,
-        },
-      },
-    });
+    expect(canonicalSyncOperationPayload(rawMargins), {'settings': {}});
     expect(areSyncOperationsEquivalent(rawMargins, canonicalMargins), true);
   });
 
@@ -683,8 +641,6 @@ void main() {
     expect(canonicalSyncOperationPayload(mixed), {
       'settings': {
         'theme': 'dark',
-        'capsuleCollapseAllActiveQueues': {'Primary|right': true},
-        'deepCapsuleQueueStartTopMargins': {'Primary|right': 64.0},
       },
     });
   });
@@ -2066,9 +2022,27 @@ void main() {
     ];
 
     for (final operation in cases) {
+      final settings = operation.payload['settings'] as Map?;
+      final localCapsuleOnly = settings != null &&
+          settings.isNotEmpty &&
+          settings.keys.map((key) => key.toString().toLowerCase()).every({
+                'useCapsuleMode',
+                'useDeepCapsuleMode',
+                'useCapsuleCollapseAll',
+                'capsuleCollapseAllActive',
+                'capsuleCollapseAllActiveQueues',
+                'showDeepCapsuleWhileExpanded',
+                'collapseExpandedDeepCapsuleOnClick',
+                'hideDeepCapsulesWhenCovered',
+                'hideDeepCapsulesWhenFullscreen',
+                'deepCapsuleStartTopMargin',
+                'deepCapsuleQueueStartTopMargins',
+                'deepCapsuleSide',
+                'deepCapsuleMonitorDeviceName',
+              }.map((key) => key.toLowerCase()).toSet().contains);
       expect(
         isSyncOperationPayloadWellFormed(operation),
-        false,
+        localCapsuleOnly,
         reason: operation.kind.name,
       );
     }

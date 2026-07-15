@@ -1747,7 +1747,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       showTopBarNewNoteButton: controller.state.showTopBarNewNoteButton,
       showTopBarExternalOpenButton:
           controller.state.showTopBarExternalOpenButton,
-      useCapsuleMode: controller.state.useCapsuleMode,
+      useCapsuleMode: Platform.isWindows && controller.state.useCapsuleMode,
       onWindowDragStart: widget.paperWindowDragStarter,
       enableToolTips: controller.state.enableToolTips,
       enableAnimations: controller.state.enableAnimations,
@@ -1761,7 +1761,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           controller.state.todoReminderIntervalValue,
       defaultTodoReminderIntervalUnit:
           controller.state.todoReminderIntervalUnit,
-      collapseAllActive: controller.state.useCapsuleMode &&
+      collapseAllActive: Platform.isWindows &&
+          controller.state.useCapsuleMode &&
           controller.state.useCapsuleCollapseAll &&
           controller.state.isCapsuleCollapseAllActiveFor(paper),
       noteLineSpacing: controller.state.noteLineSpacing,
@@ -3105,6 +3106,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       supportsFullscreenTopmostMode: controller.supportsFullscreenTopmostMode,
       supportsGlobalHotkeys: controller.supportsGlobalHotkeys,
       supportsScriptCapsules: controller.supportsScriptCapsules,
+      supportsCapsules: Platform.isWindows,
       initialHideFromWindowSwitcher:
           controller.state.hidePapersFromWindowSwitcher,
       initialFullscreenTopmostMode: controller.state.fullscreenTopmostMode,
@@ -4883,9 +4885,9 @@ class PaperPreview extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final mobileBoard =
         !standaloneSurface && MediaQuery.sizeOf(context).shortestSide < 600;
-    final titleBarTintAlpha = isDark ? 18 / 255 : 12 / 255;
-    final titleBarDividerAlpha = isDark ? 34 / 255 : 28 / 255;
-    final isCollapsed = collapseAllActive || paper.isCollapsed;
+    // The master capsule only retracts or expands the edge capsule queue. It
+    // must never become paper state or change the paper body's visibility.
+    final isCollapsed = paper.isCollapsed;
     final scriptCapsuleSpec =
         paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
     final textZoom = paper.textZoom.clamp(0.5, 1.5).toDouble();
@@ -4898,24 +4900,18 @@ class PaperPreview extends StatelessWidget {
         child: DecoratedBox(
           key: ValueKey('${paper.id}-paper-surface'),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerLowest,
+            color: colorScheme.surface,
             border: Border.all(
-              color: colorScheme.outlineVariant,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.48),
             ),
-            borderRadius: BorderRadius.circular(
-              standaloneSurface
-                  ? 18
-                  : mobileBoard
-                      ? 18
-                      : 12,
-            ),
+            borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
                 color: colorScheme.shadow.withValues(
-                  alpha: isDark ? 0.34 : 0.18,
+                  alpha: isDark ? 0.26 : 0.14,
                 ),
-                blurRadius: standaloneSurface || mobileBoard ? 22 : 16,
-                offset: standaloneSurface ? Offset.zero : const Offset(0, 4),
+                blurRadius: standaloneSurface || mobileBoard ? 18 : 14,
+                offset: standaloneSurface ? Offset.zero : const Offset(0, 3),
               ),
             ],
           ),
@@ -4936,13 +4932,7 @@ class PaperPreview extends StatelessWidget {
                           ? 56
                           : null,
                   decoration: BoxDecoration(
-                    color: colorScheme.primary.withValues(
-                      alpha: standaloneSurface
-                          ? titleBarTintAlpha
-                          : mobileBoard
-                              ? (isDark ? 18 / 255 : 12 / 255)
-                              : 0.035,
-                    ),
+                    color: Colors.transparent,
                     borderRadius: standaloneSurface
                         ? const BorderRadius.vertical(top: Radius.circular(17))
                         : mobileBoard
@@ -4950,20 +4940,7 @@ class PaperPreview extends StatelessWidget {
                                 top: Radius.circular(15),
                               )
                             : null,
-                    border: Border(
-                      bottom: BorderSide(
-                        color: standaloneSurface
-                            ? colorScheme.primary.withValues(
-                                alpha: titleBarDividerAlpha,
-                              )
-                            : mobileBoard
-                                ? colorScheme.primary.withValues(
-                                    alpha: isDark ? 34 / 255 : 28 / 255,
-                                  )
-                                : colorScheme.outlineVariant
-                                    .withValues(alpha: 0.7),
-                      ),
-                    ),
+                    border: const Border(),
                   ),
                   padding: EdgeInsets.fromLTRB(
                     standaloneSurface
@@ -5280,7 +5257,10 @@ class PaperPreview extends StatelessWidget {
                 ),
             ],
           );
-    if (!enableAnimations) {
+    // Native paper HWNDs animate their own geometry. Cross-fading the Flutter
+    // subtree at the same time exposes a transient blank frame during resize,
+    // pin and capsule transitions.
+    if (!enableAnimations || standaloneSurface) {
       return body;
     }
     return AnimatedSwitcher(
@@ -5289,11 +5269,10 @@ class PaperPreview extends StatelessWidget {
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) {
-        return SizeTransition(
-          sizeFactor: animation,
-          alignment: AlignmentDirectional.topStart,
-          child: FadeTransition(
-            opacity: animation,
+        return ClipRect(
+          child: SizeTransition(
+            sizeFactor: animation,
+            alignment: AlignmentDirectional.topStart,
             child: child,
           ),
         );
@@ -5592,9 +5571,11 @@ class PaperPreview extends StatelessWidget {
     }
     final strings = PaperTodoStringsScope.of(context);
     final width = MediaQuery.sizeOf(context).width;
-    final hideOptionalCreationButtons = width < (paper.isNote ? 300 : 255);
+    final showPrimaryActions = width >= 225;
+    final showSecondaryActions = width >= 285;
+    final showCreationActions = width >= (paper.isNote ? 390 : 340);
     final actions = <Widget>[
-      if (!hideOptionalCreationButtons && showTopBarNewTodoButton)
+      if (showCreationActions && showTopBarNewTodoButton)
         _standaloneHeaderButton(
           key: ValueKey('${paper.id}-new-todo'),
           tooltip: strings.get(PaperTodoStringKeys.actionNewTodoPaper),
@@ -5606,7 +5587,7 @@ class PaperPreview extends StatelessWidget {
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
           ),
         ),
-      if (!hideOptionalCreationButtons && showTopBarNewNoteButton)
+      if (showCreationActions && showTopBarNewNoteButton)
         _standaloneHeaderButton(
           key: ValueKey('${paper.id}-new-note'),
           tooltip: strings.get(PaperTodoStringKeys.actionNewNotePaper),
@@ -5618,13 +5599,13 @@ class PaperPreview extends StatelessWidget {
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
           ),
         ),
-      if (paper.isNote && enableTodoNoteLinks)
+      if (showSecondaryActions && paper.isNote && enableTodoNoteLinks)
         SizedBox(
           width: 24,
           height: 24,
           child: _noteLinkDragHandle(context),
         ),
-      if (paper.isNote && showTopBarExternalOpenButton)
+      if (showSecondaryActions && paper.isNote && showTopBarExternalOpenButton)
         _standaloneHeaderButton(
           key: ValueKey('${paper.id}-open-markdown'),
           tooltip: _openMarkdownEditorLabel(strings),
@@ -5634,28 +5615,30 @@ class PaperPreview extends StatelessWidget {
             style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500),
           ),
         ),
-      _standaloneHeaderButton(
-        key: ValueKey('${paper.id}-sync-now'),
-        tooltip: strings.get(PaperTodoStringKeys.actionSyncNow),
-        onPressed: syncing ? null : () => unawaited(onSync()),
-        child: syncing
-            ? const SizedBox.square(
-                dimension: 12,
-                child: CircularProgressIndicator(strokeWidth: 1.6),
-              )
-            : const Icon(Icons.sync_outlined, size: 15),
-      ),
-      _standaloneHeaderButton(
-        key: ValueKey('${paper.id}-desktop-pin'),
-        tooltip: paper.isPinnedToDesktop
-            ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
-            : strings.get(PaperTodoStringKeys.actionPinToDesktop),
-        onPressed: _togglePinnedToDesktop,
-        child: Icon(
-          paper.isPinnedToDesktop ? Icons.push_pin : Icons.push_pin_outlined,
-          size: 15,
+      if (showSecondaryActions)
+        _standaloneHeaderButton(
+          key: ValueKey('${paper.id}-sync-now'),
+          tooltip: strings.get(PaperTodoStringKeys.actionSyncNow),
+          onPressed: syncing ? null : () => unawaited(onSync()),
+          child: syncing
+              ? const SizedBox.square(
+                  dimension: 12,
+                  child: CircularProgressIndicator(strokeWidth: 1.6),
+                )
+              : const Icon(Icons.sync_outlined, size: 15),
         ),
-      ),
+      if (showPrimaryActions)
+        _standaloneHeaderButton(
+          key: ValueKey('${paper.id}-desktop-pin'),
+          tooltip: paper.isPinnedToDesktop
+              ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
+              : strings.get(PaperTodoStringKeys.actionPinToDesktop),
+          onPressed: _togglePinnedToDesktop,
+          child: Icon(
+            paper.isPinnedToDesktop ? Icons.push_pin : Icons.push_pin_outlined,
+            size: 15,
+          ),
+        ),
       _standaloneHeaderButton(
         key: ValueKey('${paper.id}-close'),
         tooltip: useCapsuleMode
@@ -5744,13 +5727,11 @@ class PaperPreview extends StatelessWidget {
     return IconButton(
       tooltip: _tooltipLabel(
         enableToolTips,
-        collapseAllActive
-            ? strings.get(PaperTodoStringKeys.collapseAllActive)
-            : paper.isCollapsed
-                ? strings.get(PaperTodoStringKeys.actionExpandPaper)
-                : strings.get(PaperTodoStringKeys.actionCollapsePaper),
+        paper.isCollapsed
+            ? strings.get(PaperTodoStringKeys.actionExpandPaper)
+            : strings.get(PaperTodoStringKeys.actionCollapsePaper),
       ),
-      onPressed: collapseAllActive ? null : _toggleCollapsed,
+      onPressed: _toggleCollapsed,
       style: mobileBoard
           ? IconButton.styleFrom(
               minimumSize: const Size.square(48),
@@ -11587,18 +11568,31 @@ class _TodoEditorState extends State<_TodoEditor> {
     final now = DateTime.now();
     final initialDate = parsePaperTodoDueAtLocal(item.dueAtLocal) ??
         now.add(const Duration(hours: 1));
-    _TodoDueSelection? result;
     if (widget.standaloneSurface && Platform.isWindows) {
-      result = await _pickNativeWindowsDueDate(initialDate);
+      // A null native result means the user cancelled. Falling through to the
+      // Flutter dialog would show a second picker for the same action.
+      final result = await _pickNativeWindowsDueDate(initialDate);
+      if (result == null) {
+        return;
+      }
+      _applyDueSelection(item, result, initialDate);
+      return;
     }
-    result ??= await showDialog<_TodoDueSelection>(
+    final result = await showDialog<_TodoDueSelection>(
         context: context,
         builder: (context) =>
             _TodoDueSelectionDialog(initialDate: initialDate));
-    final selection = result;
-    if (selection == null) {
+    if (result == null) {
       return;
     }
+    _applyDueSelection(item, result, initialDate);
+  }
+
+  void _applyDueSelection(
+    PaperItem item,
+    _TodoDueSelection selection,
+    DateTime initialDate,
+  ) {
     _pushTodoUndoSnapshot();
     setState(() {
       item.dueAtLocal = selection.clear

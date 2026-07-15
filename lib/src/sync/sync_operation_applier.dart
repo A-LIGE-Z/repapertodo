@@ -173,6 +173,11 @@ class SyncOperationApplier {
     if (index < 0) {
       state.papers.add(paper);
     } else {
+      final localPaper = state.papers[index];
+      paper
+        ..isCollapsed = localPaper.isCollapsed
+        ..capsuleSide = localPaper.capsuleSide
+        ..capsuleMonitorDeviceName = localPaper.capsuleMonitorDeviceName;
       state.papers[index] = paper;
     }
   }

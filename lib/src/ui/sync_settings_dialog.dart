@@ -161,6 +161,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required bool supportsFullscreenTopmostMode,
   required bool supportsGlobalHotkeys,
   required bool supportsScriptCapsules,
+  required bool supportsCapsules,
   required bool initialHideFromWindowSwitcher,
   required String initialFullscreenTopmostMode,
   required String initialPinnedTodoHotKey,
@@ -226,6 +227,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       supportsFullscreenTopmostMode: supportsFullscreenTopmostMode,
       supportsGlobalHotkeys: supportsGlobalHotkeys,
       supportsScriptCapsules: supportsScriptCapsules,
+      supportsCapsules: supportsCapsules,
       initialHideFromWindowSwitcher: initialHideFromWindowSwitcher,
       initialFullscreenTopmostMode: initialFullscreenTopmostMode,
       initialPinnedTodoHotKey: initialPinnedTodoHotKey,
@@ -292,6 +294,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.supportsFullscreenTopmostMode,
     required this.supportsGlobalHotkeys,
     required this.supportsScriptCapsules,
+    required this.supportsCapsules,
     required this.initialHideFromWindowSwitcher,
     required this.initialFullscreenTopmostMode,
     required this.initialPinnedTodoHotKey,
@@ -353,6 +356,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final bool supportsFullscreenTopmostMode;
   final bool supportsGlobalHotkeys;
   final bool supportsScriptCapsules;
+  final bool supportsCapsules;
   final bool initialHideFromWindowSwitcher;
   final String initialFullscreenTopmostMode;
   final String initialPinnedTodoHotKey;
@@ -983,8 +987,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                               () => _showTopBarExternalOpenButton = value),
                         ),
                       ],
-                      if (_selectedSettingsSection ==
-                          _SettingsSection.capsules) ...[
+                      if (widget.supportsCapsules &&
+                          _selectedSettingsSection ==
+                              _SettingsSection.capsules) ...[
                         const Divider(height: 24),
                         _settingsSectionHeader(
                           section: _SettingsSection.capsules,
@@ -1867,67 +1872,69 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       children: [
         for (final section in _SettingsSection.values)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Tooltip(
-              message: compact ? _settingsSectionLabel(section) : '',
-              child: Material(
-                color: section == _selectedSettingsSection
-                    ? colors.primaryContainer
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-                child: InkWell(
-                  key: ValueKey('settings-category-${section.name}'),
+          if (widget.supportsCapsules || section != _SettingsSection.capsules)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Tooltip(
+                message: compact ? _settingsSectionLabel(section) : '',
+                child: Material(
+                  color: section == _selectedSettingsSection
+                      ? colors.primaryContainer
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
-                  onTap: () => _selectSettingsSection(section),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: compact ? 0 : 12,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: compact
-                            ? MainAxisAlignment.center
-                            : MainAxisAlignment.start,
-                        children: [
-                          Icon(
-                            _settingsSectionIcon(section),
-                            size: 19,
-                            color: section == _selectedSettingsSection
-                                ? colors.onPrimaryContainer
-                                : colors.onSurfaceVariant,
-                          ),
-                          if (!compact) ...[
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _settingsSectionLabel(section),
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(
-                                      color: section == _selectedSettingsSection
-                                          ? colors.onPrimaryContainer
-                                          : colors.onSurfaceVariant,
-                                      fontWeight:
-                                          section == _selectedSettingsSection
-                                              ? FontWeight.w600
-                                              : FontWeight.w500,
-                                    ),
-                              ),
+                  child: InkWell(
+                    key: ValueKey('settings-category-${section.name}'),
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => _selectSettingsSection(section),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: compact ? 0 : 12,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: compact
+                              ? MainAxisAlignment.center
+                              : MainAxisAlignment.start,
+                          children: [
+                            Icon(
+                              _settingsSectionIcon(section),
+                              size: 19,
+                              color: section == _selectedSettingsSection
+                                  ? colors.onPrimaryContainer
+                                  : colors.onSurfaceVariant,
                             ),
+                            if (!compact) ...[
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _settingsSectionLabel(section),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelLarge
+                                      ?.copyWith(
+                                        color:
+                                            section == _selectedSettingsSection
+                                                ? colors.onPrimaryContainer
+                                                : colors.onSurfaceVariant,
+                                        fontWeight:
+                                            section == _selectedSettingsSection
+                                                ? FontWeight.w600
+                                                : FontWeight.w500,
+                                      ),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
       ],
     );
   }

@@ -94,6 +94,15 @@ void main() {
     final remoteWebDav = remoteSync['webDav'] as Map<String, Object?>;
 
     expect(remote.containsKey('startAtLogin'), false);
+    expect(remote.containsKey('useCapsuleMode'), false);
+    expect(remote.containsKey('useDeepCapsuleMode'), false);
+    expect(remote.containsKey('useCapsuleCollapseAll'), false);
+    expect(remote.containsKey('capsuleCollapseAllActiveQueues'), false);
+    for (final paper in (remote['papers'] as List).cast<Map>()) {
+      expect(paper.containsKey('isCollapsed'), false);
+      expect(paper.containsKey('capsuleSide'), false);
+      expect(paper.containsKey('capsuleMonitorDeviceName'), false);
+    }
     expect(remoteSync.containsKey('pendingOperationBatch'), false);
     expect(remoteSource, isNot(contains('pending-paper')));
     expect(remoteSource, isNot(contains('windows-device')));

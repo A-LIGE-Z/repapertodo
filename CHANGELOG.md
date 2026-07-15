@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Decoupled master-capsule retraction from paper rendering, made desktop-pin
+  capsule activation restore the paper directly to the foreground, removed the
+  duplicate Windows due picker, and progressively reveal paper-header actions
+  as the paper grows.
+- Made capsule configuration Windows-local: Android no longer exposes capsule
+  controls, and WebDAV snapshots and operations no longer transfer capsule
+  layout or collapsed state while still consuming compatible historical logs.
+- Unified Windows papers into a softer rounded paper surface and removed the
+  competing Flutter cross-fade from native paper-window transitions.
 - Kept capsules visible while hovered, restored per-paper capsule click
   behavior for pinned and unpinned papers, and ensured the master capsule only
   collapses or expands the capsule queue without changing paper state.

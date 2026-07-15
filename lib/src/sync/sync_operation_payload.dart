@@ -44,7 +44,9 @@ bool isSyncOperationPayloadWellFormed(SyncOperation operation) {
           _payloadMarkdownTextFieldIsSafe(payload, 'content');
     case SyncOperationKind.updateSettings:
       final settings = _jsonMapOrNull(_payloadValue(payload, 'settings'));
-      return settings != null && _hasApplicableSettingsPayload(settings);
+      return settings != null &&
+          (_hasApplicableSettingsPayload(settings) ||
+              _hasLocalOnlyCapsuleSettingsPayload(settings));
   }
 }
 
@@ -121,7 +123,10 @@ JsonMap? canonicalSyncOperationPayload(SyncOperation operation) {
         return null;
       }
       final safeSettings = canonicalSyncOperationSettingsPayload(settings);
-      return safeSettings.isNotEmpty ? {'settings': safeSettings} : null;
+      return safeSettings.isNotEmpty ||
+              _hasLocalOnlyCapsuleSettingsPayload(settings)
+          ? {'settings': safeSettings}
+          : null;
   }
 }
 
@@ -1154,10 +1159,19 @@ bool _hasApplicableSettingsPayload(JsonMap settings) {
   return canonicalSyncOperationSettingsPayload(settings).isNotEmpty;
 }
 
+bool _hasLocalOnlyCapsuleSettingsPayload(JsonMap settings) {
+  return settings.isNotEmpty &&
+      settings.keys.every(
+        (key) => _localOnlyCapsuleSettingKeyNames.contains(
+          key.trim().toLowerCase(),
+        ),
+      );
+}
+
 JsonMap _canonicalPaperPayload(JsonMap paperJson) {
   final paper = _migratePaperPayload(paperJson);
   if (_canNormalizePaperPayloadDeterministically(paper)) {
-    return PaperData.fromJson(paper).toJson();
+    return _withoutLocalCapsulePaperState(PaperData.fromJson(paper).toJson());
   }
   final canonical = Map<String, Object?>.from(paper);
   canonical['id'] = _payloadStringId(canonical, 'id');
@@ -1169,7 +1183,14 @@ JsonMap _canonicalPaperPayload(JsonMap paperJson) {
     for (final element in jsonMapList(canonical['noteCanvasElements']))
       _canonicalIdPayload(element),
   ];
-  return canonical;
+  return _withoutLocalCapsulePaperState(canonical);
+}
+
+JsonMap _withoutLocalCapsulePaperState(JsonMap paper) {
+  return Map<String, Object?>.from(paper)
+    ..remove('isCollapsed')
+    ..remove('capsuleSide')
+    ..remove('capsuleMonitorDeviceName');
 }
 
 JsonMap _canonicalTodoItemPayload(JsonMap itemJson) {
@@ -1218,8 +1239,6 @@ const _syncOperationAppPreferenceKeys = {
   'systemFontFamilyName',
   'externalMarkdownExtension',
   'zoom',
-  'useCapsuleMode',
-  'useDeepCapsuleMode',
   'showTopBarNewTodoButton',
   'showTopBarNewNoteButton',
   'showTopBarNewPaperButtons',
@@ -1240,13 +1259,6 @@ const _syncOperationAppPreferenceKeys = {
   'hideLinkedNotesFromCapsules',
   'runLinkedScriptCapsulesOnClick',
   'maxTitleLength',
-  'useCapsuleCollapseAll',
-  'capsuleCollapseAllActive',
-  'capsuleCollapseAllActiveQueues',
-  'showDeepCapsuleWhileExpanded',
-  'collapseExpandedDeepCapsuleOnClick',
-  'hideDeepCapsulesWhenCovered',
-  'hideDeepCapsulesWhenFullscreen',
   'enableAnimations',
   'enableToolTips',
   'pinnedTodoHotKey',
@@ -1255,17 +1267,31 @@ const _syncOperationAppPreferenceKeys = {
   'usePersistentPowerShellProcess',
   'preferPowerShell7',
   'hideScriptRunWindow',
+};
+
+const _localOnlyCapsuleSettingKeys = {
+  'useCapsuleMode',
+  'useDeepCapsuleMode',
+  'useCapsuleCollapseAll',
+  'capsuleCollapseAllActive',
+  'capsuleCollapseAllActiveQueues',
+  'showDeepCapsuleWhileExpanded',
+  'collapseExpandedDeepCapsuleOnClick',
+  'hideDeepCapsulesWhenCovered',
+  'hideDeepCapsulesWhenFullscreen',
   'deepCapsuleStartTopMargin',
   'deepCapsuleQueueStartTopMargins',
   'deepCapsuleSide',
   'deepCapsuleMonitorDeviceName',
 };
 
+final _localOnlyCapsuleSettingKeyNames = {
+  for (final key in _localOnlyCapsuleSettingKeys) key.toLowerCase(),
+};
+
 final _invalidSettingValue = Object();
 
 const _syncOperationBooleanPreferenceKeys = {
-  'useCapsuleMode',
-  'useDeepCapsuleMode',
   'showTopBarNewTodoButton',
   'showTopBarNewNoteButton',
   'showTopBarExternalOpenButton',
@@ -1277,12 +1303,6 @@ const _syncOperationBooleanPreferenceKeys = {
   'allowLongLinkedNoteTitles',
   'hideLinkedNotesFromCapsules',
   'runLinkedScriptCapsulesOnClick',
-  'useCapsuleCollapseAll',
-  'capsuleCollapseAllActive',
-  'showDeepCapsuleWhileExpanded',
-  'collapseExpandedDeepCapsuleOnClick',
-  'hideDeepCapsulesWhenCovered',
-  'hideDeepCapsulesWhenFullscreen',
   'enableAnimations',
   'enableToolTips',
   'usePersistentPowerShellProcess',
