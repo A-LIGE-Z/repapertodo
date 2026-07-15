@@ -2924,6 +2924,7 @@ void main() {
     expect(app, contains('final isCollapsed = paper.isCollapsed;'));
     expect(app, isNot(contains('collapseAllActive || paper.isCollapsed')));
     expect(app, contains('_applyDueSelection(item, result, initialDate)'));
+    expect(app, contains("'stale-collapse-rerouted'"));
   });
 
   test('Windows tray visibility state is refreshed without bounds noise', () {

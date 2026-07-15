@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Rerouted stale Windows capsule collapse events for desktop-pinned papers to
+  the authoritative unpin-and-activate path, preventing proxy refresh races
+  from collapsing a pinned paper behind the desktop.
 - Decoupled master-capsule retraction from paper rendering, made desktop-pin
   capsule activation restore the paper directly to the foreground, removed the
   duplicate Windows due picker, and progressively reveal paper-header actions

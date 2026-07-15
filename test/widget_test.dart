@@ -16613,6 +16613,49 @@ void main() {
     expect(platform.paperWindows.restoredTitleSnapshots, isNotEmpty);
   });
 
+  testWidgets('stale collapse proxy click unpins and activates pinned paper',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final paper = PaperData(
+      id: 'stale-pinned-proxy-paper',
+      type: PaperTypes.todo,
+      title: 'Pinned proxy',
+      isPinnedToDesktop: true,
+      x: 123,
+      y: 234,
+      width: 456,
+      height: 345,
+    );
+    final state = AppState(papers: [paper]);
+    await store.save(state);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    await tester.pumpAndSettle();
+
+    platform.paperWindows.emitAction(
+      const PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.collapsePaper,
+        paperId: 'stale-pinned-proxy-paper',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(paper.isPinnedToDesktop, false);
+    expect(paper.isCollapsed, false);
+    expect([paper.x, paper.y, paper.width, paper.height], [123, 234, 456, 345]);
+    expect(platform.paperWindows.shownTitles, contains('Pinned proxy'));
+    expect(store.savedState.papers.single.isPinnedToDesktop, false);
+  });
+
   testWidgets(
       'coordinator expands a collapse-all queue from its master capsule',
       (tester) async {

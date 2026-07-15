@@ -2567,6 +2567,22 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       case PaperWindowActionKinds.toggleCollapseAll:
         unawaited(_toggleCollapseAll(paper, request.value));
       case PaperWindowActionKinds.collapsePaper:
+        // Native proxy HWNDs can deliver one click with their previous
+        // collapseOnClick flag while a pin-state surface refresh is in flight.
+        // Dart owns the authoritative paper state: a pinned paper must always
+        // use its capsule as the escape route from desktop mode, never become
+        // collapsed behind the desktop.
+        if (paper.isPinnedToDesktop) {
+          unawaited(
+            UsageLog.instance.record(
+              'capsule',
+              'stale-collapse-rerouted',
+              details: {'paperId': paper.id},
+            ),
+          );
+          unawaited(_activatePaperFromCapsule(paper));
+          break;
+        }
         if (!paper.isCollapsed) {
           setState(() {
             paper.isCollapsed = true;
