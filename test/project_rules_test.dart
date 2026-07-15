@@ -3351,7 +3351,6 @@ void main() {
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final storage = _readProjectText('lib/src/core/storage/state_store.dart');
     final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
-    final singleExe = _readProjectText('scripts/build_windows_single_exe.ps1');
 
     expect(runner, contains('FOS_PICKFOLDERS'));
     expect(runner, contains('storage-path.txt'));
@@ -3359,8 +3358,6 @@ void main() {
     expect(runner, contains('method == "commitDataDirectory"'));
     expect(storage, contains('Future<void> relocate('));
     expect(settings, contains("ValueKey('settings-data-directory')"));
-    expect(singleExe, contains('payload.zip'));
-    expect(singleExe, contains('iexpress.exe'));
   });
 
   test('Windows startup toggle checks the actual native surface visibility',

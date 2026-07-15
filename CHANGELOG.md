@@ -18,8 +18,8 @@
   removed paper taskbar buttons, and refresh capsule fullscreen hiding every
   250 ms for prompt restoration.
 - Added a native Windows folder picker for first-run and settings-driven data
-  directory selection with safe state relocation, plus a self-extracting
-  single-EXE build that carries the Flutter runtime payload.
+  directory selection with safe state relocation; Windows packaging remains the
+  conventional release directory/zip containing the EXE and Flutter runtime.
 
 - Made Jianguoyun conditional manifest updates compatible with its unquoted
   opaque ETags: sync still tries the standard quoted `If-Match` first, then
