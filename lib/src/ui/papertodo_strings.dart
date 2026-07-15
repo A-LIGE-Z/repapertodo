@@ -303,6 +303,13 @@ abstract final class PaperTodoStringKeys {
   static const syncDownloadedLegacyPlainRetry =
       'syncDownloadedLegacyPlainRetry';
   static const syncEncryptionPassphrase = 'syncEncryptionPassphrase';
+  static const webDavAppPassword = 'webDavAppPassword';
+  static const jianguoyunAppPasswordHelper = 'jianguoyunAppPasswordHelper';
+  static const jianguoyunAuthenticationFailed =
+      'jianguoyunAuthenticationFailed';
+  static const year = 'year';
+  static const month = 'month';
+  static const day = 'day';
   static const syncFailed = 'syncFailed';
   static const syncFoundLegacyOperationLogs = 'syncFoundLegacyOperationLogs';
   static const syncMergedRemoteChanges = 'syncMergedRemoteChanges';
@@ -773,6 +780,14 @@ const _enStrings = {
   PaperTodoStringKeys.syncDownloadedLegacyPlainRetry:
       'Remote data downloaded from legacy plain WebDAV data. Automatic encryption migration could not complete; sync again to retry.',
   PaperTodoStringKeys.syncEncryptionPassphrase: 'Sync encryption passphrase',
+  PaperTodoStringKeys.webDavAppPassword: 'WebDAV app password',
+  PaperTodoStringKeys.jianguoyunAppPasswordHelper:
+      'Jianguoyun requires an app password from Third-party app management; the account login password will return HTTP 401.',
+  PaperTodoStringKeys.jianguoyunAuthenticationFailed:
+      'Jianguoyun rejected the credentials. Enter the email address and the app password generated under Third-party app management. Do not enter the account login password or the sync encryption passphrase here.',
+  PaperTodoStringKeys.year: 'Year',
+  PaperTodoStringKeys.month: 'Month',
+  PaperTodoStringKeys.day: 'Day',
   PaperTodoStringKeys.syncFailed: 'Sync failed: {0}',
   PaperTodoStringKeys.syncFoundLegacyOperationLogs:
       'Found {0} legacy plain WebDAV {1}; sync again after remote ETags are available to retry encryption migration.',
@@ -1139,6 +1154,14 @@ const _zhStrings = {
   PaperTodoStringKeys.syncDownloadedLegacyPlainRetry:
       '已从旧版明文 WebDAV 数据下载远端数据。自动加密迁移未完成，请再次同步重试。',
   PaperTodoStringKeys.syncEncryptionPassphrase: '同步加密密钥短语',
+  PaperTodoStringKeys.webDavAppPassword: 'WebDAV 应用密码',
+  PaperTodoStringKeys.jianguoyunAppPasswordHelper:
+      '坚果云必须使用“第三方应用管理”生成的应用密码；账户登录密码会返回 HTTP 401。',
+  PaperTodoStringKeys.jianguoyunAuthenticationFailed:
+      '坚果云拒绝了认证。请填写邮箱账号，并在此处填写“第三方应用管理”生成的应用密码；不要填写账户登录密码，也不要与同步加密密钥短语混用。',
+  PaperTodoStringKeys.year: '年',
+  PaperTodoStringKeys.month: '月',
+  PaperTodoStringKeys.day: '日',
   PaperTodoStringKeys.syncFailed: '同步失败：{0}',
   PaperTodoStringKeys.syncFoundLegacyOperationLogs:
       '发现 {0} 个旧版明文 WebDAV {1}；远端 ETag 可用后再次同步以重试加密迁移。',

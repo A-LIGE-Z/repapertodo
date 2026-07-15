@@ -1544,8 +1544,15 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                           ),
                           decoration: InputDecoration(
                             border: const OutlineInputBorder(),
-                            labelText:
-                                strings.get(PaperTodoStringKeys.password),
+                            labelText: strings.get(
+                              _presetId == WebDavPresetIds.jianguoyun
+                                  ? PaperTodoStringKeys.webDavAppPassword
+                                  : PaperTodoStringKeys.password,
+                            ),
+                            helperText: _presetId == WebDavPresetIds.jianguoyun
+                                ? strings.get(PaperTodoStringKeys
+                                    .jianguoyunAppPasswordHelper)
+                                : null,
                             errorText: _passwordErrorText,
                             prefixIcon: const Icon(Icons.key_outlined),
                             suffixIcon: IconButton(

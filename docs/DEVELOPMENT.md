@@ -219,6 +219,15 @@ Windows build output with `repapertodo.exe`, `flutter_windows.dll`, and `data`.
 The Release directory also carries the app-local MSVC and Universal CRT DLLs,
 so a clean Windows 10 machine does not need a separate Visual C++ Redistributable
 installation before starting the application.
+Create the user-facing layered ZIP with
+`scripts/package_windows_zip.ps1`. Its root contains only the statically linked
+`repapertodo.exe` launcher; the Flutter executable, engine, CRT DLLs, assets,
+and AOT data are stored under `runtime/`.
+
+Runtime diagnostics are written as daily `.txt` files under `LOG` beside the
+configured `data.json`. Entries record settings, paper lifecycle/state, startup,
+and sync events without card text or credential values, and files older than
+seven calendar days are deleted automatically.
 
 For focused Windows parity QA on a real desktop session, first build the
 Windows release exe, manually exercise the current build, then record the
@@ -291,6 +300,11 @@ $env:REPAPERTODO_WEBDAV_PASSPHRASE = "<sync-encryption-passphrase>"
 $env:REPAPERTODO_WEBDAV_ROOT = "repapertodo-live-smoke"
 .\scripts\webdav_live_smoke.ps1 -ResultJson dist\webdav-live-smoke.json
 ```
+
+For Jianguoyun, `REPAPERTODO_WEBDAV_PASSWORD` must be the generated password
+from Third-party app management. The normal account login password returns HTTP
+401. `REPAPERTODO_WEBDAV_PASSPHRASE` is a separate RePaperTodo encryption value
+and is never used for HTTP authentication.
 
 For the required domestic-provider QA, set
 `REPAPERTODO_WEBDAV_PROVIDER=jianguoyun` against a Jianguoyun account and write

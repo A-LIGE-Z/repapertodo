@@ -575,11 +575,14 @@ creates a blank main column, while deleting column 1 promotes the next column
 into the main text. Inserting or deleting later columns should keep the other
 columns in order and preserve normalized per-column widths.
 Todo column width resizing should preserve PaperTodo splitter semantics: wide
-multi-column rows show an 8px drag target between adjacent columns, dragging
+and compact multi-column rows stay on one horizontal line and show an
+8px drag target with a single vertical divider between adjacent columns. Column-number
+labels and individual field outlines are omitted. Dragging
 resizes only that column pair, each column width is clamped to at least 0.2 and
 at most 8. Width saves happen without creating a todo undo snapshot.
 Todo due editing should preserve PaperTodo date-and-time precision: the picker
-must expose a calendar date plus 00-23 hour and 00-59 minute choices, default a
+must expose compact year/month/day plus 00-23 hour and 00-59 minute choices,
+default a
 new due time to roughly one hour from now, and save local values as
 `yyyy-MM-ddTHH:mm:ss` without milliseconds and with seconds reset to `00`.
 The due date and reminder interval dialogs should keep PaperTodo's keyboard
@@ -591,8 +594,8 @@ PaperTodo-compatible due dates read from storage should accept common
 year-first, slash-separated, day-first, Chinese year/month/day, and .NET
 seven-digit fractional-second timestamp forms before normalizing back to the
 canonical local format.
-Clicking an existing Todo due chip should reopen the due editor just like
-PaperTodo's due badge.
+The existing Todo due chip becomes a compact, right-aligned two-line due status
+that still reopens the due editor like PaperTodo's due badge.
 Clicking an existing Todo reminder chip should reopen the reminder interval
 editor so chip affordances stay consistent with Todo item menus.
 Todo overflow actions should mirror PaperTodo item menus for due and reminder
@@ -619,10 +622,10 @@ dates keep month-day plus `HH:mm`.
 Relative due labels should use PaperTodo's duration model rather than coarse
 day names: round the absolute distance up to at least one minute, combine day,
 hour, and minute units such as `2h5m`, then show `in {duration}` for future
-items and `{duration} overdue` for past items. When relative due labels are
-enabled, Todo rows should show the relative due chip next to the absolute due
-chip, while the absolute chip remains the click target for editing and clearing
-the due date. The reminder timer should also refresh due rows even when no
+items and `{duration} overdue` for past items. Todo rows keep one compact due
+status at the far right: relative time is the emphasized first line when
+enabled, absolute time remains the second line, and the same area edits or
+clears the due date. The reminder timer should also refresh due rows even when no
 reminder bubble is shown, so visible countdown text does not go stale.
 Todo ordering should preserve PaperTodo's reorder data semantics: item moves
 must push a todo undo snapshot, keep the moved item focused, normalize item

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'src/app.dart';
 import 'src/bootstrap/app_bootstrap.dart';
 import 'src/bootstrap/crash_recovery.dart';
+import 'src/core/logging/usage_log.dart';
 import 'src/sync/android_background_sync.dart';
 import 'src/windows/paper_window_app.dart';
 import 'src/windows/paper_window_arguments.dart';
@@ -26,6 +27,14 @@ Future<void> main(List<String> args) async {
         state: bootstrap.controller.state,
         error: error,
         stackTrace: stackTrace,
+      );
+      unawaited(
+        UsageLog.instance.record(
+          'application',
+          'unhandled-error',
+          level: 'ERROR',
+          details: {'errorType': error.runtimeType.toString()},
+        ),
       );
     } catch (_) {
       // Crash recovery must never replace the original failure.
@@ -47,6 +56,10 @@ Future<void> main(List<String> args) async {
         return;
       }
       activeBootstrap = bootstrap;
+      await UsageLog.instance.configureForStateFile(bootstrap.store.filePath);
+      await UsageLog.instance.record('application', 'started', details: {
+        'platform': Platform.operatingSystem,
+      });
       await initializeRePaperTodoAndroidBackgroundSync();
       await configureRePaperTodoAndroidBackgroundSync(
         sync: bootstrap.controller.state.sync,

@@ -80,6 +80,7 @@ abstract final class PaperWindowActionKinds {
   static const toggleCollapseAll = 'toggleCollapseAll';
   static const collapsePaper = 'collapsePaper';
   static const expandPaper = 'expandPaper';
+  static const syncNow = 'syncNow';
 
   static const values = {
     openPaper,
@@ -92,6 +93,7 @@ abstract final class PaperWindowActionKinds {
     toggleCollapseAll,
     collapsePaper,
     expandPaper,
+    syncNow,
   };
 }
 

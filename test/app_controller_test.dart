@@ -443,12 +443,16 @@ void main() {
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
       initialState: AppState(
+        useCapsuleCollapseAll: true,
+        capsuleCollapseAllActive: true,
+        capsuleCollapseAllActiveQueues: {'Primary|right': true},
         papers: [
           PaperData(
             id: 'paper-a',
             type: PaperTypes.todo,
             title: 'A',
             isVisible: false,
+            isCollapsed: true,
           ),
           PaperData(
             id: 'paper-b',
@@ -465,8 +469,11 @@ void main() {
       const StartupCommand(StartupCommandKind.show),
     );
 
-    expect(platform.paperWindows.shownIds, ['paper-a', 'paper-b']);
-    expect(platform.paperWindows.refreshSurfaceRegistryCount, 1);
+    expect(platform.paperWindows.restoreAllCount, 1);
+    expect(controller.state.papers.every((paper) => paper.isVisible), true);
+    expect(controller.state.papers.every((paper) => !paper.isCollapsed), true);
+    expect(controller.state.capsuleCollapseAllActive, false);
+    expect(controller.state.capsuleCollapseAllActiveQueues, isEmpty);
     expect(platform.tray.rebuildMenuCount, 1);
 
     await controller.executeStartupCommand(
@@ -474,7 +481,7 @@ void main() {
     );
 
     expect(platform.paperWindows.hiddenIds, ['paper-a', 'paper-b']);
-    expect(platform.paperWindows.refreshSurfaceRegistryCount, 2);
+    expect(platform.paperWindows.refreshSurfaceRegistryCount, 1);
     expect(platform.tray.rebuildMenuCount, 2);
   });
 
@@ -713,7 +720,11 @@ void main() {
 
     expect(note.isVisible, true);
     expect(note.isCollapsed, false);
-    expect(platform.paperWindows.shownIds, ['todo-paper', 'linked-note']);
+    expect(platform.paperWindows.restoreAllCount, 1);
+    expect(platform.paperWindows.restoredVisibilitySnapshots.single, [
+      true,
+      true,
+    ]);
   });
 
   test('opening linked notes places them beside the source paper', () async {
@@ -872,7 +883,11 @@ void main() {
       true,
       true,
     ]);
-    expect(platform.paperWindows.shownIds, ['paper-1', 'paper-2']);
+    expect(platform.paperWindows.restoreAllCount, 1);
+    expect(platform.paperWindows.restoredVisibilitySnapshots.single, [
+      true,
+      true,
+    ]);
   });
 
   test('startup toggle follows visible native surfaces like PaperTodo',
@@ -897,7 +912,11 @@ void main() {
       ['paper-1', 'paper-2'],
     ]);
     expect(platform.paperWindows.hiddenIds, isEmpty);
-    expect(platform.paperWindows.shownIds, ['paper-1', 'paper-2']);
+    expect(platform.paperWindows.restoreAllCount, 1);
+    expect(platform.paperWindows.restoredVisibilitySnapshots.single, [
+      true,
+      true,
+    ]);
   });
 
   test('startup settings command is retained for the UI layer', () async {

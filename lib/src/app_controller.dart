@@ -462,23 +462,29 @@ class RePaperTodoController {
       case StartupCommandKind.none:
         return;
       case StartupCommandKind.show:
+        state
+          ..capsuleCollapseAllActive = false
+          ..capsuleCollapseAllActiveQueues = <String, bool>{};
         for (final paper in state.papers) {
-          await _showPaper(
-            paper,
-            rebuildTrayMenu: false,
-            refreshSurfaceRegistry: false,
-          );
+          paper
+            ..isVisible = true
+            ..isCollapsed = false;
         }
-        await _platform.paperWindows.refreshSurfaceRegistry(state);
+        state.normalize();
+        await _platform.paperWindows.restoreAll(state);
         trayMenuNeedsRefresh = state.papers.isNotEmpty;
       case StartupCommandKind.hide:
+        state
+          ..capsuleCollapseAllActive = false
+          ..capsuleCollapseAllActiveQueues = <String, bool>{};
         for (final paper in state.papers) {
-          await _hidePaper(
-            paper,
-            rebuildTrayMenu: false,
-            refreshSurfaceRegistry: false,
-          );
+          paper
+            ..isPinnedToDesktop = false
+            ..isVisible = false
+            ..isCollapsed = false;
+          await _platform.paperWindows.hidePaper(paper);
         }
+        state.normalize();
         await _platform.paperWindows.refreshSurfaceRegistry(state);
         trayMenuNeedsRefresh = state.papers.isNotEmpty;
       case StartupCommandKind.toggle:

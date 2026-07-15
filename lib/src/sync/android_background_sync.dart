@@ -5,8 +5,10 @@ import 'package:flutter/widgets.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../core/model/sync_settings.dart';
+import '../core/logging/usage_log.dart';
 import '../core/storage/state_store.dart';
 import 'app_sync_service.dart';
+import 'webdav/webdav_client.dart';
 
 const androidBackgroundSyncUniqueName = 'repapertodo-periodic-webdav-sync';
 const androidBackgroundSyncTaskName = 'repapertodo.webdav.sync';
@@ -154,6 +156,10 @@ Future<bool> runRePaperTodoBackgroundSync(
 
   final store = StateStore(filePath: stateFilePath);
   try {
+    await UsageLog.instance.configureForStateFile(stateFilePath);
+    await UsageLog.instance.record('sync', 'background-started', details: {
+      'platform': 'android',
+    });
     final state = await store.load();
     final sync = state.sync;
     if (!sync.enabled ||
@@ -166,8 +172,22 @@ Future<bool> runRePaperTodoBackgroundSync(
       store: store,
     );
     await store.save(result.state);
+    await UsageLog.instance.record('sync', 'background-completed', details: {
+      'platform': 'android',
+      'status': result.syncResult.status.name,
+    });
     return _backgroundSyncCompletedWithoutRetry(result.syncResult.status);
-  } catch (_) {
+  } catch (error) {
+    await UsageLog.instance.record(
+      'sync',
+      'background-failed',
+      level: 'ERROR',
+      details: {
+        'platform': 'android',
+        'errorType': error.runtimeType.toString(),
+        if (error is WebDavException) 'statusCode': error.statusCode,
+      },
+    );
     return false;
   }
 }

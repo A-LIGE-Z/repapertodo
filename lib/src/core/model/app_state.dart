@@ -496,6 +496,26 @@ class AppState {
     setCapsuleCollapseAllActiveFor(paper, !active);
   }
 
+  void toggleCapsuleCollapseAllQueue(String queueKey) {
+    if (!useCapsuleMode || !useCapsuleCollapseAll || !useDeepCapsuleMode) {
+      return;
+    }
+    final normalizedQueueKey = queueKey.trim();
+    if (normalizedQueueKey.isEmpty ||
+        !papers.any((paper) =>
+            paper.isVisible &&
+            capsuleQueueKeyFor(paper) == normalizedQueueKey)) {
+      return;
+    }
+    final active = capsuleCollapseAllActiveQueues[normalizedQueueKey] ?? false;
+    if (active) {
+      capsuleCollapseAllActiveQueues.remove(normalizedQueueKey);
+    } else {
+      capsuleCollapseAllActiveQueues[normalizedQueueKey] = true;
+    }
+    capsuleCollapseAllActive = capsuleCollapseAllActiveQueues.isNotEmpty;
+  }
+
   JsonMap toJson() {
     return {
       ...extra,

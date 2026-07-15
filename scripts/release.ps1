@@ -517,6 +517,48 @@ function Assert-ZipContainsFile {
   throw $Message
 }
 
+function Assert-ZipContainsExactFile {
+  param(
+    [string]$ZipPath,
+    [string]$FileName,
+    [string]$Message
+  )
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [IO.Compression.ZipFile]::OpenRead($ZipPath)
+  try {
+    foreach ($entry in $archive.Entries) {
+      $entryName = $entry.FullName -replace "\\", "/"
+      if ($entryName -eq $FileName -and $entry.Length -gt 0) {
+        return
+      }
+    }
+  } finally {
+    $archive.Dispose()
+  }
+
+  throw $Message
+}
+
+function Assert-WindowsZipRootLayout {
+  param([string]$ZipPath)
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [IO.Compression.ZipFile]::OpenRead($ZipPath)
+  try {
+    $rootFiles = @($archive.Entries | Where-Object {
+      $entryName = $_.FullName -replace "\\", "/"
+      -not $entryName.Contains("/") -and $_.Length -gt 0
+    })
+    if ($rootFiles.Count -ne 1 -or
+        ($rootFiles[0].FullName -replace "\\", "/") -ne "repapertodo.exe") {
+      throw "Windows release zip root must contain only repapertodo.exe."
+    }
+  } finally {
+    $archive.Dispose()
+  }
+}
+
 function Assert-ZipContainsFilePattern {
   param(
     [string]$ZipPath,
@@ -762,7 +804,12 @@ function Remove-WindowsRuntimeStateFiles {
     "fullscreen-debug.log"
   )
 
-  Get-ChildItem -LiteralPath $StagingDirectory -File |
+  Get-ChildItem -LiteralPath $StagingDirectory -Recurse -Directory |
+    Where-Object { $_.Name -eq "LOG" } |
+    Sort-Object FullName -Descending |
+    Remove-Item -Recurse -Force
+
+  Get-ChildItem -LiteralPath $StagingDirectory -Recurse -File |
     Where-Object {
       $name = $_.Name
       $runtimeStateNames -contains $name -or
@@ -2886,6 +2933,7 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
 $windowsReleaseDir = Join-Path $repoRoot "build\windows\x64\runner\Release"
 $windowsReleaseExe = Join-Path $windowsReleaseDir "repapertodo.exe"
+$windowsLauncherExe = Join-Path $windowsReleaseDir "repapertodo_launcher.exe"
 $androidReleaseApkSource = Join-Path $repoRoot "build\app\outputs\flutter-apk\app-release.apk"
 $windowsStagingDir = Join-Path $dist "repapertodo-windows-x64-$artifactVersion-staging"
 $windowsZip = Join-Path $dist "repapertodo-windows-x64-$artifactVersion.zip"
@@ -2932,6 +2980,9 @@ Invoke-Step "Package release artifacts" {
   Assert-FileExists `
     -Path $windowsReleaseExe `
     -Message "Windows release executable was not found. Run without -SkipBuild to create it."
+  Assert-FileExists `
+    -Path $windowsLauncherExe `
+    -Message "Windows release launcher was not found. Run without -SkipBuild to create it."
   foreach ($windowsRuntimeLibrary in @(
     "msvcp140.dll",
     "vcruntime140.dll",
@@ -2957,10 +3008,21 @@ Invoke-Step "Package release artifacts" {
     Remove-Item -LiteralPath $windowsStagingDir -Recurse -Force
   }
   New-Item -ItemType Directory -Force -Path $windowsStagingDir | Out-Null
+  $windowsRuntimeStagingDir = Join-Path $windowsStagingDir "runtime"
+  New-Item -ItemType Directory -Force -Path $windowsRuntimeStagingDir | Out-Null
   Copy-Item `
-    -Path (Join-Path $windowsReleaseDir "*") `
-    -Destination $windowsStagingDir `
+    -LiteralPath $windowsLauncherExe `
+    -Destination (Join-Path $windowsStagingDir "repapertodo.exe") `
+    -Force
+  Get-ChildItem -LiteralPath $windowsReleaseDir -Force |
+    Where-Object { $_.Name -ne "repapertodo_launcher.exe" } |
+    Copy-Item `
+    -Destination $windowsRuntimeStagingDir `
     -Recurse `
+    -Force
+  Move-Item `
+    -LiteralPath (Join-Path $windowsRuntimeStagingDir "repapertodo.exe") `
+    -Destination (Join-Path $windowsRuntimeStagingDir "repapertodo.runtime.exe") `
     -Force
   Remove-WindowsRuntimeStateFiles -StagingDirectory $windowsStagingDir
   try {
@@ -2973,36 +3035,41 @@ Invoke-Step "Package release artifacts" {
   Assert-ZipEntriesSafe `
     -ZipPath $windowsZip `
     -Message "Windows release zip contains unsafe entry paths."
-  Assert-ZipContainsFile `
+  Assert-WindowsZipRootLayout -ZipPath $windowsZip
+  Assert-ZipContainsExactFile `
     -ZipPath $windowsZip `
     -FileName "repapertodo.exe" `
     -Message "Windows release zip does not contain repapertodo.exe."
-  Assert-ZipContainsFile `
+  Assert-ZipContainsExactFile `
     -ZipPath $windowsZip `
-    -FileName "flutter_windows.dll" `
-    -Message "Windows release zip does not contain flutter_windows.dll."
+    -FileName "runtime/repapertodo.runtime.exe" `
+    -Message "Windows release zip does not contain runtime/repapertodo.runtime.exe."
+  Assert-ZipContainsExactFile `
+    -ZipPath $windowsZip `
+    -FileName "runtime/flutter_windows.dll" `
+    -Message "Windows release zip does not contain runtime/flutter_windows.dll."
   foreach ($windowsRuntimeLibrary in @(
     "msvcp140.dll",
     "vcruntime140.dll",
     "vcruntime140_1.dll",
     "ucrtbase.dll"
   )) {
-    Assert-ZipContainsFile `
+    Assert-ZipContainsExactFile `
       -ZipPath $windowsZip `
-      -FileName $windowsRuntimeLibrary `
-      -Message "Windows release zip does not contain $windowsRuntimeLibrary."
+      -FileName "runtime/$windowsRuntimeLibrary" `
+      -Message "Windows release zip does not contain runtime/$windowsRuntimeLibrary."
   }
-  Assert-ZipContainsFile `
+  Assert-ZipContainsExactFile `
     -ZipPath $windowsZip `
-    -FileName "data/app.so" `
-    -Message "Windows release zip does not contain data/app.so."
-  Assert-ZipContainsFile `
+    -FileName "runtime/data/app.so" `
+    -Message "Windows release zip does not contain runtime/data/app.so."
+  Assert-ZipContainsExactFile `
     -ZipPath $windowsZip `
-    -FileName "data/icudtl.dat" `
-    -Message "Windows release zip does not contain data/icudtl.dat."
-  Assert-ZipContainsFile `
+    -FileName "runtime/data/icudtl.dat" `
+    -Message "Windows release zip does not contain runtime/data/icudtl.dat."
+  Assert-ZipContainsExactFile `
     -ZipPath $windowsZip `
-    -FileName "data/flutter_assets/FontManifest.json" `
+    -FileName "runtime/data/flutter_assets/FontManifest.json" `
     -Message "Windows release zip does not contain Flutter asset files."
   foreach ($runtimeStateFile in @(
     "data.json",

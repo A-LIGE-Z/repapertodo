@@ -329,7 +329,10 @@ void NativeCapsuleWindow::SendClick() {
            flutter::EncodableValue(paper_id_)},
           {flutter::EncodableValue("kind"), flutter::EncodableValue(kind)},
           {flutter::EncodableValue("value"),
-           flutter::EncodableValue(master_ ? std::string() : paper_id_)},
+           flutter::EncodableValue(
+               master_ && surface_id_.rfind("master:", 0) == 0
+                   ? surface_id_.substr(7)
+                   : paper_id_)},
       });
 }
 

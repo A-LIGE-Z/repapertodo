@@ -68,13 +68,13 @@ void main() {
     expect(find.text('RePaperTodo'), findsWidgets);
     expect(find.text('Windows parity'), findsOneWidget);
     expect(find.text('Build compatible data core'), findsOneWidget);
-    expect(find.text('Due 06-30 00:00'), findsOneWidget);
+    expect(find.text('06-30 00:00'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.close_outlined));
     await tester.pump();
 
     expect(controller.state.papers.single.items[1].dueAtLocal, isNull);
-    expect(find.text('Due 06-30 00:00'), findsNothing);
+    expect(find.text('06-30 00:00'), findsNothing);
 
     await tester.enterText(
         find.byKey(const ValueKey('welcome-todo-title')), 'Edited title');
@@ -668,6 +668,45 @@ void main() {
       find.byKey(const ValueKey('paper-window-hidden-actions-close')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('paper-window-hidden-actions-sync-now')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('paper window manual sync delegates to the coordinator',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'paper-window-sync',
+      title: 'Sync paper',
+      items: [PaperItem(id: 'sync-item', text: 'Sync')],
+    );
+    final actions = <String>[];
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(papers: [paper]),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+        paperWindowActionSender: (kind, {value = ''}) async {
+          actions.add(kind);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('paper-window-sync-sync-now')),
+    );
+    await tester.pump();
+
+    expect(actions, [PaperWindowActionKinds.syncNow]);
   });
 
   testWidgets('paper window actions remain anchored to the resized right edge',
@@ -4130,6 +4169,14 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     await _selectSettingsCategory(tester, 'sync');
+    expect(
+      find.widgetWithText(TextField, 'WebDAV app password'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Jianguoyun requires an app password'),
+      findsOneWidget,
+    );
     await tester.scrollUntilVisible(
       find.widgetWithText(TextField, 'Remote folder'),
       240,
@@ -6209,6 +6256,75 @@ void main() {
     expect(find.textContaining(failureMessage), findsOneWidget);
     expect(find.textContaining('Provider details:'), findsNothing);
     expect(find.textContaining('WebDavException'), findsNothing);
+    expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
+  });
+
+  testWidgets('Jianguoyun HTTP 401 explains the required app password',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final initialState = AppState(
+      sync: SyncSettings(
+        enabled: true,
+        provider: SyncProviderIds.webDav,
+        webDav: WebDavSyncSettings.jianguoyun(
+          username: 'user@example.test',
+          password: 'provider-app-password',
+          encryptionPassphrase: 'independent-sync-passphrase',
+        ),
+      ),
+      papers: [
+        PaperData(
+          id: 'jianguoyun-auth-failure-note',
+          type: PaperTypes.note,
+          title: 'Local before authentication retry',
+          content: 'Local body',
+        ),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: initialState,
+      platform: _RecordingPlatformServices(),
+    );
+    final syncService = _ManualSyncService(
+      firstSyncError: const WebDavException(
+        'WebDAV authentication failed. Check the username and app password.',
+        statusCode: HttpStatus.unauthorized,
+      ),
+      result: AppSyncRunResult(
+        syncResult: const AppSyncResult(
+          status: AppSyncStatus.uploaded,
+          message: 'Local data uploaded.',
+        ),
+        state: controller.state,
+      ),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        syncService: syncService,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Sync now').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.textContaining(
+        'Enter the email address and the app password generated under Third-party app management.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(
+        'Do not enter the account login password or the sync encryption passphrase here.',
+      ),
+      findsOneWidget,
+    );
     expect(find.widgetWithText(SnackBarAction, 'Retry'), findsOneWidget);
   });
 
@@ -11574,7 +11690,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Due in 5m'), findsOneWidget);
+    expect(find.text('in 5m'), findsOneWidget);
     expect(find.text(_formatAbsoluteDueLabelForTest(dueAt)), findsOneWidget);
   });
 
@@ -11617,15 +11733,15 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Due in 21m'), findsOneWidget);
+    expect(find.text('in 21m'), findsOneWidget);
 
     item.dueAtLocal = DateTime.now()
         .add(const Duration(minutes: 19, seconds: 5))
         .toIso8601String();
     await tester.pump(const Duration(seconds: 31));
 
-    expect(find.text('Due in 21m'), findsNothing);
-    expect(find.text('Due in 20m'), findsOneWidget);
+    expect(find.text('in 21m'), findsNothing);
+    expect(find.text('in 20m'), findsOneWidget);
   });
 
   testWidgets('formats relative todo due durations like PaperTodo',
@@ -11683,9 +11799,9 @@ void main() {
       ),
     );
 
-    expect(find.text('Due in 2h5m'), findsOneWidget);
-    expect(find.text('Due 1h3m overdue'), findsOneWidget);
-    expect(find.text('Due in 1m'), findsOneWidget);
+    expect(find.text('in 2h5m'), findsOneWidget);
+    expect(find.text('1h3m overdue'), findsOneWidget);
+    expect(find.text('in 1m'), findsOneWidget);
   });
 
   testWidgets('sets todo due date with hour and minute like PaperTodo',
@@ -11721,7 +11837,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Due 06-30 09:15'), findsOneWidget);
+    expect(find.text('06-30 09:15'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Set due date'));
     await tester.pumpAndSettle();
@@ -11747,7 +11863,7 @@ void main() {
 
     final item = controller.state.papers.single.items.single;
     expect(item.dueAtLocal, '2026-06-30T10:30:00');
-    expect(find.text('Due 06-30 10:30'), findsOneWidget);
+    expect(find.text('06-30 10:30'), findsOneWidget);
   });
 
   testWidgets('opens todo due editor from due chip like PaperTodo',
@@ -11782,7 +11898,9 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(InputChip, 'Due 06-30 09:15'));
+    await tester.tap(
+      find.byKey(const ValueKey('due-chip-paper-due-chip-item-due-absolute')),
+    );
     await tester.pumpAndSettle();
 
     tester
@@ -11798,7 +11916,7 @@ void main() {
 
     final item = controller.state.papers.single.items.single;
     expect(item.dueAtLocal, '2026-06-30T09:45:00');
-    expect(find.text('Due 06-30 09:45'), findsOneWidget);
+    expect(find.text('06-30 09:45'), findsOneWidget);
   });
 
   testWidgets('todo due dialog keyboard shortcuts match PaperTodo',
@@ -11833,7 +11951,11 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(InputChip, 'Due 06-30 09:15'));
+    await tester.tap(
+      find.byKey(
+        const ValueKey('due-shortcut-paper-due-shortcut-item-due-absolute'),
+      ),
+    );
     await tester.pumpAndSettle();
     tester
         .widget<DropdownButtonFormField<int>>(
@@ -11847,9 +11969,13 @@ void main() {
 
     final item = controller.state.papers.single.items.single;
     expect(item.dueAtLocal, '2026-06-30T09:15:00');
-    expect(find.text('Due 06-30 09:15'), findsOneWidget);
+    expect(find.text('06-30 09:15'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(InputChip, 'Due 06-30 09:15'));
+    await tester.tap(
+      find.byKey(
+        const ValueKey('due-shortcut-paper-due-shortcut-item-due-absolute'),
+      ),
+    );
     await tester.pumpAndSettle();
     tester
         .widget<DropdownButtonFormField<int>>(
@@ -11868,7 +11994,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(item.dueAtLocal, '2026-06-30T10:30:00');
-    expect(find.text('Due 06-30 10:30'), findsOneWidget);
+    expect(find.text('06-30 10:30'), findsOneWidget);
   });
 
   testWidgets('formats absolute todo due times like PaperTodo', (tester) async {
@@ -12244,8 +12370,22 @@ void main() {
     final firstItem = controller.state.papers.single.items.first;
     expect(firstItem.todoColumnCount, 2);
     expect(firstItem.todoExtraColumns, ['']);
-    expect(find.text('Column 1'), findsOneWidget);
-    expect(find.text('Column 2'), findsOneWidget);
+    expect(find.text('Column 1'), findsNothing);
+    expect(find.text('Column 2'), findsNothing);
+    final firstColumnBox = tester.renderObject<RenderBox>(
+      find.byKey(const ValueKey('columns-paper-columns-item-text')),
+    );
+    final secondColumnBox = tester.renderObject<RenderBox>(
+      find.byKey(
+        const ValueKey('columns-paper-columns-item-column-2'),
+      ),
+    );
+    expect(
+      (firstColumnBox.localToGlobal(Offset.zero).dy -
+              secondColumnBox.localToGlobal(Offset.zero).dy)
+          .abs(),
+      lessThan(2),
+    );
 
     await tester.enterText(
       find.byKey(const ValueKey('columns-paper-columns-item-column-2')),
@@ -16501,6 +16641,9 @@ void main() {
       initialState: state,
       platform: platform,
     );
+    final queueKey = controller.state.capsuleQueueKeyFor(
+      controller.state.papers.first,
+    );
     await tester.pumpWidget(
       RePaperTodoApp(controller: controller, store: store),
     );
@@ -16508,9 +16651,10 @@ void main() {
     final restoreCount = platform.paperWindows.restoredTitleSnapshots.length;
 
     platform.paperWindows.emitAction(
-      const PaperWindowActionRequest(
+      PaperWindowActionRequest(
         kind: PaperWindowActionKinds.toggleCollapseAll,
         paperId: 'collapse-all-master',
+        value: queueKey,
       ),
     );
     await tester.pump();
@@ -16522,6 +16666,20 @@ void main() {
       greaterThan(restoreCount),
     );
     expect(store.savedState.capsuleCollapseAllActive, false);
+
+    controller.state.papers.last.isCollapsed = true;
+    platform.paperWindows.emitAction(
+      const PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.openPaper,
+        paperId: 'collapse-all-peer',
+        value: 'collapse-all-peer',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(controller.state.papers.last.isCollapsed, false);
+    expect(platform.paperWindows.shownTitles, contains('Peer'));
   });
 
   testWidgets('dragging a master capsule changes its queue start height',
@@ -18450,12 +18608,12 @@ String _formatAbsoluteDueLabelForTest(DateTime date) {
   final time = '${local.hour.toString().padLeft(2, '0')}:'
       '${local.minute.toString().padLeft(2, '0')}';
   if (dueDay == today) {
-    return 'Due $time';
+    return time;
   }
   if (dueDay == today.add(const Duration(days: 1))) {
-    return 'Due Tomorrow $time';
+    return 'Tomorrow $time';
   }
-  return 'Due ${local.month.toString().padLeft(2, '0')}-'
+  return '${local.month.toString().padLeft(2, '0')}-'
       '${local.day.toString().padLeft(2, '0')} $time';
 }
 

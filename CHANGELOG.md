@@ -23,6 +23,22 @@
 - Added app-local MSVC and Universal CRT runtime libraries to Windows builds so
   the packaged application starts on Windows 10 without requiring a separately
   installed Visual C++ Redistributable.
+- Reworked the Windows ZIP so its root contains only `repapertodo.exe`; a
+  dependency-free launcher starts the Flutter executable and complete runtime
+  from the nested `runtime/` directory.
+- Fixed collapse-all queues and tray Show all by clearing stale queue state,
+  restoring every paper in one native reconciliation, and routing capsule
+  clicks by stable queue/paper identity.
+- Added redacted daily text diagnostics under the data directory's `LOG`
+  folder for settings, paper, application, and sync events, with automatic
+  seven-day retention on Windows and Android.
+- Added a manual sync action to every paper header and clarified that
+  Jianguoyun requires its generated WebDAV app password rather than the account
+  login password; authentication failures now give a provider-specific recovery
+  message.
+- Kept Todo columns in one row at compact paper widths with divider-only
+  separation, and replaced large due-date dialogs/chips with a compact
+  date-time selector and right-aligned relative/absolute due status.
 
 - Made Jianguoyun conditional manifest updates compatible with its unquoted
   opaque ETags: sync still tries the standard quoted `If-Match` first, then

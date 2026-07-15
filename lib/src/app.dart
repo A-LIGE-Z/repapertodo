@@ -13,6 +13,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:path/path.dart' as p;
 
 import 'app_controller.dart';
+import 'core/logging/usage_log.dart';
 import 'core/model/app_state.dart';
 import 'core/model/external_uri_targets.dart';
 import 'core/model/markdown_formatting.dart';
@@ -29,6 +30,7 @@ import 'core/model/paper_titles.dart';
 import 'core/model/sync_settings.dart';
 import 'core/model/todo_paste.dart';
 import 'core/model/todo_due_date.dart';
+import 'core/model/webdav_presets.dart';
 import 'core/script/script_capsule.dart';
 import 'core/storage/state_store.dart';
 import 'core/startup/startup_command.dart';
@@ -1761,6 +1763,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           controller.state.useCapsuleCollapseAll &&
           controller.state.isCapsuleCollapseAllActiveFor(paper),
       noteLineSpacing: controller.state.noteLineSpacing,
+      syncing: _isSyncing,
+      onSync: actionSender == null
+          ? () => _syncNow()
+          : () => actionSender(PaperWindowActionKinds.syncNow),
       onChanged: _refreshAndSaveState,
       onTitleChanged: _updatePaperTitle,
       onCreatePaper: actionSender == null
@@ -1841,11 +1847,32 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         : controller.state.isCapsuleCollapseAllActiveFor(surfacePaper);
   }
 
-  Future<void> _toggleCollapseAll([PaperData? paper]) async {
+  Future<void> _toggleCollapseAll([
+    PaperData? paper,
+    String queueKey = '',
+  ]) async {
     setState(() {
-      controller.state.toggleCapsuleCollapseAllFor(paper);
+      if (queueKey.trim().isNotEmpty) {
+        controller.state.toggleCapsuleCollapseAllQueue(queueKey);
+      } else {
+        controller.state.toggleCapsuleCollapseAllFor(paper);
+      }
     });
     await controller.refreshPaperSurfaces();
+    await _saveState();
+  }
+
+  Future<void> _activatePaperFromCapsule(PaperData paper) async {
+    setState(() {
+      controller.state.setCapsuleCollapseAllActiveFor(paper, false);
+      paper
+        ..isVisible = true
+        ..isCollapsed = false;
+      controller.state.normalize();
+      _surfacePaperId = paper.id;
+    });
+    await controller.refreshPaperSurfaces();
+    await controller.showPaper(paper);
     await _saveState();
   }
 
@@ -1853,6 +1880,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     bool scheduleLocalEditSync = true,
     bool rebuildTrayMenu = true,
     bool preserveExistingPendingOperationBatch = true,
+    AppState? usageBeforeState,
+    String usageSource = 'state-save',
   }) async {
     AppState? beforeState;
     final saveLocalEditSyncGeneration = _localEditSyncGeneration;
@@ -1888,7 +1917,16 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           }
         }
       }
-      await widget.store.save(controller.state);
+      final savedState = _stateSnapshot(controller.state);
+      await widget.store.save(savedState);
+      final usageBefore = usageBeforeState ?? beforeState;
+      if (usageBefore != null) {
+        await UsageLog.instance.recordStateChange(
+          before: usageBefore,
+          after: savedState,
+          source: usageSource,
+        );
+      }
       if (rebuildTrayMenu) {
         await _rebuildTrayMenu();
       }
@@ -2367,6 +2405,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (command.kind == StartupCommandKind.none) {
       return;
     }
+    await UsageLog.instance.record('application', 'startup-command', details: {
+      'command': command.kind.name,
+    });
     if (command.kind == StartupCommandKind.exit) {
       _exitCommandFuture ??= _runExitStartupCommand(command);
       await _exitCommandFuture;
@@ -2482,7 +2523,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             .where((candidate) => candidate.id == request.value)
             .firstOrNull;
         if (target != null) {
-          unawaited(_openPaper(target));
+          unawaited(_activatePaperFromCapsule(target));
         }
       case PaperWindowActionKinds.createTodo:
         unawaited(_createPaper(PaperTypes.todo, sourcePaper: paper));
@@ -2503,7 +2544,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       case PaperWindowActionKinds.openReminderPaper:
         unawaited(_openTodoReminderPaper(paper));
       case PaperWindowActionKinds.toggleCollapseAll:
-        unawaited(_toggleCollapseAll(paper));
+        unawaited(_toggleCollapseAll(paper, request.value));
       case PaperWindowActionKinds.collapsePaper:
         if (!paper.isCollapsed) {
           setState(() {
@@ -2514,14 +2555,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           unawaited(_saveState());
         }
       case PaperWindowActionKinds.expandPaper:
-        if (paper.isCollapsed) {
-          setState(() {
-            paper.isCollapsed = false;
-            controller.state.normalize();
-          });
-          unawaited(controller.refreshPaperSurfaces());
-          unawaited(_saveState());
-        }
+        unawaited(_activatePaperFromCapsule(paper));
+      case PaperWindowActionKinds.syncNow:
+        unawaited(_syncNow());
     }
   }
 
@@ -2756,6 +2792,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   Future<void> _runSyncNow({required bool showMessage}) async {
     setState(() => _isSyncing = true);
+    await UsageLog.instance.record('sync', 'started', details: {
+      'manual': showMessage,
+      'provider': controller.state.sync.provider,
+      'preset': controller.state.sync.webDav.presetId,
+    });
     _localEditSyncDebounce?.cancel();
     _localEditSyncDebounce = null;
     try {
@@ -2782,6 +2823,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         return;
       }
       await _replaceStateAndApplyPlatform(result.state);
+      await UsageLog.instance.record('sync', 'completed', details: {
+        'manual': showMessage,
+        'status': result.syncResult.status.name,
+      });
       _restartAutoSyncTimer();
       if (showMessage && mounted) {
         _showSyncSnackBar(
@@ -2790,6 +2835,16 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         );
       }
     } catch (error) {
+      await UsageLog.instance.record(
+        'sync',
+        'failed',
+        level: 'ERROR',
+        details: {
+          'manual': showMessage,
+          'errorType': error.runtimeType.toString(),
+          if (error is WebDavException) 'statusCode': error.statusCode,
+        },
+      );
       if (!mounted || !showMessage) {
         return;
       }
@@ -2920,6 +2975,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _openSettings() async {
+    final stateBeforeSettings = _stateSnapshot(controller.state);
     final hadPendingLocalEditSync = _pendingLocalEditBaseState != null &&
         _pendingLocalEditLatestState != null;
     _localEditSyncDebounce?.cancel();
@@ -3189,6 +3245,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             await widget.store.relocate(nextFilePath, controller.state);
             try {
               await controller.commitDataDirectory(selectedDirectory);
+              await UsageLog.instance.configureForStateFile(nextFilePath);
             } catch (_) {
               await widget.store.relocate(previousFilePath, controller.state);
               rethrow;
@@ -3269,6 +3326,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       await _saveState(
         scheduleLocalEditSync: false,
         preserveExistingPendingOperationBatch: preservePendingOperationBatch,
+        usageBeforeState: stateBeforeSettings,
+        usageSource: 'settings-save',
       );
       await _configureAndroidBackgroundSyncAfterSettingsSave();
     } catch (error) {
@@ -3360,12 +3419,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   void _showSyncFailureSnackBar(Object error) {
+    final failureMessage = error is WebDavException &&
+            error.statusCode == HttpStatus.unauthorized &&
+            controller.state.sync.webDav.presetId == WebDavPresetIds.jianguoyun
+        ? strings.get(PaperTodoStringKeys.jianguoyunAuthenticationFailed)
+        : _readableFailureMessage(error, strings: strings);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           strings.format(
             PaperTodoStringKeys.syncFailed,
-            [_readableFailureMessage(error, strings: strings)],
+            [failureMessage],
           ),
         ),
         action: SnackBarAction(
@@ -4693,6 +4757,8 @@ class PaperPreview extends StatelessWidget {
     required this.defaultTodoReminderIntervalUnit,
     required this.collapseAllActive,
     required this.noteLineSpacing,
+    required this.syncing,
+    required this.onSync,
     required this.onChanged,
     required this.onTitleChanged,
     required this.onCreatePaper,
@@ -4753,6 +4819,8 @@ class PaperPreview extends StatelessWidget {
   final String defaultTodoReminderIntervalUnit;
   final bool collapseAllActive;
   final double noteLineSpacing;
+  final bool syncing;
+  final Future<void> Function() onSync;
   final Future<void> Function() onChanged;
   final Future<void> Function(PaperData paper) onTitleChanged;
   final Future<void> Function(String type, {PaperData? sourcePaper})
@@ -5285,6 +5353,23 @@ class PaperPreview extends StatelessWidget {
       return [
         SizedBox.square(
           dimension: 48,
+          child: IconButton(
+            key: ValueKey('${paper.id}-sync-now'),
+            tooltip: _tooltipLabel(
+              enableToolTips,
+              strings.get(PaperTodoStringKeys.actionSyncNow),
+            ),
+            onPressed: syncing ? null : () => unawaited(onSync()),
+            icon: syncing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync_outlined),
+          ),
+        ),
+        SizedBox.square(
+          dimension: 48,
           child: _collapseButton(context, isCollapsed),
         ),
         SizedBox.square(
@@ -5363,6 +5448,20 @@ class PaperPreview extends StatelessWidget {
       ];
     }
     return [
+      IconButton(
+        key: ValueKey('${paper.id}-sync-now'),
+        tooltip: _tooltipLabel(
+          enableToolTips,
+          strings.get(PaperTodoStringKeys.actionSyncNow),
+        ),
+        onPressed: syncing ? null : () => unawaited(onSync()),
+        icon: syncing
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.sync_outlined),
+      ),
       IconButton(
         tooltip: _tooltipLabel(
           enableToolTips,
@@ -5502,6 +5601,17 @@ class PaperPreview extends StatelessWidget {
             style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500),
           ),
         ),
+      _standaloneHeaderButton(
+        key: ValueKey('${paper.id}-sync-now'),
+        tooltip: strings.get(PaperTodoStringKeys.actionSyncNow),
+        onPressed: syncing ? null : () => unawaited(onSync()),
+        child: syncing
+            ? const SizedBox.square(
+                dimension: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.6),
+              )
+            : const Icon(Icons.sync_outlined, size: 15),
+      ),
       _standaloneHeaderButton(
         key: ValueKey('${paper.id}-desktop-pin'),
         tooltip: paper.isPinnedToDesktop
@@ -9076,6 +9186,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     final mobileBoard = !widget.standaloneSurface &&
         MediaQuery.sizeOf(context).shortestSide < 600;
     final leadingExtent = mobileBoard ? 48.0 : visualSpec.controlExtent;
+    final dueIndicator = _todoDueIndicator(context, item, visualSpec);
     final row = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -9102,7 +9213,6 @@ class _TodoEditorState extends State<_TodoEditor> {
                 spacing: 6,
                 runSpacing: 4,
                 children: [
-                  ..._todoDueChips(context, item, visualSpec),
                   if (_formatReminderInterval(item)
                       case final reminderInterval?)
                     InputChip(
@@ -9147,6 +9257,10 @@ class _TodoEditorState extends State<_TodoEditor> {
           visualSpec: visualSpec,
           compact: compactActions,
         ),
+        if (dueIndicator != null) ...[
+          const SizedBox(width: 4),
+          dueIndicator,
+        ],
       ],
     );
     final rowBody =
@@ -9377,71 +9491,107 @@ class _TodoEditorState extends State<_TodoEditor> {
     return rect.contains(globalPosition);
   }
 
-  List<Widget> _todoDueChips(
+  Widget? _todoDueIndicator(
     BuildContext context,
     PaperItem item,
     _TodoVisualSpec visualSpec,
   ) {
     final dueAt = parsePaperTodoDueAtLocal(item.dueAtLocal);
     if (dueAt == null) {
-      return const [];
+      return null;
     }
-
-    final chipTextStyle = _todoChipTextStyle(visualSpec);
-    final chips = <Widget>[];
-    if (widget.showDueRelativeTime) {
-      chips.add(
-        Chip(
-          key: ValueKey('${widget.paper.id}-${item.id}-due-relative'),
-          visualDensity: VisualDensity.compact,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          avatar: Icon(
-            Icons.schedule_outlined,
-            size: visualSpec.chipIconSize,
+    final colorScheme = Theme.of(context).colorScheme;
+    final difference = dueAt.difference(DateTime.now());
+    final statusColor = difference.isNegative
+        ? colorScheme.error
+        : difference <= const Duration(hours: 1)
+            ? colorScheme.tertiary
+            : colorScheme.onSurfaceVariant;
+    final absolute = _formatAbsoluteDueDate(dueAt);
+    final relative = _formatRelativeDueDate(dueAt);
+    final label = strings.format(PaperTodoStringKeys.dueLabel, [
+      widget.showDueRelativeTime ? '$relative, $absolute' : absolute,
+    ]);
+    return Semantics(
+      button: true,
+      label: label,
+      child: InkWell(
+        key: ValueKey('${widget.paper.id}-${item.id}-due-absolute'),
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => unawaited(_pickDueDate(context, item)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: widget.standaloneSurface ? 74 : 88,
+            maxWidth: widget.standaloneSurface ? 98 : 122,
+            minHeight: widget.standaloneSurface ? 34 : 44,
           ),
-          labelStyle: chipTextStyle,
-          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-          label: Text(
-            strings.format(
-              PaperTodoStringKeys.dueLabel,
-              [_formatRelativeDueDate(dueAt)],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Icon(
+                  difference.isNegative
+                      ? Icons.warning_amber_rounded
+                      : Icons.schedule_outlined,
+                  size: visualSpec.chipIconSize,
+                  color: statusColor,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (widget.showDueRelativeTime)
+                        Text(
+                          relative,
+                          key: ValueKey(
+                            '${widget.paper.id}-${item.id}-due-relative',
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: _todoChipTextStyle(visualSpec)?.copyWith(
+                            color: statusColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      Text(
+                        absolute,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: _todoChipTextStyle(visualSpec)?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  key: ValueKey('${widget.paper.id}-${item.id}-due-clear'),
+                  onPressed: () => _clearDueDate(item),
+                  tooltip: _tooltipLabel(
+                    widget.enableToolTips,
+                    strings.get(PaperTodoStringKeys.actionClearDueDate),
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  iconSize: 14,
+                  icon: const Icon(Icons.close_outlined),
+                ),
+              ],
             ),
           ),
         ),
-      );
-    }
-
-    chips.add(
-      InputChip(
-        key: ValueKey('${widget.paper.id}-${item.id}-due-absolute'),
-        visualDensity: VisualDensity.compact,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        avatar: Icon(
-          Icons.event_outlined,
-          size: visualSpec.chipIconSize,
-        ),
-        labelStyle: chipTextStyle,
-        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-        label: Text(
-          strings.format(
-            PaperTodoStringKeys.dueLabel,
-            [_formatAbsoluteDueDate(dueAt)],
-          ),
-        ),
-        onPressed: () => unawaited(_pickDueDate(context, item)),
-        onDeleted: () => _clearDueDate(item),
-        deleteIcon: Icon(
-          Icons.close_outlined,
-          size: visualSpec.chipIconSize,
-        ),
-        deleteButtonTooltipMessage: _tooltipLabel(
-          widget.enableToolTips,
-          strings.get(PaperTodoStringKeys.actionClearDueDate),
-        ),
       ),
     );
-
-    return chips;
   }
 
   Widget _noteLinkDropTarget(PaperItem item, Widget row) {
@@ -10628,19 +10778,6 @@ class _TodoEditorState extends State<_TodoEditor> {
       padding: const EdgeInsets.only(bottom: 6),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (constraints.maxWidth < 640) {
-            return Column(
-              children: [
-                for (var index = 0; index < fields.length; index++)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      bottom: index == fields.length - 1 ? 0 : 6,
-                    ),
-                    child: fields[index],
-                  ),
-              ],
-            );
-          }
           return IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -10789,21 +10926,10 @@ class _TodoEditorState extends State<_TodoEditor> {
               maxLines: null,
               textInputAction: TextInputAction.next,
               decoration: InputDecoration(
-                border: item.todoColumnCount > 1
-                    ? const OutlineInputBorder()
-                    : InputBorder.none,
-                enabledBorder: item.todoColumnCount > 1
-                    ? const OutlineInputBorder()
-                    : InputBorder.none,
-                focusedBorder: item.todoColumnCount > 1
-                    ? OutlineInputBorder(
-                        borderSide: BorderSide(color: colorScheme.primary),
-                      )
-                    : InputBorder.none,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
                 filled: false,
-                labelText: item.todoColumnCount > 1
-                    ? strings.format(PaperTodoStringKeys.columnLabel, [1])
-                    : null,
                 hintText: strings.get(PaperTodoStringKeys.todoNewItemHint),
                 isDense: true,
                 contentPadding: visualSpec.mainContentPadding,
@@ -10938,11 +11064,9 @@ class _TodoEditorState extends State<_TodoEditor> {
             maxLines: null,
             textInputAction: TextInputAction.next,
             decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              labelText: strings.format(
-                PaperTodoStringKeys.columnLabel,
-                [index + 2],
-              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
               isDense: true,
               contentPadding: visualSpec.extraContentPadding,
             ),
@@ -11792,82 +11916,95 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
         child: AlertDialog(
           title: Text(strings.get(PaperTodoStringKeys.dialogDueDate)),
           content: SizedBox(
-            width: 360,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 330,
-                    child: CalendarDatePicker(
-                      initialDate: _selectedDate,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                      onDateChanged: (value) {
-                        setState(() {
-                          _selectedDate = DateTime(
-                            value.year,
-                            value.month,
-                            value.day,
-                          );
-                        });
-                      },
+            width: 320,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: _datePartDropdown(
+                        key: const ValueKey('todo-due-year'),
+                        label: strings.get(PaperTodoStringKeys.year),
+                        value: _selectedDate.year,
+                        values: [
+                          for (var value = 2000; value <= 2100; value++) value
+                        ],
+                        onChanged: (value) => _setDate(year: value),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<int>(
-                          key: const ValueKey('todo-due-hour'),
-                          initialValue: _hour,
-                          decoration: InputDecoration(
-                            labelText: strings.get(PaperTodoStringKeys.hour),
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: [
-                            for (var value = 0; value < 24; value++)
-                              DropdownMenuItem(
-                                value: value,
-                                child: Text(value.toString().padLeft(2, '0')),
-                              ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _hour = value);
-                            }
-                          },
-                        ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: _datePartDropdown(
+                        key: const ValueKey('todo-due-month'),
+                        label: strings.get(PaperTodoStringKeys.month),
+                        value: _selectedDate.month,
+                        values: [
+                          for (var value = 1; value <= 12; value++) value
+                        ],
+                        onChanged: (value) => _setDate(month: value),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<int>(
-                          key: const ValueKey('todo-due-minute'),
-                          initialValue: _minute,
-                          decoration: InputDecoration(
-                            labelText: strings.get(PaperTodoStringKeys.minute),
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: [
-                            for (var value = 0; value < 60; value++)
-                              DropdownMenuItem(
-                                value: value,
-                                child: Text(value.toString().padLeft(2, '0')),
-                              ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _minute = value);
-                            }
-                          },
-                        ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: _datePartDropdown(
+                        key: const ValueKey('todo-due-day'),
+                        label: strings.get(PaperTodoStringKeys.day),
+                        value: _selectedDate.day,
+                        values: [
+                          for (var value = 1;
+                              value <=
+                                  _daysInMonth(
+                                      _selectedDate.year, _selectedDate.month);
+                              value++)
+                            value,
+                        ],
+                        onChanged: (value) => _setDate(day: value),
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _datePartDropdown(
+                        key: const ValueKey('todo-due-hour'),
+                        label: strings.get(PaperTodoStringKeys.hour),
+                        value: _hour,
+                        values: [
+                          for (var value = 0; value < 24; value++) value
+                        ],
+                        padValue: true,
+                        onChanged: (value) => setState(() => _hour = value),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        ':',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    Expanded(
+                      child: _datePartDropdown(
+                        key: const ValueKey('todo-due-minute'),
+                        label: strings.get(PaperTodoStringKeys.minute),
+                        value: _minute,
+                        values: [
+                          for (var value = 0; value < 60; value++) value
+                        ],
+                        padValue: true,
+                        onChanged: (value) => setState(() => _minute = value),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           actions: [
@@ -11888,6 +12025,55 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
       ),
     );
   }
+
+  Widget _datePartDropdown({
+    required Key key,
+    required String label,
+    required int value,
+    required List<int> values,
+    required ValueChanged<int> onChanged,
+    bool padValue = false,
+  }) {
+    return DropdownButtonFormField<int>(
+      key: key,
+      initialValue: value,
+      menuMaxHeight: 280,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      ),
+      items: [
+        for (final option in values)
+          DropdownMenuItem(
+            value: option,
+            child:
+                Text(padValue ? option.toString().padLeft(2, '0') : '$option'),
+          ),
+      ],
+      onChanged: (next) {
+        if (next != null) {
+          onChanged(next);
+        }
+      },
+    );
+  }
+
+  void _setDate({int? year, int? month, int? day}) {
+    final nextYear = year ?? _selectedDate.year;
+    final nextMonth = month ?? _selectedDate.month;
+    final nextDay = (day ?? _selectedDate.day)
+        .clamp(1, _daysInMonth(nextYear, nextMonth))
+        .toInt();
+    setState(() {
+      _selectedDate = DateTime(nextYear, nextMonth, nextDay);
+    });
+  }
+
+  int _daysInMonth(int year, int month) => DateTime(year, month + 1, 0).day;
 
   KeyEventResult _handleDialogKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) {

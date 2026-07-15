@@ -2966,6 +2966,11 @@ void main() {
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final platform =
         _readProjectText('lib/src/platform/windows_platform_services.dart');
+    final trayCommandStart = runner.indexOf('switch (command) {');
+    final trayCommandEnd = runner.indexOf(
+      'void FlutterWindow::SendBoundsChanged()',
+      trayCommandStart,
+    );
 
     expect(design, contains('Native Windows tray menus'));
     expect(design, contains('do not leak confirmation or delete submenus'));
@@ -2982,7 +2987,12 @@ void main() {
     expect(runner, contains('delete_menu.release();'));
     expect(runner, contains('tray_labels_.inline_confirm_action.c_str()'));
     expect(runner, contains('tray_labels_.cancel.c_str()'));
-    expect(runner, isNot(contains('MessageBoxW')));
+    expect(trayCommandStart, isNonNegative);
+    expect(trayCommandEnd, greaterThan(trayCommandStart));
+    expect(
+      runner.substring(trayCommandStart, trayCommandEnd),
+      isNot(contains('MessageBoxW')),
+    );
     expect(runner, contains('SendPaperDeleteRequested'));
     expect(runner, contains('"paperDeleteRequested"'));
     expect(platform, contains('_paperDeleteRequests'));
@@ -3363,6 +3373,8 @@ void main() {
   test('Windows release deploys app-local runtime dependencies', () {
     final cmake = _readProjectText('windows/CMakeLists.txt');
     final release = _readProjectText('scripts/release.ps1');
+    final package = _readProjectText('scripts/package_windows_zip.ps1');
+    final launcher = _readProjectText('windows/runner/launcher_main.cpp');
     final readme = _readProjectText('README.md');
 
     expect(cmake, contains('include(InstallRequiredSystemLibraries)'));
@@ -3371,6 +3383,13 @@ void main() {
     expect(release, contains('vcruntime140.dll'));
     expect(release, contains('vcruntime140_1.dll'));
     expect(release, contains('ucrtbase.dll'));
+    expect(release, contains('Assert-WindowsZipRootLayout'));
+    expect(release, contains('runtime/repapertodo.runtime.exe'));
+    expect(package,
+        contains('Windows ZIP root must contain only repapertodo.exe'));
+    expect(package, contains('runtime/repapertodo.runtime.exe'));
+    expect(launcher, contains('CreateProcessW'));
+    expect(launcher, contains('repapertodo.runtime.exe'));
     expect(readme, contains('app-local MSVC/Universal CRT DLLs'));
   });
 
