@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repapertodo/src/app.dart';
@@ -151,6 +152,143 @@ void main() {
     expect(zh.get('unknown.key'), 'unknown.key');
   });
 
+  test('settings top-bar button labels match PaperTodo source wording', () {
+    final zh = PaperTodoStrings.resolve(const Locale('zh'));
+    final en = PaperTodoStrings.resolve(const Locale('en'));
+
+    expect(
+      zh.get(PaperTodoStringKeys.topBarNewTodo),
+      '\u663e\u793a\u65b0\u5efa\u5f85\u529e\u6309\u94ae',
+    );
+    expect(
+      zh.get(PaperTodoStringKeys.topBarNewNote),
+      '\u663e\u793a\u65b0\u5efa\u7b14\u8bb0\u6309\u94ae',
+    );
+    expect(en.get(PaperTodoStringKeys.topBarNewTodo), 'Show new todo button');
+    expect(en.get(PaperTodoStringKeys.topBarNewNote), 'Show new note button');
+  });
+
+  test('matches PaperTodo relative due-time resources', () {
+    final en = PaperTodoStrings.resolve(const Locale('en'));
+    final zh = PaperTodoStrings.resolve(const Locale('zh'));
+
+    expect(
+      en.format(PaperTodoStringKeys.relativeDueDayUnit, [2]),
+      '2d',
+    );
+    expect(
+      en.format(PaperTodoStringKeys.relativeDueHourUnit, [3]),
+      '3h',
+    );
+    expect(
+      en.format(PaperTodoStringKeys.relativeDueMinuteUnit, [4]),
+      '4m',
+    );
+    expect(
+      zh.format(PaperTodoStringKeys.relativeDueDayUnit, [2]),
+      '2\u5929',
+    );
+    expect(
+      zh.format(PaperTodoStringKeys.relativeDueHourUnit, [3]),
+      '3\u5c0f\u65f6',
+    );
+    expect(
+      zh.format(PaperTodoStringKeys.relativeDueMinuteUnit, [4]),
+      '4\u5206',
+    );
+    expect(
+      zh.format(PaperTodoStringKeys.relativeDueFuture, ['2\u5c0f\u65f6']),
+      '2\u5c0f\u65f6\u540e',
+    );
+    expect(
+      zh.format(PaperTodoStringKeys.relativeDueOverdue, ['5\u5206']),
+      '\u5df2\u8fc7\u671f5\u5206',
+    );
+    expect(
+      en.get(PaperTodoStringKeys.todoReminderBubbleTitle),
+      'Todo due soon',
+    );
+    expect(
+      en.format(PaperTodoStringKeys.todoReminderBubbleMessage, [
+        '2026-07-21 14:00:00',
+        'in 4m 58s',
+        'Review deadline',
+      ]),
+      '2026-07-21 14:00:00\nin 4m 58s\nReview deadline',
+    );
+    expect(
+      zh.get(PaperTodoStringKeys.todoReminderBubbleTitle),
+      '\u5f85\u529e\u5feb\u5230\u65f6\u95f4',
+    );
+    expect(
+      zh.format(PaperTodoStringKeys.todoReminderBubbleRemaining, [
+        '4\u520658\u79d2',
+      ]),
+      '\u8fd8\u6709 4\u520658\u79d2',
+    );
+  });
+
+  test('matches PaperTodo settings hint resources', () {
+    final en = PaperTodoStrings.resolve(const Locale('en'));
+    final zh = PaperTodoStrings.resolve(const Locale('zh'));
+
+    expect(en.get(PaperTodoStringKeys.uiFontDefault), 'Language default');
+    expect(zh.get(PaperTodoStringKeys.uiFontDefault), '语言默认');
+    expect(en.get(PaperTodoStringKeys.markdownOff), 'Off');
+    expect(zh.get(PaperTodoStringKeys.markdownOff), '关闭');
+    expect(en.get(PaperTodoStringKeys.avoidFullscreen), 'Avoid');
+    expect(zh.get(PaperTodoStringKeys.avoidFullscreen), '避让');
+    expect(en.get(PaperTodoStringKeys.todoVisualSize), 'Todo size');
+    expect(zh.get(PaperTodoStringKeys.todoVisualSize), '待办大小');
+    expect(en.get(PaperTodoStringKeys.dialogDueDate), 'Set time');
+    expect(zh.get(PaperTodoStringKeys.dialogDueDate), '设置时间节点');
+    expect(en.get(PaperTodoStringKeys.actionChangeDueDate), 'Change time');
+    expect(zh.get(PaperTodoStringKeys.actionChangeDueDate), '修改时间节点');
+    expect(
+      en.get(PaperTodoStringKeys.actionClearReminder),
+      'Use global reminder interval',
+    );
+    expect(
+      zh.get(PaperTodoStringKeys.actionClearReminder),
+      '使用全局提醒间隔',
+    );
+    expect(
+      en.format(PaperTodoStringKeys.menuOpenLinkedNote, ['Plan']),
+      'Open linked note: Plan',
+    );
+    expect(
+      zh.format(PaperTodoStringKeys.menuOpenLinkedNote, ['计划']),
+      '打开关联笔记：计划',
+    );
+
+    expect(
+      en.get(PaperTodoStringKeys.tipThemeMode),
+      'Choose light, dark, or follow the Windows system theme.',
+    );
+    expect(
+      zh.get(PaperTodoStringKeys.tipThemeMode),
+      '选择浅色、深色，或跟随 Windows 系统主题。',
+    );
+    expect(
+      en.get(PaperTodoStringKeys.tipHideDeepCapsulesWhenCovered),
+      "When an external window overlaps an edge capsule's docked area, "
+      'the capsule hides immediately and returns when the area is clear.',
+    );
+    expect(
+      zh.get(PaperTodoStringKeys.tipRunLinkedScriptCapsulesOnClick),
+      '关联入口指向脚本胶囊时，左键直接运行脚本，右键打开编辑。默认关闭以避免误触。',
+    );
+    expect(
+      en.get(PaperTodoStringKeys.tipEnableToolTips),
+      'Show brief hints when the pointer rests on buttons or interactive '
+      'areas. Setting info icons stay available either way.',
+    );
+    expect(
+      zh.get(PaperTodoStringKeys.tipTodoReminderBubbleDuration),
+      '提醒气泡自动关闭前保持显示的秒数；鼠标悬停在气泡上时会暂停计时。',
+    );
+  });
+
   test('looks up localized Windows tray menu strings', () {
     final en = PaperTodoStrings.resolve(const Locale('en'));
     final zh = PaperTodoStrings.resolve(const Locale('zh'));
@@ -222,9 +360,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('设置'), findsWidgets);
-    expect(find.byTooltip('待办与笔记'), findsOneWidget);
-    expect(find.byTooltip('胶囊'), findsOneWidget);
-    expect(find.byTooltip('通用与高级'), findsOneWidget);
+    expect(find.text('待办/笔记'), findsOneWidget);
+    expect(find.text('胶囊'), findsOneWidget);
+    expect(find.text('通用/高级'), findsOneWidget);
     expect(find.text('跟随系统'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('settings-category-sync')));
     await tester.pumpAndSettle();
@@ -331,21 +469,16 @@ void main() {
       ),
     );
 
-    expect(find.text('第 1 列'), findsOneWidget);
-    expect(find.text('第 2 列'), findsOneWidget);
+    expect(find.text('第 1 列'), findsNothing);
+    expect(find.text('第 2 列'), findsNothing);
     expect(find.text('新事项'), findsOneWidget);
-    expect(find.text('预览'), findsWidgets);
-    expect(find.text('编辑'), findsNothing);
+    expect(find.text('预览'), findsNothing);
+    expect(find.text('编辑'), findsOneWidget);
     expect(find.text('分栏'), findsNothing);
-    expect(find.textContaining('暂无笔记内容'), findsOneWidget);
+    expect(find.textContaining('暂无笔记内容'), findsNothing);
     expect(find.text('Column 1'), findsNothing);
     expect(find.text('New item'), findsNothing);
     expect(find.text('Edit'), findsNothing);
-
-    await tester
-        .tap(find.byKey(const ValueKey('localized-editor-note-paper-preview')));
-    await tester.pump();
-    await tester.pump();
 
     expect(find.byKey(const ValueKey('localized-editor-note-paper-content')),
         findsOneWidget);
@@ -412,34 +545,42 @@ void main() {
       ),
     );
 
-    expect(find.byTooltip('加粗 (Ctrl+B)'), findsOneWidget);
-    expect(find.byTooltip('斜体 (Ctrl+I)'), findsOneWidget);
-    expect(find.byTooltip('插入链接 (Ctrl+K)'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, '添加画布块'), findsOneWidget);
+    expect(find.byTooltip('加粗 (Ctrl+B)'), findsNothing);
+    expect(find.byTooltip('斜体 (Ctrl+I)'), findsNothing);
+    expect(find.byTooltip('插入链接 (Ctrl+K)'), findsNothing);
+    expect(find.byTooltip('添加画布块'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '添加画布块'), findsNothing);
     expect(find.widgetWithText(TextButton, '添加文本块'), findsNothing);
-    expect(find.text('代码'), findsNWidgets(2));
+    expect(find.text('CODE'), findsNWidgets(2));
     expect(find.text('文本'), findsNothing);
-    expect(find.text('层级 1'), findsOneWidget);
+    expect(find.text('层 1'), findsOneWidget);
     expect(find.text('顶层 2'), findsOneWidget);
     expect(find.byTooltip('拖动画布块'), findsWidgets);
-    expect(find.byTooltip('编辑画布几何参数'), findsWidgets);
-    expect(find.byTooltip('复制画布块'), findsWidgets);
-    expect(find.byTooltip('画布层级操作'), findsWidgets);
-    expect(find.byTooltip('删除画布块'), findsWidgets);
+    expect(find.byTooltip('编辑画布几何参数'), findsNothing);
+    expect(find.byTooltip('复制画布块'), findsNothing);
+    expect(find.byTooltip('画布层级操作'), findsNothing);
+    expect(find.byTooltip('删除画布块'), findsNothing);
     expect(find.byTooltip('调整画布块大小'), findsWidgets);
     expect(find.byTooltip('Bold (Ctrl+B)'), findsNothing);
     expect(find.widgetWithText(TextButton, 'Add canvas block'), findsNothing);
 
-    await tester.tap(find.byTooltip('编辑画布几何参数').first);
+    final topCanvasBlock = find.byKey(
+      const ValueKey('note-canvas-element-localized-canvas-text'),
+    );
+    await tester.tapAt(
+      tester.getTopLeft(topCanvasBlock) + const Offset(12, 12),
+      buttons: kSecondaryMouseButton,
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('画布块几何参数'), findsOneWidget);
-    expect(find.text('宽度'), findsOneWidget);
-    expect(find.text('高度'), findsOneWidget);
-    expect(find.text('层级'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, '取消'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
-    expect(find.text('Canvas block geometry'), findsNothing);
+    expect(find.text('CODE · 层 2'), findsOneWidget);
+    expect(find.text('上移一层'), findsOneWidget);
+    expect(find.text('下移一层'), findsOneWidget);
+    expect(find.text('置于顶层'), findsOneWidget);
+    expect(find.text('置于底层'), findsOneWidget);
+    expect(find.text('复制画布块'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
+    expect(find.text('Duplicate canvas block'), findsNothing);
   });
 
   testWidgets('uses Chinese system locale for recovery snapshots',

@@ -645,7 +645,7 @@ void main() {
     });
   });
 
-  test('rejects structurally incomplete sync operation payloads', () {
+  test('rejects incomplete payloads while accepting capsule no-ops', () {
     final longMarkdownText =
         List.filled(MarkdownPasteText.maxTextLength + 1, 'n').join();
     final longTodoText =
@@ -2023,26 +2023,26 @@ void main() {
 
     for (final operation in cases) {
       final settings = operation.payload['settings'] as Map?;
-      final localCapsuleOnly = settings != null &&
-          settings.isNotEmpty &&
-          settings.keys.map((key) => key.toString().toLowerCase()).every({
-                'useCapsuleMode',
-                'useDeepCapsuleMode',
-                'useCapsuleCollapseAll',
-                'capsuleCollapseAllActive',
-                'capsuleCollapseAllActiveQueues',
-                'showDeepCapsuleWhileExpanded',
-                'collapseExpandedDeepCapsuleOnClick',
-                'hideDeepCapsulesWhenCovered',
-                'hideDeepCapsulesWhenFullscreen',
-                'deepCapsuleStartTopMargin',
-                'deepCapsuleQueueStartTopMargins',
-                'deepCapsuleSide',
-                'deepCapsuleMonitorDeviceName',
-              }.map((key) => key.toLowerCase()).toSet().contains);
+      final localCapsuleNoop = settings != null &&
+          (settings.isEmpty ||
+              settings.keys.map((key) => key.toString().toLowerCase()).every({
+                    'useCapsuleMode',
+                    'useDeepCapsuleMode',
+                    'useCapsuleCollapseAll',
+                    'capsuleCollapseAllActive',
+                    'capsuleCollapseAllActiveQueues',
+                    'showDeepCapsuleWhileExpanded',
+                    'collapseExpandedDeepCapsuleOnClick',
+                    'hideDeepCapsulesWhenCovered',
+                    'hideDeepCapsulesWhenFullscreen',
+                    'deepCapsuleStartTopMargin',
+                    'deepCapsuleQueueStartTopMargins',
+                    'deepCapsuleSide',
+                    'deepCapsuleMonitorDeviceName',
+                  }.map((key) => key.toLowerCase()).toSet().contains));
       expect(
         isSyncOperationPayloadWellFormed(operation),
-        localCapsuleOnly,
+        localCapsuleNoop,
         reason: operation.kind.name,
       );
     }

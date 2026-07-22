@@ -2186,7 +2186,7 @@ void main() {
     expect(stored.sync.operationDeviceSequences, {'device-a': 2});
   });
 
-  test('merges remote queue-map settings with canonical app semantics',
+  test('ignores remote local-only capsule settings while advancing sequence',
       () async {
     final directory = await Directory.systemTemp
         .createTemp('repapertodo_app_sync_merge_queue_maps_');
@@ -2246,25 +2246,16 @@ void main() {
     expect(result.deviceSequences, {'device-a': 1});
     expect(result.state.useCapsuleMode, true);
     expect(result.state.useDeepCapsuleMode, true);
-    expect(result.state.useCapsuleCollapseAll, true);
-    expect(result.state.capsuleCollapseAllActive, true);
-    expect(result.state.capsuleCollapseAllActiveQueues, {
-      'Primary|right': true,
-    });
-    expect(result.state.deepCapsuleQueueStartTopMargins, {
-      '|right': 8.0,
-      'Primary|left': 10000.0,
-    });
+    expect(result.state.useCapsuleCollapseAll, false);
+    expect(result.state.capsuleCollapseAllActive, false);
+    expect(result.state.capsuleCollapseAllActiveQueues, isEmpty);
+    expect(result.state.deepCapsuleQueueStartTopMargins, isEmpty);
 
     final stored = await store.load();
     expect(stored.sync.operationDeviceSequences, {'device-a': 1});
-    expect(stored.capsuleCollapseAllActiveQueues, {
-      'Primary|right': true,
-    });
-    expect(stored.deepCapsuleQueueStartTopMargins, {
-      '|right': 8.0,
-      'Primary|left': 10000.0,
-    });
+    expect(stored.useCapsuleCollapseAll, false);
+    expect(stored.capsuleCollapseAllActiveQueues, isEmpty);
+    expect(stored.deepCapsuleQueueStartTopMargins, isEmpty);
   });
 
   test('merge saves tombstones for legacy-cased delete payloads', () async {

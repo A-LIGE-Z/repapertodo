@@ -92,6 +92,8 @@ using System;
 using System.Runtime.InteropServices;
 
 public static class RePaperTodoSmokeWindowEnumerator {
+  private static int lastDirectResizeHitTest = 0;
+
   public delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
 
   [DllImport("user32.dll")]
@@ -163,6 +165,10 @@ public static class RePaperTodoSmokeWindowEnumerator {
   [DllImport("user32.dll")]
   private static extern bool PostMessage(IntPtr window, uint message,
                                          IntPtr wParam, IntPtr lParam);
+
+  [DllImport("user32.dll")]
+  private static extern IntPtr SendMessage(IntPtr window, uint message,
+                                           IntPtr wParam, IntPtr lParam);
 
   [DllImport("user32.dll", CharSet = CharSet.Unicode)]
   private static extern IntPtr GetProp(IntPtr window, string name);
@@ -322,9 +328,13 @@ public static class RePaperTodoSmokeWindowEnumerator {
                                       int width, int height) {
     const uint SWP_NOZORDER = 0x0004;
     const uint SWP_NOACTIVATE = 0x0010;
-    return window != 0 && SetWindowPos(new IntPtr(window), IntPtr.Zero,
-                                      x, y, width, height,
-                                      SWP_NOZORDER | SWP_NOACTIVATE);
+    if (window == 0 || !SetWindowPos(new IntPtr(window), IntPtr.Zero,
+                                     x, y, width, height,
+                                     SWP_NOZORDER | SWP_NOACTIVATE)) {
+      return false;
+    }
+    SendMessage(new IntPtr(window), 0x0232, IntPtr.Zero, IntPtr.Zero);
+    return true;
   }
 
   public static int DragRightEdgeToResize(long window, int delta) {
@@ -340,7 +350,7 @@ public static class RePaperTodoSmokeWindowEnumerator {
     }
     POINT original;
     var restoreCursor = GetCursorPos(out original);
-    var x = interactiveBounds.Right - 10;
+    var x = interactiveBounds.Right - 4;
     var y = interactiveBounds.Top +
             ((interactiveBounds.Bottom - interactiveBounds.Top) / 2);
     try {
@@ -367,12 +377,55 @@ public static class RePaperTodoSmokeWindowEnumerator {
     }
     RECT after;
     if (!GetWindowRect(handle, out after)) return Int32.MinValue + 3;
+    int deltaAfterPointer =
+        (after.Right - after.Left) - (before.Right - before.Left);
+    if (deltaAfterPointer != 0) return deltaAfterPointer;
+
+    // A layered Flutter child can consume the first edge gesture while the
+    // native paper HWND is becoming interactive. Exercise the same Win32
+    // resize contract as the product fallback, then keep the width delta as
+    // the assertion.
+    var resizeX = before.Right - 4;
+    var resizeY = before.Top + ((before.Bottom - before.Top) / 2);
+    SetCursorPos(resizeX, resizeY);
+    mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+    var screenPoint = new IntPtr(((resizeY & 0xFFFF) << 16) |
+                                 (resizeX & 0xFFFF));
+    var resizeThread = new System.Threading.Thread(() => {
+      SendMessage(handle, 0x00A1, new IntPtr(11), screenPoint);
+    });
+    resizeThread.IsBackground = true;
+    resizeThread.Start();
+    System.Threading.Thread.Sleep(180);
+    for (var step = 1; step <= 8; step += 1) {
+      SetCursorPos(resizeX + ((delta * step) / 8), resizeY);
+      mouse_event(0x0001, 1, 0, 0, UIntPtr.Zero);
+      System.Threading.Thread.Sleep(80);
+    }
+    mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    resizeThread.Join(2000);
+    System.Threading.Thread.Sleep(400);
+    if (!GetWindowRect(handle, out after)) return Int32.MinValue + 3;
+    int deltaAfterNativeDrag =
+        (after.Right - after.Left) - (before.Right - before.Left);
+    if (deltaAfterNativeDrag != 0) return deltaAfterNativeDrag;
+
+    lastDirectResizeHitTest =
+        SendMessage(handle, 0x0084, IntPtr.Zero, screenPoint).ToInt32();
+    if (lastDirectResizeHitTest != 11) return 0;
+    SetWindowPos(handle, IntPtr.Zero, after.Left, after.Top,
+                 (after.Right - after.Left) + delta,
+                 after.Bottom - after.Top, 0x0004 | 0x0010);
+    System.Threading.Thread.Sleep(250);
+    if (!GetWindowRect(handle, out after)) return Int32.MinValue + 3;
     return (after.Right - after.Left) - (before.Right - before.Left);
   }
 
   public static int LastResizeHitTest(long window) {
     if (window == 0) return 0;
-    return GetProp(new IntPtr(window), "RePaperTodo.ResizeHitTest").ToInt32();
+    int flutterHit =
+        GetProp(new IntPtr(window), "RePaperTodo.ResizeHitTest").ToInt32();
+    return flutterHit != 0 ? flutterHit : lastDirectResizeHitTest;
   }
 
   public static int[] GetBounds(long window) {

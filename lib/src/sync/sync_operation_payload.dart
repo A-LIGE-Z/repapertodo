@@ -45,7 +45,8 @@ bool isSyncOperationPayloadWellFormed(SyncOperation operation) {
     case SyncOperationKind.updateSettings:
       final settings = _jsonMapOrNull(_payloadValue(payload, 'settings'));
       return settings != null &&
-          (_hasApplicableSettingsPayload(settings) ||
+          (settings.isEmpty ||
+              _hasApplicableSettingsPayload(settings) ||
               _hasLocalOnlyCapsuleSettingsPayload(settings));
   }
 }
@@ -123,7 +124,8 @@ JsonMap? canonicalSyncOperationPayload(SyncOperation operation) {
         return null;
       }
       final safeSettings = canonicalSyncOperationSettingsPayload(settings);
-      return safeSettings.isNotEmpty ||
+      return settings.isEmpty ||
+              safeSettings.isNotEmpty ||
               _hasLocalOnlyCapsuleSettingsPayload(settings)
           ? {'settings': safeSettings}
           : null;

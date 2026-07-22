@@ -81,6 +81,9 @@ class NoopPaperWindowHost implements PaperWindowHost {
   Future<void> hideCoordinatorWindow() async {}
 
   @override
+  Future<void> setCoordinatorBackgroundColor(int argb) async {}
+
+  @override
   Future<void> revealPinnedPaper(PaperData paper) async {}
 
   @override
@@ -140,10 +143,16 @@ class NoopSystemIntegrationHost implements SystemIntegrationHost {
   bool get supportsGlobalHotkeys => false;
 
   @override
+  bool get supportsCustomColorPicker => false;
+
+  @override
   Future<bool> isForegroundFullscreen() async => false;
 
   @override
   Future<List<String>> installedFontFamilies() async => const [];
+
+  @override
+  Future<String?> chooseCustomColor(String initialColorHex) async => null;
 
   @override
   Future<void> registerGlobalHotkeys(AppState state) async {}

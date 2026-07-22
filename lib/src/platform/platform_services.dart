@@ -36,6 +36,7 @@ abstract interface class PaperWindowHost {
   Future<void> capturePaperSurfaceBounds(PaperData paper);
   Future<void> refreshSurfaceRegistry(AppState state);
   Future<void> restoreAll(AppState state);
+  Future<void> setCoordinatorBackgroundColor(int argb);
   Future<void> hideCoordinatorWindow();
 }
 
@@ -213,8 +214,10 @@ abstract interface class SystemIntegrationHost {
   bool get supportsWindowSwitcherVisibility;
   bool get supportsFullscreenTopmostMode;
   bool get supportsGlobalHotkeys;
+  bool get supportsCustomColorPicker;
 
   Future<List<String>> installedFontFamilies();
+  Future<String?> chooseCustomColor(String initialColorHex);
   Future<void> registerGlobalHotkeys(AppState state);
   Future<void> unregisterGlobalHotkeys();
   Future<bool> isForegroundFullscreen();

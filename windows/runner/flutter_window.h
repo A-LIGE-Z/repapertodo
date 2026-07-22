@@ -62,6 +62,9 @@ class FlutterWindow : public Win32Window {
   void AddTrayIcon();
   void RemoveTrayIcon();
   void ShowTrayMenu();
+  bool MeasureTrayMenuItem(MEASUREITEMSTRUCT* measure);
+  bool DrawTrayMenuItem(const DRAWITEMSTRUCT* draw);
+  void ApplyTrayMenuWindowChrome();
   void StartSingleInstanceListener();
   void StopSingleInstanceListener();
   void SendBoundsChanged();
@@ -143,8 +146,37 @@ class FlutterWindow : public Win32Window {
     std::string id;
     std::wstring label;
     bool is_visible = false;
+    std::string paper_type;
   };
+  enum class TrayOwnerDrawKind {
+    command,
+    header,
+    separator,
+    paper,
+    padding,
+  };
+  struct TrayOwnerDrawItem {
+    std::wstring text;
+    TrayOwnerDrawKind kind = TrayOwnerDrawKind::command;
+    bool checked = false;
+    bool has_submenu = false;
+    bool danger = false;
+    std::string paper_type;
+  };
+  struct TrayPalette {
+    COLORREF paper = RGB(255, 249, 234);
+    COLORREF border = RGB(224, 206, 167);
+    COLORREF text = RGB(51, 41, 30);
+    COLORREF weak = RGB(138, 122, 99);
+    COLORREF active = RGB(140, 115, 80);
+    COLORREF tint = RGB(120, 92, 48);
+    COLORREF hover = RGB(238, 229, 211);
+    COLORREF danger = RGB(176, 90, 70);
+    bool dark = false;
+  };
+  TrayPalette ResolveTrayPalette() const;
   std::vector<TrayPaperMenuItem> tray_papers_;
+  std::vector<std::unique_ptr<TrayOwnerDrawItem>> active_tray_items_;
   TrayMenuLabels tray_labels_;
   std::vector<std::string> paper_surface_order_;
   struct PaperSurfaceState {

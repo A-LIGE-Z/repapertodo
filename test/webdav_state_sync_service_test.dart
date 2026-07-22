@@ -5448,7 +5448,7 @@ void main() {
     );
   });
 
-  test('uploads canonical settings queue-map payloads', () async {
+  test('uploads local-only capsule settings as a canonical no-op', () async {
     final requests = <http.Request>[];
     final operation = SyncOperation(
       id: 'legacy-device-a-1',
@@ -5509,21 +5509,7 @@ void main() {
     expect(uploadedOperation['id'], 'device-a-1');
     expect(uploadedOperation['deviceId'], 'device-a');
     expect(uploadedOperation['sequence'], 1);
-    expect(uploadedOperation['payload'], {
-      'settings': {
-        'useCapsuleMode': true,
-        'useDeepCapsuleMode': true,
-        'useCapsuleCollapseAll': true,
-        'capsuleCollapseAllActive': true,
-        'capsuleCollapseAllActiveQueues': {
-          'Primary|right': true,
-        },
-        'deepCapsuleQueueStartTopMargins': {
-          '|right': 8.0,
-          'Primary|left': 10000.0,
-        },
-      },
-    });
+    expect(uploadedOperation['payload'], {'settings': {}});
   });
 
   test('accepts matching existing operation logs during upload retry',
@@ -5622,8 +5608,7 @@ void main() {
     );
   });
 
-  test('accepts canonical queue-map operation logs during upload retry',
-      () async {
+  test('accepts canonical capsule no-op logs during upload retry', () async {
     final requests = <http.Request>[];
     final createdAtUtc = DateTime.utc(2026, 7, 1, 9);
     final localOperation = SyncOperation(
@@ -5659,21 +5644,7 @@ void main() {
       sequence: 1,
       kind: SyncOperationKind.updateSettings,
       createdAtUtc: createdAtUtc,
-      payload: {
-        'settings': {
-          'useCapsuleMode': true,
-          'useDeepCapsuleMode': true,
-          'useCapsuleCollapseAll': true,
-          'capsuleCollapseAllActive': true,
-          'capsuleCollapseAllActiveQueues': {
-            'Primary|right': true,
-          },
-          'deepCapsuleQueueStartTopMargins': {
-            '|right': 8.0,
-            'Primary|left': 10000.0,
-          },
-        },
-      },
+      payload: {'settings': {}},
     );
     final webDavClient = WebDavClient(
       baseUri: Uri.parse('https://dav.example.test/remote.php/dav/files/user/'),

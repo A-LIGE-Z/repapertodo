@@ -306,6 +306,11 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   }
 
   @override
+  Future<void> setCoordinatorBackgroundColor(int argb) async {
+    await _channel.invokeMethod<void>('setCoordinatorBackgroundColor', argb);
+  }
+
+  @override
   Future<bool> hasVisibleSurfaces(AppState state) async {
     await _normalizeStateForPlatform(state);
     _syncKnownPapers(state);
@@ -342,9 +347,11 @@ class WindowsPaperWindowHost implements PaperWindowHost {
   @override
   Future<void> restoreAll(AppState state) async {
     await refreshSurfaceRegistry(state);
-    final visiblePapers = state.papers.where((paper) {
-      return paper.isVisible && !state.isCapsuleCollapseAllActiveFor(paper);
-    }).toList();
+    // Capsule collapse/expand only controls the native capsule queue. Paper
+    // windows remain visible and unchanged so toggling the master capsule
+    // never hides or mutates the underlying cards.
+    final visiblePapers =
+        state.papers.where((paper) => paper.isVisible).toList();
     if (visiblePapers.isEmpty) {
       _activePaper = null;
       await _channel.invokeMethod<void>('hide');
@@ -926,7 +933,10 @@ Map<String, List<PaperData>> _capsuleQueueMembers(AppState state) {
     final belongsToQueue = paper.isVisible &&
         !linkedNoteCapsuleHidden &&
         state.useCapsuleMode &&
-        state.useDeepCapsuleMode;
+        state.useDeepCapsuleMode &&
+        (paper.isCollapsed ||
+            paper.isPinnedToDesktop ||
+            state.showDeepCapsuleWhileExpanded);
     if (!belongsToQueue) {
       continue;
     }
@@ -1002,6 +1012,8 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(AppState state) {
         'theme': state.theme,
         'colorScheme': state.colorScheme,
         'customThemeColorHex': state.customThemeColorHex,
+        'fontFamily': _windowsUiFontFamily(state),
+        'enableAnimations': state.enableAnimations,
       });
     }
     if (collapseAllActive) {
@@ -1025,6 +1037,8 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(AppState state) {
           fallbackNumber: 1,
         ),
         'paperType': paper.type,
+        'isScriptCapsule':
+            paper.isNote && ScriptCapsuleSpec.tryParse(paper.content) != null,
         'top': top,
         'capsuleSide': paper.capsuleSide,
         'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
@@ -1035,6 +1049,8 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(AppState state) {
         'theme': state.theme,
         'colorScheme': state.colorScheme,
         'customThemeColorHex': state.customThemeColorHex,
+        'fontFamily': _windowsUiFontFamily(state),
+        'enableAnimations': state.enableAnimations,
       });
     }
   }
@@ -1073,9 +1089,25 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
     'hideFromWindowSwitcher': state.hidePapersFromWindowSwitcher,
     'hideWhenCovered': state.hideDeepCapsulesWhenCovered,
     'hideWhenFullscreen': state.hideDeepCapsulesWhenFullscreen,
+    'enableAnimations': state.enableAnimations,
+    'fontFamily': _windowsUiFontFamily(state),
     'isScriptCapsule':
         paper.isNote && ScriptCapsuleSpec.isScriptCapsuleContent(paper.content),
     if (labels != null) 'trayLabel': _trayPaperLabel(paper, title, labels),
+  };
+}
+
+String _windowsUiFontFamily(AppState state) {
+  final systemFamily = normalizeSystemFontFamilyName(
+    state.systemFontFamilyName,
+  );
+  if (systemFamily.isNotEmpty) {
+    return systemFamily;
+  }
+  return switch (UiFontPresets.normalize(state.uiFontPreset)) {
+    UiFontPresets.serif => 'Georgia',
+    UiFontPresets.mono => 'Consolas',
+    _ => 'Segoe UI',
   };
 }
 
@@ -1084,12 +1116,6 @@ String _trayPaperLabel(
   String title,
   TrayMenuLabels labels,
 ) {
-  final type = PaperTypes.normalize(paper.type);
-  final isScriptCapsule =
-      paper.isNote && ScriptCapsuleSpec.isScriptCapsuleContent(paper.content);
-  final typeLabel = isScriptCapsule
-      ? labels.scriptPaper
-      : (type == PaperTypes.note ? labels.notePaper : labels.todoPaper);
   final status = <String>[
     if (!paper.isVisible) labels.hidden,
     if (paper.isCollapsed) labels.collapsed,
@@ -1097,9 +1123,9 @@ String _trayPaperLabel(
     if (paper.alwaysOnTop) labels.topmost,
   ];
   if (status.isEmpty) {
-    return '$typeLabel - $title';
+    return title;
   }
-  return '$typeLabel - $title (${status.join(', ')})';
+  return '$title (${status.join(', ')})';
 }
 
 class WindowsStartupHost implements StartupHost {
@@ -1168,6 +1194,9 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
   bool get supportsGlobalHotkeys => true;
 
   @override
+  bool get supportsCustomColorPicker => true;
+
+  @override
   Future<bool> isForegroundFullscreen() async {
     return await _channel.invokeMethod<bool>('isForegroundFullscreen') ?? false;
   }
@@ -1181,6 +1210,16 @@ class WindowsSystemIntegrationHost implements SystemIntegrationHost {
     } on MissingPluginException {
       return const [];
     }
+  }
+
+  @override
+  Future<String?> chooseCustomColor(String initialColorHex) async {
+    final selected = await _channel.invokeMethod<String>(
+      'chooseCustomColor',
+      initialColorHex,
+    );
+    final normalized = selected?.trim().toUpperCase() ?? '';
+    return RegExp(r'^#[0-9A-F]{6}$').hasMatch(normalized) ? normalized : null;
   }
 
   @override

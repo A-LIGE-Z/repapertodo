@@ -4,6 +4,7 @@ abstract final class PaperTodoStringKeys {
   static const appTitle = 'appTitle';
   static const actionAddColumn = 'actionAddColumn';
   static const actionAddCanvasBlock = 'actionAddCanvasBlock';
+  static const actionAddCodeBlock = 'actionAddCodeBlock';
   static const actionAddItem = 'actionAddItem';
   static const actionAddTextBlock = 'actionAddTextBlock';
   static const actionBackToBoard = 'actionBackToBoard';
@@ -31,6 +32,7 @@ abstract final class PaperTodoStringKeys {
   static const actionDragToLinkNoteToTodo = 'actionDragToLinkNoteToTodo';
   static const actionDragToReorder = 'actionDragToReorder';
   static const actionEditLinkedScript = 'actionEditLinkedScript';
+  static const actionEditScriptCapsule = 'actionEditScriptCapsule';
   static const actionEditTitle = 'actionEditTitle';
   static const actionEqualWidths = 'actionEqualWidths';
   static const actionExpandAll = 'actionExpandAll';
@@ -38,7 +40,14 @@ abstract final class PaperTodoStringKeys {
   static const actionExpandPaper = 'actionExpandPaper';
   static const actionHidePaper = 'actionHidePaper';
   static const actionHideThisPaper = 'actionHideThisPaper';
+  static const actionHideCompact = 'actionHideCompact';
   static const actionInsertBeforeColumn = 'actionInsertBeforeColumn';
+  static const menuDeleteTodoColumn = 'menuDeleteTodoColumn';
+  static const menuDecreaseTodoColumns = 'menuDecreaseTodoColumns';
+  static const menuIncreaseTodoColumns = 'menuIncreaseTodoColumns';
+  static const menuInsertTodoColumnBefore = 'menuInsertTodoColumnBefore';
+  static const menuOpenLinkedNote = 'menuOpenLinkedNote';
+  static const menuEditLinkedScriptCapsule = 'menuEditLinkedScriptCapsule';
   static const actionKeepOnTop = 'actionKeepOnTop';
   static const actionLinkNote = 'actionLinkNote';
   static const actionLinkPaper = 'actionLinkPaper';
@@ -49,8 +58,10 @@ abstract final class PaperTodoStringKeys {
   static const actionResizePaperWindow = 'actionResizePaperWindow';
   static const actionNewNote = 'actionNewNote';
   static const actionNewNotePaper = 'actionNewNotePaper';
+  static const actionNewNotePaperCompact = 'actionNewNotePaperCompact';
   static const actionNewTodo = 'actionNewTodo';
   static const actionNewTodoPaper = 'actionNewTodoPaper';
+  static const actionNewTodoPaperCompact = 'actionNewTodoPaperCompact';
   static const actionOpen = 'actionOpen';
   static const actionOpenCurrentPaperSurface = 'actionOpenCurrentPaperSurface';
   static const actionOpenLinkedNote = 'actionOpenLinkedNote';
@@ -143,14 +154,26 @@ abstract final class PaperTodoStringKeys {
   static const deepCapsuleSide = 'deepCapsuleSide';
   static const deepCapsuleTopMargin = 'deepCapsuleTopMargin';
   static const defaultFont = 'defaultFont';
+  static const uiFontDefault = 'uiFontDefault';
   static const dengXian = 'dengXian';
   static const dialogDeletePaper = 'dialogDeletePaper';
+  static const dialogDeletePaperBody = 'dialogDeletePaperBody';
   static const dialogDueDate = 'dialogDueDate';
+  static const dialogDueDateMessage = 'dialogDueDateMessage';
+  static const dialogDueDateConfirm = 'dialogDueDateConfirm';
   static const dialogRestoreSnapshot = 'dialogRestoreSnapshot';
   static const dialogSyncSettings = 'dialogSyncSettings';
   static const settingsTodoAndNotes = 'settingsTodoAndNotes';
   static const settingsCapsules = 'settingsCapsules';
   static const settingsGeneralAdvanced = 'settingsGeneralAdvanced';
+  static const settingsLineSpacingReset = 'settingsLineSpacingReset';
+  static const settingsSectionCapsule = 'settingsSectionCapsule';
+  static const settingsSectionDisplay = 'settingsSectionDisplay';
+  static const settingsSectionExternalOpen = 'settingsSectionExternalOpen';
+  static const settingsSectionGeneral = 'settingsSectionGeneral';
+  static const settingsSectionScriptCapsule = 'settingsSectionScriptCapsule';
+  static const settingsSectionTodoAndNotes = 'settingsSectionTodoAndNotes';
+  static const settingsSectionTopBarButtons = 'settingsSectionTopBarButtons';
   static const dataDirectory = 'dataDirectory';
   static const dataDirectoryHelp = 'dataDirectoryHelp';
   static const dueLabel = 'dueLabel';
@@ -219,7 +242,8 @@ abstract final class PaperTodoStringKeys {
   static const openLinkFailed = 'openLinkFailed';
   static const openLinkUnsupported = 'openLinkUnsupported';
   static const paperDeleted = 'paperDeleted';
-  static const paperLimitReached = 'paperLimitReached';
+  static const paperLimitMessage = 'paperLimitMessage';
+  static const paperLimitTitle = 'paperLimitTitle';
   static const passphraseHelper = 'passphraseHelper';
   static const password = 'password';
   static const persistentPowerShellProcess = 'persistentPowerShellProcess';
@@ -244,7 +268,10 @@ abstract final class PaperTodoStringKeys {
   static const pinnedTodoHotkey = 'pinnedTodoHotkey';
   static const preferPowerShell7 = 'preferPowerShell7';
   static const relativeDueDates = 'relativeDueDates';
+  static const relativeDueDayUnit = 'relativeDueDayUnit';
   static const relativeDueFuture = 'relativeDueFuture';
+  static const relativeDueHourUnit = 'relativeDueHourUnit';
+  static const relativeDueMinuteUnit = 'relativeDueMinuteUnit';
   static const relativeDueOverdue = 'relativeDueOverdue';
   static const recoverySnapshotFallback = 'recoverySnapshotFallback';
   static const recoverySnapshotLoadFailed = 'recoverySnapshotLoadFailed';
@@ -254,6 +281,8 @@ abstract final class PaperTodoStringKeys {
   static const reminderEveryHours = 'reminderEveryHours';
   static const reminderEveryMinutes = 'reminderEveryMinutes';
   static const reminderInterval = 'reminderInterval';
+  static const reminderIntervalGlobal = 'reminderIntervalGlobal';
+  static const reminderIntervalMessage = 'reminderIntervalMessage';
   static const reminderScope = 'reminderScope';
   static const reminderUnit = 'reminderUnit';
   static const remoteFolder = 'remoteFolder';
@@ -271,6 +300,7 @@ abstract final class PaperTodoStringKeys {
   static const small = 'small';
   static const startAtLogin = 'startAtLogin';
   static const stayOnTop = 'stayOnTop';
+  static const systemFont = 'systemFont';
   static const trayCollapsed = 'trayCollapsed';
   static const trayDeleteConfirmMessage = 'trayDeleteConfirmMessage';
   static const trayDeleteConfirmTitle = 'trayDeleteConfirmTitle';
@@ -336,12 +366,67 @@ abstract final class PaperTodoStringKeys {
   static const todoNoteLinks = 'todoNoteLinks';
   static const todoReminders = 'todoReminders';
   static const todoSpacing = 'todoSpacing';
+  static const todoReminderBubbleMessage = 'todoReminderBubbleMessage';
+  static const todoReminderBubbleOverdue = 'todoReminderBubbleOverdue';
+  static const todoReminderBubbleRemaining = 'todoReminderBubbleRemaining';
+  static const todoReminderBubbleTitle = 'todoReminderBubbleTitle';
+  static const todoReminderCountdownDay = 'todoReminderCountdownDay';
+  static const todoReminderCountdownHour = 'todoReminderCountdownHour';
+  static const todoReminderCountdownMinute = 'todoReminderCountdownMinute';
+  static const todoReminderCountdownSecond = 'todoReminderCountdownSecond';
   static const todoReminderMultiple = 'todoReminderMultiple';
   static const todoReminderSingle = 'todoReminderSingle';
   static const todoNewItemHint = 'todoNewItemHint';
   static const todoItemDeleted = 'todoItemDeleted';
   static const todoItemFallback = 'todoItemFallback';
   static const todoVisualSize = 'todoVisualSize';
+  static const tipAllowLongLinkedNoteTitles = 'tipAllowLongLinkedNoteTitles';
+  static const tipCapsuleCollapseAll = 'tipCapsuleCollapseAll';
+  static const tipCapsuleMode = 'tipCapsuleMode';
+  static const tipCollapseExpandedDeepCapsuleOnClick =
+      'tipCollapseExpandedDeepCapsuleOnClick';
+  static const tipCustomThemeColor = 'tipCustomThemeColor';
+  static const tipDeepCapsuleMode = 'tipDeepCapsuleMode';
+  static const tipEnableAnimations = 'tipEnableAnimations';
+  static const tipEnableTodoNoteLinks = 'tipEnableTodoNoteLinks';
+  static const tipEnableToolTips = 'tipEnableToolTips';
+  static const tipExternalExtension = 'tipExternalExtension';
+  static const tipExternalOpenButton = 'tipExternalOpenButton';
+  static const tipFullscreenTopmostMode = 'tipFullscreenTopmostMode';
+  static const tipHideDeepCapsulesWhenCovered =
+      'tipHideDeepCapsulesWhenCovered';
+  static const tipHideLinkedNotesFromCapsules =
+      'tipHideLinkedNotesFromCapsules';
+  static const tipHidePapersFromWindowSwitcher =
+      'tipHidePapersFromWindowSwitcher';
+  static const tipHideScriptRunWindow = 'tipHideScriptRunWindow';
+  static const tipMarkdownRender = 'tipMarkdownRender';
+  static const tipMaxTitleLength = 'tipMaxTitleLength';
+  static const tipNewNoteButton = 'tipNewNoteButton';
+  static const tipNewTodoButton = 'tipNewTodoButton';
+  static const tipNoteLineSpacing = 'tipNoteLineSpacing';
+  static const tipPersistentPowerShellProcess =
+      'tipPersistentPowerShellProcess';
+  static const tipPinnedNoteHotKey = 'tipPinnedNoteHotKey';
+  static const tipPinnedTodoHotKey = 'tipPinnedTodoHotKey';
+  static const tipPreferPowerShell7 = 'tipPreferPowerShell7';
+  static const tipRunLinkedScriptCapsulesOnClick =
+      'tipRunLinkedScriptCapsulesOnClick';
+  static const tipShowDeepCapsuleWhileExpanded =
+      'tipShowDeepCapsuleWhileExpanded';
+  static const tipShowLinkedNoteName = 'tipShowLinkedNoteName';
+  static const tipShowTodoDueRelativeTime = 'tipShowTodoDueRelativeTime';
+  static const tipStartup = 'tipStartup';
+  static const tipSystemFont = 'tipSystemFont';
+  static const tipThemeMode = 'tipThemeMode';
+  static const tipTodoDueYearDisplay = 'tipTodoDueYearDisplay';
+  static const tipTodoLineSpacing = 'tipTodoLineSpacing';
+  static const tipTodoReminderBubbleDuration = 'tipTodoReminderBubbleDuration';
+  static const tipTodoReminderInterval = 'tipTodoReminderInterval';
+  static const tipTodoReminderIntervalUnit = 'tipTodoReminderIntervalUnit';
+  static const tipTodoReminderScope = 'tipTodoReminderScope';
+  static const tipTodoVisualSize = 'tipTodoVisualSize';
+  static const tipUseTodoReminderInterval = 'tipUseTodoReminderInterval';
   static const tooltips = 'tooltips';
   static const tooltipsHelp = 'tooltipsHelp';
   static const topBarNewNote = 'topBarNewNote';
@@ -362,6 +447,7 @@ abstract final class PaperTodoStringKeys {
   static const webDavIssueUsernameRequired = 'webDavIssueUsernameRequired';
   static const webDavProvider = 'webDavProvider';
   static const webDavSync = 'webDavSync';
+  static const enableWebDavSync = 'enableWebDavSync';
   static const webDavUrl = 'webDavUrl';
   static const xl = 'xl';
   static const yaHei = 'yaHei';
@@ -465,18 +551,19 @@ const _enStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
   PaperTodoStringKeys.actionAddColumn: 'Add column',
   PaperTodoStringKeys.actionAddCanvasBlock: 'Add canvas block',
+  PaperTodoStringKeys.actionAddCodeBlock: 'Add code block',
   PaperTodoStringKeys.actionAddItem: 'Add item',
   PaperTodoStringKeys.actionAddTextBlock: 'Add text block',
   PaperTodoStringKeys.actionBackToBoard: 'Back to board',
   PaperTodoStringKeys.actionCancel: 'Cancel',
-  PaperTodoStringKeys.actionChangeDueDate: 'Change due date',
-  PaperTodoStringKeys.actionChangeReminder: 'Change reminder',
+  PaperTodoStringKeys.actionChangeDueDate: 'Change time',
+  PaperTodoStringKeys.actionChangeReminder: 'Change reminder interval',
   PaperTodoStringKeys.actionClear: 'Clear',
   PaperTodoStringKeys.actionClose: 'Close',
   PaperTodoStringKeys.actionClearCompleted: 'Clear completed',
   PaperTodoStringKeys.actionClearCompletedItems: 'Clear completed items',
-  PaperTodoStringKeys.actionClearDueDate: 'Clear due date',
-  PaperTodoStringKeys.actionClearReminder: 'Clear reminder',
+  PaperTodoStringKeys.actionClearDueDate: 'Clear time',
+  PaperTodoStringKeys.actionClearReminder: 'Use global reminder interval',
   PaperTodoStringKeys.actionClearReminderInterval: 'Clear reminder interval',
   PaperTodoStringKeys.actionCollapseAll: 'Collapse all',
   PaperTodoStringKeys.actionCollapseAllPapers: 'Collapse all papers',
@@ -485,12 +572,13 @@ const _enStrings = {
   PaperTodoStringKeys.actionCopy: 'Copy',
   PaperTodoStringKeys.actionDelete: 'Delete',
   PaperTodoStringKeys.actionDeleteColumn: 'Delete column {0}',
-  PaperTodoStringKeys.actionDeleteItem: 'Delete item',
+  PaperTodoStringKeys.actionDeleteItem: 'Delete this item',
   PaperTodoStringKeys.actionDeletePaper: 'Delete paper',
   PaperTodoStringKeys.actionDisableAlwaysOnTop: 'Disable always on top',
   PaperTodoStringKeys.actionDragToLinkNoteToTodo: 'Drag to link note to todo',
   PaperTodoStringKeys.actionDragToReorder: 'Drag to reorder',
   PaperTodoStringKeys.actionEditLinkedScript: 'Edit linked script',
+  PaperTodoStringKeys.actionEditScriptCapsule: 'Edit script capsule',
   PaperTodoStringKeys.actionEditTitle: 'Click to edit title',
   PaperTodoStringKeys.actionEqualWidths: 'Equal widths',
   PaperTodoStringKeys.actionExpandAll: 'Expand all',
@@ -498,7 +586,15 @@ const _enStrings = {
   PaperTodoStringKeys.actionExpandPaper: 'Expand paper',
   PaperTodoStringKeys.actionHidePaper: 'Hide paper',
   PaperTodoStringKeys.actionHideThisPaper: 'Hide this paper',
+  PaperTodoStringKeys.actionHideCompact: 'Hide',
   PaperTodoStringKeys.actionInsertBeforeColumn: 'Insert before column {0}',
+  PaperTodoStringKeys.menuDeleteTodoColumn: 'Delete this column',
+  PaperTodoStringKeys.menuDecreaseTodoColumns: 'Remove column from this todo',
+  PaperTodoStringKeys.menuIncreaseTodoColumns: 'Add column to this todo',
+  PaperTodoStringKeys.menuInsertTodoColumnBefore:
+      'Insert column before this one',
+  PaperTodoStringKeys.menuOpenLinkedNote: 'Open linked note: {0}',
+  PaperTodoStringKeys.menuEditLinkedScriptCapsule: 'Edit linked script: {0}',
   PaperTodoStringKeys.actionKeepOnTop: 'Keep on top',
   PaperTodoStringKeys.actionLinkNote: 'Link note',
   PaperTodoStringKeys.actionLinkPaper: 'Link {0}',
@@ -509,8 +605,10 @@ const _enStrings = {
   PaperTodoStringKeys.actionResizePaperWindow: 'Drag an edge to resize paper',
   PaperTodoStringKeys.actionNewNote: 'New note',
   PaperTodoStringKeys.actionNewNotePaper: 'New note paper',
+  PaperTodoStringKeys.actionNewNotePaperCompact: '+ Note paper',
   PaperTodoStringKeys.actionNewTodo: 'New todo',
   PaperTodoStringKeys.actionNewTodoPaper: 'New todo paper',
+  PaperTodoStringKeys.actionNewTodoPaperCompact: '+ Todo paper',
   PaperTodoStringKeys.actionOpen: 'Open',
   PaperTodoStringKeys.actionOpenCurrentPaperSurface:
       'Open current paper surface',
@@ -538,8 +636,8 @@ const _enStrings = {
   PaperTodoStringKeys.actionSave: 'Save',
   PaperTodoStringKeys.actionSaveWindowBounds: 'Save window bounds',
   PaperTodoStringKeys.actionSelectAll: 'Select all',
-  PaperTodoStringKeys.actionSetDueDate: 'Set due date',
-  PaperTodoStringKeys.actionSetReminder: 'Set reminder',
+  PaperTodoStringKeys.actionSetDueDate: 'Set time',
+  PaperTodoStringKeys.actionSetReminder: 'Set reminder interval',
   PaperTodoStringKeys.actionSetReminderInterval: 'Set reminder interval',
   PaperTodoStringKeys.actionSettings: 'Settings',
   PaperTodoStringKeys.actionShowHidden: 'Show hidden',
@@ -552,12 +650,11 @@ const _enStrings = {
   PaperTodoStringKeys.actionUnlinkNote: 'Unlink note',
   PaperTodoStringKeys.actionUnpinFromDesktop: 'Unpin from desktop',
   PaperTodoStringKeys.actionWideFirstColumn: 'Wide first column',
-  PaperTodoStringKeys.allowLongLinkedNoteTitles:
-      'Allow long linked note titles',
-  PaperTodoStringKeys.allDue: 'All due',
-  PaperTodoStringKeys.animations: 'Animations',
-  PaperTodoStringKeys.appearance: 'Appearance',
-  PaperTodoStringKeys.avoidFullscreen: 'Avoid fullscreen',
+  PaperTodoStringKeys.allowLongLinkedNoteTitles: 'Long linked note titles',
+  PaperTodoStringKeys.allDue: 'All',
+  PaperTodoStringKeys.animations: 'Enable animations',
+  PaperTodoStringKeys.appearance: 'Display',
+  PaperTodoStringKeys.avoidFullscreen: 'Avoid',
   PaperTodoStringKeys.basic: 'Basic',
   PaperTodoStringKeys.capsuleMode: 'Capsule mode',
   PaperTodoStringKeys.canvasBlockActions: 'Canvas block actions',
@@ -586,9 +683,9 @@ const _enStrings = {
   PaperTodoStringKeys.canvasSendToBack: 'Send to back',
   PaperTodoStringKeys.canvasTopLayer: 'Top {0}',
   PaperTodoStringKeys.collapseAllActive: 'Collapse all active',
-  PaperTodoStringKeys.collapseAllControl: 'Collapse all control',
+  PaperTodoStringKeys.collapseAllControl: 'Show main capsule',
   PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick:
-      'Collapse expanded deep capsule on click',
+      'Click edge capsule again to retract paper',
   PaperTodoStringKeys.colorForest: 'Forest',
   PaperTodoStringKeys.colorInk: 'Ink',
   PaperTodoStringKeys.colorRose: 'Rose',
@@ -597,23 +694,37 @@ const _enStrings = {
   PaperTodoStringKeys.columnLabel: 'Column {0}',
   PaperTodoStringKeys.custom: 'Custom',
   PaperTodoStringKeys.customFontFamily: 'Custom font family',
-  PaperTodoStringKeys.customThemeColor: 'Custom theme color',
-  PaperTodoStringKeys.themeColorDefault: 'Default theme color',
+  PaperTodoStringKeys.customThemeColor: 'Global theme color',
+  PaperTodoStringKeys.themeColorDefault: 'Use default palette',
   PaperTodoStringKeys.themeColorPick: 'Choose color',
-  PaperTodoStringKeys.themeColorClear: 'Restore default',
-  PaperTodoStringKeys.deepCapsuleMode: 'Deep capsule mode',
+  PaperTodoStringKeys.themeColorClear: 'Default color',
+  PaperTodoStringKeys.deepCapsuleMode: 'Edge capsule mode',
   PaperTodoStringKeys.deepCapsuleMonitor: 'Deep capsule monitor',
   PaperTodoStringKeys.deepCapsuleSide: 'Deep capsule side',
   PaperTodoStringKeys.deepCapsuleTopMargin: 'Deep capsule top margin',
   PaperTodoStringKeys.defaultFont: 'Default',
+  PaperTodoStringKeys.uiFontDefault: 'Language default',
   PaperTodoStringKeys.dengXian: 'DengXian',
   PaperTodoStringKeys.dialogDeletePaper: 'Delete paper?',
-  PaperTodoStringKeys.dialogDueDate: 'Due date',
+  PaperTodoStringKeys.dialogDeletePaperBody:
+      'This paper will be permanently removed and cannot be restored from the tray.',
+  PaperTodoStringKeys.dialogDueDate: 'Set time',
+  PaperTodoStringKeys.dialogDueDateMessage:
+      'Choose the local date and time for this todo item.',
+  PaperTodoStringKeys.dialogDueDateConfirm: 'OK',
   PaperTodoStringKeys.dialogRestoreSnapshot: 'Restore snapshot?',
   PaperTodoStringKeys.dialogSyncSettings: 'Sync settings',
-  PaperTodoStringKeys.settingsTodoAndNotes: 'Todo & notes',
+  PaperTodoStringKeys.settingsTodoAndNotes: 'Todo / Notes',
   PaperTodoStringKeys.settingsCapsules: 'Capsules',
-  PaperTodoStringKeys.settingsGeneralAdvanced: 'General & advanced',
+  PaperTodoStringKeys.settingsGeneralAdvanced: 'General / Advanced',
+  PaperTodoStringKeys.settingsLineSpacingReset: 'Default',
+  PaperTodoStringKeys.settingsSectionCapsule: 'Capsule',
+  PaperTodoStringKeys.settingsSectionDisplay: 'Display',
+  PaperTodoStringKeys.settingsSectionExternalOpen: 'External open',
+  PaperTodoStringKeys.settingsSectionGeneral: 'General',
+  PaperTodoStringKeys.settingsSectionScriptCapsule: 'Script capsule',
+  PaperTodoStringKeys.settingsSectionTodoAndNotes: 'To-dos & notes',
+  PaperTodoStringKeys.settingsSectionTopBarButtons: 'Top-bar buttons',
   PaperTodoStringKeys.actionBrowse: 'Browse',
   PaperTodoStringKeys.dataDirectory: 'Data folder',
   PaperTodoStringKeys.dataDirectoryHelp:
@@ -624,20 +735,22 @@ const _enStrings = {
   PaperTodoStringKeys.enhanced: 'Enhanced',
   PaperTodoStringKeys.externalMarkdownOpenFailed:
       'External markdown open failed: {0}',
-  PaperTodoStringKeys.externalMarkdownExtension: 'External markdown extension',
+  PaperTodoStringKeys.externalMarkdownExtension: 'External open file type',
   PaperTodoStringKeys.externalMarkdownExtensionInvalid:
       'Use an extension such as .md, .txt, or .todo.md without reserved filename characters, control characters, or a trailing dot or space.',
   PaperTodoStringKeys.fontPreset: 'Font preset',
-  PaperTodoStringKeys.fullscreenTopmostMode: 'Fullscreen/topmost mode',
+  PaperTodoStringKeys.fullscreenTopmostMode: 'Fullscreen handling',
   PaperTodoStringKeys.generic: 'Generic',
-  PaperTodoStringKeys.hideCoveredDeepCapsules: 'Hide covered deep capsules',
+  PaperTodoStringKeys.hideCoveredDeepCapsules:
+      'Hide edge capsules when covered',
   PaperTodoStringKeys.hideFullscreenDeepCapsules:
       'Hide edge capsules during fullscreen apps',
-  PaperTodoStringKeys.hideFromTaskSwitcher: 'Hide from task switcher',
-  PaperTodoStringKeys.hideLinkedNoteCapsules: 'Hide linked note capsules',
+  PaperTodoStringKeys.hideFromTaskSwitcher: 'Hide papers from window switching',
+  PaperTodoStringKeys.hideLinkedNoteCapsules:
+      'Linked notes not shown as capsules',
   PaperTodoStringKeys.hidePassphrase: 'Hide passphrase',
   PaperTodoStringKeys.hidePassword: 'Hide password',
-  PaperTodoStringKeys.hideScriptRunWindow: 'Hide script run window',
+  PaperTodoStringKeys.hideScriptRunWindow: 'Hide script window',
   PaperTodoStringKeys.hour: 'Hour',
   PaperTodoStringKeys.hours: 'Hours',
   PaperTodoStringKeys.interval: 'Interval',
@@ -659,8 +772,8 @@ const _enStrings = {
   PaperTodoStringKeys.markdownActionMore: 'More markdown actions',
   PaperTodoStringKeys.markdownActionQuote: 'Quote',
   PaperTodoStringKeys.markdownActionStrikethrough: 'Strikethrough',
-  PaperTodoStringKeys.markdownMode: 'Markdown mode',
-  PaperTodoStringKeys.markdownOff: 'Markdown off',
+  PaperTodoStringKeys.markdownMode: 'Markdown display',
+  PaperTodoStringKeys.markdownOff: 'Off',
   PaperTodoStringKeys.menuCanvas: 'Canvas',
   PaperTodoStringKeys.menuDesktopPin: 'Desktop pin',
   PaperTodoStringKeys.menuFormat: 'Format',
@@ -668,13 +781,13 @@ const _enStrings = {
   PaperTodoStringKeys.menuText: 'Text',
   PaperTodoStringKeys.menuTodo: 'Todo',
   PaperTodoStringKeys.menuTodoItem: 'Item',
-  PaperTodoStringKeys.maxTitleLength: 'Max title length',
+  PaperTodoStringKeys.maxTitleLength: 'Title length limit',
   PaperTodoStringKeys.medium: 'Medium',
   PaperTodoStringKeys.minute: 'Minute',
   PaperTodoStringKeys.minutes: 'Minutes',
   PaperTodoStringKeys.mono: 'Mono',
   PaperTodoStringKeys.nearest: 'Nearest',
-  PaperTodoStringKeys.noYear: 'No year',
+  PaperTodoStringKeys.noYear: 'None',
   PaperTodoStringKeys.noteEmptyPreview: '_No note content._',
   PaperTodoStringKeys.noteEditorHint: 'Write a note...',
   PaperTodoStringKeys.noteSpacing: 'Note spacing',
@@ -686,8 +799,9 @@ const _enStrings = {
   PaperTodoStringKeys.openLinkUnsupported:
       'Open link failed: unsupported link target.',
   PaperTodoStringKeys.paperDeleted: '{0} deleted.',
-  PaperTodoStringKeys.paperLimitReached:
-      'Paper limit reached. Delete papers you no longer need before creating more.',
+  PaperTodoStringKeys.paperLimitMessage:
+      'You have reached the 100-paper limit.\nDelete papers you no longer need before creating more.',
+  PaperTodoStringKeys.paperLimitTitle: 'Paper limit reached',
   PaperTodoStringKeys.passphraseHelper:
       'Required for encrypted Windows and Android sync.',
   PaperTodoStringKeys.password: 'Password',
@@ -715,36 +829,43 @@ const _enStrings = {
   PaperTodoStringKeys.pinnedNoteHotkey: 'Pinned note hotkey',
   PaperTodoStringKeys.pinnedTodoHotkey: 'Pinned todo hotkey',
   PaperTodoStringKeys.preferPowerShell7: 'Prefer PowerShell 7',
-  PaperTodoStringKeys.relativeDueDates: 'Relative due dates',
+  PaperTodoStringKeys.relativeDueDates: 'Show relative todo time',
+  PaperTodoStringKeys.relativeDueDayUnit: '{0}d',
   PaperTodoStringKeys.relativeDueFuture: 'in {0}',
+  PaperTodoStringKeys.relativeDueHourUnit: '{0}h',
+  PaperTodoStringKeys.relativeDueMinuteUnit: '{0}m',
   PaperTodoStringKeys.relativeDueOverdue: '{0} overdue',
   PaperTodoStringKeys.recoverySnapshotFallback: 'Snapshot',
   PaperTodoStringKeys.recoverySnapshotLoadFailed:
       'Unable to load snapshots: {0}',
   PaperTodoStringKeys.recoverySnapshotModified: 'Modified {0}',
   PaperTodoStringKeys.recoverySnapshotsEmpty: 'No recovery snapshots found.',
-  PaperTodoStringKeys.reminderDisplaySeconds: 'Reminder display seconds',
+  PaperTodoStringKeys.reminderDisplaySeconds: 'Bubble duration (seconds)',
   PaperTodoStringKeys.reminderEveryHours: 'Every {0} hr',
   PaperTodoStringKeys.reminderEveryMinutes: 'Every {0} min',
   PaperTodoStringKeys.reminderInterval: 'Reminder interval',
-  PaperTodoStringKeys.reminderScope: 'Reminder scope',
-  PaperTodoStringKeys.reminderUnit: 'Reminder unit',
+  PaperTodoStringKeys.reminderIntervalGlobal: 'Global',
+  PaperTodoStringKeys.reminderIntervalMessage:
+      'Set a custom reminder interval for this todo. It overrides the app setting when interval reminder bubbles are enabled.',
+  PaperTodoStringKeys.reminderScope: 'Reminder target',
+  PaperTodoStringKeys.reminderUnit: 'Interval unit',
   PaperTodoStringKeys.remoteFolder: 'Remote folder',
   PaperTodoStringKeys.requestTimeoutSeconds: 'Request timeout seconds',
   PaperTodoStringKeys.right: 'Right',
   PaperTodoStringKeys.runLinkedScriptCapsulesOnClick:
-      'Run linked script capsules on click',
+      'Run linked scripts directly',
   PaperTodoStringKeys.scriptCapsuleFailed: 'Script capsule failed: {0}',
   PaperTodoStringKeys.serif: 'Serif',
   PaperTodoStringKeys.settingsSaveFailed: 'Settings save failed: {0}',
   PaperTodoStringKeys.showDeepCapsuleWhileExpanded:
       'Show deep capsule while expanded',
-  PaperTodoStringKeys.showLinkedNoteName: 'Show linked note name',
+  PaperTodoStringKeys.showLinkedNoteName: 'Show linked note title',
   PaperTodoStringKeys.showPassphrase: 'Show passphrase',
   PaperTodoStringKeys.showPassword: 'Show password',
   PaperTodoStringKeys.small: 'Small',
-  PaperTodoStringKeys.startAtLogin: 'Start at login',
+  PaperTodoStringKeys.startAtLogin: 'Start with Windows',
   PaperTodoStringKeys.stayOnTop: 'Stay on top',
+  PaperTodoStringKeys.systemFont: 'System font',
   PaperTodoStringKeys.trayCollapsed: 'collapsed',
   PaperTodoStringKeys.trayDeleteConfirmMessage: 'Delete "{0}"?',
   PaperTodoStringKeys.trayDeleteConfirmTitle: 'Delete paper?',
@@ -809,20 +930,108 @@ const _enStrings = {
   PaperTodoStringKeys.syncSnapshotRestoredLegacyPlainNextUpload:
       'Snapshot restored from legacy plain WebDAV data. The next successful upload will write encrypted payloads.',
   PaperTodoStringKeys.syncUploaded: 'Local data uploaded.',
-  PaperTodoStringKeys.theme: 'Theme',
+  PaperTodoStringKeys.theme: 'Theme mode',
   PaperTodoStringKeys.themeDark: 'Dark',
   PaperTodoStringKeys.themeLight: 'Light',
   PaperTodoStringKeys.themeSystem: 'System',
-  PaperTodoStringKeys.todoNoteLinks: 'Todo-note links',
-  PaperTodoStringKeys.todoReminders: 'Todo reminders',
+  PaperTodoStringKeys.todoNoteLinks: 'Enable todo-note links',
+  PaperTodoStringKeys.todoReminders: 'Use interval reminder bubbles',
   PaperTodoStringKeys.todoSpacing: 'Todo spacing',
+  PaperTodoStringKeys.todoReminderBubbleMessage: '{0}\n{1}\n{2}',
+  PaperTodoStringKeys.todoReminderBubbleOverdue: '{0} overdue',
+  PaperTodoStringKeys.todoReminderBubbleRemaining: 'in {0}',
+  PaperTodoStringKeys.todoReminderBubbleTitle: 'Todo due soon',
+  PaperTodoStringKeys.todoReminderCountdownDay: '{0}d ',
+  PaperTodoStringKeys.todoReminderCountdownHour: '{0}h ',
+  PaperTodoStringKeys.todoReminderCountdownMinute: '{0}m ',
+  PaperTodoStringKeys.todoReminderCountdownSecond: '{0}s',
   PaperTodoStringKeys.todoReminderMultiple: 'Reminder: {0} todo items are due.',
   PaperTodoStringKeys.todoReminderSingle: 'Reminder: {0} - {1}',
   PaperTodoStringKeys.todoNewItemHint: 'New item',
   PaperTodoStringKeys.todoItemDeleted: '{0} deleted.',
   PaperTodoStringKeys.todoItemFallback: 'Todo item',
-  PaperTodoStringKeys.todoVisualSize: 'Todo visual size',
-  PaperTodoStringKeys.tooltips: 'Tooltips',
+  PaperTodoStringKeys.todoVisualSize: 'Todo size',
+  PaperTodoStringKeys.tipAllowLongLinkedNoteTitles:
+      'When off, linked note titles stay compact. When on, they expand to fit content: about 5 full-width characters on one-line todos and 10 on multiline todos.',
+  PaperTodoStringKeys.tipCapsuleCollapseAll:
+      'Show a main capsule at the top of the capsule queue to collapse or expand the current queue.',
+  PaperTodoStringKeys.tipCapsuleMode:
+      'Allow papers to collapse into small capsules to save desktop space. Edge capsule features require this first.',
+  PaperTodoStringKeys.tipCollapseExpandedDeepCapsuleOnClick:
+      'When a paper is open from an edge capsule, click the same capsule again to retract the paper.',
+  PaperTodoStringKeys.tipCustomThemeColor:
+      'Click the color block to open the full color picker. The chosen color generates the whole app palette instead of only changing this setting item.',
+  PaperTodoStringKeys.tipDeepCapsuleMode:
+      'Capsules dock to the screen edge as a queue and slide out on hover.',
+  PaperTodoStringKeys.tipEnableAnimations:
+      'Enable transition animations for common actions. Turn off for a more direct response.',
+  PaperTodoStringKeys.tipEnableTodoNoteLinks:
+      'Drag a note onto a todo item to link it, then open the note directly from that item.',
+  PaperTodoStringKeys.tipEnableToolTips:
+      'Show brief hints when the pointer rests on buttons or interactive areas. Setting info icons stay available either way.',
+  PaperTodoStringKeys.tipExternalExtension:
+      'Choose the file type used when handing the note to an external app, such as .md or .txt.',
+  PaperTodoStringKeys.tipExternalOpenButton:
+      'Show the external open button in the top bar, writing the current note to a temporary file and handing it to the default app.',
+  PaperTodoStringKeys.tipFullscreenTopmostMode:
+      'When video, games, or other fullscreen windows are detected, papers and edge capsules can temporarily step aside. Stay on top keeps them visible.',
+  PaperTodoStringKeys.tipHideDeepCapsulesWhenCovered:
+      'When an external window overlaps an edge capsule\'s docked area, the capsule hides immediately and returns when the area is clear.',
+  PaperTodoStringKeys.tipHideLinkedNotesFromCapsules:
+      'Notes linked to todo items no longer appear in the capsule list, avoiding duplicate entry points.',
+  PaperTodoStringKeys.tipHidePapersFromWindowSwitcher:
+      'When on, expanded papers are hidden from Alt+Tab and Task View. They remain accessible from the tray, desktop papers, and capsules.',
+  PaperTodoStringKeys.tipHideScriptRunWindow:
+      'Hide the script window. Normal !p / !power waits for completion and captures errors; !pf / !powerf only submits to the persistent process.',
+  PaperTodoStringKeys.tipMarkdownRender:
+      'Basic mode applies light highlighting; Enhanced also styles headings, lists, and emphasis.',
+  PaperTodoStringKeys.tipMaxTitleLength:
+      'Maximum number of characters shown in paper titles and capsules.',
+  PaperTodoStringKeys.tipNewNoteButton:
+      'Show the new note button in the paper top bar.',
+  PaperTodoStringKeys.tipNewTodoButton:
+      'Show the new todo button in the paper top bar.',
+  PaperTodoStringKeys.tipNoteLineSpacing:
+      'Type the line spacing multiplier for note text. Default is 1; range is 0.8 to 5.',
+  PaperTodoStringKeys.tipPersistentPowerShellProcess:
+      '!pf / !powerf reuse a persistent process for faster startup, but variables and state may carry between scripts. Turning this off ends that process.',
+  PaperTodoStringKeys.tipPinnedNoteHotKey:
+      'Press a key combination in the box to bring a pinned note paper from the desktop bottom to the front. Esc, Backspace, or Delete clears it.',
+  PaperTodoStringKeys.tipPinnedTodoHotKey:
+      'Press a key combination in the box to bring a pinned todo paper from the desktop bottom to the front. Esc, Backspace, or Delete clears it.',
+  PaperTodoStringKeys.tipPreferPowerShell7:
+      'Prefer PowerShell 7 (pwsh.exe); fall back to Windows PowerShell when unavailable. Scripts can also use !pwsh or !ps5 to choose.',
+  PaperTodoStringKeys.tipRunLinkedScriptCapsulesOnClick:
+      'When a linked entry points to a script capsule, left-click runs it and right-click opens it for editing. Off by default to prevent accidental runs.',
+  PaperTodoStringKeys.tipShowDeepCapsuleWhileExpanded:
+      'After opening a paper from an edge capsule, keep its edge entry visible. When off, that entry is hidden while the paper is open.',
+  PaperTodoStringKeys.tipShowLinkedNoteName:
+      'Show the linked note title after the todo item.',
+  PaperTodoStringKeys.tipShowTodoDueRelativeTime:
+      'Todo time badges can show how long remains, or how long they have been overdue, instead of the calendar time.',
+  PaperTodoStringKeys.tipStartup:
+      'Launch PaperTodo automatically when Windows starts.',
+  PaperTodoStringKeys.tipSystemFont:
+      'Choose from fonts currently installed in Windows. The selected font applies to the UI, tray, capsules, todos, and note text. Choose language default to clear the manual system font and use the app default font rules.',
+  PaperTodoStringKeys.tipThemeMode:
+      'Choose light, dark, or follow the Windows system theme.',
+  PaperTodoStringKeys.tipTodoDueYearDisplay:
+      'Choose whether todo due badges include a year, shown as 26 or 2026.',
+  PaperTodoStringKeys.tipTodoLineSpacing:
+      'Type the line spacing multiplier for multiline todo text. Default is 1; range is 0.8 to 5.',
+  PaperTodoStringKeys.tipTodoReminderBubbleDuration:
+      'How long reminder bubbles stay visible before closing. Hovering a bubble pauses its timer.',
+  PaperTodoStringKeys.tipTodoReminderInterval:
+      'How often an unfinished todo can show another reminder bubble once it is within the selected interval before due, or already overdue.',
+  PaperTodoStringKeys.tipTodoReminderIntervalUnit:
+      'Choose whether the reminder interval value is counted in minutes or hours.',
+  PaperTodoStringKeys.tipTodoReminderScope:
+      'Nearest shows only the closest matching todo per reminder check; All can show every matching todo.',
+  PaperTodoStringKeys.tipTodoVisualSize:
+      'Adjust todo text, row height, and spacing.',
+  PaperTodoStringKeys.tipUseTodoReminderInterval:
+      'Repeat reminder bubbles by the selected interval. Off keeps the original one-time due-soon reminder.',
+  PaperTodoStringKeys.tooltips: 'Show hover hints',
   PaperTodoStringKeys.tooltipsHelp:
       'Only hides ordinary operation hints. Settings explanations stay available.',
   PaperTodoStringKeys.topBarNewNote: 'Top bar new note',
@@ -850,11 +1059,12 @@ const _enStrings = {
   PaperTodoStringKeys.webDavIssueUsernameRequired: 'Enter a WebDAV username.',
   PaperTodoStringKeys.webDavProvider: 'WebDAV provider',
   PaperTodoStringKeys.webDavSync: 'WebDAV sync',
+  PaperTodoStringKeys.enableWebDavSync: 'Enable WebDAV sync',
   PaperTodoStringKeys.webDavUrl: 'WebDAV URL',
   PaperTodoStringKeys.xl: 'XL',
   PaperTodoStringKeys.yaHei: 'YaHei',
-  PaperTodoStringKeys.yy: 'YY',
-  PaperTodoStringKeys.yyyy: 'YYYY',
+  PaperTodoStringKeys.yy: '26',
+  PaperTodoStringKeys.yyyy: '2026',
   PaperTodoStringKeys.zoom: 'Zoom',
 };
 
@@ -862,18 +1072,19 @@ const _zhStrings = {
   PaperTodoStringKeys.appTitle: 'RePaperTodo',
   PaperTodoStringKeys.actionAddColumn: '添加列',
   PaperTodoStringKeys.actionAddCanvasBlock: '添加画布块',
+  PaperTodoStringKeys.actionAddCodeBlock: '添加代码块',
   PaperTodoStringKeys.actionAddItem: '添加事项',
   PaperTodoStringKeys.actionAddTextBlock: '添加文本块',
   PaperTodoStringKeys.actionBackToBoard: '返回面板',
   PaperTodoStringKeys.actionCancel: '取消',
-  PaperTodoStringKeys.actionChangeDueDate: '更改到期时间',
-  PaperTodoStringKeys.actionChangeReminder: '更改提醒',
+  PaperTodoStringKeys.actionChangeDueDate: '修改时间节点',
+  PaperTodoStringKeys.actionChangeReminder: '修改提醒间隔',
   PaperTodoStringKeys.actionClear: '清除',
   PaperTodoStringKeys.actionClose: '关闭',
-  PaperTodoStringKeys.actionClearCompleted: '清除已完成',
+  PaperTodoStringKeys.actionClearCompleted: '清理已完成',
   PaperTodoStringKeys.actionClearCompletedItems: '清除已完成事项',
-  PaperTodoStringKeys.actionClearDueDate: '清除到期时间',
-  PaperTodoStringKeys.actionClearReminder: '清除提醒',
+  PaperTodoStringKeys.actionClearDueDate: '清除时间节点',
+  PaperTodoStringKeys.actionClearReminder: '使用全局提醒间隔',
   PaperTodoStringKeys.actionClearReminderInterval: '清除提醒间隔',
   PaperTodoStringKeys.actionCollapseAll: '全部收起',
   PaperTodoStringKeys.actionCollapseAllPapers: '收起全部纸片',
@@ -882,12 +1093,13 @@ const _zhStrings = {
   PaperTodoStringKeys.actionCopy: '复制',
   PaperTodoStringKeys.actionDelete: '删除',
   PaperTodoStringKeys.actionDeleteColumn: '删除第 {0} 列',
-  PaperTodoStringKeys.actionDeleteItem: '删除事项',
+  PaperTodoStringKeys.actionDeleteItem: '删除这一项',
   PaperTodoStringKeys.actionDeletePaper: '删除纸片',
   PaperTodoStringKeys.actionDisableAlwaysOnTop: '取消保持置顶',
   PaperTodoStringKeys.actionDragToLinkNoteToTodo: '拖动以关联笔记到待办',
   PaperTodoStringKeys.actionDragToReorder: '拖动以排序',
   PaperTodoStringKeys.actionEditLinkedScript: '编辑关联脚本',
+  PaperTodoStringKeys.actionEditScriptCapsule: '编辑脚本胶囊',
   PaperTodoStringKeys.actionEditTitle: '点击编辑标题',
   PaperTodoStringKeys.actionEqualWidths: '等宽列',
   PaperTodoStringKeys.actionExpandAll: '全部展开',
@@ -895,7 +1107,14 @@ const _zhStrings = {
   PaperTodoStringKeys.actionExpandPaper: '展开纸片',
   PaperTodoStringKeys.actionHidePaper: '隐藏纸片',
   PaperTodoStringKeys.actionHideThisPaper: '隐藏这张纸',
+  PaperTodoStringKeys.actionHideCompact: '隐藏',
   PaperTodoStringKeys.actionInsertBeforeColumn: '在第 {0} 列前插入',
+  PaperTodoStringKeys.menuDeleteTodoColumn: '删除当前列',
+  PaperTodoStringKeys.menuDecreaseTodoColumns: '减少当前待办列数',
+  PaperTodoStringKeys.menuIncreaseTodoColumns: '增加当前待办列数',
+  PaperTodoStringKeys.menuInsertTodoColumnBefore: '在当前列前插入列',
+  PaperTodoStringKeys.menuOpenLinkedNote: '打开关联笔记：{0}',
+  PaperTodoStringKeys.menuEditLinkedScriptCapsule: '编辑关联脚本：{0}',
   PaperTodoStringKeys.actionKeepOnTop: '保持置顶',
   PaperTodoStringKeys.actionLinkNote: '关联笔记',
   PaperTodoStringKeys.actionLinkPaper: '关联 {0}',
@@ -906,8 +1125,10 @@ const _zhStrings = {
   PaperTodoStringKeys.actionResizePaperWindow: '拖动边缘以调整纸张大小',
   PaperTodoStringKeys.actionNewNote: '新建笔记',
   PaperTodoStringKeys.actionNewNotePaper: '新建笔记纸片',
+  PaperTodoStringKeys.actionNewNotePaperCompact: '＋ 笔记纸',
   PaperTodoStringKeys.actionNewTodo: '新建待办',
   PaperTodoStringKeys.actionNewTodoPaper: '新建待办纸片',
+  PaperTodoStringKeys.actionNewTodoPaperCompact: '＋ 待办纸',
   PaperTodoStringKeys.actionOpen: '打开',
   PaperTodoStringKeys.actionOpenCurrentPaperSurface: '打开当前纸片窗口',
   PaperTodoStringKeys.actionOpenLinkedNote: '打开关联笔记',
@@ -933,8 +1154,8 @@ const _zhStrings = {
   PaperTodoStringKeys.actionSave: '保存',
   PaperTodoStringKeys.actionSaveWindowBounds: '保存窗口边界',
   PaperTodoStringKeys.actionSelectAll: '全选',
-  PaperTodoStringKeys.actionSetDueDate: '设置到期时间',
-  PaperTodoStringKeys.actionSetReminder: '设置提醒',
+  PaperTodoStringKeys.actionSetDueDate: '设置时间节点',
+  PaperTodoStringKeys.actionSetReminder: '设置提醒间隔',
   PaperTodoStringKeys.actionSetReminderInterval: '设置提醒间隔',
   PaperTodoStringKeys.actionSettings: '设置',
   PaperTodoStringKeys.actionShowHidden: '显示隐藏',
@@ -947,11 +1168,11 @@ const _zhStrings = {
   PaperTodoStringKeys.actionUnlinkNote: '取消关联笔记',
   PaperTodoStringKeys.actionUnpinFromDesktop: '从桌面取消固定',
   PaperTodoStringKeys.actionWideFirstColumn: '加宽第一列',
-  PaperTodoStringKeys.allowLongLinkedNoteTitles: '允许较长关联笔记标题',
-  PaperTodoStringKeys.allDue: '全部到期',
-  PaperTodoStringKeys.animations: '动画效果',
-  PaperTodoStringKeys.appearance: '外观',
-  PaperTodoStringKeys.avoidFullscreen: '避让全屏',
+  PaperTodoStringKeys.allowLongLinkedNoteTitles: '关联笔记显示长标题',
+  PaperTodoStringKeys.allDue: '每个',
+  PaperTodoStringKeys.animations: '启用动画效果',
+  PaperTodoStringKeys.appearance: '显示',
+  PaperTodoStringKeys.avoidFullscreen: '避让',
   PaperTodoStringKeys.basic: '基础',
   PaperTodoStringKeys.capsuleMode: '胶囊模式',
   PaperTodoStringKeys.canvasBlockActions: '画布块操作',
@@ -979,8 +1200,8 @@ const _zhStrings = {
   PaperTodoStringKeys.canvasSendToBack: '置于底层',
   PaperTodoStringKeys.canvasTopLayer: '顶层 {0}',
   PaperTodoStringKeys.collapseAllActive: '默认收起全部',
-  PaperTodoStringKeys.collapseAllControl: '收起全部控件',
-  PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick: '点击已展开边缘胶囊时收回纸片',
+  PaperTodoStringKeys.collapseAllControl: '显示主胶囊',
+  PaperTodoStringKeys.collapseExpandedDeepCapsuleOnClick: '再次点击边缘胶囊收回纸片',
   PaperTodoStringKeys.colorForest: '森林',
   PaperTodoStringKeys.colorInk: '墨色',
   PaperTodoStringKeys.colorRose: '玫瑰',
@@ -989,44 +1210,56 @@ const _zhStrings = {
   PaperTodoStringKeys.columnLabel: '第 {0} 列',
   PaperTodoStringKeys.custom: '自定义',
   PaperTodoStringKeys.customFontFamily: '自定义字体族',
-  PaperTodoStringKeys.customThemeColor: '自定义主题色',
-  PaperTodoStringKeys.themeColorDefault: '默认主题色',
+  PaperTodoStringKeys.customThemeColor: '全局主题颜色',
+  PaperTodoStringKeys.themeColorDefault: '跟随默认调色板',
   PaperTodoStringKeys.themeColorPick: '选择颜色',
-  PaperTodoStringKeys.themeColorClear: '恢复默认',
-  PaperTodoStringKeys.deepCapsuleMode: '边缘胶囊模式',
+  PaperTodoStringKeys.themeColorClear: '默认颜色',
+  PaperTodoStringKeys.deepCapsuleMode: '胶囊贴边模式',
   PaperTodoStringKeys.deepCapsuleMonitor: '边缘胶囊显示器',
   PaperTodoStringKeys.deepCapsuleSide: '边缘胶囊侧边',
   PaperTodoStringKeys.deepCapsuleTopMargin: '边缘胶囊顶部边距',
   PaperTodoStringKeys.defaultFont: '默认',
+  PaperTodoStringKeys.uiFontDefault: '语言默认',
   PaperTodoStringKeys.dengXian: '等线',
   PaperTodoStringKeys.dialogDeletePaper: '删除纸片？',
-  PaperTodoStringKeys.dialogDueDate: '到期时间',
+  PaperTodoStringKeys.dialogDeletePaperBody: '删除后将永久移除，不能从托盘恢复。',
+  PaperTodoStringKeys.dialogDueDate: '设置时间节点',
+  PaperTodoStringKeys.dialogDueDateMessage: '选择这个待办事项的本地日期和时间。',
+  PaperTodoStringKeys.dialogDueDateConfirm: '确定',
   PaperTodoStringKeys.dialogRestoreSnapshot: '恢复快照？',
   PaperTodoStringKeys.dialogSyncSettings: '同步设置',
-  PaperTodoStringKeys.settingsTodoAndNotes: '待办与笔记',
+  PaperTodoStringKeys.settingsTodoAndNotes: '待办/笔记',
   PaperTodoStringKeys.settingsCapsules: '胶囊',
-  PaperTodoStringKeys.settingsGeneralAdvanced: '通用与高级',
+  PaperTodoStringKeys.settingsGeneralAdvanced: '通用/高级',
+  PaperTodoStringKeys.settingsLineSpacingReset: '默认',
+  PaperTodoStringKeys.settingsSectionCapsule: '胶囊',
+  PaperTodoStringKeys.settingsSectionDisplay: '显示',
+  PaperTodoStringKeys.settingsSectionExternalOpen: '外部打开',
+  PaperTodoStringKeys.settingsSectionGeneral: '通用',
+  PaperTodoStringKeys.settingsSectionScriptCapsule: '脚本胶囊',
+  PaperTodoStringKeys.settingsSectionTodoAndNotes: '待办与笔记',
+  PaperTodoStringKeys.settingsSectionTopBarButtons: '顶栏按钮',
   PaperTodoStringKeys.actionBrowse: '浏览',
   PaperTodoStringKeys.dataDirectory: '数据保存目录',
   PaperTodoStringKeys.dataDirectoryHelp: '用于保存 data.json、备份和恢复文件。修改目录时会复制当前数据。',
   PaperTodoStringKeys.dueLabel: '到期 {0}',
   PaperTodoStringKeys.dueTomorrow: '明天 {0}',
-  PaperTodoStringKeys.dueYearDisplay: '到期年份显示',
+  PaperTodoStringKeys.dueYearDisplay: '时间节点年份显示',
   PaperTodoStringKeys.enhanced: '增强',
   PaperTodoStringKeys.externalMarkdownOpenFailed: '外部 Markdown 打开失败：{0}',
-  PaperTodoStringKeys.externalMarkdownExtension: '外部 Markdown 扩展名',
+  PaperTodoStringKeys.externalMarkdownExtension: '外部打开文件类型',
   PaperTodoStringKeys.externalMarkdownExtensionInvalid:
       '请使用 .md、.txt 或 .todo.md 这类扩展名，不要包含文件名保留字符、控制字符，也不要以点或空格结尾。',
   PaperTodoStringKeys.fontPreset: '字体预设',
-  PaperTodoStringKeys.fullscreenTopmostMode: '全屏/置顶模式',
+  PaperTodoStringKeys.fullscreenTopmostMode: '全屏窗口处理',
   PaperTodoStringKeys.generic: '通用',
-  PaperTodoStringKeys.hideCoveredDeepCapsules: '遮挡时隐藏边缘胶囊',
+  PaperTodoStringKeys.hideCoveredDeepCapsules: '有窗口遮挡时隐藏贴边胶囊',
   PaperTodoStringKeys.hideFullscreenDeepCapsules: '全屏应用时隐藏边缘胶囊',
-  PaperTodoStringKeys.hideFromTaskSwitcher: '从任务切换器隐藏',
-  PaperTodoStringKeys.hideLinkedNoteCapsules: '隐藏关联笔记胶囊',
+  PaperTodoStringKeys.hideFromTaskSwitcher: '从窗口切换中隐藏纸片',
+  PaperTodoStringKeys.hideLinkedNoteCapsules: '关联笔记不显示为胶囊',
   PaperTodoStringKeys.hidePassphrase: '隐藏密钥短语',
   PaperTodoStringKeys.hidePassword: '隐藏密码',
-  PaperTodoStringKeys.hideScriptRunWindow: '隐藏脚本运行窗口',
+  PaperTodoStringKeys.hideScriptRunWindow: '隐藏脚本窗口',
   PaperTodoStringKeys.hour: '小时',
   PaperTodoStringKeys.hours: '小时',
   PaperTodoStringKeys.interval: '间隔',
@@ -1048,8 +1281,8 @@ const _zhStrings = {
   PaperTodoStringKeys.markdownActionMore: '更多 Markdown 操作',
   PaperTodoStringKeys.markdownActionQuote: '引用',
   PaperTodoStringKeys.markdownActionStrikethrough: '删除线',
-  PaperTodoStringKeys.markdownMode: 'Markdown 模式',
-  PaperTodoStringKeys.markdownOff: '关闭 Markdown',
+  PaperTodoStringKeys.markdownMode: 'Markdown 显示',
+  PaperTodoStringKeys.markdownOff: '关闭',
   PaperTodoStringKeys.menuCanvas: '画布',
   PaperTodoStringKeys.menuDesktopPin: '桌面钉住',
   PaperTodoStringKeys.menuFormat: '格式',
@@ -1057,13 +1290,13 @@ const _zhStrings = {
   PaperTodoStringKeys.menuText: '文本',
   PaperTodoStringKeys.menuTodo: '待办',
   PaperTodoStringKeys.menuTodoItem: '事项',
-  PaperTodoStringKeys.maxTitleLength: '标题最大长度',
+  PaperTodoStringKeys.maxTitleLength: '标题字数上限',
   PaperTodoStringKeys.medium: '中',
   PaperTodoStringKeys.minute: '分钟',
   PaperTodoStringKeys.minutes: '分钟',
   PaperTodoStringKeys.mono: '等宽',
-  PaperTodoStringKeys.nearest: '最近一项',
-  PaperTodoStringKeys.noYear: '不显示年份',
+  PaperTodoStringKeys.nearest: '单个',
+  PaperTodoStringKeys.noYear: '不显示',
   PaperTodoStringKeys.noteEmptyPreview: '_暂无笔记内容。_',
   PaperTodoStringKeys.noteEditorHint: '写点笔记...',
   PaperTodoStringKeys.noteSpacing: '笔记行距',
@@ -1074,7 +1307,8 @@ const _zhStrings = {
   PaperTodoStringKeys.openLinkFailed: '打开链接失败：{0}',
   PaperTodoStringKeys.openLinkUnsupported: '打开链接失败：不支持的链接目标。',
   PaperTodoStringKeys.paperDeleted: '{0} 已删除。',
-  PaperTodoStringKeys.paperLimitReached: '纸片数量已达上限。请先删除不再需要的纸片。',
+  PaperTodoStringKeys.paperLimitMessage: '纸片已达到 100 张上限。\n请删除不再需要的纸片后再新建。',
+  PaperTodoStringKeys.paperLimitTitle: '纸片数量已满',
   PaperTodoStringKeys.passphraseHelper: '用于 Windows 与 Android 加密同步。',
   PaperTodoStringKeys.password: '密码',
   PaperTodoStringKeys.persistentPowerShellProcess: '常驻 PowerShell 进程',
@@ -1091,36 +1325,43 @@ const _zhStrings = {
   PaperTodoStringKeys.platformSettingStartupAtLogin: '开机启动',
   PaperTodoStringKeys.platformSettingWindowSwitcherVisibility: '任务切换器可见性',
   PaperTodoStringKeys.platformSettingsFailed: '平台设置失败：{0}',
-  PaperTodoStringKeys.pinnedNoteHotkey: '置顶笔记快捷键',
-  PaperTodoStringKeys.pinnedTodoHotkey: '置顶待办快捷键',
+  PaperTodoStringKeys.pinnedNoteHotkey: '呼出钉住笔记纸快捷键',
+  PaperTodoStringKeys.pinnedTodoHotkey: '呼出钉住待办纸快捷键',
   PaperTodoStringKeys.preferPowerShell7: '优先使用 PowerShell 7',
-  PaperTodoStringKeys.relativeDueDates: '相对到期时间',
-  PaperTodoStringKeys.relativeDueFuture: '{0} 后',
-  PaperTodoStringKeys.relativeDueOverdue: '已逾期 {0}',
+  PaperTodoStringKeys.relativeDueDates: '显示相对待办时间',
+  PaperTodoStringKeys.relativeDueDayUnit: '{0}天',
+  PaperTodoStringKeys.relativeDueFuture: '{0}后',
+  PaperTodoStringKeys.relativeDueHourUnit: '{0}小时',
+  PaperTodoStringKeys.relativeDueMinuteUnit: '{0}分',
+  PaperTodoStringKeys.relativeDueOverdue: '已过期{0}',
   PaperTodoStringKeys.recoverySnapshotFallback: '快照',
   PaperTodoStringKeys.recoverySnapshotLoadFailed: '无法加载快照：{0}',
   PaperTodoStringKeys.recoverySnapshotModified: '修改于 {0}',
   PaperTodoStringKeys.recoverySnapshotsEmpty: '未找到恢复快照。',
-  PaperTodoStringKeys.reminderDisplaySeconds: '提醒显示秒数',
+  PaperTodoStringKeys.reminderDisplaySeconds: '气泡悬浮时长（秒）',
   PaperTodoStringKeys.reminderEveryHours: '每 {0} 小时',
   PaperTodoStringKeys.reminderEveryMinutes: '每 {0} 分钟',
   PaperTodoStringKeys.reminderInterval: '提醒间隔',
-  PaperTodoStringKeys.reminderScope: '提醒范围',
-  PaperTodoStringKeys.reminderUnit: '提醒单位',
+  PaperTodoStringKeys.reminderIntervalGlobal: '全局',
+  PaperTodoStringKeys.reminderIntervalMessage:
+      '为这个待办设置单独的提醒间隔。开启间隔气泡提醒时，它会覆盖应用设置。',
+  PaperTodoStringKeys.reminderScope: '提醒对象',
+  PaperTodoStringKeys.reminderUnit: '间隔单位',
   PaperTodoStringKeys.remoteFolder: '远程文件夹',
   PaperTodoStringKeys.requestTimeoutSeconds: '请求超时秒数',
   PaperTodoStringKeys.right: '右侧',
-  PaperTodoStringKeys.runLinkedScriptCapsulesOnClick: '点击时运行关联脚本胶囊',
+  PaperTodoStringKeys.runLinkedScriptCapsulesOnClick: '关联脚本直接运行',
   PaperTodoStringKeys.scriptCapsuleFailed: '脚本胶囊运行失败：{0}',
   PaperTodoStringKeys.serif: '衬线',
   PaperTodoStringKeys.settingsSaveFailed: '设置保存失败：{0}',
   PaperTodoStringKeys.showDeepCapsuleWhileExpanded: '展开时保留边缘胶囊',
-  PaperTodoStringKeys.showLinkedNoteName: '显示关联笔记名称',
+  PaperTodoStringKeys.showLinkedNoteName: '显示关联笔记标题',
   PaperTodoStringKeys.showPassphrase: '显示密钥短语',
   PaperTodoStringKeys.showPassword: '显示密码',
   PaperTodoStringKeys.small: '小',
-  PaperTodoStringKeys.startAtLogin: '开机启动',
+  PaperTodoStringKeys.startAtLogin: '开机自启动',
   PaperTodoStringKeys.stayOnTop: '保持置顶',
+  PaperTodoStringKeys.systemFont: '系统字体',
   PaperTodoStringKeys.trayCollapsed: '已折叠',
   PaperTodoStringKeys.trayDeleteConfirmMessage: '删除“{0}”？',
   PaperTodoStringKeys.trayDeleteConfirmTitle: '删除纸片？',
@@ -1182,23 +1423,92 @@ const _zhStrings = {
   PaperTodoStringKeys.syncSnapshotRestoredLegacyPlainNextUpload:
       '已从旧版明文 WebDAV 数据恢复快照。下次成功上传时会写入加密载荷。',
   PaperTodoStringKeys.syncUploaded: '已上传本地数据。',
-  PaperTodoStringKeys.theme: '主题',
+  PaperTodoStringKeys.theme: '主题模式',
   PaperTodoStringKeys.themeDark: '深色',
   PaperTodoStringKeys.themeLight: '浅色',
   PaperTodoStringKeys.themeSystem: '跟随系统',
-  PaperTodoStringKeys.todoNoteLinks: '待办-笔记关联',
-  PaperTodoStringKeys.todoReminders: '待办提醒',
+  PaperTodoStringKeys.todoNoteLinks: '启用待办关联笔记',
+  PaperTodoStringKeys.todoReminders: '使用间隔气泡提醒',
   PaperTodoStringKeys.todoSpacing: '待办行距',
+  PaperTodoStringKeys.todoReminderBubbleMessage: '{0}\n{1}\n{2}',
+  PaperTodoStringKeys.todoReminderBubbleOverdue: '过期 {0}',
+  PaperTodoStringKeys.todoReminderBubbleRemaining: '还有 {0}',
+  PaperTodoStringKeys.todoReminderBubbleTitle: '待办快到时间',
+  PaperTodoStringKeys.todoReminderCountdownDay: '{0}天',
+  PaperTodoStringKeys.todoReminderCountdownHour: '{0}小时',
+  PaperTodoStringKeys.todoReminderCountdownMinute: '{0}分',
+  PaperTodoStringKeys.todoReminderCountdownSecond: '{0}秒',
   PaperTodoStringKeys.todoReminderMultiple: '提醒：{0} 个待办事项已到期。',
   PaperTodoStringKeys.todoReminderSingle: '提醒：{0} - {1}',
   PaperTodoStringKeys.todoNewItemHint: '新事项',
   PaperTodoStringKeys.todoItemDeleted: '{0} 已删除。',
   PaperTodoStringKeys.todoItemFallback: '待办事项',
-  PaperTodoStringKeys.todoVisualSize: '待办显示大小',
-  PaperTodoStringKeys.tooltips: '悬停提示',
+  PaperTodoStringKeys.todoVisualSize: '待办大小',
+  PaperTodoStringKeys.tipAllowLongLinkedNoteTitles:
+      '关闭时保持紧凑显示；开启后关联笔记标题会按内容扩展，单行最多约 5 个全角字符，多行最多约 10 个。',
+  PaperTodoStringKeys.tipCapsuleCollapseAll: '在胶囊队列顶部显示主胶囊，用于一键收起或展开当前队列。',
+  PaperTodoStringKeys.tipCapsuleMode: '允许纸片折叠为小胶囊，减少桌面占用；胶囊贴边等功能需要先开启此项。',
+  PaperTodoStringKeys.tipCollapseExpandedDeepCapsuleOnClick:
+      '纸片已从边缘胶囊展开时，再次点击同一胶囊会把纸片收回。',
+  PaperTodoStringKeys.tipCustomThemeColor:
+      '点击色块打开全色域颜色选择器。选中的颜色会生成整套应用调色板，而不只是改变设置项本身。',
+  PaperTodoStringKeys.tipDeepCapsuleMode: '胶囊会自动停靠到屏幕边缘并排列成队列，鼠标悬停时滑出。',
+  PaperTodoStringKeys.tipEnableAnimations: '为常见操作启用过渡动画；关闭后响应更直接。',
+  PaperTodoStringKeys.tipEnableTodoNoteLinks:
+      '允许把笔记拖到待办项上建立关联，之后可从待办项直接打开对应笔记。',
+  PaperTodoStringKeys.tipEnableToolTips: '指针停在按钮和可操作区域上时显示简短说明；设置页说明图标始终可用。',
+  PaperTodoStringKeys.tipExternalExtension: '选择交给外部程序打开时使用的文件类型，例如 .md 或 .txt。',
+  PaperTodoStringKeys.tipExternalOpenButton:
+      '在顶栏显示外部打开按钮，将当前笔记写入临时文件并交给系统默认程序打开。',
+  PaperTodoStringKeys.tipFullscreenTopmostMode:
+      '检测到视频、游戏等全屏窗口时，纸片和边缘胶囊可临时避让；选择保持置顶则始终可见。',
+  PaperTodoStringKeys.tipHideDeepCapsulesWhenCovered:
+      '外部窗口与贴边胶囊停靠区域重叠时，胶囊会立即隐藏；区域空出后自动恢复。',
+  PaperTodoStringKeys.tipHideLinkedNotesFromCapsules:
+      '已关联到待办项的笔记不再出现在胶囊列表中，避免重复入口。',
+  PaperTodoStringKeys.tipHidePapersFromWindowSwitcher:
+      '开启后，展开的纸片会从 Alt+Tab 和任务视图中隐藏；仍可通过托盘、桌面纸片和胶囊访问。',
+  PaperTodoStringKeys.tipHideScriptRunWindow:
+      '隐藏脚本运行窗口。普通 !p / !power 会等待脚本结束并捕获错误；!pf / !powerf 只投递到常驻进程。',
+  PaperTodoStringKeys.tipMarkdownRender: '基础模式只做轻量高亮；增强模式进一步美化标题、列表和强调。',
+  PaperTodoStringKeys.tipMaxTitleLength: '纸片标题和胶囊显示的最大字数。',
+  PaperTodoStringKeys.tipNewNoteButton: '在纸片顶栏显示新建笔记按钮。',
+  PaperTodoStringKeys.tipNewTodoButton: '在纸片顶栏显示新建待办按钮。',
+  PaperTodoStringKeys.tipNoteLineSpacing: '输入笔记正文的行距倍数，默认 1，范围 0.8 到 5。',
+  PaperTodoStringKeys.tipPersistentPowerShellProcess:
+      '!pf / !powerf 会复用常驻进程，启动更快，但脚本间的变量和状态可能保留。关闭后结束该进程。',
+  PaperTodoStringKeys.tipPinnedNoteHotKey:
+      '在输入框中按下组合键，用于把钉在桌面底层的笔记纸呼出到前面；按 Esc、Backspace 或 Delete 可清空。',
+  PaperTodoStringKeys.tipPinnedTodoHotKey:
+      '在输入框中按下组合键，用于把钉在桌面底层的待办纸呼出到前面；按 Esc、Backspace 或 Delete 可清空。',
+  PaperTodoStringKeys.tipPreferPowerShell7:
+      '优先使用 PowerShell 7（pwsh.exe）；找不到时回退到 Windows PowerShell。脚本中也可用 !pwsh 或 !ps5 指定。',
+  PaperTodoStringKeys.tipRunLinkedScriptCapsulesOnClick:
+      '关联入口指向脚本胶囊时，左键直接运行脚本，右键打开编辑。默认关闭以避免误触。',
+  PaperTodoStringKeys.tipShowDeepCapsuleWhileExpanded:
+      '从边缘胶囊打开纸片后，边缘仍保留对应入口；关闭后，打开期间暂时隐藏该入口。',
+  PaperTodoStringKeys.tipShowLinkedNoteName: '在待办项后显示已关联笔记的标题。',
+  PaperTodoStringKeys.tipShowTodoDueRelativeTime:
+      '待办时间徽标显示距离到期还有多久，或已经过期多久，而不是固定日期时间。',
+  PaperTodoStringKeys.tipStartup: '开机时自动启动 PaperTodo。',
+  PaperTodoStringKeys.tipSystemFont:
+      '从当前 Windows 已安装字体中选择一个字体；选择后会应用到界面、托盘、胶囊、待办和笔记正文。选择语言默认会清除手动系统字体，并使用应用默认字体规则。',
+  PaperTodoStringKeys.tipThemeMode: '选择浅色、深色，或跟随 Windows 系统主题。',
+  PaperTodoStringKeys.tipTodoDueYearDisplay: '选择待办时间节点是否显示年份，可显示为 26年 或 2026年。',
+  PaperTodoStringKeys.tipTodoLineSpacing: '输入待办多行文本的行距倍数，默认 1，范围 0.8 到 5。',
+  PaperTodoStringKeys.tipTodoReminderBubbleDuration:
+      '提醒气泡自动关闭前保持显示的秒数；鼠标悬停在气泡上时会暂停计时。',
+  PaperTodoStringKeys.tipTodoReminderInterval:
+      '未完成待办进入所选间隔范围内或已经过期后，再次弹出气泡提醒的最短间隔。',
+  PaperTodoStringKeys.tipTodoReminderIntervalUnit: '选择提醒间隔数值按分钟或小时计算。',
+  PaperTodoStringKeys.tipTodoReminderScope: '单个只提醒当前最接近到期的待办；每个会提醒所有符合条件的待办。',
+  PaperTodoStringKeys.tipTodoVisualSize: '调整待办项的文字、行高和间距。',
+  PaperTodoStringKeys.tipUseTodoReminderInterval:
+      '开启后按所选间隔重复弹出提醒气泡；关闭时保留原来的临期一次提醒。',
+  PaperTodoStringKeys.tooltips: '显示悬停提示',
   PaperTodoStringKeys.tooltipsHelp: '仅隐藏普通操作提示。设置说明仍会保留。',
-  PaperTodoStringKeys.topBarNewNote: '顶栏新建笔记',
-  PaperTodoStringKeys.topBarNewTodo: '顶栏新建待办',
+  PaperTodoStringKeys.topBarNewNote: '显示新建笔记按钮',
+  PaperTodoStringKeys.topBarNewTodo: '显示新建待办按钮',
   PaperTodoStringKeys.topBarOpenSurface: '显示外部打开按钮',
   PaperTodoStringKeys.untitledPaper: '未命名',
   PaperTodoStringKeys.username: '用户名',
@@ -1218,10 +1528,11 @@ const _zhStrings = {
   PaperTodoStringKeys.webDavIssueUsernameRequired: '请输入 WebDAV 用户名。',
   PaperTodoStringKeys.webDavProvider: 'WebDAV 服务',
   PaperTodoStringKeys.webDavSync: 'WebDAV 同步',
+  PaperTodoStringKeys.enableWebDavSync: '启用 WebDAV 同步',
   PaperTodoStringKeys.webDavUrl: 'WebDAV URL',
   PaperTodoStringKeys.xl: '特大',
   PaperTodoStringKeys.yaHei: '雅黑',
-  PaperTodoStringKeys.yy: 'YY',
-  PaperTodoStringKeys.yyyy: 'YYYY',
+  PaperTodoStringKeys.yy: '26年',
+  PaperTodoStringKeys.yyyy: '2026年',
   PaperTodoStringKeys.zoom: '缩放',
 };

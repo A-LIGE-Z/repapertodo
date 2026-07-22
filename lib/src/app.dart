@@ -6,10 +6,9 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:path/path.dart' as p;
 
 import 'app_controller.dart';
@@ -17,7 +16,6 @@ import 'core/logging/usage_log.dart';
 import 'core/model/app_state.dart';
 import 'core/model/external_uri_targets.dart';
 import 'core/model/markdown_formatting.dart';
-import 'core/model/markdown_inline_html.dart';
 import 'core/model/markdown_link_targets.dart';
 import 'core/model/markdown_links.dart';
 import 'core/model/markdown_list_continuation.dart';
@@ -41,6 +39,8 @@ import 'sync/webdav/webdav_client.dart';
 import 'sync/webdav/webdav_payload_codec.dart';
 import 'sync/webdav/webdav_state_sync_service.dart';
 import 'ui/papertodo_strings.dart';
+import 'ui/papertodo_markdown_source.dart';
+import 'ui/papertodo_theme.dart';
 import 'ui/runtime_custom_font.dart';
 import 'ui/sync_settings_dialog.dart';
 
@@ -52,23 +52,12 @@ const _maxTodoReminderDetailLines = 4;
 const _todoReminderLeadTime = Duration(minutes: 10);
 const _todoReminderGraceTime = Duration(minutes: 2);
 const _windowsPaperTransparencyKey = Color(0xFF010203);
-const _yaHeiFontFamily = 'Microsoft YaHei UI';
-const _yaHeiFontFamilyFallback = [
-  'Microsoft YaHei',
-  'Segoe UI',
-  'Microsoft JhengHei UI',
-  'Microsoft JhengHei',
-  'Yu Gothic UI',
-  'Malgun Gothic',
-  'Meiryo',
-  'Segoe UI Symbol',
-  'Segoe UI Emoji',
-];
+const _paperWindowChromeMargin = 8.0;
 const _dengXianFontFamily = 'DengXian';
 const _dengXianFontFamilyFallback = [
+  'Segoe UI',
   'Microsoft YaHei UI',
   'Microsoft YaHei',
-  'Segoe UI',
   'Microsoft JhengHei UI',
   'Microsoft JhengHei',
   'Yu Gothic UI',
@@ -77,9 +66,39 @@ const _dengXianFontFamilyFallback = [
   'Segoe UI Symbol',
   'Segoe UI Emoji',
 ];
-final _paperTodoMarkdownBuilders = <String, MarkdownElementBuilder>{
-  'u': _UnderlineMarkdownElementBuilder(),
-};
+// Flutter's DengXian shaping keeps fractional CJK advances that WPF's
+// Display text mode rounds away. Preserve the source line box while matching
+// the reference advance used by wrapped Todo text.
+const _paperTodoDengXianAdvanceScale = 12.5 / 13;
+const _defaultContentFontFamily = 'Microsoft YaHei UI';
+const _defaultContentFontFamilyFallback = [
+  'Segoe UI',
+  'Microsoft YaHei',
+  'Segoe UI Symbol',
+  'Segoe UI Emoji',
+];
+const _paperTodoCodeFontFamily = 'Cascadia Mono';
+const _paperTodoCodeFontFamilyFallback = [
+  'Consolas',
+  'Microsoft YaHei UI',
+  'Segoe UI Symbol',
+  'Segoe UI Emoji',
+];
+
+Color _paperTodoBlend(Color background, Color foreground, int alpha) {
+  final clampedAlpha = alpha.clamp(0, 255);
+  final inverse = 255 - clampedAlpha;
+  int channel(double value) => value.round();
+  int premultiply(int value, int opacity) => ((value * opacity) + 127) ~/ 255;
+  int mix(int base, int overlay) =>
+      premultiply(base, inverse) + premultiply(overlay, clampedAlpha);
+  return Color.fromARGB(
+    255,
+    mix(channel(background.r * 255), channel(foreground.r * 255)),
+    mix(channel(background.g * 255), channel(foreground.g * 255)),
+    mix(channel(background.b * 255), channel(foreground.b * 255)),
+  );
+}
 
 typedef AndroidBackgroundSyncConfigurator = Future<void> Function({
   required SyncSettings sync,
@@ -134,34 +153,6 @@ void _copySyncRuntimeMetadata({
     ..deletedTodoItemTombstones = runtimeCopy.deletedTodoItemTombstones
     ..extra = runtimeCopy.extra;
   target.webDav.extra = runtimeCopy.webDav.extra;
-}
-
-final _paperTodoMarkdownExtensionSet = md.ExtensionSet(
-  md.ExtensionSet.commonMark.blockSyntaxes,
-  <md.InlineSyntax>[
-    ...md.ExtensionSet.commonMark.inlineSyntaxes,
-    md.StrikethroughSyntax(),
-  ],
-);
-
-class _UnderlineMarkdownElementBuilder extends MarkdownElementBuilder {
-  @override
-  Widget? visitElementAfterWithContext(
-    BuildContext context,
-    md.Element element,
-    TextStyle? preferredStyle,
-    TextStyle? parentStyle,
-  ) {
-    final baseStyle = parentStyle ?? DefaultTextStyle.of(context).style;
-    return SelectableText.rich(
-      TextSpan(
-        text: element.textContent,
-        style: baseStyle.merge(preferredStyle).merge(
-              const TextStyle(decoration: TextDecoration.underline),
-            ),
-      ),
-    );
-  }
 }
 
 class RePaperTodoApp extends StatefulWidget {
@@ -245,6 +236,7 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
         store: widget.store,
         syncService: widget.syncService ?? AppSyncService(),
         configureAndroidBackgroundSync: widget.configureAndroidBackgroundSync,
+        runtimeCustomFontFamily: _runtimeCustomFontFamily,
         onAppThemeChanged: () => setState(() {}),
         initialSurfacePaperId: widget.initialSurfacePaperId,
         paperWindowMode: widget.paperWindowMode,
@@ -272,9 +264,19 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
   }
 
   ThemeData _appTheme(Brightness brightness, AppState state) {
-    final colors = _paperColorScheme(brightness, state);
+    final paperColors = PaperTodoThemeColors.resolve(
+      brightness: brightness,
+      colorScheme: state.colorScheme,
+      customThemeColorHex: state.customThemeColorHex,
+    );
+    final colors = _paperColorScheme(brightness, paperColors);
+    final typography = PaperTodoTypography(
+      contentFontFamily: _contentFontFamily(state),
+      contentFontFamilyFallback: _contentFontFamilyFallback(state),
+    );
     final base = ThemeData(
       colorScheme: colors,
+      extensions: [paperColors, typography],
       useMaterial3: true,
       scaffoldBackgroundColor: colors.surface,
       canvasColor: colors.surface,
@@ -283,7 +285,11 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
     );
     final fontFamily = _fontFamily(state);
     final fontFamilyFallback = _fontFamilyFallback(state);
+    final hoverTint = paperColors.hover;
     return base.copyWith(
+      hoverColor: hoverTint,
+      focusColor: hoverTint,
+      highlightColor: hoverTint,
       textTheme: base.textTheme.apply(
         fontFamily: fontFamily,
         fontFamilyFallback: fontFamilyFallback,
@@ -296,65 +302,124 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
-          minimumSize: const Size(32, 32),
-          maximumSize: const Size(40, 40),
-          padding: const EdgeInsets.all(6),
+          minimumSize: const Size(34, 34),
+          maximumSize: const Size(42, 42),
+          padding: const EdgeInsets.all(7),
           foregroundColor: colors.onSurfaceVariant,
+          disabledForegroundColor:
+              colors.onSurfaceVariant.withValues(alpha: 0.30),
+          hoverColor: paperColors.tint.withValues(alpha: 0.075),
+          highlightColor: paperColors.tint.withValues(alpha: 0.13),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       ),
       checkboxTheme: CheckboxThemeData(
-        side: BorderSide(color: colors.outline, width: 1.4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+        side: WidgetStateBorderSide.resolveWith((states) {
+          final hovered = states.contains(WidgetState.hovered);
+          final selected = states.contains(WidgetState.selected);
+          return BorderSide(
+            color: hovered && !selected
+                ? paperColors.checkBoxHoverBorder
+                : paperColors.checkBox,
+            width: 1.5,
+          );
+        }),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         fillColor: WidgetStateProperty.resolveWith((states) {
-          return states.contains(WidgetState.selected)
-              ? colors.primary
+          final hovered = states.contains(WidgetState.hovered);
+          if (states.contains(WidgetState.selected)) {
+            return hovered ? paperColors.checkBoxActiveHover : colors.primary;
+          }
+          return hovered
+              ? paperColors.checkBoxUncheckedHover
               : Colors.transparent;
         }),
-        checkColor: WidgetStatePropertyAll(colors.onPrimary),
+        checkColor: WidgetStatePropertyAll(paperColors.paper),
       ),
       inputDecorationTheme: InputDecorationTheme(
-        filled: false,
+        filled: true,
+        fillColor: paperColors.tint.withValues(alpha: 0.035),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: colors.outlineVariant),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: colors.outlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: colors.primary, width: 1.5),
+        ),
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        backgroundColor: paperColors.tint.withValues(alpha: 0.055),
+        selectedColor: paperColors.tint.withValues(alpha: 0.12),
+        side: BorderSide(
+          color: colors.outlineVariant.withValues(alpha: 0.72),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: colors.surface,
         surfaceTintColor: Colors.transparent,
-        elevation: 10,
-        shadowColor: colors.shadow.withValues(alpha: 0.22),
+        elevation: 0,
+        shadowColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           side: BorderSide(color: colors.outlineVariant),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
         ),
-        menuPadding: const EdgeInsets.symmetric(vertical: 4),
+        menuPadding: const EdgeInsets.all(4),
         textStyle: base.textTheme.bodyMedium?.copyWith(
           color: colors.onSurface,
           fontSize: 13,
+          height: 1,
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => base.textTheme.bodyMedium
+              ?.copyWith(
+                color: colors.onSurface,
+                fontSize: 13,
+                height: 1,
+              )
+              .copyWith(
+                color: states.contains(WidgetState.disabled)
+                    ? colors.onSurface.withValues(alpha: 0.72)
+                    : colors.onSurface,
+              ),
         ),
       ),
       menuTheme: MenuThemeData(
         style: MenuStyle(
           backgroundColor: WidgetStatePropertyAll(colors.surface),
           surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-          elevation: const WidgetStatePropertyAll(10),
-          shadowColor: WidgetStatePropertyAll(
-            colors.shadow.withValues(alpha: 0.22),
-          ),
+          elevation: const WidgetStatePropertyAll(0),
+          shadowColor: const WidgetStatePropertyAll(Colors.transparent),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               side: BorderSide(color: colors.outlineVariant),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
           padding: const WidgetStatePropertyAll(
@@ -363,9 +428,30 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
         ),
       ),
       dividerTheme: DividerThemeData(
-        color: colors.outlineVariant.withValues(alpha: 0.7),
+        color: colors.outlineVariant.withValues(alpha: 0.38),
         thickness: 1,
         space: 1,
+      ),
+      scrollbarTheme: ScrollbarThemeData(
+        radius: const Radius.circular(3),
+        thickness: const WidgetStatePropertyAll(5),
+        minThumbLength: 28,
+        mainAxisMargin: 7,
+        crossAxisMargin: 0,
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          final active = states.contains(WidgetState.hovered) ||
+              states.contains(WidgetState.dragged);
+          return (active ? const Color(0xFF96784F) : const Color(0xFFB39B74))
+              .withValues(
+            alpha: states.contains(WidgetState.dragged)
+                ? 0.64
+                : states.contains(WidgetState.hovered)
+                    ? 0.54
+                    : 0.34,
+          );
+        }),
+        trackColor: const WidgetStatePropertyAll(Colors.transparent),
+        trackBorderColor: const WidgetStatePropertyAll(Colors.transparent),
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
@@ -375,107 +461,64 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
         textStyle: TextStyle(color: colors.surface, fontSize: 12),
         waitDuration: const Duration(milliseconds: 450),
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: colors.surface,
+        contentTextStyle: TextStyle(
+          color: colors.onSurface,
+          fontSize: 13,
+          height: 1.25,
+        ),
+        actionTextColor: colors.primary,
+        disabledActionTextColor: colors.onSurfaceVariant.withValues(
+          alpha: 0.55,
+        ),
+        elevation: 8,
+        insetPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: colors.outlineVariant),
+        ),
+      ),
     );
   }
 
-  ColorScheme _paperColorScheme(Brightness brightness, AppState state) {
-    final dark = brightness == Brightness.dark;
-    final scheme = ColorSchemes.normalize(state.colorScheme);
-    final palettes = <String,
-        ({
-      Color lightPaper,
-      Color lightBorder,
-      Color lightText,
-      Color lightWeak,
-      Color lightActive,
-      Color darkPaper,
-      Color darkBorder,
-      Color darkText,
-      Color darkWeak,
-      Color darkActive
-    })>{
-      ColorSchemes.warm: (
-        lightPaper: const Color(0xFFFFF9EA),
-        lightBorder: const Color(0xFFE0CEA7),
-        lightText: const Color(0xFF33291E),
-        lightWeak: const Color(0xFF8A7A63),
-        lightActive: const Color(0xFF8C7350),
-        darkPaper: const Color(0xFF211F1C),
-        darkBorder: const Color(0xFF4C453D),
-        darkText: const Color(0xFFE7E0D4),
-        darkWeak: const Color(0xFF92897B),
-        darkActive: const Color(0xFFA88E6A),
-      ),
-      ColorSchemes.ink: (
-        lightPaper: const Color(0xFFF6F7F9),
-        lightBorder: const Color(0xFFD0D6DE),
-        lightText: const Color(0xFF262C36),
-        lightWeak: const Color(0xFF767E8A),
-        lightActive: const Color(0xFF5A6C86),
-        darkPaper: const Color(0xFF1A1C20),
-        darkBorder: const Color(0xFF3C424C),
-        darkText: const Color(0xFFDEE3EA),
-        darkWeak: const Color(0xFF8A929E),
-        darkActive: const Color(0xFF849CBC),
-      ),
-      ColorSchemes.forest: (
-        lightPaper: const Color(0xFFF3F8F1),
-        lightBorder: const Color(0xFFC8DAC6),
-        lightText: const Color(0xFF26322A),
-        lightWeak: const Color(0xFF6E8070),
-        lightActive: const Color(0xFF588260),
-        darkPaper: const Color(0xFF1A1E1B),
-        darkBorder: const Color(0xFF3A463C),
-        darkText: const Color(0xFFDCE4DC),
-        darkWeak: const Color(0xFF869488),
-        darkActive: const Color(0xFF7CA886),
-      ),
-      ColorSchemes.rose: (
-        lightPaper: const Color(0xFFFDF5F6),
-        lightBorder: const Color(0xFFE4CDD2),
-        lightText: const Color(0xFF36262A),
-        lightWeak: const Color(0xFF8C7278),
-        lightActive: const Color(0xFF9E6876),
-        darkPaper: const Color(0xFF211C1E),
-        darkBorder: const Color(0xFF4E4044),
-        darkText: const Color(0xFFE8DCDF),
-        darkWeak: const Color(0xFF988489),
-        darkActive: const Color(0xFFBE8694),
-      ),
-    }[scheme]!;
-    final surface = dark ? palettes.darkPaper : palettes.lightPaper;
-    final border = dark ? palettes.darkBorder : palettes.lightBorder;
-    final text = dark ? palettes.darkText : palettes.lightText;
-    final weak = dark ? palettes.darkWeak : palettes.lightWeak;
-    final customThemeColor = _customThemeColor(state.customThemeColorHex);
-    final active = customThemeColor == null
-        ? (dark ? palettes.darkActive : palettes.lightActive)
-        : ColorScheme.fromSeed(
-            seedColor: customThemeColor,
-            brightness: brightness,
-          ).primary;
+  ColorScheme _paperColorScheme(
+    Brightness brightness,
+    PaperTodoThemeColors palette,
+  ) {
     return ColorScheme.fromSeed(
-      seedColor: active,
+      seedColor: palette.active,
       brightness: brightness,
     ).copyWith(
-      primary: active,
-      onPrimary: dark ? const Color(0xFF211F1C) : Colors.white,
-      surface: surface,
-      surfaceContainerLowest: surface,
-      surfaceContainerLow: surface,
-      surfaceContainer: surface,
-      surfaceContainerHigh: surface,
-      surfaceContainerHighest: surface,
-      onSurface: text,
-      onSurfaceVariant: weak,
-      outline: border,
-      outlineVariant: border,
-      primaryContainer: dark
-          ? border
-          : Color.alphaBlend(active.withValues(alpha: 0.12), surface),
-      onPrimaryContainer: text,
-      secondary: active,
-      onSecondary: dark ? const Color(0xFF211F1C) : Colors.white,
+      primary: palette.active,
+      onPrimary: palette.paper,
+      surface: palette.paper,
+      surfaceContainerLowest: palette.paper,
+      surfaceContainerLow: palette.paper,
+      surfaceContainer: palette.paper,
+      surfaceContainerHigh: palette.code,
+      surfaceContainerHighest: palette.paper,
+      onSurface: palette.text,
+      onSurfaceVariant: palette.weakText,
+      outline: palette.paperBorder,
+      outlineVariant: palette.paperBorder,
+      primaryContainer: Color.alphaBlend(
+        palette.tint.withValues(alpha: palette.isDark ? 42 / 255 : 24 / 255),
+        palette.paper,
+      ),
+      onPrimaryContainer: palette.text,
+      secondary: palette.active,
+      onSecondary: palette.paper,
+      tertiary: palette.link,
+      onTertiary: palette.paper,
+      error: palette.danger,
+      onError: palette.paper,
     );
   }
 
@@ -487,14 +530,6 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
     };
   }
 
-  Color? _customThemeColor(String value) {
-    final match = RegExp(r'^#?([0-9A-Fa-f]{6})$').firstMatch(value.trim());
-    if (match == null) {
-      return null;
-    }
-    return Color(int.parse('FF${match.group(1)!}', radix: 16));
-  }
-
   String? _fontFamily(AppState state) {
     return resolveAppFontFamily(
       state,
@@ -504,6 +539,20 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
 
   List<String>? _fontFamilyFallback(AppState state) {
     return resolveAppFontFamilyFallback(
+      state,
+      runtimeCustomFontFamily: _runtimeCustomFontFamily,
+    );
+  }
+
+  String? _contentFontFamily(AppState state) {
+    return resolveAppContentFontFamily(
+      state,
+      runtimeCustomFontFamily: _runtimeCustomFontFamily,
+    );
+  }
+
+  List<String>? _contentFontFamilyFallback(AppState state) {
+    return resolveAppContentFontFamilyFallback(
       state,
       runtimeCustomFontFamily: _runtimeCustomFontFamily,
     );
@@ -525,7 +574,7 @@ String? resolveAppFontFamily(
     return runtimeFamily;
   }
   return switch (UiFontPresets.normalize(state.uiFontPreset)) {
-    UiFontPresets.yaHei => _yaHeiFontFamily,
+    UiFontPresets.yaHei => null,
     UiFontPresets.dengXian => _dengXianFontFamily,
     UiFontPresets.serif => 'serif',
     UiFontPresets.mono => 'monospace',
@@ -545,9 +594,74 @@ List<String>? resolveAppFontFamilyFallback(
     return null;
   }
   return switch (UiFontPresets.normalize(state.uiFontPreset)) {
-    UiFontPresets.yaHei => _yaHeiFontFamilyFallback,
+    UiFontPresets.yaHei => null,
     UiFontPresets.dengXian => _dengXianFontFamilyFallback,
     _ => null,
+  };
+}
+
+String resolveAppContentFontFamily(
+  AppState state, {
+  String? runtimeCustomFontFamily,
+}) {
+  final systemFontFamilyName = normalizeSystemFontFamilyName(
+    state.systemFontFamilyName,
+  );
+  if (systemFontFamilyName.isNotEmpty) {
+    return systemFontFamilyName;
+  }
+  final runtimeFamily = runtimeCustomFontFamily?.trim();
+  if (runtimeFamily != null && runtimeFamily.isNotEmpty) {
+    return runtimeFamily;
+  }
+  return switch (UiFontPresets.normalize(state.uiFontPreset)) {
+    UiFontPresets.yaHei => _defaultContentFontFamily,
+    UiFontPresets.dengXian => _dengXianFontFamily,
+    UiFontPresets.serif => 'serif',
+    UiFontPresets.mono => 'monospace',
+    _ => _defaultContentFontFamily,
+  };
+}
+
+String resolveWindowsNativeDialogFontFamily(
+  AppState state, {
+  String? runtimeCustomFontFamily,
+}) {
+  final systemFontFamilyName = normalizeSystemFontFamilyName(
+    state.systemFontFamilyName,
+  );
+  if (systemFontFamilyName.isNotEmpty) {
+    return systemFontFamilyName;
+  }
+  final runtimeFamily = runtimeCustomFontFamily?.trim();
+  if (runtimeFamily != null && runtimeFamily.isNotEmpty) {
+    return runtimeFamily;
+  }
+  return switch (UiFontPresets.normalize(state.uiFontPreset)) {
+    UiFontPresets.yaHei => 'Microsoft YaHei UI',
+    UiFontPresets.dengXian => _dengXianFontFamily,
+    UiFontPresets.serif => 'Georgia',
+    UiFontPresets.mono => 'Consolas',
+    _ => '',
+  };
+}
+
+List<String>? resolveAppContentFontFamilyFallback(
+  AppState state, {
+  String? runtimeCustomFontFamily,
+}) {
+  if (normalizeSystemFontFamilyName(state.systemFontFamilyName).isNotEmpty) {
+    return null;
+  }
+  final runtimeFamily = runtimeCustomFontFamily?.trim();
+  if (runtimeFamily != null && runtimeFamily.isNotEmpty) {
+    return null;
+  }
+  return switch (UiFontPresets.normalize(state.uiFontPreset)) {
+    UiFontPresets.yaHei => _defaultContentFontFamilyFallback,
+    UiFontPresets.dengXian => _dengXianFontFamilyFallback,
+    UiFontPresets.serif || UiFontPresets.mono => null,
+    _ => _defaultContentFontFamilyFallback,
   };
 }
 
@@ -774,6 +888,7 @@ class PaperBoardScreen extends StatefulWidget {
     required this.store,
     required this.syncService,
     required this.configureAndroidBackgroundSync,
+    this.runtimeCustomFontFamily,
     this.onAppThemeChanged,
     this.initialSurfacePaperId,
     this.paperWindowMode = false,
@@ -790,6 +905,7 @@ class PaperBoardScreen extends StatefulWidget {
   final StateStore store;
   final AppSyncService syncService;
   final AndroidBackgroundSyncConfigurator configureAndroidBackgroundSync;
+  final String? runtimeCustomFontFamily;
   final VoidCallback? onAppThemeChanged;
   final String? initialSurfacePaperId;
   final bool paperWindowMode;
@@ -811,6 +927,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   bool _deferredSettingsSync = false;
   bool _queuedSilentSync = false;
   Future<void> _saveQueue = Future<void>.value();
+  Future<void> _capsuleToggleQueue = Future<void>.value();
   Future<void>? _activeSyncFuture;
   Future<void>? _exitCommandFuture;
   StreamSubscription<PaperData>? _surfaceUpdateSubscription;
@@ -967,16 +1084,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (widget.coordinatorWindowMode) {
       return Scaffold(
         key: const ValueKey('windows-settings-window-surface'),
-        backgroundColor: colorScheme.surface,
-        body: const SizedBox.expand(),
+        backgroundColor: _windowsPaperTransparencyKey,
+        body: DecoratedBox(
+          key: const ValueKey('windows-settings-paper-underlay'),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
       );
     }
     if (widget.paperWindowMode) {
       if (surfacePaper == null) {
         return const SizedBox.shrink();
-      }
-      if (_isCollapseAllMasterPaper(surfacePaper)) {
-        return _paperWindowMasterCapsule(surfacePaper);
       }
       if (surfacePaper.isCollapsed) {
         return _paperWindowCapsule(surfacePaper);
@@ -986,11 +1106,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         body: Stack(
           fit: StackFit.expand,
           children: [
-            Padding(
+            Positioned.fill(
               key: ValueKey('${surfacePaper.id}-paper-window-chrome-margin'),
-              padding: const EdgeInsets.all(8),
-              child: _paperPreview(surfacePaper, notePapers),
+              child: Padding(
+                padding: const EdgeInsets.all(_paperWindowChromeMargin),
+                child: _paperPreview(surfacePaper, notePapers),
+              ),
             ),
+            ..._paperWindowTransparencyGuards(),
             if (!surfacePaper.isPinnedToDesktop) ..._paperWindowResizeHandles(),
           ],
         ),
@@ -1078,6 +1201,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     );
   }
 
+  // Legacy renderer retained only for storage/widget migration coverage. The
+  // live master capsule is an independent native HWND and must never replace a
+  // real paper engine's content.
+  // ignore: unused_element
   bool _isCollapseAllMasterPaper(PaperData paper) {
     if (!controller.state.useCapsuleMode ||
         !controller.state.useCapsuleCollapseAll ||
@@ -1101,6 +1228,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return false;
   }
 
+  // ignore: unused_element
   Widget _paperWindowMasterCapsule(PaperData paper) {
     final colors = Theme.of(context).colorScheme;
     final collapseAllActive =
@@ -1117,7 +1245,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return Scaffold(
       backgroundColor: _windowsPaperTransparencyKey,
       body: Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(_paperWindowChromeMargin),
         child: MouseRegion(
           onEnter: widget.paperWindowCapsuleHoverChanged == null
               ? null
@@ -1133,13 +1261,15 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             color: Colors.transparent,
             child: InkWell(
               key: ValueKey('${paper.id}-paper-window-master-capsule'),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(999),
               onTap: () => unawaited(toggle()),
               child: DecoratedBox(
+                key:
+                    ValueKey('${paper.id}-paper-window-master-capsule-surface'),
                 decoration: BoxDecoration(
                   color: colors.surface,
                   border: Border.all(color: colors.outlineVariant),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(999),
                   boxShadow: [
                     BoxShadow(
                       color: colors.shadow.withValues(alpha: 0.18),
@@ -1202,9 +1332,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
 
   Widget _paperWindowCapsule(PaperData paper) {
     final colorScheme = Theme.of(context).colorScheme;
-    final capsuleCloseWidth = controller.state.useDeepCapsuleMode ? 30.0 : 21.0;
+    final paperColors = PaperTodoThemeColors.of(context);
+    const capsuleCloseWidth = 21.0;
     final scriptCapsuleSpec =
         paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
+    final capsuleIcon = scriptCapsuleSpec != null
+        ? '\u26A1'
+        : paper.isNote
+            ? '\u270E'
+            : '\u2713';
+    final capsuleIconSize = scriptCapsuleSpec == null ? 13.0 : 15.0;
+    const capsuleRadius = 12.0;
     void expandForEditing() {
       final sender = widget.paperWindowActionSender;
       if (sender != null) {
@@ -1221,118 +1359,169 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       body: Stack(
         children: [
           Positioned.fill(
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: MouseRegion(
-                onEnter: widget.paperWindowCapsuleHoverChanged == null
-                    ? null
-                    : (_) => unawaited(
-                          widget.paperWindowCapsuleHoverChanged!(true),
-                        ),
-                onExit: widget.paperWindowCapsuleHoverChanged == null
-                    ? null
-                    : (_) => unawaited(
-                          widget.paperWindowCapsuleHoverChanged!(false),
-                        ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      border: Border.all(color: colorScheme.outlineVariant),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: colorScheme.shadow.withValues(alpha: 0.18),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            key: ValueKey('${paper.id}-paper-window-capsule'),
-                            borderRadius: const BorderRadius.horizontal(
-                              left: Radius.circular(12),
-                            ),
-                            onTap: scriptCapsuleSpec == null
-                                ? expandForEditing
-                                : () => unawaited(
-                                      _runPaperWindowScriptCapsule(
-                                        scriptCapsuleSpec,
+            left: _paperWindowChromeMargin,
+            top: _paperWindowChromeMargin,
+            right: _paperWindowChromeMargin,
+            bottom: _paperWindowChromeMargin,
+            child: MouseRegion(
+              onEnter: widget.paperWindowCapsuleHoverChanged == null
+                  ? null
+                  : (_) => unawaited(
+                        widget.paperWindowCapsuleHoverChanged!(true),
+                      ),
+              onExit: widget.paperWindowCapsuleHoverChanged == null
+                  ? null
+                  : (_) => unawaited(
+                        widget.paperWindowCapsuleHoverChanged!(false),
+                      ),
+              child: Material(
+                color: Colors.transparent,
+                child: DecoratedBox(
+                  key: ValueKey('${paper.id}-paper-window-capsule-surface'),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    border: Border.all(color: colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(capsuleRadius),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colorScheme.shadow.withValues(alpha: 0.08),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          key: ValueKey('${paper.id}-paper-window-capsule'),
+                          borderRadius: const BorderRadius.horizontal(
+                            left: Radius.circular(capsuleRadius),
+                          ),
+                          hoverColor: paperColors.hover,
+                          highlightColor: paperColors.tint.withValues(
+                            alpha: paperColors.isDark ? 58 / 255 : 42 / 255,
+                          ),
+                          splashColor: Colors.transparent,
+                          onTap: scriptCapsuleSpec == null
+                              ? expandForEditing
+                              : () => unawaited(
+                                    _runPaperWindowScriptCapsule(
+                                      scriptCapsuleSpec,
+                                    ),
+                                  ),
+                          onSecondaryTap: scriptCapsuleSpec == null
+                              ? null
+                              : expandForEditing,
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: Row(
+                              children: [
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  alignment: Alignment.centerLeft,
+                                  children: [
+                                    Transform.translate(
+                                      offset: Offset(
+                                        0,
+                                        paper.isNote ? -1 : -1.25,
+                                      ),
+                                      child: Text(
+                                        capsuleIcon,
+                                        style: TextStyle(
+                                          color: paperColors.brightWeakText,
+                                          fontFamily: 'Segoe UI Symbol',
+                                          fontFamilyFallback: const <String>[
+                                            'Segoe UI Emoji',
+                                          ],
+                                          fontSize: capsuleIconSize,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1,
+                                        ),
                                       ),
                                     ),
-                            onSecondaryTap: scriptCapsuleSpec == null
-                                ? null
-                                : expandForEditing,
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 6),
-                              child: Row(
-                                children: [
-                                  Listener(
-                                    key: ValueKey(
-                                        '${paper.id}-capsule-drag-handle'),
-                                    behavior: HitTestBehavior.opaque,
-                                    onPointerDown: widget
-                                                .paperWindowDragStarter ==
-                                            null
-                                        ? null
-                                        : (_) => unawaited(
-                                              widget.paperWindowDragStarter!(),
-                                            ),
-                                    child: SizedBox(
+                                    Positioned(
+                                      left: -6,
                                       width: 26,
-                                      height: double.infinity,
-                                      child: Icon(
-                                        paper.isTodo
-                                            ? Icons.check_outlined
-                                            : scriptCapsuleSpec != null
-                                                ? Icons.bolt_outlined
-                                                : Icons.edit_outlined,
-                                        size: 13,
-                                        color: colorScheme.onSurfaceVariant,
+                                      top: -8,
+                                      bottom: -8,
+                                      child: Listener(
+                                        key: ValueKey(
+                                            '${paper.id}-capsule-drag-handle'),
+                                        behavior: HitTestBehavior.opaque,
+                                        onPointerDown:
+                                            widget.paperWindowDragStarter ==
+                                                    null
+                                                ? null
+                                                : (_) => unawaited(
+                                                      widget
+                                                          .paperWindowDragStarter!(),
+                                                    ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Transform.translate(
+                                    offset: const Offset(-1, -1),
+                                    child: Transform.scale(
+                                      scaleX: paper.isNote ? 0.93 : 0.94,
+                                      scaleY: 1,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        _displayTitle(paper),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                              fontSize: 11,
+                                            ),
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      _displayTitle(paper),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(
-                                            color: colorScheme.onSurfaceVariant,
-                                            fontSize: 11,
-                                          ),
-                                    ),
-                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: capsuleCloseWidth,
+                        child: InkWell(
+                          key: ValueKey(
+                              '${paper.id}-paper-window-capsule-close'),
+                          borderRadius: const BorderRadius.horizontal(
+                            right: Radius.circular(capsuleRadius),
+                          ),
+                          hoverColor: paperColors.hover,
+                          highlightColor: paperColors.tint.withValues(
+                            alpha: paperColors.isDark ? 58 / 255 : 42 / 255,
+                          ),
+                          splashColor: Colors.transparent,
+                          onTap: () => unawaited(_hidePaper(paper)),
+                          child: Transform.translate(
+                            offset: const Offset(-1, 0),
+                            child: Text(
+                              '\u00D7',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: colorScheme.onSurfaceVariant,
+                                fontFamily: 'Segoe UI Symbol',
+                                fontFamilyFallback: const <String>[
+                                  'Segoe UI Emoji',
                                 ],
+                                fontSize: 18,
+                                height: 1,
                               ),
                             ),
                           ),
                         ),
-                        SizedBox(
-                          width: capsuleCloseWidth,
-                          child: InkWell(
-                            key: ValueKey(
-                                '${paper.id}-paper-window-capsule-close'),
-                            borderRadius: const BorderRadius.horizontal(
-                              right: Radius.circular(12),
-                            ),
-                            onTap: () => unawaited(_hidePaper(paper)),
-                            child: Icon(
-                              Icons.close,
-                              size: 14,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1367,6 +1556,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       double? bottom,
       double? width,
       double? height,
+      Widget? child,
     }) {
       return Positioned(
         left: left,
@@ -1383,17 +1573,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
               key: ValueKey('paper-window-resize-$direction'),
               behavior: HitTestBehavior.opaque,
               onPointerDown: (_) => unawaited(resizeStarter(direction)),
+              child: child,
             ),
           ),
         ),
       );
     }
 
-    // The visible paper starts 8 px inside the transparent window chrome.
-    // A 12/18 px native-like hit zone covers both the outer HWND edge and the
-    // visible paper border without stealing ordinary content interaction.
-    const edge = 12.0;
-    const corner = 18.0;
+    // The paper itself now fills the HWND. Keep a narrow native-like hit zone
+    // over its edge so resizing remains discoverable without a fake frame.
+    const edge = 8.0;
+    const corner = 16.0;
     return [
       handle(
         direction: 'left',
@@ -1458,6 +1648,56 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         bottom: 0,
         width: corner,
         height: corner,
+        child: CustomPaint(
+          painter: const _PaperResizeGripPainter(),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _paperWindowTransparencyGuards() {
+    const offset = _paperWindowChromeMargin - 1;
+    const thickness = 1.0;
+    return const [
+      Positioned(
+        left: offset,
+        top: 0,
+        bottom: 0,
+        width: thickness,
+        child: ColoredBox(
+          key: ValueKey('paper-window-transparency-guard-left'),
+          color: _windowsPaperTransparencyKey,
+        ),
+      ),
+      Positioned(
+        right: offset,
+        top: 0,
+        bottom: 0,
+        width: thickness,
+        child: ColoredBox(
+          key: ValueKey('paper-window-transparency-guard-right'),
+          color: _windowsPaperTransparencyKey,
+        ),
+      ),
+      Positioned(
+        left: 0,
+        top: offset,
+        right: 0,
+        height: thickness,
+        child: ColoredBox(
+          key: ValueKey('paper-window-transparency-guard-top'),
+          color: _windowsPaperTransparencyKey,
+        ),
+      ),
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: offset,
+        height: thickness,
+        child: ColoredBox(
+          key: ValueKey('paper-window-transparency-guard-bottom'),
+          color: _windowsPaperTransparencyKey,
+        ),
       ),
     ];
   }
@@ -1538,7 +1778,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                   icon: Icons.note_add_outlined,
                   label: strings.get(PaperTodoStringKeys.actionNewNote),
                 ),
-              if (controller.state.useCapsuleMode &&
+              if (Platform.isWindows &&
+                  controller.state.useCapsuleMode &&
                   controller.state.useCapsuleCollapseAll)
                 _compactMenuItem(
                   value: _CompactAppBarActions.toggleCollapseAll,
@@ -1607,7 +1848,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
               _createPaper(PaperTypes.note, sourcePaper: surfacePaper),
           icon: const Icon(Icons.note_add_outlined),
         ),
-      if (controller.state.useCapsuleMode &&
+      if (Platform.isWindows &&
+          controller.state.useCapsuleMode &&
           controller.state.useCapsuleCollapseAll)
         IconButton(
           tooltip: _tooltipLabel(
@@ -1657,10 +1899,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       value: value,
       enabled: enabled,
       height: _paperTodoPopupMenuHeight(),
+      padding: _paperTodoPopupMenuItemPadding,
       child: Row(
         children: [
-          Icon(icon),
-          const SizedBox(width: 12),
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
           Flexible(child: Text(label)),
         ],
       ),
@@ -1761,6 +2004,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           controller.state.todoReminderIntervalValue,
       defaultTodoReminderIntervalUnit:
           controller.state.todoReminderIntervalUnit,
+      nativeDialogFontFamily: resolveWindowsNativeDialogFontFamily(
+        controller.state,
+        runtimeCustomFontFamily: widget.runtimeCustomFontFamily,
+      ),
       collapseAllActive: Platform.isWindows &&
           controller.state.useCapsuleMode &&
           controller.state.useCapsuleCollapseAll &&
@@ -1823,20 +2070,62 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     });
     final createdPaper = paper;
     if (createdPaper == null) {
-      _showPaperLimitSnackBar();
+      await _showPaperLimitDialog();
       return;
     }
     await controller.showPaper(createdPaper);
     await _saveState();
   }
 
-  void _showPaperLimitSnackBar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          strings.get(PaperTodoStringKeys.paperLimitReached),
-        ),
-      ),
+  Future<void> _showPaperLimitDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        final strings = PaperTodoStringsScope.of(context);
+        final paperColors = PaperTodoThemeColors.of(context);
+        return _PaperDialog(
+          width: 340,
+          height: 176,
+          minWidth: 340,
+          minHeight: 176,
+          radius: 10,
+          padding: const EdgeInsets.all(18),
+          contentSpacing: 8,
+          actionSpacing: 16,
+          titleFontSize: 16,
+          shadowKind: _PaperDialogShadowKind.compact,
+          title: strings.get(PaperTodoStringKeys.paperLimitTitle),
+          content: Text(
+            strings.get(PaperTodoStringKeys.paperLimitMessage),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: paperColors.weakText,
+                  fontSize: 13,
+                  height: 20 / 13,
+                ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(72, 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                foregroundColor: paperColors.text,
+                textStyle: const TextStyle(fontSize: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              child: Text(
+                strings.get(PaperTodoStringKeys.dialogDueDateConfirm),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1853,23 +2142,30 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   Future<void> _toggleCollapseAll([
     PaperData? paper,
     String queueKey = '',
-  ]) async {
+  ]) {
+    final normalizedQueueKey = queueKey.trim();
     setState(() {
-      if (queueKey.trim().isNotEmpty) {
-        controller.state.toggleCapsuleCollapseAllQueue(queueKey);
+      if (normalizedQueueKey.isNotEmpty) {
+        controller.state.toggleCapsuleCollapseAllQueue(normalizedQueueKey);
       } else {
         controller.state.toggleCapsuleCollapseAllFor(paper);
       }
     });
-    await UsageLog.instance.record('capsule', 'master-toggle', details: {
-      'queueKey': queueKey.trim(),
-      'paperId': paper?.id ?? '',
-      'active': paper == null
-          ? controller.state.capsuleCollapseAllActive
-          : controller.state.isCapsuleCollapseAllActiveFor(paper),
+    final active = paper == null
+        ? controller.state.capsuleCollapseAllActive
+        : controller.state.isCapsuleCollapseAllActiveFor(paper);
+    _capsuleToggleQueue =
+        _capsuleToggleQueue.catchError((_) {}).then((_) async {
+      if (!mounted) return;
+      await UsageLog.instance.record('capsule', 'master-toggle', details: {
+        'queueKey': normalizedQueueKey,
+        'paperId': paper?.id ?? '',
+        'active': active,
+      });
+      await controller.refreshPaperSurfaces();
+      await _saveState();
     });
-    await controller.refreshPaperSurfaces();
-    await _saveState();
+    return _capsuleToggleQueue;
   }
 
   Future<void> _activatePaperFromCapsule(PaperData paper) async {
@@ -2965,21 +3261,58 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           context: context,
           builder: (context) {
             final strings = PaperTodoStringsScope.of(context);
-            return AlertDialog(
-              title: Text(
-                strings.get(PaperTodoStringKeys.dialogRestoreSnapshot),
+            final paperColors = PaperTodoThemeColors.of(context);
+            return _PaperDialog(
+              width: 382,
+              title: strings.get(PaperTodoStringKeys.dialogRestoreSnapshot),
+              content: Text(
+                _snapshotSummary(snapshot),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: paperColors.weakText,
+                      fontSize: 13,
+                      height: 20 / 13,
+                    ),
               ),
-              content: Text(_snapshotSummary(snapshot)),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
+                  style: TextButton.styleFrom(
+                    fixedSize: const Size(72, 34),
+                    minimumSize: const Size(72, 34),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 7,
+                    ),
+                    foregroundColor: paperColors.text,
+                    backgroundColor:
+                        paperColors.tint.withValues(alpha: 28 / 255),
+                    textStyle: const TextStyle(fontSize: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                   child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
                 ),
-                FilledButton.icon(
+                FilledButton(
                   key: const ValueKey('confirm-restore-snapshot'),
                   onPressed: () => Navigator.of(context).pop(true),
-                  icon: const Icon(Icons.restore_outlined),
-                  label: Text(strings.get(PaperTodoStringKeys.actionRestore)),
+                  style: FilledButton.styleFrom(
+                    fixedSize: const Size(72, 34),
+                    minimumSize: const Size(72, 34),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 7,
+                    ),
+                    backgroundColor: paperColors.active,
+                    foregroundColor: paperColors.paper,
+                    textStyle: const TextStyle(fontSize: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(strings.get(PaperTodoStringKeys.actionRestore)),
                 ),
               ],
             );
@@ -3025,6 +3358,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   Future<void> _openSettings() async {
+    await controller.setCoordinatorBackgroundColor(
+      Theme.of(context).colorScheme.surface.toARGB32(),
+    );
     final stateBeforeSettings = _stateSnapshot(controller.state);
     final hadPendingLocalEditSync = _pendingLocalEditBaseState != null &&
         _pendingLocalEditLatestState != null;
@@ -3144,6 +3480,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       supportsDataDirectorySelection: controller.supportsDataDirectorySelection,
       selectDataDirectory: controller.chooseDataDirectory,
       loadInstalledFontFamilies: controller.installedFontFamilies,
+      pickCustomThemeColor: controller.supportsCustomColorPicker
+          ? controller.chooseCustomColor
+          : null,
+      openAuthorLink: () => _openUri('https://github.com/snownico0722'),
     );
     try {
       await controller.hideCoordinatorWindow();
@@ -3827,18 +4167,66 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           context: context,
           builder: (context) {
             final strings = PaperTodoStringsScope.of(context);
-            return AlertDialog(
-              title: Text(strings.get(PaperTodoStringKeys.dialogDeletePaper)),
-              content: Text(_displayTitle(paper)),
+            final paperColors = PaperTodoThemeColors.of(context);
+            return _PaperDialog(
+              width: 300,
+              height: 178,
+              minWidth: 300,
+              minHeight: 178,
+              radius: 18,
+              padding: const EdgeInsets.all(18),
+              contentSpacing: 10,
+              actionSpacing: 16,
+              titleFontSize: 16,
+              destructive: true,
+              title: strings.get(PaperTodoStringKeys.dialogDeletePaper),
+              content: Text(
+                strings.get(PaperTodoStringKeys.dialogDeletePaperBody),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: paperColors.weakText,
+                      fontSize: 13,
+                      height: 20 / 13,
+                    ),
+              ),
               actions: [
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: FilledButton.styleFrom(
+                    fixedSize: const Size(72, 34),
+                    minimumSize: const Size(72, 34),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 7,
+                    ),
+                    backgroundColor: paperColors.danger,
+                    foregroundColor: paperColors.paper,
+                    textStyle: const TextStyle(fontSize: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(strings.get(PaperTodoStringKeys.actionDelete)),
+                ),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
+                  style: TextButton.styleFrom(
+                    fixedSize: const Size(72, 34),
+                    minimumSize: const Size(72, 34),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 7,
+                    ),
+                    foregroundColor: paperColors.text,
+                    backgroundColor:
+                        paperColors.tint.withValues(alpha: 28 / 255),
+                    textStyle: const TextStyle(fontSize: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                   child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
-                ),
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  icon: const Icon(Icons.delete_outline),
-                  label: Text(strings.get(PaperTodoStringKeys.actionDelete)),
                 ),
               ],
             );
@@ -4004,42 +4392,49 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       ..clear()
       ..addAll(reminderKeys);
     final first = candidates.first;
-    final message = candidates.length == 1
-        ? strings.format(
-            PaperTodoStringKeys.todoReminderSingle,
-            [
-              _displayTitle(first.paper),
-              _displayReminderItemText(first.paper, first.item),
-            ],
-          )
+    final reminderNow = DateTime.now();
+    final singleCandidate = candidates.length == 1;
+    final message = singleCandidate
+        ? strings.get(PaperTodoStringKeys.todoReminderBubbleTitle)
         : strings.format(
             PaperTodoStringKeys.todoReminderMultiple,
             [candidates.length],
           );
-    final reminderNow = DateTime.now();
-    final details = candidates
-        .take(_maxTodoReminderDetailLines)
-        .map(
-          (candidate) => _formatTodoReminderDetail(
-            candidate,
-            reminderNow,
-            includeItemText: candidates.length > 1,
-          ),
-        )
-        .toList();
+    final details = singleCandidate
+        ? <String>[
+            _formatPaperTodoReminderBubbleMessage(first, reminderNow),
+          ]
+        : candidates
+            .take(_maxTodoReminderDetailLines)
+            .map(
+              (candidate) => _formatTodoReminderDetail(
+                candidate,
+                reminderNow,
+                includeItemText: true,
+              ),
+            )
+            .toList();
     final reminderDuration = Duration(
       seconds: controller.state.todoReminderBubbleDurationSeconds,
     );
     final nativePresenter = widget.paperWindowReminderPresenter;
     if (widget.paperWindowMode && nativePresenter != null) {
       final colorScheme = Theme.of(context).colorScheme;
+      final paperColors = PaperTodoThemeColors.of(context);
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final reminderTint = paperColors.tint;
       unawaited(nativePresenter(<String, Object?>{
         'visible': true,
         'title': message,
         'message': details.join('\n'),
         'durationSeconds': reminderDuration.inSeconds,
         'backgroundColor': colorScheme.surface.toARGB32(),
-        'borderColor': colorScheme.outlineVariant.toARGB32(),
+        'borderColor': reminderTint.toARGB32(),
+        'borderAlpha': 150,
+        'iconBackgroundColor': Color.alphaBlend(
+          reminderTint.withValues(alpha: (isDark ? 48 : 32) / 255),
+          colorScheme.surface,
+        ).toARGB32(),
         'accentColor': colorScheme.primary.toARGB32(),
         'textColor': colorScheme.onSurface.toARGB32(),
         'weakTextColor': colorScheme.onSurfaceVariant.toARGB32(),
@@ -4249,6 +4644,73 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return text;
   }
 
+  String _formatPaperTodoReminderBubbleMessage(
+    _TodoReminderCandidate candidate,
+    DateTime now,
+  ) {
+    final dueAt = candidate.dueAt.toLocal();
+    final dueText = '${dueAt.year.toString().padLeft(4, '0')}-'
+        '${dueAt.month.toString().padLeft(2, '0')}-'
+        '${dueAt.day.toString().padLeft(2, '0')} '
+        '${dueAt.hour.toString().padLeft(2, '0')}:'
+        '${dueAt.minute.toString().padLeft(2, '0')}:'
+        '${dueAt.second.toString().padLeft(2, '0')}';
+    final difference = dueAt.difference(now);
+    final absoluteDifference = difference.isNegative
+        ? Duration(microseconds: -difference.inMicroseconds)
+        : difference;
+    final countdown = _formatPaperTodoReminderBubbleCountdown(
+      absoluteDifference,
+    );
+    final relativeText = strings.format(
+      difference.isNegative
+          ? PaperTodoStringKeys.todoReminderBubbleOverdue
+          : PaperTodoStringKeys.todoReminderBubbleRemaining,
+      [countdown],
+    );
+    return strings.format(
+      PaperTodoStringKeys.todoReminderBubbleMessage,
+      [
+        dueText,
+        relativeText,
+        _displayReminderItemText(candidate.paper, candidate.item),
+      ],
+    );
+  }
+
+  String _formatPaperTodoReminderBubbleCountdown(Duration span) {
+    var totalSeconds =
+        (span.inMicroseconds / Duration.microsecondsPerSecond).ceil();
+    if (totalSeconds < 0) {
+      totalSeconds = 0;
+    }
+    final days = totalSeconds ~/ Duration.secondsPerDay;
+    totalSeconds %= Duration.secondsPerDay;
+    final hours = totalSeconds ~/ Duration.secondsPerHour;
+    totalSeconds %= Duration.secondsPerHour;
+    final minutes = totalSeconds ~/ Duration.secondsPerMinute;
+    final seconds = totalSeconds % Duration.secondsPerMinute;
+
+    String component(String key, int value) => strings.format(key, [value]);
+
+    if (days > 0) {
+      return '${component(PaperTodoStringKeys.todoReminderCountdownDay, days)}'
+          '${component(PaperTodoStringKeys.todoReminderCountdownHour, hours)}'
+          '${component(PaperTodoStringKeys.todoReminderCountdownMinute, minutes)}'
+          '${component(PaperTodoStringKeys.todoReminderCountdownSecond, seconds)}';
+    }
+    if (hours > 0) {
+      return '${component(PaperTodoStringKeys.todoReminderCountdownHour, hours)}'
+          '${component(PaperTodoStringKeys.todoReminderCountdownMinute, minutes)}'
+          '${component(PaperTodoStringKeys.todoReminderCountdownSecond, seconds)}';
+    }
+    if (minutes > 0) {
+      return '${component(PaperTodoStringKeys.todoReminderCountdownMinute, minutes)}'
+          '${component(PaperTodoStringKeys.todoReminderCountdownSecond, seconds)}';
+    }
+    return component(PaperTodoStringKeys.todoReminderCountdownSecond, seconds);
+  }
+
   String _formatTodoReminderDetail(
     _TodoReminderCandidate candidate,
     DateTime now, {
@@ -4383,6 +4845,34 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
   @override
   Widget build(BuildContext context) {
     final strings = PaperTodoStringsScope.of(context);
+    final paperColors = PaperTodoThemeColors.of(context);
+    final inputFill = paperColors.tint.withValues(
+      alpha: paperColors.isDark ? 22 / 255 : 12 / 255,
+    );
+    final inputBorder = BorderSide(
+      color: paperColors.tint.withValues(alpha: 80 / 255),
+    );
+    InputDecoration inputDecoration() => InputDecoration(
+          filled: true,
+          fillColor: inputFill,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 7,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: inputBorder,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: inputBorder,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: paperColors.active, width: 1.5),
+          ),
+        );
     return Focus(
       autofocus: true,
       onKeyEvent: _handleDialogKeyEvent,
@@ -4391,60 +4881,99 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
           const SingleActivator(LogicalKeyboardKey.enter): _save,
           const SingleActivator(LogicalKeyboardKey.escape): _cancel,
         },
-        child: AlertDialog(
-          title: Text(strings.get(PaperTodoStringKeys.reminderInterval)),
+        child: _PaperDialog(
+          surfaceKey: const ValueKey('todo-reminder-dialog-surface'),
+          width: 326,
+          height: 216,
+          radius: 12,
+          padding: const EdgeInsets.all(16),
+          contentSpacing: 8,
+          actionSpacing: 16,
+          actionsGap: 6,
+          title: strings.get(PaperTodoStringKeys.reminderInterval),
           content: SizedBox(
-            width: 360,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(
-                  controller: _intervalController,
-                  focusNode: _intervalFocusNode,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    labelText: strings.get(PaperTodoStringKeys.interval),
-                    prefixIcon: const Icon(Icons.notifications_active_outlined),
+                Text(
+                  strings.get(PaperTodoStringKeys.reminderIntervalMessage),
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                    height: 1.25,
                   ),
-                  keyboardType: TextInputType.number,
-                  onSubmitted: (_) => _save(),
                 ),
-                const SizedBox(height: 12),
-                SegmentedButton<String>(
-                  segments: [
-                    ButtonSegment(
-                      value: TodoReminderIntervalUnits.minutes,
-                      icon: const Icon(Icons.timer_outlined),
-                      label: Text(strings.get(PaperTodoStringKeys.minutes)),
-                    ),
-                    ButtonSegment(
-                      value: TodoReminderIntervalUnits.hours,
-                      icon: const Icon(Icons.schedule_outlined),
-                      label: Text(strings.get(PaperTodoStringKeys.hours)),
-                    ),
-                  ],
-                  selected: {_unit},
-                  onSelectionChanged: (selection) {
-                    setState(() => _unit = selection.single);
-                  },
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 32,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('todo-reminder-interval-value'),
+                          controller: _intervalController,
+                          focusNode: _intervalFocusNode,
+                          autofocus: true,
+                          textAlign: TextAlign.center,
+                          textAlignVertical: TextAlignVertical.center,
+                          style: const TextStyle(fontSize: 13, height: 1.15),
+                          decoration: inputDecoration(),
+                          keyboardType: TextInputType.number,
+                          onSubmitted: (_) => _save(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 112,
+                        child: _TodoDialogDropdown<String>(
+                          dropdownKey:
+                              const ValueKey('todo-reminder-interval-unit'),
+                          value: _unit,
+                          items: [
+                            DropdownMenuItem(
+                              value: TodoReminderIntervalUnits.minutes,
+                              child: Text(
+                                strings.get(PaperTodoStringKeys.minutes),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: TodoReminderIntervalUnits.hours,
+                              child: Text(
+                                strings.get(PaperTodoStringKeys.hours),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) => setState(() => _unit = value),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: _clear,
-              child: Text(strings.get(PaperTodoStringKeys.actionClear)),
-            ),
-            TextButton(
               onPressed: _cancel,
+              style: _todoDialogActionStyle(context),
               child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
             ),
-            FilledButton.icon(
+            TextButton(
+              onPressed: _clear,
+              style: _todoDialogActionStyle(context),
+              child: Text(
+                strings.get(PaperTodoStringKeys.reminderIntervalGlobal),
+              ),
+            ),
+            FilledButton(
               onPressed: _save,
-              icon: const Icon(Icons.check),
-              label: Text(strings.get(PaperTodoStringKeys.actionSave)),
+              style: _todoDialogActionStyle(context, primary: true),
+              child: Text(
+                strings.get(PaperTodoStringKeys.dialogDueDateConfirm),
+              ),
             ),
           ],
         ),
@@ -4500,6 +5029,225 @@ class _LinkedNoteRestore {
   final String noteId;
 }
 
+enum _PaperDialogShadowKind { floating, compact }
+
+class _PaperDialog extends StatelessWidget {
+  const _PaperDialog({
+    required this.title,
+    required this.content,
+    required this.actions,
+    this.icon,
+    this.destructive = false,
+    this.width = 440,
+    this.height,
+    this.minWidth = 0,
+    this.minHeight = 0,
+    this.radius = 18,
+    this.padding = const EdgeInsets.fromLTRB(16, 14, 16, 14),
+    this.contentSpacing = 14,
+    this.actionSpacing = 16,
+    this.actionsGap = 8,
+    this.titleFontSize = 15,
+    this.shadowKind = _PaperDialogShadowKind.floating,
+    this.surfaceKey,
+  });
+
+  final String title;
+  final Widget content;
+  final List<Widget> actions;
+  final IconData? icon;
+  final bool destructive;
+  final double width;
+  final double? height;
+  final double minWidth;
+  final double minHeight;
+  final double radius;
+  final EdgeInsetsGeometry padding;
+  final double contentSpacing;
+  final double actionSpacing;
+  final double actionsGap;
+  final double titleFontSize;
+  final _PaperDialogShadowKind shadowKind;
+  final Key? surfaceKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = colors.brightness == Brightness.dark;
+    final accent = destructive ? colors.error : colors.primary;
+    final compactShadow = shadowKind == _PaperDialogShadowKind.compact;
+    return Dialog(
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      child: ConstrainedBox(
+        key: surfaceKey,
+        constraints: BoxConstraints(
+          minWidth: minWidth,
+          minHeight: minHeight,
+          maxWidth: width,
+          maxHeight: height ?? double.infinity,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: colors.outlineVariant),
+            boxShadow: [
+              BoxShadow(
+                color: colors.shadow.withValues(
+                  alpha: compactShadow ? 0.22 : (isDark ? 0.36 : 0.22),
+                ),
+                blurRadius: compactShadow ? 18 : (isDark ? 26 : 24),
+                offset:
+                    compactShadow ? const Offset(0, 2) : const Offset(1.4, 1.4),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: padding,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    if (icon case final icon?) ...[
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: accent.withValues(
+                            alpha: isDark ? 0.16 : 0.10,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: SizedBox.square(
+                          dimension: 28,
+                          child: Icon(icon, size: 17, color: accent),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontSize: titleFontSize,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: contentSpacing),
+                if (height == null)
+                  content
+                else
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: content,
+                    ),
+                  ),
+                SizedBox(height: actionSpacing),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: actionsGap,
+                  runSpacing: actionsGap,
+                  children: actions,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+ButtonStyle _todoDialogActionStyle(
+  BuildContext context, {
+  bool primary = false,
+}) {
+  final colors = PaperTodoThemeColors.of(context);
+  return TextButton.styleFrom(
+    minimumSize: const Size(64, 26),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+    backgroundColor: primary ? colors.active : colors.hover,
+    foregroundColor: primary ? colors.paper : colors.text,
+    textStyle: const TextStyle(fontSize: 12),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.zero,
+    ),
+  );
+}
+
+class _TodoDialogDropdown<T> extends StatelessWidget {
+  const _TodoDialogDropdown({
+    required this.dropdownKey,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.menuMaxHeight = 220,
+  });
+
+  final Key dropdownKey;
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T> onChanged;
+  final double menuMaxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PaperTodoThemeColors.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.tint.withValues(
+          alpha: colors.isDark ? 22 / 255 : 12 / 255,
+        ),
+        border: Border.all(
+          color: colors.tint.withValues(alpha: 80 / 255),
+        ),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<T>(
+            key: dropdownKey,
+            value: value,
+            isDense: true,
+            isExpanded: true,
+            menuMaxHeight: menuMaxHeight,
+            borderRadius: BorderRadius.circular(8),
+            dropdownColor: colors.paper,
+            icon: Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: colors.weakText,
+            ),
+            style: TextStyle(
+              color: colors.text,
+              fontSize: 13,
+              height: 1.15,
+            ),
+            items: items,
+            onChanged: (next) {
+              if (next != null) {
+                onChanged(next);
+              }
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RecoverySnapshotsDialog extends StatefulWidget {
   const _RecoverySnapshotsDialog({
     required this.loadSnapshots,
@@ -4532,10 +5280,11 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
   @override
   Widget build(BuildContext context) {
     final strings = PaperTodoStringsScope.of(context);
-    return AlertDialog(
-      title: Text(strings.get(PaperTodoStringKeys.actionRecoverySnapshots)),
+    return _PaperDialog(
+      width: 560,
+      icon: Icons.history_outlined,
+      title: strings.get(PaperTodoStringKeys.actionRecoverySnapshots),
       content: SizedBox(
-        width: 520,
         child: FutureBuilder<List<WebDavSnapshotRecord>>(
           future: _snapshotsFuture,
           builder: (context, snapshot) {
@@ -4608,20 +5357,37 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
                 ),
               );
             }
-            return ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 360),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: snapshots.length,
-                separatorBuilder: (context, index) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final record = snapshots[index];
-                  return _RecoverySnapshotListItem(
-                    record: record,
-                    onRestore: () => Navigator.of(context).pop(record),
-                    strings: strings,
-                  );
-                },
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.025),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(11),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: snapshots.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final record = snapshots[index];
+                      return _RecoverySnapshotListItem(
+                        record: record,
+                        onRestore: () => Navigator.of(context).pop(record),
+                        strings: strings,
+                      );
+                    },
+                  ),
+                ),
               ),
             );
           },
@@ -4676,6 +5442,8 @@ class _RecoverySnapshotListItem extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         record.path,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 4),
@@ -4699,19 +5467,56 @@ class _RecoverySnapshotListItem extends StatelessWidget {
         ),
       );
     }
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.history_outlined),
-      title: Text(_snapshotSummary(record)),
-      subtitle: Text(
-        '${record.path}\n${_snapshotSizeLabel(strings, record)}',
-      ),
-      isThreeLine: true,
-      trailing: FilledButton.icon(
-        key: ValueKey('restore-snapshot-${record.path}'),
-        onPressed: onRestore,
-        icon: const Icon(Icons.restore_outlined),
-        label: Text(strings.get(PaperTodoStringKeys.actionRestore)),
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.history_outlined,
+            size: 19,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _snapshotSummary(record),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(fontSize: 13),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  record.path,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _snapshotSizeLabel(strings, record),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 11.5,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.icon(
+            key: ValueKey('restore-snapshot-${record.path}'),
+            onPressed: onRestore,
+            icon: const Icon(Icons.restore_outlined, size: 16),
+            label: Text(strings.get(PaperTodoStringKeys.actionRestore)),
+          ),
+        ],
       ),
     );
   }
@@ -4763,18 +5568,156 @@ String _formatByteCount(int value) {
   return '${mib.toStringAsFixed(mib < 10 ? 1 : 0)} MiB';
 }
 
+class _PaperTodoPopupMenuItem<T> extends PopupMenuItem<T> {
+  const _PaperTodoPopupMenuItem({
+    super.key,
+    super.value,
+    super.onTap,
+    super.enabled,
+    super.height,
+    super.padding,
+    super.textStyle,
+    super.labelTextStyle,
+    super.mouseCursor,
+    required super.child,
+  });
+
+  @override
+  PopupMenuItemState<T, _PaperTodoPopupMenuItem<T>> createState() =>
+      _PaperTodoPopupMenuItemState<T>();
+}
+
+class _PaperTodoPopupMenuItemState<T>
+    extends PopupMenuItemState<T, _PaperTodoPopupMenuItem<T>> {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final menuTheme = PopupMenuTheme.of(context);
+    final states = <WidgetState>{
+      if (!widget.enabled) WidgetState.disabled,
+    };
+    final style = theme.useMaterial3
+        ? widget.labelTextStyle?.resolve(states) ??
+            menuTheme.labelTextStyle?.resolve(states) ??
+            theme.textTheme.labelLarge!
+        : widget.textStyle ??
+            menuTheme.textStyle ??
+            theme.textTheme.titleMedium!;
+    final padding = widget.padding ??
+        EdgeInsets.symmetric(horizontal: theme.useMaterial3 ? 12 : 16);
+    final item = DefaultTextStyle(
+      style: style,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: widget.height),
+        child: Padding(
+          padding: padding,
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: buildChild(),
+          ),
+        ),
+      ),
+    );
+
+    return MergeSemantics(
+      child: buildSemantics(
+        child: InkWell(
+          onTap: widget.enabled ? handleTap : null,
+          canRequestFocus: widget.enabled,
+          mouseCursor:
+              widget.mouseCursor ?? menuTheme.mouseCursor?.resolve(states),
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: theme.hoverColor,
+          focusColor: theme.focusColor,
+          // The pointer remains hovered while pressed; a second tint would
+          // darken PaperTodo's single IsHighlighted surface.
+          highlightColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          child: item,
+        ),
+      ),
+    );
+  }
+}
+
+class _PaperTodoPopupMenuHeaderLabel extends StatelessWidget {
+  const _PaperTodoPopupMenuHeaderLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PaperTodoThemeColors.of(context);
+    return Text(
+      label,
+      style: TextStyle(
+        color: colors.weakText.withValues(alpha: 0.72),
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        height: 1,
+      ),
+    );
+  }
+}
+
 PopupMenuItem<String> _paperTodoMenuHeader(String label) {
   return PopupMenuItem<String>(
     enabled: false,
-    height: 32,
-    child: Text(
-      label,
-      style: const TextStyle(
+    height: 28,
+    padding: _paperTodoPopupMenuItemPadding,
+    child: _PaperTodoPopupMenuHeaderLabel(label),
+  );
+}
+
+const EdgeInsets _paperTodoPopupMenuItemPadding =
+    EdgeInsets.fromLTRB(8, 4, 10, 4);
+
+const EdgeInsets _paperTodoStandalonePopupMenuItemPadding =
+    EdgeInsets.fromLTRB(8, 2, 10, 2);
+
+BoxConstraints _paperTodoStandaloneMenuConstraints(
+  BuildContext context,
+  List<PopupMenuEntry<String>> entries,
+) {
+  final theme = Theme.of(context);
+  final style = theme.popupMenuTheme.labelTextStyle?.resolve({}) ??
+      theme.textTheme.bodyMedium?.copyWith(fontSize: 13, height: 1) ??
+      const TextStyle(fontSize: 13, height: 1);
+  var widest = 0.0;
+  for (final entry in entries) {
+    if (entry is! PopupMenuItem<String>) {
+      continue;
+    }
+    final child = entry.child;
+    String? value;
+    TextStyle? entryStyle;
+    if (child is Text) {
+      value = child.data;
+      entryStyle = child.style;
+    } else if (child is _PaperTodoPopupMenuHeaderLabel) {
+      value = child.label;
+      entryStyle = const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w600,
-      ),
-    ),
-  );
+        height: 1,
+      );
+    } else {
+      continue;
+    }
+    if (value == null || value.isEmpty) {
+      continue;
+    }
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: entryStyle ?? style),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    widest = math.max(widest, painter.width);
+  }
+  // PaperTodo's menu is content-sized: 4 px menu padding, 8/10 px item
+  // padding, and a 1 px border on both sides.
+  return BoxConstraints.tightFor(width: (widest + 28).ceilToDouble());
 }
 
 double _paperTodoPopupMenuHeight() {
@@ -4806,6 +5749,7 @@ class PaperPreview extends StatelessWidget {
     required this.todoDueYearDisplayMode,
     required this.defaultTodoReminderIntervalValue,
     required this.defaultTodoReminderIntervalUnit,
+    required this.nativeDialogFontFamily,
     required this.collapseAllActive,
     required this.noteLineSpacing,
     required this.syncing,
@@ -4868,6 +5812,7 @@ class PaperPreview extends StatelessWidget {
   final String todoDueYearDisplayMode;
   final int defaultTodoReminderIntervalValue;
   final String defaultTodoReminderIntervalUnit;
+  final String nativeDialogFontFamily;
   final bool collapseAllActive;
   final double noteLineSpacing;
   final bool syncing;
@@ -4898,248 +5843,274 @@ class PaperPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final mobileBoard =
         !standaloneSurface && MediaQuery.sizeOf(context).shortestSide < 600;
     // The master capsule only retracts or expands the edge capsule queue. It
     // must never become paper state or change the paper body's visibility.
-    final isCollapsed = paper.isCollapsed;
+    final isCollapsed = Platform.isWindows && paper.isCollapsed;
     final scriptCapsuleSpec =
         paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
     final textZoom = paper.textZoom.clamp(0.5, 1.5).toDouble();
     final desktopInteractionLocked =
-        paper.isPinnedToDesktop && !paper.isCollapsed;
+        Platform.isWindows && paper.isPinnedToDesktop && !paper.isCollapsed;
     return Semantics(
       label: '$titleText ${paper.type} paper',
       child: Listener(
         onPointerSignal: _handlePointerSignal,
-        child: DecoratedBox(
-          key: ValueKey('${paper.id}-paper-surface'),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            border: Border.all(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.48),
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withValues(
-                  alpha: isDark ? 0.26 : 0.14,
-                ),
-                blurRadius: standaloneSurface || mobileBoard ? 18 : 14,
-                offset: standaloneSurface ? Offset.zero : const Offset(0, 3),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: standaloneSurface ? Clip.hardEdge : Clip.none,
+          child: DecoratedBox(
+            key: ValueKey('${paper.id}-paper-surface'),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              border: Border.all(
+                color: paperColors.paperBorder,
               ),
-            ],
-          ),
-          child: Padding(
-            padding: EdgeInsets.zero,
-            child: Column(
-              crossAxisAlignment: standaloneSurface
-                  ? CrossAxisAlignment.stretch
-                  : mobileBoard
-                      ? CrossAxisAlignment.stretch
-                      : CrossAxisAlignment.start,
-              children: [
-                Container(
-                  key: ValueKey('${paper.id}-paper-header'),
-                  height: standaloneSurface
-                      ? 31
-                      : mobileBoard
-                          ? 56
-                          : null,
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: standaloneSurface
-                        ? const BorderRadius.vertical(top: Radius.circular(17))
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: standaloneSurface
+                  ? const <BoxShadow>[]
+                  : [
+                      BoxShadow(
+                        color: colorScheme.shadow.withValues(
+                          alpha: isDark ? 0.24 : 0.13,
+                        ),
+                        blurRadius: 16,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+            ),
+            child: Padding(
+              padding: EdgeInsets.zero,
+              child: Column(
+                crossAxisAlignment: standaloneSurface
+                    ? CrossAxisAlignment.stretch
+                    : mobileBoard
+                        ? CrossAxisAlignment.stretch
+                        : CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    key: ValueKey('${paper.id}-paper-header'),
+                    height: standaloneSurface
+                        ? 31
                         : mobileBoard
-                            ? const BorderRadius.vertical(
-                                top: Radius.circular(15),
-                              )
+                            ? 56
                             : null,
-                    border: const Border(),
-                  ),
-                  padding: EdgeInsets.fromLTRB(
-                    standaloneSurface
-                        ? 6
-                        : mobileBoard
-                            ? 8
-                            : 10,
-                    standaloneSurface
-                        ? 3
-                        : mobileBoard
-                            ? 4
-                            : 5,
-                    standaloneSurface
-                        ? 8
-                        : mobileBoard
-                            ? 4
-                            : 7,
-                    standaloneSurface
-                        ? 2
-                        : mobileBoard
-                            ? 3
-                            : 5,
-                  ),
-                  child: Semantics(
-                    label: standaloneSurface
-                        ? PaperTodoStringsScope.of(context)
-                            .get(PaperTodoStringKeys.actionMovePaperWindow)
-                        : null,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onPanStart: standaloneSurface &&
-                              !desktopInteractionLocked &&
-                              onWindowDragStart != null
-                          ? (_) => unawaited(onWindowDragStart!())
-                          : null,
-                      child: Listener(
-                        behavior: HitTestBehavior.translucent,
-                        onPointerDown: (event) =>
-                            _handlePaperContextMenuPointerDown(context, event),
-                        child: Row(
-                          children: [
-                            if (standaloneSurface)
-                              _standalonePaperTypeButton(
-                                context,
-                                scriptCapsuleSpec: scriptCapsuleSpec,
-                              )
-                            else
-                              SizedBox.square(
-                                dimension: mobileBoard ? 40 : 24,
-                                child: Icon(
-                                  paper.isTodo
-                                      ? (paper.items.isNotEmpty &&
-                                              paper.items
-                                                  .every((item) => item.done)
-                                          ? Icons.check_box
-                                          : Icons.check_box_outline_blank)
-                                      : scriptCapsuleSpec != null
-                                          ? Icons.bolt_outlined
-                                          : Icons.edit_outlined,
-                                  size: mobileBoard ? 20 : 17,
-                                  color: colorScheme.primary,
-                                ),
-                              ),
-                            if (!standaloneSurface &&
-                                paper.isNote &&
-                                enableTodoNoteLinks) ...[
-                              const SizedBox(width: 2),
-                              _noteLinkDragHandle(context),
-                            ],
-                            SizedBox(width: standaloneSurface ? 1 : 5),
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    minWidth: standaloneSurface ? 30 : 0,
-                                    maxWidth: standaloneSurface
-                                        ? 86
-                                        : double.infinity,
-                                  ),
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      border: standaloneSurface
-                                          ? Border(
-                                              bottom: BorderSide(
-                                                color: colorScheme
-                                                    .outlineVariant
-                                                    .withValues(alpha: 0.38),
-                                              ),
-                                            )
-                                          : null,
-                                    ),
-                                    child: Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: standaloneSurface ? 4 : 0,
-                                      ),
-                                      child: _PaperTitleEditor(
-                                        paper: paper,
-                                        titleText: titleText,
-                                        textZoom: textZoom,
-                                        enabled: !desktopInteractionLocked &&
-                                            !isCollapsed,
-                                        fieldEnabled: !desktopInteractionLocked,
-                                        enableToolTips: enableToolTips,
-                                        compact: standaloneSurface,
-                                        onTitleChanged: onTitleChanged,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (standaloneSurface) ...[
-                              ..._standalonePaperHeaderActions(
-                                context: context,
-                                isCollapsed: isCollapsed,
-                                desktopInteractionLocked:
-                                    desktopInteractionLocked,
-                              ),
-                            ] else if (mobileBoard) ...[
-                              ..._paperHeaderActions(
-                                context: context,
-                                isCollapsed: isCollapsed,
-                                desktopInteractionLocked:
-                                    desktopInteractionLocked,
-                                textZoom: textZoom,
-                              ),
-                            ],
-                          ],
-                        ),
+                    decoration: BoxDecoration(
+                      color: paperColors.tint.withValues(
+                        alpha: isDark ? 18 / 255 : 12 / 255,
                       ),
-                    ),
-                  ),
-                ),
-                if (!standaloneSurface && !mobileBoard) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Wrap(
-                        spacing: 2,
-                        runSpacing: 2,
-                        children: _paperHeaderActions(
-                          context: context,
-                          isCollapsed: isCollapsed,
-                          desktopInteractionLocked: desktopInteractionLocked,
-                          textZoom: textZoom,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-                if (standaloneSurface)
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
-                          child: SizedBox(
-                            width: math.max(0, constraints.maxWidth - 12),
-                            child: AbsorbPointer(
-                              absorbing: desktopInteractionLocked,
-                              child: _animatedPaperBody(
-                                isCollapsed,
-                                scriptCapsuleSpec,
-                              ),
+                      borderRadius: standaloneSurface
+                          ? const BorderRadius.vertical(
+                              top: Radius.circular(17))
+                          : mobileBoard
+                              ? const BorderRadius.vertical(
+                                  top: Radius.circular(17),
+                                )
+                              : null,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Color.alphaBlend(
+                            paperColors.tint.withValues(
+                              alpha: isDark ? 34 / 255 : 28 / 255,
                             ),
+                            paperColors.paper,
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     ),
-                  )
-                else
-                  Padding(
-                    padding: mobileBoard
-                        ? const EdgeInsets.fromLTRB(8, 4, 8, 8)
-                        : const EdgeInsets.fromLTRB(7, 3, 7, 7),
-                    child: AbsorbPointer(
-                      absorbing: desktopInteractionLocked,
-                      child: _animatedPaperBody(isCollapsed, scriptCapsuleSpec),
+                    padding: EdgeInsets.fromLTRB(
+                      standaloneSurface
+                          ? 6
+                          : mobileBoard
+                              ? 8
+                              : 10,
+                      standaloneSurface
+                          ? 5
+                          : mobileBoard
+                              ? 4
+                              : 5,
+                      standaloneSurface
+                          ? 8
+                          : mobileBoard
+                              ? 4
+                              : 7,
+                      standaloneSurface
+                          ? 1
+                          : mobileBoard
+                              ? 3
+                              : 5,
+                    ),
+                    child: Semantics(
+                      label: standaloneSurface
+                          ? PaperTodoStringsScope.of(context)
+                              .get(PaperTodoStringKeys.actionMovePaperWindow)
+                          : null,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onPanStart: standaloneSurface &&
+                                !desktopInteractionLocked &&
+                                onWindowDragStart != null
+                            ? (_) => unawaited(onWindowDragStart!())
+                            : null,
+                        child: Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerDown: (event) =>
+                              _handlePaperContextMenuPointerDown(
+                                  context, event),
+                          child: LayoutBuilder(
+                            builder: (context, headerConstraints) {
+                              return Row(
+                                children: [
+                                  if (standaloneSurface)
+                                    _paperWindowLeadingAction(
+                                      context,
+                                      scriptCapsuleSpec: scriptCapsuleSpec,
+                                    )
+                                  else
+                                    SizedBox.square(
+                                      dimension: mobileBoard ? 40 : 24,
+                                      child: Icon(
+                                        paper.isTodo
+                                            ? (paper.items.isNotEmpty &&
+                                                    paper.items.every(
+                                                        (item) => item.done)
+                                                ? Icons.check_box
+                                                : Icons.check_box_outline_blank)
+                                            : scriptCapsuleSpec != null
+                                                ? Icons.bolt_outlined
+                                                : Icons.edit_outlined,
+                                        size: mobileBoard ? 20 : 17,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  if (!standaloneSurface &&
+                                      paper.isNote &&
+                                      enableTodoNoteLinks) ...[
+                                    const SizedBox(width: 2),
+                                    _noteLinkDragHandle(context),
+                                  ],
+                                  if (!standaloneSurface)
+                                    const SizedBox(width: 5),
+                                  Expanded(
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          minWidth: standaloneSurface ? 38 : 0,
+                                          maxWidth: standaloneSurface
+                                              ? 86
+                                              : double.infinity,
+                                        ),
+                                        child: _PaperTitleEditor(
+                                          paper: paper,
+                                          titleText: titleText,
+                                          textZoom: textZoom,
+                                          enabled: !desktopInteractionLocked &&
+                                              !isCollapsed,
+                                          fieldEnabled:
+                                              !desktopInteractionLocked,
+                                          enableToolTips: enableToolTips,
+                                          compact: standaloneSurface,
+                                          onTitleChanged: onTitleChanged,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (standaloneSurface) ...[
+                                    ..._paperWindowHeaderActions(
+                                      context: context,
+                                      isCollapsed: isCollapsed,
+                                      desktopInteractionLocked:
+                                          desktopInteractionLocked,
+                                      availableWidth:
+                                          headerConstraints.maxWidth,
+                                    ),
+                                  ] else if (mobileBoard) ...[
+                                    ..._paperHeaderActions(
+                                      context: context,
+                                      isCollapsed: isCollapsed,
+                                      desktopInteractionLocked:
+                                          desktopInteractionLocked,
+                                      textZoom: textZoom,
+                                    ),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-              ],
+                  if (!standaloneSurface && !mobileBoard) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Wrap(
+                          spacing: 2,
+                          runSpacing: 2,
+                          children: _paperHeaderActions(
+                            context: context,
+                            isCollapsed: isCollapsed,
+                            desktopInteractionLocked: desktopInteractionLocked,
+                            textZoom: textZoom,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (standaloneSurface && paper.isNote)
+                    Expanded(
+                      child: Padding(
+                        key: ValueKey('${paper.id}-standalone-note-body'),
+                        padding: const EdgeInsets.only(top: 2),
+                        child: AbsorbPointer(
+                          absorbing: desktopInteractionLocked,
+                          child: _animatedPaperBody(
+                            isCollapsed,
+                            scriptCapsuleSpec,
+                            fillAvailable: true,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (standaloneSurface)
+                    Expanded(
+                      child: _PaperTodoScrollViewport(
+                        key: ValueKey('${paper.id}-todo-scroll-viewport'),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SizedBox(
+                              width: math.max(0, constraints.maxWidth - 14),
+                              child: AbsorbPointer(
+                                absorbing: desktopInteractionLocked,
+                                child: _animatedPaperBody(
+                                  isCollapsed,
+                                  scriptCapsuleSpec,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: mobileBoard
+                          ? const EdgeInsets.fromLTRB(8, 4, 8, 8)
+                          : const EdgeInsets.fromLTRB(7, 3, 7, 7),
+                      child: AbsorbPointer(
+                        absorbing: desktopInteractionLocked,
+                        child:
+                            _animatedPaperBody(isCollapsed, scriptCapsuleSpec),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -5158,12 +6129,26 @@ class PaperPreview extends StatelessWidget {
         cursor: SystemMouseCursors.grab,
         child: SizedBox.square(
           key: ValueKey('${paper.id}-note-link-drag-handle'),
-          dimension: standaloneSurface ? 28 : 48,
-          child: Icon(
-            Icons.link_outlined,
-            size: 16,
-            color: colorScheme.primary,
-          ),
+          dimension: standaloneSurface ? 24 : 48,
+          child: standaloneSurface
+              ? Text(
+                  '\u2316',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Segoe UI Symbol',
+                    fontFamilyFallback: const <String>[
+                      'Segoe UI Emoji',
+                    ],
+                    fontSize: 13,
+                    color: colorScheme.primary,
+                    height: 1,
+                  ),
+                )
+              : Icon(
+                  Icons.link_outlined,
+                  size: 16,
+                  color: colorScheme.primary,
+                ),
         ),
       ),
     );
@@ -5189,11 +6174,25 @@ class PaperPreview extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.link_outlined,
-                  size: 16,
-                  color: colorScheme.onPrimaryContainer,
-                ),
+                if (!standaloneSurface)
+                  Icon(
+                    Icons.link_outlined,
+                    size: 16,
+                    color: colorScheme.onPrimaryContainer,
+                  )
+                else
+                  Text(
+                    '\u2316',
+                    style: TextStyle(
+                      fontFamily: 'Segoe UI Symbol',
+                      fontFamilyFallback: const <String>[
+                        'Segoe UI Emoji',
+                      ],
+                      fontSize: 13,
+                      color: colorScheme.onPrimaryContainer,
+                      height: 1,
+                    ),
+                  ),
                 const SizedBox(width: 6),
                 Text(
                   strings.format(
@@ -5221,8 +6220,9 @@ class PaperPreview extends StatelessWidget {
 
   Widget _animatedPaperBody(
     bool isCollapsed,
-    ScriptCapsuleSpec? scriptCapsuleSpec,
-  ) {
+    ScriptCapsuleSpec? scriptCapsuleSpec, {
+    bool fillAvailable = false,
+  }) {
     final body = isCollapsed
         ? scriptCapsuleSpec == null
             ? const SizedBox.shrink(key: ValueKey('collapsed'))
@@ -5243,6 +6243,7 @@ class PaperPreview extends StatelessWidget {
                       runLinkedScriptCapsulesOnClick,
                   maxTitleLength: maxTitleLength,
                   enableToolTips: enableToolTips,
+                  enableAnimations: enableAnimations,
                   visualSize: todoVisualSize,
                   lineSpacing: todoLineSpacing,
                   textZoom: paper.textZoom,
@@ -5251,6 +6252,7 @@ class PaperPreview extends StatelessWidget {
                   defaultReminderIntervalValue:
                       defaultTodoReminderIntervalValue,
                   defaultReminderIntervalUnit: defaultTodoReminderIntervalUnit,
+                  nativeDialogFontFamily: nativeDialogFontFamily,
                   onOpenLinkedNote: onOpenLinkedNote,
                   onRunScriptCapsule: onRunScriptCapsule,
                   onChanged: onChanged,
@@ -5259,18 +6261,10 @@ class PaperPreview extends StatelessWidget {
                   onReminderReset: onTodoReminderReset,
                   standaloneSurface: standaloneSurface,
                 )
+              else if (fillAvailable)
+                Expanded(child: _noteEditor())
               else
-                _NoteEditor(
-                  paper: paper,
-                  markdownRenderMode: markdownRenderMode,
-                  lineSpacing: noteLineSpacing,
-                  textZoom: paper.textZoom,
-                  enableToolTips: enableToolTips,
-                  onOpenUri: onOpenUri,
-                  onChanged: onChanged,
-                  onTextZoomChanged: _setTextZoom,
-                  onShowPaperContextMenu: _showPaperContextMenu,
-                ),
+                _noteEditor(),
             ],
           );
     // Native paper HWNDs animate their own geometry. Cross-fading the Flutter
@@ -5294,6 +6288,21 @@ class PaperPreview extends StatelessWidget {
         );
       },
       child: body,
+    );
+  }
+
+  Widget _noteEditor() {
+    return _NoteEditor(
+      paper: paper,
+      markdownRenderMode: markdownRenderMode,
+      lineSpacing: noteLineSpacing,
+      textZoom: paper.textZoom,
+      enableToolTips: enableToolTips,
+      onOpenUri: onOpenUri,
+      onChanged: onChanged,
+      onTextZoomChanged: _setTextZoom,
+      onShowPaperContextMenu: _showPaperContextMenu,
+      standaloneSurface: standaloneSurface,
     );
   }
 
@@ -5379,27 +6388,11 @@ class PaperPreview extends StatelessWidget {
     final compact = MediaQuery.sizeOf(context).shortestSide < 600;
     if (compact) {
       return [
-        SizedBox.square(
-          dimension: 48,
-          child: IconButton(
-            key: ValueKey('${paper.id}-sync-now'),
-            tooltip: _tooltipLabel(
-              enableToolTips,
-              strings.get(PaperTodoStringKeys.actionSyncNow),
-            ),
-            onPressed: syncing ? null : () => unawaited(onSync()),
-            icon: syncing
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.sync_outlined),
+        if (useCapsuleMode)
+          SizedBox.square(
+            dimension: 48,
+            child: _collapseButton(context, isCollapsed),
           ),
-        ),
-        SizedBox.square(
-          dimension: 48,
-          child: _collapseButton(context, isCollapsed),
-        ),
         SizedBox.square(
           key: ValueKey('${paper.id}-paper-actions'),
           dimension: 48,
@@ -5432,33 +6425,39 @@ class PaperPreview extends StatelessWidget {
                 CheckedPopupMenuItem<String>(
                   value: '$_compactPaperZoomActionPrefix${option.value}',
                   checked: option.value == textZoom,
+                  height: _paperTodoPopupMenuHeight(),
+                  padding: _paperTodoPopupMenuItemPadding,
                   child: Text('${strings.get(PaperTodoStringKeys.zoom)} '
                       '${option.label}'),
                 ),
-              const PopupMenuDivider(),
-              _paperActionMenuItem(
-                value: _compactPaperActionToggleAlwaysOnTop,
-                icon: paper.alwaysOnTop
-                    ? Icons.push_pin
-                    : Icons.push_pin_outlined,
-                label: paper.alwaysOnTop
-                    ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
-                    : strings.get(PaperTodoStringKeys.actionKeepOnTop),
-              ),
-              _paperActionMenuItem(
-                value: _compactPaperActionTogglePinned,
-                icon: paper.isPinnedToDesktop
-                    ? Icons.desktop_windows
-                    : Icons.desktop_windows_outlined,
-                label: paper.isPinnedToDesktop
-                    ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
-                    : strings.get(PaperTodoStringKeys.actionPinToDesktop),
-              ),
-              _paperActionMenuItem(
-                value: _compactPaperActionCaptureBounds,
-                icon: Icons.aspect_ratio_outlined,
-                label: strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
-              ),
+              if (Platform.isWindows) ...[
+                const PopupMenuDivider(),
+                _paperActionMenuItem(
+                  value: _compactPaperActionToggleAlwaysOnTop,
+                  icon: paper.alwaysOnTop
+                      ? Icons.push_pin
+                      : Icons.push_pin_outlined,
+                  label: paper.alwaysOnTop
+                      ? strings
+                          .get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
+                      : strings.get(PaperTodoStringKeys.actionKeepOnTop),
+                ),
+                _paperActionMenuItem(
+                  value: _compactPaperActionTogglePinned,
+                  icon: paper.isPinnedToDesktop
+                      ? Icons.desktop_windows
+                      : Icons.desktop_windows_outlined,
+                  label: paper.isPinnedToDesktop
+                      ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
+                      : strings.get(PaperTodoStringKeys.actionPinToDesktop),
+                ),
+                _paperActionMenuItem(
+                  value: _compactPaperActionCaptureBounds,
+                  icon: Icons.aspect_ratio_outlined,
+                  label:
+                      strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
+                ),
+              ],
               const PopupMenuDivider(),
               _paperActionMenuItem(
                 value: _compactPaperActionHide,
@@ -5477,20 +6476,6 @@ class PaperPreview extends StatelessWidget {
     }
     return [
       IconButton(
-        key: ValueKey('${paper.id}-sync-now'),
-        tooltip: _tooltipLabel(
-          enableToolTips,
-          strings.get(PaperTodoStringKeys.actionSyncNow),
-        ),
-        onPressed: syncing ? null : () => unawaited(onSync()),
-        icon: syncing
-            ? const SizedBox.square(
-                dimension: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.sync_outlined),
-      ),
-      IconButton(
         tooltip: _tooltipLabel(
           enableToolTips,
           strings.get(PaperTodoStringKeys.actionOpenPaperSurface),
@@ -5507,7 +6492,7 @@ class PaperPreview extends StatelessWidget {
           onPressed: () => unawaited(onOpenExternalMarkdown(paper)),
           icon: const Icon(Icons.file_open_outlined),
         ),
-      _collapseButton(context, isCollapsed),
+      if (useCapsuleMode) _collapseButton(context, isCollapsed),
       PopupMenuButton<double>(
         tooltip: _tooltipLabel(
           enableToolTips,
@@ -5522,42 +6507,47 @@ class PaperPreview extends StatelessWidget {
               CheckedPopupMenuItem<double>(
                 value: option.value,
                 checked: option.value == textZoom,
+                height: _paperTodoPopupMenuHeight(),
+                padding: _paperTodoPopupMenuItemPadding,
                 child: Text(option.label),
               ),
           ];
         },
       ),
-      IconButton(
-        tooltip: _tooltipLabel(
-          enableToolTips,
-          paper.alwaysOnTop
-              ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
-              : strings.get(PaperTodoStringKeys.actionKeepOnTop),
+      if (Platform.isWindows)
+        IconButton(
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            paper.alwaysOnTop
+                ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
+                : strings.get(PaperTodoStringKeys.actionKeepOnTop),
+          ),
+          onPressed: _toggleAlwaysOnTop,
+          icon: Icon(
+              paper.alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined),
         ),
-        onPressed: _toggleAlwaysOnTop,
-        icon:
-            Icon(paper.alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined),
-      ),
-      IconButton(
-        tooltip: _tooltipLabel(
-          enableToolTips,
-          paper.isPinnedToDesktop
-              ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
-              : strings.get(PaperTodoStringKeys.actionPinToDesktop),
+      if (Platform.isWindows)
+        IconButton(
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            paper.isPinnedToDesktop
+                ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
+                : strings.get(PaperTodoStringKeys.actionPinToDesktop),
+          ),
+          onPressed: _togglePinnedToDesktop,
+          icon: Icon(paper.isPinnedToDesktop
+              ? Icons.desktop_windows
+              : Icons.desktop_windows_outlined),
         ),
-        onPressed: _togglePinnedToDesktop,
-        icon: Icon(paper.isPinnedToDesktop
-            ? Icons.desktop_windows
-            : Icons.desktop_windows_outlined),
-      ),
-      IconButton(
-        tooltip: _tooltipLabel(
-          enableToolTips,
-          strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
+      if (Platform.isWindows)
+        IconButton(
+          tooltip: _tooltipLabel(
+            enableToolTips,
+            strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
+          ),
+          onPressed: () => unawaited(onCaptureBounds(paper)),
+          icon: const Icon(Icons.aspect_ratio_outlined),
         ),
-        onPressed: () => unawaited(onCaptureBounds(paper)),
-        icon: const Icon(Icons.aspect_ratio_outlined),
-      ),
       IconButton(
         tooltip: _tooltipLabel(
           enableToolTips,
@@ -5577,6 +6567,9 @@ class PaperPreview extends StatelessWidget {
     ];
   }
 
+  // Kept temporarily for state-file/widget compatibility while the new paper
+  // chrome rolls out; no runtime path calls this legacy composition.
+  // ignore: unused_element
   List<Widget> _standalonePaperHeaderActions({
     required BuildContext context,
     required bool isCollapsed,
@@ -5586,7 +6579,7 @@ class PaperPreview extends StatelessWidget {
       return [_pinnedDesktopUnlockButton(context)];
     }
     final strings = PaperTodoStringsScope.of(context);
-    final width = MediaQuery.sizeOf(context).width;
+    final width = math.min(MediaQuery.sizeOf(context).width, paper.width);
     final showPrimaryActions = width >= 225;
     final showSecondaryActions = width >= 285;
     final showCreationActions = width >= (paper.isNote ? 390 : 340);
@@ -5628,7 +6621,11 @@ class PaperPreview extends StatelessWidget {
           onPressed: () => unawaited(onOpenExternalMarkdown(paper)),
           child: const Text(
             'MD',
-            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w400,
+              height: 1,
+            ),
           ),
         ),
       if (showSecondaryActions)
@@ -5668,6 +6665,225 @@ class PaperPreview extends StatelessWidget {
     return actions;
   }
 
+  List<Widget> _paperWindowHeaderActions({
+    required BuildContext context,
+    required bool isCollapsed,
+    required bool desktopInteractionLocked,
+    required double availableWidth,
+  }) {
+    final strings = PaperTodoStringsScope.of(context);
+    if (desktopInteractionLocked) {
+      return [
+        _paperWindowHeaderButton(
+          context,
+          key: ValueKey('${paper.id}-desktop-pin'),
+          tooltip: strings.get(PaperTodoStringKeys.actionUnpinFromDesktop),
+          onPressed: _togglePinnedToDesktop,
+          child: _paperTodoDesktopPinGlyph(pinned: true),
+        ),
+      ];
+    }
+    final width = availableWidth;
+    final showBaseActions = width >= (paper.isNote ? 230 : 180);
+    final showUtility = width >= 210;
+    final showSync = width >= 400;
+    return [
+      if (showSync)
+        _paperWindowHeaderButton(
+          context,
+          key: ValueKey('${paper.id}-sync-now'),
+          tooltip: strings.get(PaperTodoStringKeys.actionSyncNow),
+          onPressed: syncing ? null : () => unawaited(onSync()),
+          child: syncing
+              ? const SizedBox.square(
+                  dimension: 13,
+                  child: CircularProgressIndicator(strokeWidth: 1.6),
+                )
+              : const Icon(Icons.sync_rounded, size: 16),
+        ),
+      if (showUtility && paper.isNote && enableTodoNoteLinks)
+        SizedBox(
+          key: ValueKey('${paper.id}-note-link-drag-action'),
+          width: 24,
+          height: 24,
+          child: _noteLinkDragHandle(context),
+        ),
+      if (showUtility && paper.isNote && showTopBarExternalOpenButton)
+        _paperWindowHeaderButton(
+          context,
+          key: ValueKey('${paper.id}-open-markdown'),
+          tooltip: _openMarkdownEditorLabel(strings),
+          onPressed: () => unawaited(onOpenExternalMarkdown(paper)),
+          child: const Text(
+            'MD',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w400,
+              height: 1,
+            ),
+          ),
+        ),
+      if (showBaseActions)
+        _paperWindowHeaderButton(
+          context,
+          key: ValueKey('${paper.id}-desktop-pin'),
+          tooltip: paper.isPinnedToDesktop
+              ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
+              : strings.get(PaperTodoStringKeys.actionPinToDesktop),
+          onPressed: _togglePinnedToDesktop,
+          child: _paperTodoDesktopPinGlyph(
+            pinned: paper.isPinnedToDesktop,
+          ),
+        ),
+      if (showBaseActions && showTopBarNewTodoButton)
+        _paperWindowHeaderButton(
+          context,
+          key: ValueKey('${paper.id}-new-todo'),
+          tooltip: strings.get(PaperTodoStringKeys.actionNewTodoPaper),
+          onPressed: () => unawaited(
+            onCreatePaper(PaperTypes.todo, sourcePaper: paper),
+          ),
+          child: Transform.translate(
+            key: const ValueKey('paper-window-new-todo-glyph-metrics'),
+            offset: const Offset(-1, 1),
+            child: const Text(
+              '\uFF0B\u2713',
+              style: TextStyle(
+                fontFamily: 'Segoe UI Symbol',
+                fontFamilyFallback: <String>['Segoe UI Emoji'],
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                height: 1,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ),
+        ),
+      if (showBaseActions && showTopBarNewNoteButton)
+        _paperWindowHeaderButton(
+          context,
+          key: ValueKey('${paper.id}-new-note'),
+          tooltip: strings.get(PaperTodoStringKeys.actionNewNotePaper),
+          onPressed: () => unawaited(
+            onCreatePaper(PaperTypes.note, sourcePaper: paper),
+          ),
+          child: Transform.translate(
+            key: const ValueKey('paper-window-new-note-glyph-metrics'),
+            offset: const Offset(-1, 1),
+            child: const Text(
+              '\uFF0B\u270E',
+              style: TextStyle(
+                fontFamily: 'Segoe UI Symbol',
+                fontFamilyFallback: <String>['Segoe UI Emoji'],
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                height: 1,
+                letterSpacing: -0.75,
+              ),
+            ),
+          ),
+        ),
+      _paperWindowHeaderButton(
+        context,
+        key: ValueKey('${paper.id}-close'),
+        tooltip: useCapsuleMode
+            ? strings.get(PaperTodoStringKeys.actionCollapsePaper)
+            : strings.get(PaperTodoStringKeys.actionHideThisPaper),
+        onPressed:
+            useCapsuleMode ? _toggleCollapsed : () => unawaited(onHide(paper)),
+        child: Transform.translate(
+          key: const ValueKey('paper-window-close-glyph-metrics'),
+          offset: const Offset(-1, 1),
+          child: Text(
+            useCapsuleMode ? '\u2500' : '\u00D7',
+            style: const TextStyle(
+              fontFamily: 'Segoe UI Symbol',
+              fontFamilyFallback: <String>['Segoe UI Emoji'],
+              fontSize: 16,
+              height: 1,
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _paperTodoDesktopPinGlyph({
+    required bool pinned,
+    double size = 15,
+  }) {
+    return Transform.translate(
+      key: const ValueKey('paper-window-desktop-pin-glyph-metrics'),
+      offset: const Offset(-2, 0),
+      child: Opacity(
+        key: const ValueKey('paper-window-desktop-pin-glyph-opacity'),
+        opacity: pinned ? 1 : 0.72,
+        child: Image.asset(
+          pinned ? 'assets/icons/unpin.png' : 'assets/icons/pin.png',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.low,
+          gaplessPlayback: true,
+        ),
+      ),
+    );
+  }
+
+  Widget _paperWindowLeadingAction(
+    BuildContext context, {
+    required ScriptCapsuleSpec? scriptCapsuleSpec,
+  }) {
+    final strings = PaperTodoStringsScope.of(context);
+    final paperColors = PaperTodoThemeColors.of(context);
+    final active = paper.alwaysOnTop;
+    return _paperWindowHeaderButton(
+      context,
+      key: ValueKey('${paper.id}-topmost'),
+      width: 23,
+      tooltip: active
+          ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
+          : strings.get(PaperTodoStringKeys.actionKeepOnTop),
+      onPressed: _desktopInteractionLocked ? null : _toggleAlwaysOnTop,
+      child: _PaperWindowTopmostGlyph(
+        active: active,
+        enabled: !_desktopInteractionLocked,
+        glyph: paper.isTodo ? '\u2611' : '\u270E',
+        size: paper.isNote ? 15 : 13,
+        activeColor: paperColors.text,
+        inactiveColor: paperColors.weakText,
+      ),
+    );
+  }
+
+  Widget _paperWindowHeaderButton(
+    BuildContext context, {
+    Key? key,
+    double width = 28,
+    double height = 24,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    required Widget child,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 1),
+      child: SizedBox(
+        key: key,
+        width: width,
+        height: height,
+        child: _conditionalTooltip(
+          enabled: enableToolTips,
+          message: tooltip,
+          child: _PaperWindowHeaderAction(
+            onPressed: onPressed,
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ignore: unused_element
   Widget _standalonePaperTypeButton(
     BuildContext context, {
     required ScriptCapsuleSpec? scriptCapsuleSpec,
@@ -5778,14 +6994,18 @@ class PaperPreview extends StatelessWidget {
     if (overlay is! RenderBox) {
       return;
     }
+    final entries = _paperContextMenuItems(context);
     final selected = await showMenu<String>(
       context: context,
       requestFocus: false,
       position: RelativeRect.fromRect(
-        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
         Offset.zero & overlay.size,
       ),
-      items: _paperContextMenuItems(context),
+      items: entries,
+      constraints: standaloneSurface
+          ? _paperTodoStandaloneMenuConstraints(context, entries)
+          : null,
     );
     if (!context.mounted || selected == null) {
       return;
@@ -5795,6 +7015,9 @@ class PaperPreview extends StatelessWidget {
 
   List<PopupMenuEntry<String>> _paperContextMenuItems(BuildContext context) {
     final strings = PaperTodoStringsScope.of(context);
+    if (standaloneSurface) {
+      return _standalonePaperContextMenuItems(strings);
+    }
     final hideThisPaperLabel =
         strings.get(PaperTodoStringKeys.actionHideThisPaper);
     final openMarkdownEditorLabel = _openMarkdownEditorLabel(strings);
@@ -5860,40 +7083,44 @@ class PaperPreview extends StatelessWidget {
         CheckedPopupMenuItem<String>(
           value: '$_compactPaperZoomActionPrefix${option.value}',
           checked: option.value == textZoom,
+          height: _paperTodoPopupMenuHeight(),
+          padding: _paperTodoPopupMenuItemPadding,
           child: Text('${strings.get(PaperTodoStringKeys.zoom)} '
               '${option.label}'),
         ),
-      const PopupMenuDivider(),
-      _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuDesktopPin)),
-      _paperActionMenuItem(
-        value: _compactPaperActionToggleAlwaysOnTop,
-        icon: paper.alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
-        label: paper.alwaysOnTop
-            ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
-            : strings.get(PaperTodoStringKeys.actionKeepOnTop),
-      ),
-      _paperActionMenuItem(
-        value: _compactPaperActionTogglePinned,
-        icon: paper.isPinnedToDesktop
-            ? Icons.desktop_windows
-            : Icons.desktop_windows_outlined,
-        label: paper.isPinnedToDesktop
-            ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
-            : strings.get(PaperTodoStringKeys.actionPinToDesktop),
-      ),
-      if (!collapseAllActive)
+      if (Platform.isWindows) ...[
+        const PopupMenuDivider(),
+        _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuDesktopPin)),
         _paperActionMenuItem(
-          value: _compactPaperActionToggleCollapsed,
-          icon: paper.isCollapsed ? Icons.expand_more : Icons.expand_less,
-          label: paper.isCollapsed
-              ? strings.get(PaperTodoStringKeys.actionRestoreWindow)
-              : strings.get(PaperTodoStringKeys.actionCollapseToCapsule),
+          value: _compactPaperActionToggleAlwaysOnTop,
+          icon: paper.alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
+          label: paper.alwaysOnTop
+              ? strings.get(PaperTodoStringKeys.actionDisableAlwaysOnTop)
+              : strings.get(PaperTodoStringKeys.actionKeepOnTop),
         ),
-      _paperActionMenuItem(
-        value: _compactPaperActionCaptureBounds,
-        icon: Icons.aspect_ratio_outlined,
-        label: strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
-      ),
+        _paperActionMenuItem(
+          value: _compactPaperActionTogglePinned,
+          icon: paper.isPinnedToDesktop
+              ? Icons.desktop_windows
+              : Icons.desktop_windows_outlined,
+          label: paper.isPinnedToDesktop
+              ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
+              : strings.get(PaperTodoStringKeys.actionPinToDesktop),
+        ),
+        if (!collapseAllActive)
+          _paperActionMenuItem(
+            value: _compactPaperActionToggleCollapsed,
+            icon: paper.isCollapsed ? Icons.expand_more : Icons.expand_less,
+            label: paper.isCollapsed
+                ? strings.get(PaperTodoStringKeys.actionRestoreWindow)
+                : strings.get(PaperTodoStringKeys.actionCollapseToCapsule),
+          ),
+        _paperActionMenuItem(
+          value: _compactPaperActionCaptureBounds,
+          icon: Icons.aspect_ratio_outlined,
+          label: strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
+        ),
+      ],
       const PopupMenuDivider(),
       _paperActionMenuItem(
         value: _compactPaperActionHide,
@@ -5908,6 +7135,91 @@ class PaperPreview extends StatelessWidget {
     ];
   }
 
+  List<PopupMenuEntry<String>> _standalonePaperContextMenuItems(
+    PaperTodoStrings strings,
+  ) {
+    final scriptCapsule =
+        paper.isNote ? ScriptCapsuleSpec.tryParse(paper.content) : null;
+    return [
+      _paperTodoDesktopMenuHeader(strings.get(PaperTodoStringKeys.menuNew)),
+      _paperTodoDesktopMenuItem(
+        value: _compactPaperActionNewTodo,
+        label: strings.get(PaperTodoStringKeys.actionNewTodoPaperCompact),
+      ),
+      _paperTodoDesktopMenuItem(
+        value: _compactPaperActionNewNote,
+        label: strings.get(PaperTodoStringKeys.actionNewNotePaperCompact),
+      ),
+      if (paper.isTodo) ...[
+        const PopupMenuDivider(height: 7),
+        _paperTodoDesktopMenuHeader(strings.get(PaperTodoStringKeys.menuTodo)),
+        _paperTodoDesktopMenuItem(
+          value: _compactPaperActionClearDone,
+          label: strings.get(PaperTodoStringKeys.actionClearCompleted),
+        ),
+      ],
+      if (_canAddCanvasBlockFromPaperMenu) ...[
+        const PopupMenuDivider(height: 7),
+        _paperTodoDesktopMenuHeader(
+          strings.get(PaperTodoStringKeys.menuCanvas),
+        ),
+        _paperTodoDesktopMenuItem(
+          value: _compactPaperActionAddCanvasBlock,
+          label: strings.get(PaperTodoStringKeys.actionAddCodeBlock),
+        ),
+      ],
+      const PopupMenuDivider(height: 7),
+      _paperTodoDesktopMenuHeader(
+        strings.get(PaperTodoStringKeys.menuDesktopPin),
+      ),
+      if (!paper.isCollapsed && !paper.isPinnedToDesktop)
+        _paperTodoDesktopMenuItem(
+          value: _compactPaperActionTogglePinned,
+          label: strings.get(PaperTodoStringKeys.actionPinToDesktop),
+        ),
+      const PopupMenuDivider(height: 7),
+      _paperTodoDesktopMenuHeader(_displayPaperTitle()),
+      if (useCapsuleMode)
+        _paperTodoDesktopMenuItem(
+          value: _compactPaperActionToggleCollapsed,
+          label: scriptCapsule != null && paper.isCollapsed
+              ? strings.get(PaperTodoStringKeys.actionEditScriptCapsule)
+              : paper.isCollapsed
+                  ? strings.get(PaperTodoStringKeys.actionRestoreWindow)
+                  : strings.get(PaperTodoStringKeys.actionCollapseToCapsule),
+        ),
+      _paperTodoDesktopMenuItem(
+        value: _compactPaperActionHide,
+        label: strings.get(PaperTodoStringKeys.actionHideCompact),
+      ),
+      _paperTodoDesktopMenuItem(
+        value: _compactPaperActionDelete,
+        label: strings.get(PaperTodoStringKeys.actionDelete),
+      ),
+    ];
+  }
+
+  PopupMenuItem<String> _paperTodoDesktopMenuHeader(String label) {
+    return PopupMenuItem<String>(
+      enabled: false,
+      height: 17,
+      padding: _paperTodoStandalonePopupMenuItemPadding,
+      child: _PaperTodoPopupMenuHeaderLabel(label),
+    );
+  }
+
+  PopupMenuItem<String> _paperTodoDesktopMenuItem({
+    required String value,
+    required String label,
+  }) {
+    return _PaperTodoPopupMenuItem<String>(
+      value: value,
+      height: 21,
+      padding: _paperTodoStandalonePopupMenuItemPadding,
+      child: Text(label),
+    );
+  }
+
   PopupMenuItem<String> _paperActionMenuItem({
     required String value,
     required IconData icon,
@@ -5918,10 +7230,11 @@ class PaperPreview extends StatelessWidget {
       value: value,
       enabled: enabled,
       height: _paperTodoPopupMenuHeight(),
+      padding: _paperTodoPopupMenuItemPadding,
       child: Row(
         children: [
-          Icon(icon),
-          const SizedBox(width: 12),
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
           Flexible(child: Text(label)),
         ],
       ),
@@ -6132,6 +7445,222 @@ class PaperPreview extends StatelessWidget {
   }
 }
 
+class _PaperWindowHeaderAction extends StatefulWidget {
+  const _PaperWindowHeaderAction({
+    required this.onPressed,
+    required this.child,
+  });
+
+  final VoidCallback? onPressed;
+  final Widget child;
+
+  @override
+  State<_PaperWindowHeaderAction> createState() =>
+      _PaperWindowHeaderActionState();
+}
+
+class _PaperWindowHeaderActionState extends State<_PaperWindowHeaderAction> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  void didUpdateWidget(covariant _PaperWindowHeaderAction oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onPressed == null) {
+      _hovered = false;
+      _pressed = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
+    final enabled = widget.onPressed != null;
+    final disabledForeground = colors.onSurfaceVariant.withValues(alpha: 0.30);
+    final foreground = enabled
+        ? (_hovered || _pressed ? paperColors.text : paperColors.weakText)
+        : disabledForeground;
+    final baseStyle = IconButton.styleFrom(
+      foregroundColor: foreground,
+      disabledForegroundColor: disabledForeground,
+      hoverColor: paperColors.hover,
+      highlightColor: paperColors.hover,
+      splashFactory: NoSplash.splashFactory,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
+    );
+    return MouseRegion(
+      onEnter: enabled ? (_) => _setHovered(true) : null,
+      onExit: enabled
+          ? (_) {
+              _setHovered(false);
+              _clearPressed();
+            }
+          : null,
+      child: Listener(
+        onPointerDown: enabled
+            ? (event) {
+                if (event.buttons & kPrimaryMouseButton != 0 && !_pressed) {
+                  setState(() => _pressed = true);
+                }
+              }
+            : null,
+        onPointerUp: enabled ? (_) => _clearPressed() : null,
+        onPointerCancel: enabled ? (_) => _clearPressed() : null,
+        child: Opacity(
+          opacity: _pressed ? 0.7 : 1,
+          child: ExcludeFocus(
+            child: IconButton(
+              onPressed: widget.onPressed,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              style: baseStyle.copyWith(
+                foregroundColor: WidgetStateProperty.resolveWith<Color?>(
+                  (states) {
+                    if (!enabled || states.contains(WidgetState.disabled)) {
+                      return disabledForeground;
+                    }
+                    if (_hovered ||
+                        _pressed ||
+                        states.contains(WidgetState.hovered) ||
+                        states.contains(WidgetState.pressed)) {
+                      return paperColors.text;
+                    }
+                    return paperColors.weakText;
+                  },
+                ),
+              ),
+              icon: IconTheme.merge(
+                data: IconThemeData(color: foreground),
+                child: DefaultTextStyle.merge(
+                  style: TextStyle(color: foreground),
+                  child: widget.child,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _setHovered(bool value) {
+    if (_hovered != value) {
+      setState(() => _hovered = value);
+    }
+  }
+
+  void _clearPressed() {
+    if (_pressed) {
+      setState(() => _pressed = false);
+    }
+  }
+}
+
+class _PaperWindowTopmostGlyph extends StatefulWidget {
+  const _PaperWindowTopmostGlyph({
+    required this.active,
+    required this.enabled,
+    required this.glyph,
+    required this.size,
+    required this.activeColor,
+    required this.inactiveColor,
+  });
+
+  final bool active;
+  final bool enabled;
+  final String glyph;
+  final double size;
+  final Color activeColor;
+  final Color inactiveColor;
+
+  @override
+  State<_PaperWindowTopmostGlyph> createState() =>
+      _PaperWindowTopmostGlyphState();
+}
+
+class _PaperWindowTopmostGlyphState extends State<_PaperWindowTopmostGlyph> {
+  bool _hovered = false;
+
+  @override
+  void didUpdateWidget(covariant _PaperWindowTopmostGlyph oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled) {
+      _hovered = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
+      onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
+      child: Opacity(
+        key: const ValueKey('paper-window-topmost-glyph-opacity'),
+        opacity: widget.active || _hovered ? 1 : 0.58,
+        child: Transform.translate(
+          key: const ValueKey('paper-window-topmost-glyph-metrics'),
+          offset: const Offset(1, 1),
+          child: Text(
+            widget.glyph,
+            style: TextStyle(
+              fontFamily: 'Segoe UI Symbol',
+              fontFamilyFallback: const <String>['Segoe UI Emoji'],
+              fontSize: widget.size,
+              fontWeight: widget.active ? FontWeight.w600 : FontWeight.normal,
+              color: widget.active ? widget.activeColor : widget.inactiveColor,
+              height: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaperTodoScrollViewport extends StatefulWidget {
+  const _PaperTodoScrollViewport({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<_PaperTodoScrollViewport> createState() =>
+      _PaperTodoScrollViewportState();
+}
+
+class _PaperTodoScrollViewportState extends State<_PaperTodoScrollViewport> {
+  late final ScrollController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      key: const ValueKey('todo-paper-scrollbar'),
+      controller: _controller,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        key: const ValueKey('todo-paper-scroll'),
+        controller: _controller,
+        padding: const EdgeInsets.fromLTRB(7, 2, 7, 10),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _PaperTitleEditor extends StatefulWidget {
   const _PaperTitleEditor({
     required this.paper,
@@ -6161,6 +7690,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   bool _isEditingTitle = false;
+  bool _isHovered = false;
   String _titleBeforeEdit = '';
 
   @override
@@ -6185,6 +7715,9 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
     } else if (!widget.enabled) {
       unawaited(_endTitleEdit(commit: true));
     }
+    if (!widget.enabled) {
+      _isHovered = false;
+    }
   }
 
   @override
@@ -6198,56 +7731,121 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final paperColors = PaperTodoThemeColors.of(context);
     final strings = PaperTodoStringsScope.of(context);
     final editTitleLabel = strings.get(PaperTodoStringKeys.actionEditTitle);
-    final field = SizedBox(
+    final emphasized = _isEditingTitle || _isHovered;
+    final dividerColor = paperColors.tint.withValues(
+      alpha: paperColors.isDark ? 34 / 255 : 28 / 255,
+    );
+    final titleStyle = (widget.compact
+            ? theme.textTheme.labelMedium
+            : theme.textTheme.titleMedium)
+        ?.apply(
+          fontSizeFactor: widget.textZoom,
+        )
+        .copyWith(
+          height: 1,
+          fontSize: widget.compact ? 11 : null,
+          fontWeight: widget.compact ? FontWeight.w600 : null,
+          letterSpacing: widget.compact ? -0.1 : null,
+        );
+    final field = AnimatedContainer(
+      key: ValueKey('${widget.paper.id}-title-host'),
+      // PaperTodo changes title hover/focus tint immediately; animated
+      // interpolation here leaves a visible trail during desktop pointer
+      // movement and is not part of the source interaction.
+      duration: Duration.zero,
       height: widget.compact ? 24 : 28,
+      padding: widget.compact
+          ? const EdgeInsets.fromLTRB(4, 0, 5, 0)
+          : const EdgeInsets.symmetric(horizontal: 3),
+      decoration: BoxDecoration(
+        color: emphasized ? paperColors.hover : Colors.transparent,
+        border: widget.compact
+            ? Border(bottom: BorderSide(color: dividerColor))
+            : Border.all(
+                color: emphasized ? dividerColor : Colors.transparent,
+              ),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Focus(
         onKeyEvent: _handleKeyEvent,
-        child: TextFormField(
-          key: ValueKey('${widget.paper.id}-title'),
-          controller: _controller,
-          focusNode: _focusNode,
-          inputFormatters: const [
-            _PaperTitleTextInputFormatter(
-              maxLength: PaperTitles.maxTitleLength,
-            ),
-          ],
-          decoration: InputDecoration(
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            disabledBorder: InputBorder.none,
-            errorBorder: InputBorder.none,
-            focusedErrorBorder: InputBorder.none,
-            filled: false,
-            contentPadding: EdgeInsets.zero,
-            hintText: strings.get(PaperTodoStringKeys.untitledPaper),
-            isDense: true,
-          ),
-          enabled: widget.fieldEnabled,
-          readOnly: !_isEditingTitle,
-          showCursor: _isEditingTitle,
-          maxLines: 1,
-          textInputAction: TextInputAction.done,
-          style: (widget.compact
-                  ? theme.textTheme.labelMedium
-                  : theme.textTheme.titleMedium)
-              ?.apply(
-                fontSizeFactor: widget.textZoom,
-              )
-              .copyWith(
-                height: 1,
-                fontSize: widget.compact ? 11 : null,
-                fontWeight: widget.compact ? FontWeight.w600 : null,
+        child: Transform.translate(
+          key: ValueKey('${widget.paper.id}-title-wpf-metrics'),
+          offset: widget.compact ? const Offset(1, 1) : Offset.zero,
+          child: Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Positioned.fill(
+                child: Visibility(
+                  key: ValueKey('${widget.paper.id}-title-display-layer'),
+                  visible: !_isEditingTitle,
+                  maintainState: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: widget.enabled ? _beginTitleEdit : null,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: RichText(
+                        key: ValueKey('${widget.paper.id}-title-display'),
+                        text: TextSpan(
+                          text: _displayTitle,
+                          style: titleStyle,
+                        ),
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        textScaler: MediaQuery.textScalerOf(context),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-          onTap: _beginTitleEdit,
-          onChanged: _handleTitleChanged,
-          onFieldSubmitted: (_) => unawaited(_endTitleEdit(commit: true)),
+              IgnorePointer(
+                ignoring: !widget.enabled,
+                child: Opacity(
+                  opacity: _isEditingTitle ? 1 : 0,
+                  child: TextFormField(
+                    key: ValueKey('${widget.paper.id}-title'),
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    inputFormatters: const [
+                      _PaperTitleTextInputFormatter(
+                        maxLength: PaperTitles.maxTitleLength,
+                      ),
+                    ],
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      focusedErrorBorder: InputBorder.none,
+                      filled: false,
+                      contentPadding: EdgeInsets.zero,
+                      hintText: strings.get(PaperTodoStringKeys.untitledPaper),
+                      isDense: true,
+                    ),
+                    enabled: widget.fieldEnabled,
+                    readOnly: !_isEditingTitle,
+                    showCursor: _isEditingTitle,
+                    maxLines: 1,
+                    textInputAction: TextInputAction.done,
+                    style: titleStyle,
+                    onTap: _beginTitleEdit,
+                    onChanged: _handleTitleChanged,
+                    onFieldSubmitted: (_) =>
+                        unawaited(_endTitleEdit(commit: true)),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
-    return Semantics(
+    final titleHostContent = Semantics(
       button: widget.enabled && !_isEditingTitle,
       textField: _isEditingTitle,
       label: editTitleLabel,
@@ -6258,9 +7856,32 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
           cursor: widget.enabled
               ? SystemMouseCursors.text
               : SystemMouseCursors.basic,
+          onEnter:
+              widget.enabled ? (_) => setState(() => _isHovered = true) : null,
+          onExit:
+              widget.enabled ? (_) => setState(() => _isHovered = false) : null,
           child: field,
         ),
       ),
+    );
+    if (!widget.compact) {
+      return titleHostContent;
+    }
+    final titleMeasure = TextPainter(
+      text: TextSpan(text: _displayTitle, style: titleStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    // WPF's Segoe UI title metrics are narrower than Flutter's fallback at
+    // the narrow reference width. Wider paper windows restore the title's
+    // natural measured width just like the source title host.
+    final metricScale = MediaQuery.sizeOf(context).width <= 280 ? 0.8 : 1.0;
+    final compactWidth =
+        (titleMeasure.width * metricScale + 9).clamp(41.0, 86.0);
+    return SizedBox(
+      width: compactWidth,
+      child: titleHostContent,
     );
   }
 
@@ -6397,6 +8018,7 @@ class _NoteEditor extends StatefulWidget {
     required this.onChanged,
     required this.onTextZoomChanged,
     required this.onShowPaperContextMenu,
+    required this.standaloneSurface,
   });
 
   final PaperData paper;
@@ -6409,9 +8031,38 @@ class _NoteEditor extends StatefulWidget {
   final void Function(double value) onTextZoomChanged;
   final Future<void> Function(BuildContext context, Offset globalPosition)
       onShowPaperContextMenu;
+  final bool standaloneSurface;
 
   @override
   State<_NoteEditor> createState() => _NoteEditorState();
+}
+
+class _NotePaperGridPainter extends CustomPainter {
+  const _NotePaperGridPainter({required this.color});
+
+  final Color color;
+  final double spacing = 24;
+  final double verticalLineOffset = 1;
+  final double horizontalLineOffset = -1;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1
+      ..isAntiAlias = false;
+    for (var x = verticalLineOffset; x <= size.width; x += spacing) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (var y = horizontalLineOffset; y <= size.height; y += spacing) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _NotePaperGridPainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
 }
 
 class _NoteEditorState extends State<_NoteEditor> {
@@ -6430,13 +8081,17 @@ class _NoteEditorState extends State<_NoteEditor> {
   static const _markdownActionPaste = 'paste';
   static const _markdownActionSelectAll = 'select-all';
 
-  late final TextEditingController _contentController;
+  late final PaperTodoMarkdownTextEditingController _contentController;
+  late final ScrollController _contentScrollController;
+  late final ScrollController _previewScrollController;
   late final FocusNode _contentFocusNode;
   late String _view = _defaultView(widget.markdownRenderMode, widget.paper);
   bool _toolbarInteractionActive = false;
   bool _enteringEditorFromPreview = false;
   bool _previewLinkActivated = false;
-  bool _previewPrimaryPointer = false;
+  bool _zoomOverlayHovered = false;
+  bool _canvasAddButtonHovered = false;
+  bool _canvasAddButtonPressed = false;
   String? _selectedCanvasElementId;
 
   PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
@@ -6444,7 +8099,15 @@ class _NoteEditorState extends State<_NoteEditor> {
   @override
   void initState() {
     super.initState();
-    _contentController = TextEditingController(text: widget.paper.content);
+    _contentController = PaperTodoMarkdownTextEditingController(
+      text: widget.paper.content,
+      markdownEnabled: MarkdownRenderModes.normalize(
+            widget.markdownRenderMode,
+          ) !=
+          MarkdownRenderModes.off,
+    );
+    _contentScrollController = ScrollController();
+    _previewScrollController = ScrollController();
     _contentFocusNode = FocusNode();
     _contentFocusNode.addListener(_handleEditorFocusChange);
   }
@@ -6452,7 +8115,14 @@ class _NoteEditorState extends State<_NoteEditor> {
   @override
   void didUpdateWidget(covariant _NoteEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if ((widget.textZoom - 1).abs() < 0.001 || widget.paper.isPinnedToDesktop) {
+      _zoomOverlayHovered = false;
+    }
     if (oldWidget.markdownRenderMode != widget.markdownRenderMode) {
+      _contentController.setMarkdownEnabled(
+        MarkdownRenderModes.normalize(widget.markdownRenderMode) !=
+            MarkdownRenderModes.off,
+      );
       _view = _defaultView(widget.markdownRenderMode, widget.paper);
     }
     if (oldWidget.paper.id != widget.paper.id ||
@@ -6477,6 +8147,8 @@ class _NoteEditorState extends State<_NoteEditor> {
   void dispose() {
     _contentFocusNode.removeListener(_handleEditorFocusChange);
     _contentFocusNode.dispose();
+    _previewScrollController.dispose();
+    _contentScrollController.dispose();
     _contentController.dispose();
     super.dispose();
   }
@@ -6484,68 +8156,70 @@ class _NoteEditorState extends State<_NoteEditor> {
   @override
   Widget build(BuildContext context) {
     final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
-    if (mode == MarkdownRenderModes.off) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _noteCanvasToolbar(),
-          _notePaperSurface(
-            _editor(context, minLines: 4, maxLines: 12),
-          ),
-          if (widget.paper.noteCanvasElements.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _canvasPreview(),
-          ],
-          _noteStatusBar(context, _viewEdit),
-        ],
-      );
-    }
-    return Column(
+    final view = mode == MarkdownRenderModes.off ? _viewEdit : _safeView(mode);
+    final page = _notePaperSurface(
+      view == _viewPreview
+          ? _preview(context)
+          : _editor(context, minLines: 4, maxLines: 12),
+    );
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _noteCanvasToolbar(),
-        _notePaperSurface(
-          _safeView(mode) == _viewPreview
-              ? _preview(context)
-              : _editor(context, minLines: 4, maxLines: 12),
+        if (widget.standaloneSurface) Expanded(child: page) else page,
+        _noteStatusBar(context, view),
+      ],
+    );
+    if ((widget.textZoom - 1).abs() < 0.001) {
+      return body;
+    }
+    return Stack(
+      children: [
+        body,
+        Positioned(
+          right: 12,
+          bottom: 7,
+          child: _noteTextZoomOverlay(),
         ),
-        if (widget.paper.noteCanvasElements.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _canvasPreview(),
-        ],
-        _noteStatusBar(context, _safeView(mode)),
       ],
     );
   }
 
   Widget _noteCanvasToolbar() {
     final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
+      key: const ValueKey('note-canvas-toolbar'),
       constraints: const BoxConstraints(minHeight: 31),
-      padding: const EdgeInsets.fromLTRB(8, 2, 8, 3),
+      padding: const EdgeInsets.fromLTRB(9, 3, 9, 4),
       decoration: BoxDecoration(
-        color: colorScheme.primary.withValues(alpha: 0.025),
+        color: paperColors.tint.withValues(
+          alpha: isDark ? 16 / 255 : 10 / 255,
+        ),
         border: Border(
           bottom: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.65),
+            color: paperColors.tint.withValues(
+              alpha: isDark ? 34 / 255 : 28 / 255,
+            ),
           ),
         ),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 360;
           return Row(
             children: [
-              _addCanvasButton(compact: compact),
+              _addCanvasButton(),
               const Spacer(),
-              Flexible(
-                child: Text(
-                  '${widget.paper.noteCanvasElements.length} elements',
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                ),
+              Text(
+                _noteCanvasElementCountText(),
+                key: const ValueKey('note-canvas-element-count'),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
               ),
             ],
           );
@@ -6555,43 +8229,87 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   Widget _notePaperSurface(Widget child) {
+    final theme = Theme.of(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final minimumPageHeight = widget.standaloneSurface
+        ? 0.0
+        : math.max(160.0, widget.paper.height - 150);
     return Container(
-      margin: const EdgeInsets.fromLTRB(1, 6, 1, 0),
-      padding: const EdgeInsets.all(7),
+      key: const ValueKey('note-paper-canvas'),
+      margin: const EdgeInsets.fromLTRB(8, 6, 8, 0),
       decoration: BoxDecoration(
-        color: colorScheme.primary.withValues(alpha: 0.035),
+        color: paperColors.tint.withValues(alpha: isDark ? 0.055 : 0.035),
         border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.75),
+          color: paperColors.tint.withValues(
+            alpha: isDark ? 34 / 255 : 28 / 255,
+          ),
         ),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          border: Border.all(color: colorScheme.outlineVariant),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            Positioned(
-              left: 14,
-              top: 14,
-              bottom: 14,
-              child: Container(
-                width: 2,
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withValues(alpha: 0.42),
-                  borderRadius: BorderRadius.circular(1),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: CustomPaint(
+          key: const ValueKey('note-paper-grid'),
+          painter: _NotePaperGridPainter(
+            color: paperColors.tint.withValues(
+              alpha: isDark ? 24 / 255 : 18 / 255,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(7),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                border: Border.all(color: colorScheme.outlineVariant),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(11),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: minimumPageHeight),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 14,
+                        top: 14,
+                        bottom: 14,
+                        child: Container(
+                          key: const ValueKey('note-paper-binding-line'),
+                          width: 2,
+                          decoration: BoxDecoration(
+                            color: paperColors.tint.withValues(
+                              alpha: isDark ? 88 / 255 : 104 / 255,
+                            ),
+                            borderRadius: BorderRadius.circular(1),
+                          ),
+                        ),
+                      ),
+                      if (widget.standaloneSurface)
+                        Positioned.fill(
+                          child: Padding(
+                            key: const ValueKey('note-paper-content-padding'),
+                            padding: const EdgeInsets.fromLTRB(26, 12, 14, 12),
+                            child: child,
+                          ),
+                        )
+                      else
+                        Padding(
+                          key: const ValueKey('note-paper-content-padding'),
+                          padding: const EdgeInsets.fromLTRB(26, 12, 14, 12),
+                          child: child,
+                        ),
+                      if (widget.paper.noteCanvasElements.isNotEmpty)
+                        Positioned.fill(
+                          child: _canvasPreview(embedded: true),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 4, 5, 4),
-              child: child,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -6602,166 +8320,89 @@ class _NoteEditorState extends State<_NoteEditor> {
     required int minLines,
     required int maxLines,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _markdownToolbar(context),
-        const SizedBox(height: 8),
-        Focus(
-          onKeyEvent: _handleMarkdownKeyEvent,
-          child: Listener(
-            onPointerDown: (event) =>
-                _handleMarkdownEditorContextMenuPointerDown(context, event),
-            child: TextFormField(
-              key: ValueKey('${widget.paper.id}-content'),
-              controller: _contentController,
-              focusNode: _contentFocusNode,
-              onTapAlwaysCalled: true,
-              onTap: () => _handleEditorTap(context),
-              minLines: minLines,
-              maxLines: maxLines,
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: false,
-                hintText: strings.get(PaperTodoStringKeys.noteEditorHint),
-              ),
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.apply(
-                    fontSizeFactor: widget.textZoom,
-                  )
-                  .copyWith(height: widget.lineSpacing),
-              inputFormatters: const [
-                _MarkdownPasteTextInputFormatter(),
-                _MarkdownListContinuationTextInputFormatter(),
-              ],
-              onChanged: _commitContent,
-            ),
+    final editorStyle = PaperTodoTypography.of(context)
+        .contentStyle(
+          Theme.of(context).textTheme.bodyMedium ??
+              const TextStyle(fontSize: 14),
+        )
+        .apply(fontSizeFactor: widget.textZoom)
+        .copyWith(height: widget.lineSpacing);
+    final editor = TextFormField(
+      key: ValueKey('${widget.paper.id}-content'),
+      controller: _contentController,
+      scrollController: _contentScrollController,
+      focusNode: _contentFocusNode,
+      onTapAlwaysCalled: true,
+      onTap: () => _handleEditorTap(context),
+      expands: widget.standaloneSurface,
+      minLines: widget.standaloneSurface ? null : minLines,
+      maxLines: widget.standaloneSurface ? null : maxLines,
+      decoration: InputDecoration(
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        filled: false,
+        isDense: true,
+        contentPadding: EdgeInsets.zero,
+        hintText: widget.standaloneSurface
+            ? null
+            : strings.get(PaperTodoStringKeys.noteEditorHint),
+      ),
+      style: editorStyle,
+      inputFormatters: const [
+        _MarkdownPasteTextInputFormatter(),
+        _MarkdownListContinuationTextInputFormatter(),
+      ],
+      onChanged: _commitContent,
+    );
+    return Focus(
+      onKeyEvent: _handleMarkdownKeyEvent,
+      child: Listener(
+        onPointerDown: (event) =>
+            _handleMarkdownEditorContextMenuPointerDown(context, event),
+        child: Scrollbar(
+          key: const ValueKey('note-editor-scrollbar'),
+          controller: _contentScrollController,
+          thumbVisibility: true,
+          child: Stack(
+            children: [
+              if (_contentController.markdownEnabled &&
+                  !_contentController.hasActiveComposing)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      key: const ValueKey(
+                        'markdown-editor-block-background',
+                      ),
+                      painter: PaperTodoMarkdownEditorBackgroundPainter(
+                        data: _contentController.text,
+                        textSpan: _contentController.buildTextSpan(
+                          context: context,
+                          style: editorStyle,
+                          withComposing: false,
+                        ),
+                        colors: PaperTodoThemeColors.of(context),
+                        scrollController: _contentScrollController,
+                        textDirection: Directionality.of(context),
+                        textScaler: MediaQuery.textScalerOf(context),
+                      ),
+                    ),
+                  ),
+                ),
+              editor,
+            ],
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _markdownToolbar(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).shortestSide < 600;
-    return Listener(
-      onPointerDown: (_) => _beginToolbarInteraction(),
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-        children: [
-          _formatButton(
-            tooltip:
-                strings.get(PaperTodoStringKeys.markdownActionBoldShortcut),
-            icon: Icons.format_bold,
-            onPressed: _formatBold,
-          ),
-          _formatButton(
-            tooltip:
-                strings.get(PaperTodoStringKeys.markdownActionItalicShortcut),
-            icon: Icons.format_italic,
-            onPressed: _formatItalic,
-          ),
-          if (!compact) ...[
-            _formatButton(
-              tooltip:
-                  strings.get(PaperTodoStringKeys.markdownActionStrikethrough),
-              icon: Icons.strikethrough_s,
-              onPressed: _formatStrikethrough,
-            ),
-            _formatButton(
-              tooltip: strings.get(PaperTodoStringKeys.markdownActionHeading),
-              icon: Icons.title,
-              onPressed: _formatHeading,
-            ),
-            _formatButton(
-              tooltip: strings.get(PaperTodoStringKeys.markdownActionQuote),
-              icon: Icons.format_quote,
-              onPressed: _formatQuote,
-            ),
-            _formatButton(
-              tooltip: strings.get(PaperTodoStringKeys.markdownActionList),
-              icon: Icons.format_list_bulleted,
-              onPressed: _formatList,
-            ),
-            _formatButton(
-              tooltip: strings.get(PaperTodoStringKeys.markdownActionCodeBlock),
-              icon: Icons.code,
-              onPressed: _formatCodeBlock,
-            ),
-          ],
-          _formatButton(
-            tooltip: strings.get(
-              PaperTodoStringKeys.markdownActionInsertLinkShortcut,
-            ),
-            icon: Icons.link,
-            onPressed: _insertMarkdownLink,
-          ),
-          if (compact) _compactMarkdownActions(),
-        ],
       ),
     );
   }
 
-  Widget _formatButton({
-    required String tooltip,
-    required IconData icon,
-    required VoidCallback onPressed,
-  }) {
-    return IconButton.outlined(
-      tooltip: _tooltipLabel(widget.enableToolTips, tooltip),
-      icon: Icon(icon),
-      onPressed: onPressed,
-    );
-  }
-
-  Widget _compactMarkdownActions() {
-    return PopupMenuButton<String>(
-      key: const ValueKey('compact-markdown-toolbar-actions'),
-      tooltip: _tooltipLabel(
-        widget.enableToolTips,
-        strings.get(PaperTodoStringKeys.markdownActionMore),
-      ),
-      icon: const Icon(Icons.more_vert),
-      onOpened: _beginToolbarInteraction,
-      onCanceled: _endToolbarInteraction,
-      onSelected: (value) {
-        _handleCompactMarkdownAction(value);
-        _endToolbarInteraction();
-      },
-      itemBuilder: (context) => [
-        _markdownMenuItem(
-          value: _markdownActionStrikethrough,
-          icon: Icons.strikethrough_s,
-          label: strings.get(PaperTodoStringKeys.markdownActionStrikethrough),
-        ),
-        _markdownMenuItem(
-          value: _markdownActionHeading,
-          icon: Icons.title,
-          label: strings.get(PaperTodoStringKeys.markdownActionHeading),
-        ),
-        _markdownMenuItem(
-          value: _markdownActionQuote,
-          icon: Icons.format_quote,
-          label: strings.get(PaperTodoStringKeys.markdownActionQuote),
-        ),
-        _markdownMenuItem(
-          value: _markdownActionList,
-          icon: Icons.format_list_bulleted,
-          label: strings.get(PaperTodoStringKeys.markdownActionList),
-        ),
-        _markdownMenuItem(
-          value: _markdownActionCodeBlock,
-          icon: Icons.code,
-          label: strings.get(PaperTodoStringKeys.markdownActionCodeBlock),
-        ),
-      ],
-    );
-  }
+  /*
+   * PaperTodo keeps Markdown formatting in keyboard shortcuts and the editor
+   * context menu. The visible row above the page is reserved for canvas tools,
+   * so the Flutter port intentionally does not render a second formatting
+   * toolbar here.
+   */
 
   PopupMenuItem<String> _markdownMenuItem({
     required String value,
@@ -6769,18 +8410,44 @@ class _NoteEditorState extends State<_NoteEditor> {
     required String label,
     bool enabled = true,
   }) {
+    final compact = widget.standaloneSurface;
+    return compact
+        ? _PaperTodoPopupMenuItem<String>(
+            value: value,
+            enabled: enabled,
+            height: 21,
+            padding: _paperTodoStandalonePopupMenuItemPadding,
+            child: Text(label),
+          )
+        : PopupMenuItem<String>(
+            value: value,
+            enabled: enabled,
+            height: _paperTodoPopupMenuHeight(),
+            padding: _paperTodoPopupMenuItemPadding,
+            child: Row(
+              children: [
+                Icon(icon, size: 18),
+                const SizedBox(width: 8),
+                Flexible(child: Text(label)),
+              ],
+            ),
+          );
+  }
+
+  PopupMenuItem<String> _markdownMenuHeader(String label) {
+    if (!widget.standaloneSurface) {
+      return _paperTodoMenuHeader(label);
+    }
     return PopupMenuItem<String>(
-      value: value,
-      enabled: enabled,
-      height: _paperTodoPopupMenuHeight(),
-      child: Row(
-        children: [
-          Icon(icon),
-          const SizedBox(width: 12),
-          Flexible(child: Text(label)),
-        ],
-      ),
+      enabled: false,
+      height: 17,
+      padding: _paperTodoStandalonePopupMenuItemPadding,
+      child: _PaperTodoPopupMenuHeaderLabel(label),
     );
+  }
+
+  PopupMenuDivider _markdownMenuDivider() {
+    return PopupMenuDivider(height: widget.standaloneSurface ? 7 : 16);
   }
 
   void _handleMarkdownEditorContextMenuPointerDown(
@@ -6803,13 +8470,17 @@ class _NoteEditorState extends State<_NoteEditor> {
     }
     _beginToolbarInteraction();
     try {
+      final entries = _markdownEditorContextMenuItems();
       final selected = await showMenu<String>(
         context: context,
         position: RelativeRect.fromRect(
-          Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+          Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
           Offset.zero & overlay.size,
         ),
-        items: _markdownEditorContextMenuItems(),
+        items: entries,
+        constraints: widget.standaloneSurface
+            ? _paperTodoStandaloneMenuConstraints(context, entries)
+            : null,
       );
       if (!mounted || !context.mounted || selected == null) {
         return;
@@ -6825,7 +8496,7 @@ class _NoteEditorState extends State<_NoteEditor> {
         !_contentController.selection.isCollapsed;
     final hasText = _contentController.text.isNotEmpty;
     return [
-      _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuFormat)),
+      _markdownMenuHeader(strings.get(PaperTodoStringKeys.menuFormat)),
       _markdownMenuItem(
         value: _markdownActionBold,
         icon: Icons.format_bold,
@@ -6866,8 +8537,8 @@ class _NoteEditorState extends State<_NoteEditor> {
         icon: Icons.link,
         label: strings.get(PaperTodoStringKeys.markdownActionInsertLink),
       ),
-      const PopupMenuDivider(),
-      _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuText)),
+      _markdownMenuDivider(),
+      _markdownMenuHeader(strings.get(PaperTodoStringKeys.menuText)),
       _markdownMenuItem(
         value: _markdownActionCopy,
         icon: Icons.content_copy_outlined,
@@ -7093,7 +8764,13 @@ class _NoteEditorState extends State<_NoteEditor> {
         _safeView(mode) != _viewEdit) {
       return;
     }
+    final editorOffset = _contentScrollController.hasClients
+        ? _contentScrollController.offset
+        : 0.0;
     setState(() => _view = _viewPreview);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreScrollOffset(_previewScrollController, editorOffset);
+    });
   }
 
   void _applyMarkdownFormat(
@@ -7116,81 +8793,146 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   Widget _noteStatusBar(BuildContext context, String view) {
     final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final textStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
           color: colorScheme.onSurfaceVariant,
         );
     return DecoratedBox(
       key: const ValueKey('note-status-bar'),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLowest,
+        color: paperColors.tint.withValues(
+          alpha: isDark ? 16 / 255 : 10 / 255,
+        ),
         border: Border(
-          top: BorderSide(color: colorScheme.outlineVariant),
+          top: BorderSide(
+            color: paperColors.tint.withValues(
+              alpha: isDark ? 34 / 255 : 25 / 255,
+            ),
+          ),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Row(
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                child: Text(
-                  _noteViewLabel(view),
-                  key: const ValueKey('note-status-mode'),
-                  style: textStyle?.copyWith(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w600,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 26),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 3, 10, 4),
+          child: Row(
+            children: [
+              ConstrainedBox(
+                key: const ValueKey('note-status-mode-pill'),
+                constraints: const BoxConstraints(minWidth: 42),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: paperColors.tint.withValues(
+                      alpha: isDark ? 48 / 255 : 33 / 255,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(7, 1, 7, 2),
+                    child: Text(
+                      _noteViewLabel(view),
+                      key: const ValueKey('note-status-mode'),
+                      textAlign: TextAlign.center,
+                      style: textStyle?.copyWith(
+                        color: colorScheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                _noteStatsText(),
-                key: const ValueKey('note-status-stats'),
-                overflow: TextOverflow.ellipsis,
-                style: textStyle,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Transform.translate(
+                  key: const ValueKey('note-status-stats-metrics'),
+                  offset: const Offset(2, -2),
+                  child: Text(
+                    _noteStatsText(),
+                    key: const ValueKey('note-status-stats'),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: textStyle?.copyWith(letterSpacing: 0.05),
+                  ),
+                ),
               ),
-            ),
-            _noteZoomStatus(context, textStyle),
-          ],
+              const SizedBox(width: 8),
+              _noteZoomStatus(textStyle),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _noteZoomStatus(BuildContext context, TextStyle? textStyle) {
-    final strings = PaperTodoStringsScope.of(context);
+  Widget _noteZoomStatus(TextStyle? textStyle) {
+    return SizedBox(
+      key: const ValueKey('note-status-zoom'),
+      width: 38,
+      child: Transform.translate(
+        key: const ValueKey('note-status-zoom-metrics'),
+        offset: const Offset(0, -1),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: Text(
+            '${(widget.textZoom * 100).round()}%',
+            maxLines: 1,
+            softWrap: false,
+            textAlign: TextAlign.right,
+            style: textStyle,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _noteTextZoomOverlay() {
     final colorScheme = Theme.of(context).colorScheme;
-    final canReset = (widget.textZoom - 1).abs() > 0.001;
-    final zoomText = Text(
-      '${(widget.textZoom * 100).round()}%',
-      style: canReset
-          ? textStyle?.copyWith(
-              color: colorScheme.primary,
-              fontWeight: FontWeight.w600,
-            )
-          : textStyle,
-    );
-    final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      child: zoomText,
-    );
+    final paperColors = PaperTodoThemeColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final enabled = !widget.paper.isPinnedToDesktop;
     return _conditionalTooltip(
       enabled: widget.enableToolTips,
       message: strings.get(PaperTodoStringKeys.actionResetTextZoom),
       child: MouseRegion(
-        cursor: canReset ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter:
+            enabled ? (_) => setState(() => _zoomOverlayHovered = true) : null,
+        onExit:
+            enabled ? (_) => setState(() => _zoomOverlayHovered = false) : null,
         child: GestureDetector(
-          key: const ValueKey('note-status-zoom'),
+          key: const ValueKey('note-text-zoom-overlay'),
           behavior: HitTestBehavior.opaque,
-          onTap: canReset ? _resetTextZoom : null,
-          child: content,
+          onTap: enabled ? _resetTextZoom : null,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: _zoomOverlayHovered
+                  ? paperColors.tint.withValues(
+                      alpha: isDark ? 48 / 255 : 32 / 255,
+                    )
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              child: Opacity(
+                opacity: _zoomOverlayHovered ? 1 : 0.55,
+                child: Text(
+                  '${(widget.textZoom * 100).round()}%',
+                  style: TextStyle(
+                    color: _zoomOverlayHovered
+                        ? colorScheme.onSurface
+                        : colorScheme.onSurfaceVariant,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -7207,11 +8949,22 @@ class _NoteEditorState extends State<_NoteEditor> {
     final characterCount = _countNoteTextCharacters(widget.paper.content);
     final lineCount = _countNoteLines(widget.paper.content);
     final elementCount = widget.paper.noteCanvasElements.length;
+    if (strings.languageCode == 'zh') {
+      return '$characterCount 字 | $lineCount 行 | $elementCount 元素';
+    }
     return [
       '$characterCount ${characterCount == 1 ? 'char' : 'chars'}',
       '$lineCount ${lineCount == 1 ? 'line' : 'lines'}',
       '$elementCount ${elementCount == 1 ? 'element' : 'elements'}',
     ].join(' | ');
+  }
+
+  String _noteCanvasElementCountText() {
+    final count = widget.paper.noteCanvasElements.length;
+    if (strings.languageCode == 'zh') {
+      return '$count 元素';
+    }
+    return '$count ${count == 1 ? 'element' : 'elements'}';
   }
 
   int _countNoteTextCharacters(String text) {
@@ -7241,46 +8994,51 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   Widget _preview(BuildContext context) {
+    final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
+    final data = widget.paper.content;
     return Listener(
       onPointerDown: (event) {
         _previewLinkActivated = false;
-        _previewPrimaryPointer = event.buttons & kPrimaryMouseButton != 0;
         _handlePreviewContextMenuPointerDown(context, event);
-      },
-      onPointerUp: (event) {
-        if (!_previewPrimaryPointer) {
-          return;
-        }
-        _previewPrimaryPointer = false;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !_previewLinkActivated) {
-            _enterEditorFromPreview();
-          }
-        });
       },
       child: GestureDetector(
         key: ValueKey('${widget.paper.id}-preview'),
         behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (!_previewLinkActivated) {
+            _enterEditorFromPreview();
+          }
+        },
         child: DecoratedBox(
           decoration: const BoxDecoration(),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 112),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: MarkdownBody(
-                data: widget.paper.content.trim().isEmpty
-                    ? strings.get(PaperTodoStringKeys.noteEmptyPreview)
-                    : widget.paper.content,
-                inlineSyntaxes: paperTodoMarkdownInlineHtmlSyntaxes(),
-                extensionSet: _paperTodoMarkdownExtensionSet,
-                builders: _paperTodoMarkdownBuilders,
-                imageBuilder: _paperTodoMarkdownImageBuilder,
-                onTapLink: (text, href, title) {
-                  _previewLinkActivated = true;
-                  _openMarkdownLink(context, href);
-                },
-                styleSheet: _previewMarkdownStyleSheet(context),
-                selectable: true,
+            child: Scrollbar(
+              key: const ValueKey('note-preview-scrollbar'),
+              controller: _previewScrollController,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                key: const ValueKey('note-preview-scroll'),
+                controller: _previewScrollController,
+                padding: EdgeInsets.zero,
+                child: PaperTodoMarkdownSourcePreview(
+                  key: ValueKey(
+                    '${widget.paper.id}-${mode == MarkdownRenderModes.enhanced ? 'enhanced' : 'basic'}-markdown-preview',
+                  ),
+                  data: data,
+                  textZoom: widget.textZoom,
+                  lineSpacing: widget.lineSpacing,
+                  enhanced: mode == MarkdownRenderModes.enhanced,
+                  onTap: () {
+                    if (!_previewLinkActivated) {
+                      _enterEditorFromPreview();
+                    }
+                  },
+                  onTapLink: (href) {
+                    _previewLinkActivated = true;
+                    _openMarkdownLink(context, href);
+                  },
+                ),
               ),
             ),
           ),
@@ -7299,31 +9057,14 @@ class _NoteEditorState extends State<_NoteEditor> {
     unawaited(widget.onShowPaperContextMenu(context, event.position));
   }
 
-  Widget _paperTodoMarkdownImageBuilder(
-    Uri uri,
-    String? title,
-    String? alt,
-  ) {
-    return SelectableText('![${alt ?? ''}]($uri)');
-  }
-
-  MarkdownStyleSheet _previewMarkdownStyleSheet(BuildContext context) {
-    final theme = Theme.of(context);
-    final styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
-      p: theme.textTheme.bodyMedium
-          ?.apply(
-            fontSizeFactor: widget.textZoom,
-          )
-          .copyWith(height: widget.lineSpacing),
-    );
-    return styleSheet;
-  }
-
   void _enterEditorFromPreview() {
     final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
     if (mode == MarkdownRenderModes.off) {
       return;
     }
+    final previewOffset = _previewScrollController.hasClients
+        ? _previewScrollController.offset
+        : 0.0;
     _enteringEditorFromPreview = true;
     setState(() => _view = _viewEdit);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -7331,8 +9072,28 @@ class _NoteEditorState extends State<_NoteEditor> {
         return;
       }
       _contentFocusNode.requestFocus();
-      _enteringEditorFromPreview = false;
+      // PaperTodo keeps one text view for preview and editing. Restore the
+      // matching viewport after focus has had a chance to reveal the caret so
+      // a long note does not jump during the mode switch.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _restoreScrollOffset(_contentScrollController, previewOffset);
+        _enteringEditorFromPreview = false;
+      });
     });
+  }
+
+  void _restoreScrollOffset(ScrollController controller, double offset) {
+    if (!mounted || !controller.hasClients) {
+      return;
+    }
+    final position = controller.position;
+    final target = offset.clamp(0.0, position.maxScrollExtent).toDouble();
+    if ((position.pixels - target).abs() > 0.5) {
+      controller.jumpTo(target);
+    }
   }
 
   void _openMarkdownLink(BuildContext context, String? href) {
@@ -7368,7 +9129,8 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   String _defaultView(String mode, PaperData paper) {
-    if (ScriptCapsuleSpec.tryParse(paper.content) != null) {
+    if (paper.content.isEmpty ||
+        ScriptCapsuleSpec.tryParse(paper.content) != null) {
       return _viewEdit;
     }
     return MarkdownRenderModes.normalize(mode) == MarkdownRenderModes.off
@@ -7376,12 +9138,13 @@ class _NoteEditorState extends State<_NoteEditor> {
         : _viewPreview;
   }
 
-  Widget _canvasPreview() {
+  Widget _canvasPreview({bool embedded = false}) {
     return _NoteCanvasPreview(
       elements: widget.paper.noteCanvasElements,
       selectedElementId: _selectedCanvasElementId,
       geometryGesturesEnabled: !widget.paper.isPinnedToDesktop,
       enableToolTips: widget.enableToolTips,
+      embedded: embedded,
       textZoom: widget.textZoom,
       onChanged: widget.onChanged,
       onGeometryChanging: _refreshCanvasGeometry,
@@ -7400,24 +9163,90 @@ class _NoteEditorState extends State<_NoteEditor> {
     setState(() {});
   }
 
-  Widget _addCanvasButton({bool compact = false}) {
+  Widget _addCanvasButton() {
     final onPressed = widget.paper.isPinnedToDesktop
         ? null
         : () => _addCanvasElement(NoteCanvasElementTypes.code);
-    if (compact) {
-      return IconButton(
-        tooltip: _tooltipLabel(
-          widget.enableToolTips,
-          strings.get(PaperTodoStringKeys.actionAddCanvasBlock),
+    final enabled = onPressed != null;
+    final paperColors = PaperTodoThemeColors.of(context);
+    return _conditionalTooltip(
+      enabled: widget.enableToolTips,
+      message: strings.get(PaperTodoStringKeys.actionAddCanvasBlock),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        child: Opacity(
+          opacity: enabled ? (_canvasAddButtonPressed ? 0.7 : 1) : 0.72,
+          child: MouseRegion(
+            cursor:
+                enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+            onEnter: enabled
+                ? (_) => setState(() => _canvasAddButtonHovered = true)
+                : null,
+            onExit: enabled
+                ? (_) {
+                    setState(() {
+                      _canvasAddButtonHovered = false;
+                      _canvasAddButtonPressed = false;
+                    });
+                  }
+                : null,
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: enabled
+                  ? (_) => setState(() => _canvasAddButtonPressed = true)
+                  : null,
+              onPointerUp: enabled
+                  ? (_) => setState(() => _canvasAddButtonPressed = false)
+                  : null,
+              onPointerCancel: enabled
+                  ? (_) => setState(() => _canvasAddButtonPressed = false)
+                  : null,
+              child: DecoratedBox(
+                key: const ValueKey('note-add-canvas-block-surface'),
+                decoration: BoxDecoration(
+                  color: _canvasAddButtonHovered
+                      ? paperColors.hover
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: IconButton(
+                  key: const ValueKey('note-add-canvas-block'),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 24,
+                  ),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(28, 24),
+                    maximumSize: const Size(28, 24),
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: _canvasAddButtonHovered
+                        ? paperColors.text
+                        : paperColors.weakText,
+                    overlayColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: onPressed,
+                  icon: Text(
+                    '{}',
+                    style: TextStyle(
+                      color: _canvasAddButtonHovered
+                          ? paperColors.text
+                          : paperColors.weakText,
+                      fontFamily: 'Segoe UI Symbol',
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
-        onPressed: onPressed,
-        icon: const Icon(Icons.code, size: 17),
-      );
-    }
-    return TextButton.icon(
-      onPressed: onPressed,
-      icon: const Icon(Icons.code, size: 17),
-      label: Text(strings.get(PaperTodoStringKeys.actionAddCanvasBlock)),
+      ),
     );
   }
 
@@ -7668,6 +9497,7 @@ class _NoteCanvasPreview extends StatelessWidget {
     required this.selectedElementId,
     required this.geometryGesturesEnabled,
     required this.enableToolTips,
+    required this.embedded,
     required this.textZoom,
     required this.onChanged,
     required this.onGeometryChanging,
@@ -7682,6 +9512,7 @@ class _NoteCanvasPreview extends StatelessWidget {
   final String? selectedElementId;
   final bool geometryGesturesEnabled;
   final bool enableToolTips;
+  final bool embedded;
   final double textZoom;
   final Future<void> Function() onChanged;
   final VoidCallback onGeometryChanging;
@@ -7702,67 +9533,77 @@ class _NoteCanvasPreview extends StatelessWidget {
     final contentWidth = _contentWidth(sortedElements);
     final contentHeight = _contentHeight(sortedElements);
     final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
+    return LayoutBuilder(
       key: const ValueKey('note-canvas-preview'),
-      decoration: BoxDecoration(
-        border: Border.all(color: colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final maxWidth = constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : contentWidth;
-          final scale = (maxWidth / contentWidth).clamp(0.2, 1.0).toDouble();
-          final visualHeight =
-              (contentHeight * scale).clamp(120, 640).toDouble();
-          final canvasWidth = maxWidth / scale;
-          final canvasHeight = visualHeight / scale;
-          return SizedBox(
-            height: visualHeight,
-            child: Stack(
-              clipBehavior: Clip.hardEdge,
-              children: [
+      builder: (context, constraints) {
+        final maxWidth =
+            constraints.maxWidth.isFinite ? constraints.maxWidth : contentWidth;
+        final boundedEmbeddedHeight = embedded && constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : null;
+        final scale = embedded
+            ? 1.0
+            : (maxWidth / contentWidth).clamp(0.2, 1.0).toDouble();
+        final origin = embedded ? const Offset(2, 1) : Offset.zero;
+        final visualHeight = boundedEmbeddedHeight ??
+            (contentHeight * scale).clamp(120, 640).toDouble();
+        final canvasWidth = math.max(0, maxWidth - origin.dx) / scale;
+        final canvasHeight = math.max(0, visualHeight - origin.dy) / scale;
+        final canvas = SizedBox(
+          height: visualHeight,
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              if (!embedded)
                 Positioned.fill(
                   child: ColoredBox(
                     color: colorScheme.surfaceContainerLowest,
                   ),
                 ),
-                for (var index = 0; index < sortedElements.length; index++)
-                  Positioned(
-                    left: sortedElements[index].x * scale,
-                    top: sortedElements[index].y * scale,
-                    width: sortedElements[index].width * scale,
-                    height: sortedElements[index].height * scale,
-                    child: _NoteCanvasElementPreview(
-                      key: ValueKey(
-                        'note-canvas-element-${sortedElements[index].id}',
-                      ),
-                      element: sortedElements[index],
-                      layerRank: index + 1,
-                      layerCount: sortedElements.length,
-                      isSelected: sortedElements[index].id == selectedElementId,
-                      geometryGesturesEnabled: geometryGesturesEnabled,
-                      enableToolTips: enableToolTips,
-                      strings: strings,
-                      scale: scale,
-                      canvasWidth: canvasWidth,
-                      canvasHeight: canvasHeight,
-                      textZoom: textZoom,
-                      onChanged: onChanged,
-                      onGeometryChanging: onGeometryChanging,
-                      onSelect: onSelect,
-                      onEdit: onEdit,
-                      onDuplicate: onDuplicate,
-                      onLayerAction: onLayerAction,
-                      onDelete: onDelete,
+              for (var index = 0; index < sortedElements.length; index++)
+                Positioned(
+                  left: origin.dx + (sortedElements[index].x * scale),
+                  top: origin.dy + (sortedElements[index].y * scale),
+                  width: sortedElements[index].width * scale,
+                  height: sortedElements[index].height * scale,
+                  child: _NoteCanvasElementPreview(
+                    key: ValueKey(
+                      'note-canvas-element-${sortedElements[index].id}',
                     ),
+                    element: sortedElements[index],
+                    layerRank: index + 1,
+                    layerCount: sortedElements.length,
+                    isSelected: sortedElements[index].id == selectedElementId,
+                    geometryGesturesEnabled: geometryGesturesEnabled,
+                    enableToolTips: enableToolTips,
+                    strings: strings,
+                    scale: scale,
+                    canvasWidth: canvasWidth,
+                    canvasHeight: canvasHeight,
+                    textZoom: textZoom,
+                    onChanged: onChanged,
+                    onGeometryChanging: onGeometryChanging,
+                    onSelect: onSelect,
+                    onEdit: onEdit,
+                    onDuplicate: onDuplicate,
+                    onLayerAction: onLayerAction,
+                    onDelete: onDelete,
                   ),
-              ],
-            ),
-          );
-        },
-      ),
+                ),
+            ],
+          ),
+        );
+        if (embedded) {
+          return canvas;
+        }
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(color: colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: canvas,
+        );
+      },
     );
   }
 
@@ -7871,431 +9712,260 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final element = widget.element;
     final isCode = element.type == NoteCanvasElementTypes.code;
-    final style = Theme.of(context)
-        .textTheme
-        .bodySmall
-        ?.apply(fontSizeFactor: widget.textZoom)
-        .copyWith(fontFamily: isCode ? 'monospace' : null);
-    final typeLabel = _noteCanvasElementTypeLabel(widget.strings, element.type);
+    final baseStyle = Theme.of(context).textTheme.bodyMedium;
+    final style = baseStyle == null
+        ? null
+        : (isCode
+                ? baseStyle.copyWith(
+                    fontFamily: _paperTodoCodeFontFamily,
+                    fontFamilyFallback: _paperTodoCodeFontFamilyFallback,
+                  )
+                : PaperTodoTypography.of(context).contentStyle(baseStyle))
+            .copyWith(fontSize: (isCode ? 13 : 14) * widget.scale);
+    final typeLabel = _noteCanvasElementTypeLabel(element.type);
     final layerLabel = _noteCanvasLayerLabel(
-      widget.strings,
       widget.layerRank,
       widget.layerCount,
     );
-    final showInlineActions = element.width * widget.scale >= 168;
-    final compactContent = element.width * widget.scale < 120 ||
-        element.height * widget.scale < 72;
-    final elementPadding =
-        compactContent ? 4.0 : (8 * widget.scale).clamp(4, 8).toDouble();
+    final isTopLayer =
+        widget.layerCount > 1 && widget.layerRank == widget.layerCount;
+    final emphasized = widget.isSelected || isTopLayer;
+    final radius = (12 * widget.scale).clamp(6, 12).toDouble();
+    final headerHeight = (22 * widget.scale).clamp(18, 22).toDouble();
+    final headerLeftPadding = (7 * widget.scale).clamp(4, 7).toDouble();
+    final headerRightPadding = (6 * widget.scale).clamp(4, 6).toDouble();
+    final layerBadgeMaxWidth = math.min(
+      72.0,
+      math.max(
+        1.0,
+        (element.width * widget.scale) - headerLeftPadding - headerRightPadding,
+      ),
+    );
+    final shadowAxis = 2 / math.sqrt(2);
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _handleCanvasContextMenuPointerDown,
       child: DecoratedBox(
+        key: ValueKey('note-canvas-element-chrome-${element.id}'),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerHigh,
           border: Border.all(
-            color: widget.isSelected
+            color: emphasized
                 ? colorScheme.primary
-                : colorScheme.outlineVariant,
-            width: widget.isSelected ? 2 : 1,
+                : paperColors.tint.withValues(
+                    alpha: isDark ? 110 / 255 : 96 / 255,
+                  ),
+            width: emphasized ? 2 : 1,
           ),
-          borderRadius: BorderRadius.circular(6),
-          boxShadow: widget.isSelected
+          borderRadius: BorderRadius.circular(radius),
+          // WPF clips the resting DropShadowEffect to the element bounds on
+          // PaperTodo's canvas. Flutter's BoxShadow uses a different blur
+          // model and otherwise paints a large gray halo outside the block.
+          boxShadow: emphasized
               ? [
                   BoxShadow(
-                    color: colorScheme.primary.withValues(alpha: 0.18),
-                    blurRadius: 10,
-                    spreadRadius: 1,
+                    color: colorScheme.shadow.withValues(
+                      alpha: isDark ? 0.22 : 0.13,
+                    ),
+                    blurRadius: 6,
+                    offset: Offset(shadowAxis, shadowAxis),
                   ),
                 ]
-              : null,
+              : const [],
         ),
-        child: Stack(
-          clipBehavior: Clip.hardEdge,
-          children: [
-            Padding(
-              padding: EdgeInsets.all(elementPadding),
-              child: Column(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(math.max(0, radius - 1)),
+          child: Stack(
+            children: [
+              Column(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _conditionalTooltip(
-                          enabled: widget.enableToolTips,
-                          message: widget.strings
-                              .get(PaperTodoStringKeys.canvasDragBlock),
-                          child: MouseRegion(
-                            cursor: widget.geometryGesturesEnabled
-                                ? SystemMouseCursors.move
-                                : SystemMouseCursors.basic,
-                            child: Listener(
-                              key: ValueKey(
-                                'note-canvas-drag-handle-${element.id}',
-                              ),
-                              behavior: HitTestBehavior.opaque,
-                              onPointerDown: (event) => _beginGeometryGesture(
-                                event,
-                                _CanvasGeometryDragMode.move,
-                              ),
-                              onPointerMove: _updateGeometryGesture,
-                              onPointerUp: _endGeometryGesture,
-                              onPointerCancel: _endGeometryGesture,
-                              child: compactContent
-                                  ? Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Icon(
-                                        Icons.open_with,
-                                        size: (16 * widget.scale)
-                                            .clamp(12, 16)
-                                            .toDouble(),
+                  _conditionalTooltip(
+                    enabled: widget.enableToolTips,
+                    message:
+                        widget.strings.get(PaperTodoStringKeys.canvasDragBlock),
+                    child: MouseRegion(
+                      cursor: widget.geometryGesturesEnabled
+                          ? SystemMouseCursors.move
+                          : SystemMouseCursors.basic,
+                      child: Listener(
+                        key: ValueKey(
+                          'note-canvas-drag-handle-${element.id}',
+                        ),
+                        behavior: HitTestBehavior.opaque,
+                        onPointerDown: (event) => _beginGeometryGesture(
+                          event,
+                          _CanvasGeometryDragMode.move,
+                        ),
+                        onPointerMove: _updateGeometryGesture,
+                        onPointerUp: _endGeometryGesture,
+                        onPointerCancel: _endGeometryGesture,
+                        child: Container(
+                          height: headerHeight,
+                          padding: EdgeInsets.fromLTRB(
+                            headerLeftPadding,
+                            2,
+                            headerRightPadding,
+                            2,
+                          ),
+                          color: paperColors.tint.withValues(
+                            alpha: emphasized
+                                ? (isDark ? 96 / 255 : 76 / 255)
+                                : (isDark ? 70 / 255 : 50 / 255),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  typeLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(
                                         color: colorScheme.onSurfaceVariant,
+                                        fontSize: (10 * widget.scale)
+                                            .clamp(8, 10)
+                                            .toDouble(),
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                    )
-                                  : Wrap(
-                                      spacing: (6 * widget.scale)
-                                          .clamp(3, 6)
-                                          .toDouble(),
-                                      runSpacing: (4 * widget.scale)
-                                          .clamp(2, 4)
-                                          .toDouble(),
-                                      children: [
-                                        _NoteCanvasElementBadge(
-                                          label: typeLabel,
-                                          scale: widget.scale,
-                                          color: colorScheme.primaryContainer,
-                                          foregroundColor:
-                                              colorScheme.onPrimaryContainer,
-                                        ),
-                                        _NoteCanvasElementBadge(
-                                          label: layerLabel,
-                                          scale: widget.scale,
-                                          color: colorScheme.secondaryContainer,
-                                          foregroundColor:
-                                              colorScheme.onSecondaryContainer,
-                                        ),
-                                      ],
-                                    ),
-                            ),
+                                ),
+                              ),
+                              Container(
+                                key: ValueKey(
+                                  'note-canvas-layer-badge-${element.id}',
+                                ),
+                                constraints: BoxConstraints(
+                                  minWidth: math.min(32, layerBadgeMaxWidth),
+                                  maxWidth: layerBadgeMaxWidth,
+                                ),
+                                padding: EdgeInsets.fromLTRB(
+                                  (5 * widget.scale).clamp(3, 5).toDouble(),
+                                  0,
+                                  (5 * widget.scale).clamp(3, 5).toDouble(),
+                                  1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: paperColors.tint.withValues(
+                                    alpha: emphasized
+                                        ? (isDark ? 118 / 255 : 96 / 255)
+                                        : (isDark ? 46 / 255 : 34 / 255),
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    (4 * widget.scale).clamp(3, 4).toDouble(),
+                                  ),
+                                ),
+                                child: Text(
+                                  layerLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.clip,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(
+                                        color: isTopLayer
+                                            ? colorScheme.onSurface
+                                            : colorScheme.onSurfaceVariant,
+                                        fontSize: (9.5 * widget.scale)
+                                            .clamp(8, 9.5)
+                                            .toDouble(),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      if (showInlineActions) ...[
-                        SizedBox.square(
-                          dimension:
-                              (28 * widget.scale).clamp(24, 28).toDouble(),
-                          child: IconButton(
-                            tooltip: _tooltipLabel(
-                              widget.enableToolTips,
-                              widget.strings
-                                  .get(PaperTodoStringKeys.canvasEditGeometry),
-                            ),
-                            style: IconButton.styleFrom(
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              minimumSize: Size.zero,
-                            ),
-                            onPressed: widget.geometryGesturesEnabled
-                                ? () {
-                                    widget.onSelect(element);
-                                    unawaited(widget.onEdit(element));
-                                  }
-                                : null,
-                            iconSize:
-                                (18 * widget.scale).clamp(16, 18).toDouble(),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.tune_outlined),
-                          ),
-                        ),
-                        SizedBox.square(
-                          dimension:
-                              (28 * widget.scale).clamp(24, 28).toDouble(),
-                          child: IconButton(
-                            tooltip: _tooltipLabel(
-                              widget.enableToolTips,
-                              widget.strings.get(
-                                PaperTodoStringKeys.canvasDuplicateBlock,
-                              ),
-                            ),
-                            style: IconButton.styleFrom(
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              minimumSize: Size.zero,
-                            ),
-                            onPressed: widget.geometryGesturesEnabled
-                                ? () {
-                                    widget.onSelect(element);
-                                    widget.onDuplicate(element);
-                                  }
-                                : null,
-                            iconSize:
-                                (18 * widget.scale).clamp(16, 18).toDouble(),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.content_copy_outlined),
-                          ),
-                        ),
-                        SizedBox.square(
-                          dimension:
-                              (28 * widget.scale).clamp(24, 28).toDouble(),
-                          child: PopupMenuButton<_CanvasLayerAction>(
-                            key: ValueKey(
-                              'note-canvas-layer-actions-${element.id}',
-                            ),
-                            enabled: widget.geometryGesturesEnabled,
-                            tooltip: _tooltipLabel(
-                              widget.enableToolTips,
-                              widget.strings
-                                  .get(PaperTodoStringKeys.canvasLayerActions),
-                            ),
-                            child: Center(
-                              child: Icon(
-                                Icons.layers_outlined,
-                                size: (18 * widget.scale)
-                                    .clamp(16, 18)
-                                    .toDouble(),
-                              ),
-                            ),
-                            onSelected: (action) {
-                              widget.onSelect(element);
-                              widget.onLayerAction(element, action);
-                            },
-                            itemBuilder: (context) => [
-                              PopupMenuItem(
-                                value: _CanvasLayerAction.bringToFront,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasBringToFront,
-                                  ),
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: _CanvasLayerAction.bringForward,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasBringForward,
-                                  ),
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: _CanvasLayerAction.sendBackward,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasSendBackward,
-                                  ),
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: _CanvasLayerAction.sendToBack,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasSendToBack,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox.square(
-                          dimension:
-                              (28 * widget.scale).clamp(24, 28).toDouble(),
-                          child: IconButton(
-                            tooltip: _tooltipLabel(
-                              widget.enableToolTips,
-                              widget.strings
-                                  .get(PaperTodoStringKeys.canvasDeleteBlock),
-                            ),
-                            style: IconButton.styleFrom(
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              minimumSize: Size.zero,
-                            ),
-                            onPressed: widget.geometryGesturesEnabled
-                                ? () {
-                                    widget.onSelect(element);
-                                    widget.onDelete(element);
-                                  }
-                                : null,
-                            iconSize:
-                                (18 * widget.scale).clamp(16, 18).toDouble(),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.close_outlined),
-                          ),
-                        ),
-                      ] else
-                        SizedBox.square(
-                          dimension:
-                              (28 * widget.scale).clamp(24, 28).toDouble(),
-                          child: PopupMenuButton<String>(
-                            key: ValueKey(
-                              'note-canvas-compact-actions-${element.id}',
-                            ),
-                            enabled: widget.geometryGesturesEnabled,
-                            tooltip: _tooltipLabel(
-                              widget.enableToolTips,
-                              widget.strings
-                                  .get(PaperTodoStringKeys.canvasBlockActions),
-                            ),
-                            child: Center(
-                              child: Icon(
-                                Icons.more_vert,
-                                size: (18 * widget.scale)
-                                    .clamp(16, 18)
-                                    .toDouble(),
-                              ),
-                            ),
-                            onSelected: _handleCompactCanvasAction,
-                            itemBuilder: (context) => [
-                              PopupMenuItem(
-                                value: _compactCanvasActionEdit,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasEditGeometry,
-                                  ),
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: _compactCanvasActionDuplicate,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasDuplicateBlock,
-                                  ),
-                                ),
-                              ),
-                              const PopupMenuDivider(),
-                              PopupMenuItem(
-                                value: _compactCanvasActionBringToFront,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasBringToFront,
-                                  ),
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: _compactCanvasActionBringForward,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasBringForward,
-                                  ),
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: _compactCanvasActionSendBackward,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasSendBackward,
-                                  ),
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: _compactCanvasActionSendToBack,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.canvasSendToBack,
-                                  ),
-                                ),
-                              ),
-                              const PopupMenuDivider(),
-                              PopupMenuItem(
-                                value: _compactCanvasActionDelete,
-                                child: Text(
-                                  widget.strings.get(
-                                    PaperTodoStringKeys.actionDelete,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
                   Expanded(
-                    child: compactContent
-                        ? GestureDetector(
-                            behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        (9 * widget.scale).clamp(4, 9).toDouble(),
+                        (7 * widget.scale).clamp(4, 7).toDouble(),
+                        (9 * widget.scale).clamp(4, 9).toDouble(),
+                        (7 * widget.scale).clamp(4, 7).toDouble(),
+                      ),
+                      child: AbsorbPointer(
+                        absorbing: !widget.geometryGesturesEnabled,
+                        child: Focus(
+                          onKeyEvent: _handleCanvasTextKeyEvent,
+                          child: TextFormField(
+                            key: ValueKey(
+                              'note-canvas-element-text-${element.id}',
+                            ),
+                            controller: _textController,
+                            readOnly: !widget.geometryGesturesEnabled,
+                            enableInteractiveSelection:
+                                widget.geometryGesturesEnabled,
+                            expands: true,
+                            maxLines: null,
+                            minLines: null,
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              filled: false,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            style: style?.copyWith(
+                              color: colorScheme.onSurface,
+                            ),
                             onTap: () => widget.onSelect(element),
-                            child: ClipRect(
-                              child: Align(
-                                alignment: Alignment.topLeft,
-                                child: Text(
-                                  element.text,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.fade,
-                                  softWrap: false,
-                                  style: style?.copyWith(
-                                    color: colorScheme.onSurface,
-                                    height: 1.1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          )
-                        : Focus(
-                            onKeyEvent: _handleCanvasTextKeyEvent,
-                            child: TextFormField(
-                              key: ValueKey(
-                                'note-canvas-element-text-${element.id}',
-                              ),
-                              controller: _textController,
-                              readOnly: !widget.geometryGesturesEnabled,
-                              enableInteractiveSelection:
-                                  widget.geometryGesturesEnabled,
-                              expands: true,
-                              maxLines: null,
-                              minLines: null,
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                isDense: true,
-                              ),
-                              style: style?.copyWith(
-                                color: colorScheme.onSurface,
-                                height: 1.35,
-                              ),
-                              onTap: () => widget.onSelect(element),
-                              onChanged: _commitCanvasText,
-                            ),
+                            onChanged: _commitCanvasText,
                           ),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
-            ),
-            Positioned(
-              right: 3,
-              bottom: 3,
-              child: _conditionalTooltip(
-                enabled: widget.enableToolTips,
-                message:
-                    widget.strings.get(PaperTodoStringKeys.canvasResizeBlock),
-                child: MouseRegion(
-                  cursor: widget.geometryGesturesEnabled
-                      ? SystemMouseCursors.resizeDownRight
-                      : SystemMouseCursors.basic,
-                  child: Listener(
-                    key: ValueKey('note-canvas-resize-handle-${element.id}'),
-                    behavior: HitTestBehavior.opaque,
-                    onPointerDown: (event) => _beginGeometryGesture(
-                      event,
-                      _CanvasGeometryDragMode.resize,
-                    ),
-                    onPointerMove: _updateGeometryGesture,
-                    onPointerUp: _endGeometryGesture,
-                    onPointerCancel: _endGeometryGesture,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withValues(alpha: 0.32),
-                        borderRadius: BorderRadius.circular(4),
+              Positioned(
+                right: 2,
+                bottom: 2,
+                child: _conditionalTooltip(
+                  enabled: widget.enableToolTips,
+                  message:
+                      widget.strings.get(PaperTodoStringKeys.canvasResizeBlock),
+                  child: MouseRegion(
+                    cursor: widget.geometryGesturesEnabled
+                        ? SystemMouseCursors.resizeDownRight
+                        : SystemMouseCursors.basic,
+                    child: Listener(
+                      key: ValueKey('note-canvas-resize-handle-${element.id}'),
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: (event) => _beginGeometryGesture(
+                        event,
+                        _CanvasGeometryDragMode.resize,
                       ),
-                      child: SizedBox.square(
-                        dimension: (16 * widget.scale).clamp(14, 18).toDouble(),
-                        child: Icon(
-                          Icons.open_in_full,
-                          size: (11 * widget.scale).clamp(9, 11).toDouble(),
-                          color: colorScheme.onPrimaryContainer,
+                      onPointerMove: _updateGeometryGesture,
+                      onPointerUp: _endGeometryGesture,
+                      onPointerCancel: _endGeometryGesture,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: paperColors.tint.withValues(
+                            alpha: isDark ? 72 / 255 : 58 / 255,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: SizedBox.square(
+                          dimension:
+                              (15 * widget.scale).clamp(12, 15).toDouble(),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -8336,13 +10006,15 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
     if (overlay is! RenderBox) {
       return;
     }
+    final entries = _canvasElementContextMenuItems();
     final selected = await showMenu<String>(
       context: context,
       position: RelativeRect.fromRect(
-        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
         Offset.zero & overlay.size,
       ),
-      items: _canvasElementContextMenuItems(),
+      items: entries,
+      constraints: _paperTodoStandaloneMenuConstraints(context, entries),
     );
     if (!mounted || selected == null) {
       return;
@@ -8354,16 +10026,13 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
     return [
       PopupMenuItem<String>(
         enabled: false,
-        child: Text(
-          '${_noteCanvasElementTypeLabel(widget.strings, widget.element.type)}'
-          ' · ${_noteCanvasLayerLabel(
-            widget.strings,
-            widget.layerRank,
-            widget.layerCount,
-          )}',
+        height: 17,
+        padding: _paperTodoStandalonePopupMenuItemPadding,
+        child: _PaperTodoPopupMenuHeaderLabel(
+          '${_noteCanvasElementTypeLabel(widget.element.type)}'
+          ' · 层 ${widget.layerRank}',
         ),
       ),
-      const PopupMenuDivider(),
       _canvasElementContextMenuItem(
         value: _compactCanvasActionBringForward,
         label: widget.strings.get(PaperTodoStringKeys.canvasBringForward),
@@ -8384,7 +10053,7 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
         value: _compactCanvasActionDuplicate,
         label: widget.strings.get(PaperTodoStringKeys.canvasDuplicateBlock),
       ),
-      const PopupMenuDivider(),
+      const PopupMenuDivider(height: 7),
       _canvasElementContextMenuItem(
         value: _compactCanvasActionDelete,
         label: widget.strings.get(PaperTodoStringKeys.actionDelete),
@@ -8396,9 +10065,10 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
     required String value,
     required String label,
   }) {
-    return PopupMenuItem<String>(
+    return _PaperTodoPopupMenuItem<String>(
       value: value,
-      height: _paperTodoPopupMenuHeight(),
+      height: 21,
+      padding: _paperTodoStandalonePopupMenuItemPadding,
       child: Text(label),
     );
   }
@@ -8516,59 +10186,16 @@ enum _CanvasGeometryDragMode {
   resize,
 }
 
-class _NoteCanvasElementBadge extends StatelessWidget {
-  const _NoteCanvasElementBadge({
-    required this.label,
-    required this.scale,
-    required this.color,
-    required this.foregroundColor,
-  });
-
-  final String label;
-  final double scale;
-  final Color color;
-  final Color foregroundColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: (6 * scale).clamp(4, 6).toDouble(),
-          vertical: (3 * scale).clamp(2, 3).toDouble(),
-        ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: foregroundColor,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-              ),
-        ),
-      ),
-    );
-  }
-}
-
-String _noteCanvasElementTypeLabel(PaperTodoStrings strings, String type) {
-  return strings.get(PaperTodoStringKeys.canvasBlockTypeCode);
-}
+String _noteCanvasElementTypeLabel(String type) => 'CODE';
 
 String _noteCanvasLayerLabel(
-  PaperTodoStrings strings,
   int layerRank,
   int layerCount,
 ) {
   if (layerCount > 1 && layerRank == layerCount) {
-    return strings.format(PaperTodoStringKeys.canvasTopLayer, [layerRank]);
+    return '顶层 $layerRank';
   }
-  return strings.format(PaperTodoStringKeys.canvasLayer, [layerRank]);
+  return '层 $layerRank';
 }
 
 enum _CanvasLayerAction {
@@ -8641,10 +10268,11 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
   @override
   Widget build(BuildContext context) {
     final strings = PaperTodoStringsScope.of(context);
-    return AlertDialog(
-      title: Text(strings.get(PaperTodoStringKeys.canvasBlockGeometry)),
+    return _PaperDialog(
+      width: 452,
+      icon: Icons.aspect_ratio_outlined,
+      title: strings.get(PaperTodoStringKeys.canvasBlockGeometry),
       content: SizedBox(
-        width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -8765,6 +10393,150 @@ class _CanvasGeometryDialogState extends State<_CanvasGeometryDialog> {
   }
 }
 
+class _PaperTodoTodoCheckBox extends StatefulWidget {
+  const _PaperTodoTodoCheckBox({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  State<_PaperTodoTodoCheckBox> createState() => _PaperTodoTodoCheckBoxState();
+}
+
+class _PaperTodoTodoCheckBoxState extends State<_PaperTodoTodoCheckBox> {
+  bool _hovered = false;
+
+  @override
+  void didUpdateWidget(covariant _PaperTodoTodoCheckBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onChanged == null && _hovered) {
+      _hovered = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onChanged != null;
+    final colors = PaperTodoThemeColors.of(context);
+    return Semantics(
+      checked: widget.value,
+      enabled: enabled,
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: enabled ? (_) => setState(() => _hovered = false) : null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: enabled ? () => widget.onChanged!(!widget.value) : null,
+          child: SizedBox.square(
+            dimension: 16,
+            child: CustomPaint(
+              painter: _PaperTodoTodoCheckBoxPainter(
+                value: widget.value,
+                hovered: _hovered,
+                colors: colors,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaperTodoTodoCheckBoxPainter extends CustomPainter {
+  const _PaperTodoTodoCheckBoxPainter({
+    required this.value,
+    required this.hovered,
+    required this.colors,
+  });
+
+  final bool value;
+  final bool hovered;
+  final PaperTodoThemeColors colors;
+
+  static const double borderWidth = 1.5;
+  static const double radius = 4;
+  static const double checkStrokeWidth = 2;
+
+  double get effectiveBorderRadius => radius + borderWidth / 2;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scaleX = size.width / 16;
+    final scaleY = size.height / 16;
+    if (value) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(radius * math.min(scaleX, scaleY)),
+        ),
+        Paint()
+          ..color = hovered ? colors.checkBoxActiveHover : colors.active
+          ..style = PaintingStyle.fill,
+      );
+      final check = Path()
+        ..moveTo(3 * scaleX, 7.5 * scaleY)
+        ..lineTo(6.5 * scaleX, 11 * scaleY)
+        ..lineTo(13 * scaleX, 4 * scaleY);
+      canvas.drawPath(
+        check,
+        Paint()
+          ..color = colors.paper
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = checkStrokeWidth * math.min(scaleX, scaleY)
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+      return;
+    }
+
+    final inset = borderWidth / 2;
+    final borderRect = Rect.fromLTWH(
+      inset,
+      inset,
+      math.max(0.0, size.width - borderWidth),
+      math.max(0.0, size.height - borderWidth),
+    );
+    // WPF applies CornerRadius=4 to the outer bordered element. Flutter draws
+    // a centered stroke on the inset path, so add the half-stroke inset back
+    // to preserve the same outer radius instead of squaring the corners.
+    final borderRadius = radius + inset;
+    if (hovered) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          borderRect,
+          Radius.circular(borderRadius),
+        ),
+        Paint()
+          ..color = colors.checkBoxUncheckedHover
+          ..style = PaintingStyle.fill,
+      );
+    }
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        borderRect,
+        Radius.circular(borderRadius),
+      ),
+      Paint()
+        ..color = hovered ? colors.checkBoxHoverBorder : colors.checkBox
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = borderWidth,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PaperTodoTodoCheckBoxPainter oldDelegate) {
+    return oldDelegate.value != value ||
+        oldDelegate.hovered != hovered ||
+        oldDelegate.colors != colors;
+  }
+}
+
 class _TodoEditor extends StatefulWidget {
   const _TodoEditor({
     required this.paper,
@@ -8775,6 +10547,7 @@ class _TodoEditor extends StatefulWidget {
     required this.runLinkedScriptCapsulesOnClick,
     required this.maxTitleLength,
     required this.enableToolTips,
+    required this.enableAnimations,
     required this.visualSize,
     required this.lineSpacing,
     required this.textZoom,
@@ -8782,6 +10555,7 @@ class _TodoEditor extends StatefulWidget {
     required this.dueYearDisplayMode,
     required this.defaultReminderIntervalValue,
     required this.defaultReminderIntervalUnit,
+    required this.nativeDialogFontFamily,
     required this.onOpenLinkedNote,
     required this.onRunScriptCapsule,
     required this.onChanged,
@@ -8799,6 +10573,7 @@ class _TodoEditor extends StatefulWidget {
   final bool runLinkedScriptCapsulesOnClick;
   final int maxTitleLength;
   final bool enableToolTips;
+  final bool enableAnimations;
   final String visualSize;
   final double lineSpacing;
   final double textZoom;
@@ -8806,6 +10581,7 @@ class _TodoEditor extends StatefulWidget {
   final String dueYearDisplayMode;
   final int defaultReminderIntervalValue;
   final String defaultReminderIntervalUnit;
+  final String nativeDialogFontFamily;
   final Future<void> Function(PaperData paper, PaperData anchorPaper)
       onOpenLinkedNote;
   final Future<void> Function(ScriptCapsuleSpec spec) onRunScriptCapsule;
@@ -8820,6 +10596,206 @@ class _TodoEditor extends StatefulWidget {
 }
 
 enum _TodoFocusPlacement { start, end }
+
+class _DepartingTodoRow {
+  const _DepartingTodoRow({
+    required this.item,
+    required this.originalIndex,
+    required this.groupToken,
+    required this.delay,
+    required this.duration,
+    required this.slideDistance,
+    required this.completesGroup,
+  });
+
+  final PaperItem item;
+  final int originalIndex;
+  final Object groupToken;
+  final Duration delay;
+  final Duration duration;
+  final double slideDistance;
+  final bool completesGroup;
+}
+
+class _EnteringTodoRow {
+  const _EnteringTodoRow({
+    required this.itemId,
+    required this.delay,
+    required this.opacityDuration,
+    required this.slideDuration,
+    required this.slideDistance,
+    required this.slideCurve,
+  });
+
+  final String itemId;
+  final Duration delay;
+  final Duration opacityDuration;
+  final Duration slideDuration;
+  final double slideDistance;
+  final Curve slideCurve;
+}
+
+class _TodoEntranceAnimation extends StatefulWidget {
+  const _TodoEntranceAnimation({
+    required this.delay,
+    required this.opacityDuration,
+    required this.slideDuration,
+    required this.slideDistance,
+    required this.slideCurve,
+    required this.onFinished,
+    required this.child,
+    super.key,
+  });
+
+  final Duration delay;
+  final Duration opacityDuration;
+  final Duration slideDuration;
+  final double slideDistance;
+  final Curve slideCurve;
+  final VoidCallback onFinished;
+  final Widget child;
+
+  @override
+  State<_TodoEntranceAnimation> createState() => _TodoEntranceAnimationState();
+}
+
+class _TodoEntranceAnimationState extends State<_TodoEntranceAnimation>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  Timer? _delayTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.slideDuration,
+    );
+    _controller.addStatusListener(_handleAnimationStatus);
+    if (widget.delay == Duration.zero) {
+      _controller.forward();
+    } else {
+      _delayTimer = Timer(widget.delay, _controller.forward);
+    }
+  }
+
+  @override
+  void dispose() {
+    _delayTimer?.cancel();
+    _controller.removeStatusListener(_handleAnimationStatus);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed) {
+      widget.onFinished();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.child,
+      builder: (context, child) {
+        final slideProgress = widget.slideCurve.transform(_controller.value);
+        final opacityScale = widget.slideDuration.inMicroseconds /
+            widget.opacityDuration.inMicroseconds;
+        final opacityProgress = Curves.easeOutQuad.transform(
+          (_controller.value * opacityScale).clamp(0.0, 1.0),
+        );
+        return Opacity(
+          opacity: opacityProgress,
+          child: Transform.translate(
+            offset: Offset(
+              0,
+              -widget.slideDistance * (1 - slideProgress),
+            ),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TodoDepartureAnimation extends StatefulWidget {
+  const _TodoDepartureAnimation({
+    required this.delay,
+    required this.duration,
+    required this.slideDistance,
+    required this.onFinished,
+    required this.child,
+    super.key,
+  });
+
+  final Duration delay;
+  final Duration duration;
+  final double slideDistance;
+  final VoidCallback onFinished;
+  final Widget child;
+
+  @override
+  State<_TodoDepartureAnimation> createState() =>
+      _TodoDepartureAnimationState();
+}
+
+class _TodoDepartureAnimationState extends State<_TodoDepartureAnimation>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  Timer? _delayTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.duration,
+    );
+    _controller.addStatusListener(_handleAnimationStatus);
+    if (widget.delay == Duration.zero) {
+      _controller.forward();
+    } else {
+      _delayTimer = Timer(widget.delay, _controller.forward);
+    }
+  }
+
+  @override
+  void dispose() {
+    _delayTimer?.cancel();
+    _controller.removeStatusListener(_handleAnimationStatus);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed) {
+      widget.onFinished();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _controller,
+        child: widget.child,
+        builder: (context, child) {
+          final fadeProgress = _controller.value;
+          final slideProgress = Curves.easeOutQuad.transform(fadeProgress);
+          return Opacity(
+            opacity: 1 - fadeProgress,
+            child: Transform.translate(
+              offset: Offset(widget.slideDistance * slideProgress, 0),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
 
 class _TodoEditorState extends State<_TodoEditor> {
   static const _maxTodoUndoDepth = 100;
@@ -8836,15 +10812,41 @@ class _TodoEditorState extends State<_TodoEditor> {
   final _redoStack = <List<Map<String, Object?>>>[];
   final _focusedTodoTextUndoStack = <String>[];
   final _focusedTodoTextRedoStack = <String>[];
+  final _enteringTodoRows = <String, _EnteringTodoRow>{};
+  final _departingTodoRows = <_DepartingTodoRow>[];
+  final _multilineTodoItemIds = <String>{};
+  final _queuedTodoLineMeasurements = <String>{};
+  final _todoLineMeasurementTexts = <String, String>{};
+  final _todoLineMeasurementRowWidths = <String, double>{};
   var _textFieldRevision = 0;
   var _suppressTodoBackspaceUntilKeyUp = false;
   var _applyingTodoTextHistory = false;
   var _isDraggingTodoItem = false;
+  var _todoAppendHovered = false;
+  String? _hoveredTodoItemId;
+  String? _hoveredTodoDueItemId;
+  String? _pressedTodoDueItemId;
+  String? _hoveredTodoDragHandleItemId;
+  String? _hoveredTodoLinkedNoteItemId;
+  String? _pressedTodoLinkedNoteItemId;
+  String? _draggingTodoItemId;
+  String? _activeTodoDropTargetId;
+  bool _activeTodoDropAfter = false;
   String? _activeOriginalTodoItemId;
   int? _activeOriginalTodoColumnIndex;
   String? _activeOriginalTodoText;
 
   PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
+
+  @override
+  void didUpdateWidget(covariant _TodoEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.paper.id != widget.paper.id ||
+        (oldWidget.enableAnimations && !widget.enableAnimations)) {
+      _clearEnteringTodoRows();
+      _clearDepartingTodoRows();
+    }
+  }
 
   @override
   void dispose() {
@@ -8862,10 +10864,18 @@ class _TodoEditorState extends State<_TodoEditor> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final visualSpec = _TodoVisualSpec.from(widget.visualSize);
+    final dengXianMetrics =
+        theme.textTheme.bodyMedium?.fontFamily == _dengXianFontFamily;
+    final textMetricScale =
+        dengXianMetrics ? _paperTodoDengXianAdvanceScale : 1.0;
     final itemTextStyle = theme.textTheme.bodyMedium
-        ?.apply(fontSizeFactor: visualSpec.textScale * widget.textZoom)
+        ?.apply(
+          fontSizeFactor:
+              visualSpec.textScale * widget.textZoom * textMetricScale,
+        )
         .copyWith(
-          height: widget.lineSpacing,
+          height: widget.lineSpacing / textMetricScale,
+          letterSpacing: dengXianMetrics ? null : -0.0625,
         );
     return Focus(
       focusNode: _todoFocusNode,
@@ -8881,19 +10891,12 @@ class _TodoEditorState extends State<_TodoEditor> {
                   availableWidth < 600;
           return Column(
             children: [
-              for (var itemIndex = 0;
-                  itemIndex < widget.paper.items.length;
-                  itemIndex++)
-                _todoReorderDropTarget(
-                  item: widget.paper.items[itemIndex],
-                  child: _todoRow(
-                    context: context,
-                    item: widget.paper.items[itemIndex],
-                    itemTextStyle: itemTextStyle,
-                    visualSpec: visualSpec,
-                    compactActions: useCompactItemActions,
-                  ),
-                ),
+              ..._todoRowsForDisplay(
+                context: context,
+                itemTextStyle: itemTextStyle,
+                visualSpec: visualSpec,
+                compactActions: useCompactItemActions,
+              ),
               _todoDeleteDropTarget(context, visualSpec),
             ],
           );
@@ -8902,46 +10905,155 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
   }
 
+  List<Widget> _todoRowsForDisplay({
+    required BuildContext context,
+    required TextStyle? itemTextStyle,
+    required _TodoVisualSpec visualSpec,
+    required bool compactActions,
+  }) {
+    final rows = <Widget>[];
+    for (final item in widget.paper.items) {
+      Widget row = _todoReorderDropTarget(
+        item: item,
+        child: _todoRow(
+          context: context,
+          item: item,
+          itemTextStyle: itemTextStyle,
+          visualSpec: visualSpec,
+          compactActions: compactActions,
+        ),
+      );
+      final entrance = _enteringTodoRows[item.id];
+      if (entrance != null) {
+        row = _TodoEntranceAnimation(
+          key: ValueKey('${widget.paper.id}-${item.id}-entrance'),
+          delay: entrance.delay,
+          opacityDuration: entrance.opacityDuration,
+          slideDuration: entrance.slideDuration,
+          slideDistance: entrance.slideDistance,
+          slideCurve: entrance.slideCurve,
+          onFinished: () => _finishEnteringTodoRow(entrance),
+          child: row,
+        );
+      }
+      rows.add(row);
+    }
+    final departures = [
+      ..._departingTodoRows
+    ]..sort((left, right) => left.originalIndex.compareTo(right.originalIndex));
+    for (final departure in departures) {
+      rows.insert(
+        departure.originalIndex.clamp(0, rows.length).toInt(),
+        _TodoDepartureAnimation(
+          key: ValueKey(
+            '${widget.paper.id}-${departure.item.id}-departure',
+          ),
+          delay: departure.delay,
+          duration: departure.duration,
+          slideDistance: departure.slideDistance,
+          onFinished: () => _finishDepartingTodoGroup(departure),
+          child: _todoRow(
+            context: context,
+            item: departure.item,
+            itemTextStyle: itemTextStyle,
+            visualSpec: visualSpec,
+            compactActions: compactActions,
+          ),
+        ),
+      );
+    }
+    return rows;
+  }
+
+  void _finishDepartingTodoGroup(_DepartingTodoRow departure) {
+    if (!departure.completesGroup || !mounted) {
+      return;
+    }
+    setState(
+      () => _departingTodoRows.removeWhere(
+        (candidate) => identical(candidate.groupToken, departure.groupToken),
+      ),
+    );
+  }
+
+  void _clearDepartingTodoRows() {
+    _departingTodoRows.clear();
+  }
+
+  void _finishEnteringTodoRow(_EnteringTodoRow entrance) {
+    if (!mounted || !identical(_enteringTodoRows[entrance.itemId], entrance)) {
+      return;
+    }
+    setState(() => _enteringTodoRows.remove(entrance.itemId));
+  }
+
+  void _queueTodoEntrance(_EnteringTodoRow entrance) {
+    _enteringTodoRows[entrance.itemId] = entrance;
+  }
+
+  void _clearEnteringTodoRows() {
+    _enteringTodoRows.clear();
+  }
+
   Widget _todoReorderDropTarget({
     required PaperItem item,
     required Widget child,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final mobileBoard = !widget.standaloneSurface &&
-        MediaQuery.sizeOf(context).shortestSide < 600;
+    final paperColors = PaperTodoThemeColors.of(context);
     final dropTargetKey = _todoDropTargetKey(item);
     return DragTarget<PaperItem>(
       onWillAcceptWithDetails: (details) =>
           _canAcceptTodoItemDrop(details.data, item),
-      onAcceptWithDetails: (details) => _reorderTodoItemToTarget(
-        details.data,
-        item,
-        after: _dropAfterTodoTarget(item, details.offset),
-      ),
+      onMove: (details) {
+        if (!_canAcceptTodoItemDrop(details.data, item)) return;
+        final after = _dropAfterTodoTarget(item, details.offset);
+        if (_activeTodoDropTargetId == item.id &&
+            _activeTodoDropAfter == after) {
+          return;
+        }
+        setState(() {
+          _activeTodoDropTargetId = item.id;
+          _activeTodoDropAfter = after;
+        });
+      },
+      onLeave: (_) {
+        if (_activeTodoDropTargetId == item.id) {
+          setState(() => _activeTodoDropTargetId = null);
+        }
+      },
+      onAcceptWithDetails: (details) {
+        final after = _dropAfterTodoTarget(item, details.offset);
+        setState(() => _activeTodoDropTargetId = null);
+        _reorderTodoItemToTarget(details.data, item, after: after);
+      },
       builder: (context, candidateData, rejectedData) {
         final highlighted = candidateData
             .whereType<PaperItem>()
             .any((dragged) => _canAcceptTodoItemDrop(dragged, item));
-        return DecoratedBox(
+        final showAfter =
+            _activeTodoDropTargetId == item.id ? _activeTodoDropAfter : false;
+        return Stack(
           key: dropTargetKey,
-          decoration: BoxDecoration(
-            color: highlighted
-                ? colorScheme.primary.withValues(alpha: 0.10)
-                : Colors.transparent,
-            border: Border.all(
-              color: highlighted
-                  ? colorScheme.primary
-                  : mobileBoard
-                      ? Colors.transparent
-                      : colorScheme.primary.withValues(
-                          alpha: Theme.of(context).brightness == Brightness.dark
-                              ? 18 / 255
-                              : 12 / 255,
-                        ),
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: child,
+          clipBehavior: Clip.none,
+          children: [
+            child,
+            if (highlighted)
+              Positioned(
+                left: 4,
+                right: 4,
+                top: showAfter ? null : -1.5,
+                bottom: showAfter ? -1.5 : null,
+                child: IgnorePointer(
+                  child: Container(
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: paperColors.tint.withValues(alpha: 180 / 255),
+                      borderRadius: BorderRadius.circular(1.5),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         );
       },
     );
@@ -8970,7 +11082,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     BuildContext context,
     _TodoVisualSpec visualSpec,
   ) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
     return DragTarget<PaperItem>(
       onWillAcceptWithDetails: (details) => _todoItemIndex(details.data) >= 0,
       onAcceptWithDetails: (details) {
@@ -8996,48 +11108,43 @@ class _TodoEditorState extends State<_TodoEditor> {
             child: _todoFooterActions(visualSpec),
           );
         }
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return SizedBox(
           key: ValueKey('${widget.paper.id}-todo-delete-drop-target'),
           height: targetHeight,
           child: Container(
+            key: ValueKey('${widget.paper.id}-todo-trash-area'),
+            margin: const EdgeInsets.only(top: 6, bottom: 2),
+            height: visualSpec.controlExtent,
             decoration: BoxDecoration(
-              color: colorScheme.errorContainer.withValues(
-                alpha: highlighted ? 0.74 : 0.28,
+              color: paperColors.danger.withValues(
+                alpha: highlighted
+                    ? (isDark ? 32 / 255 : 26 / 255)
+                    : (isDark ? 16 / 255 : 12 / 255),
               ),
               border: Border.all(
-                color: colorScheme.error.withValues(
-                  alpha: highlighted ? 0.92 : 0.32,
+                color: highlighted
+                    ? paperColors.danger
+                    : paperColors.danger.withValues(alpha: 50 / 255),
+                width: highlighted ? 1.5 : 1,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: Opacity(
+                opacity: highlighted ? 1 : 0.65,
+                child: Text(
+                  '\u{1F5D1}',
+                  style: TextStyle(
+                    fontFamily: 'Segoe UI Symbol',
+                    fontFamilyFallback: const <String>['Segoe UI Emoji'],
+                    fontSize: visualSpec.trashGlyphSize,
+                    color: paperColors.danger,
+                    height: 1,
+                  ),
                 ),
               ),
-              borderRadius: BorderRadius.circular(6),
             ),
-            child: visible
-                ? ClipRect(
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.delete_outline,
-                            size: visualSpec.iconSize,
-                            color: colorScheme.onErrorContainer,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            strings.get(PaperTodoStringKeys.actionDeleteItem),
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelMedium
-                                ?.copyWith(
-                                  color: colorScheme.onErrorContainer,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : const SizedBox.shrink(),
           ),
         );
       },
@@ -9046,31 +11153,46 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   Widget _todoFooterActions(_TodoVisualSpec visualSpec) {
     final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
     if (widget.standaloneSurface) {
-      final isDark = Theme.of(context).brightness == Brightness.dark;
-      final backgroundAlpha = isDark ? 18 / 255 : 12 / 255;
       const borderAlpha = 45 / 255;
       return Semantics(
         button: true,
         label: strings.get(PaperTodoStringKeys.actionAddItem),
-        child: InkWell(
-          onTap: _addItem,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            margin: const EdgeInsets.only(top: 6, bottom: 2),
-            height: visualSpec.controlExtent,
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withValues(alpha: backgroundAlpha),
-              border: Border.all(
-                color: colorScheme.primary.withValues(alpha: borderAlpha),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.text,
+          onEnter: (_) => setState(() => _todoAppendHovered = true),
+          onExit: (_) => setState(() => _todoAppendHovered = false),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _addItem,
+            child: Container(
+              key: ValueKey('${widget.paper.id}-todo-append-area'),
+              margin: const EdgeInsets.only(top: 6, bottom: 2),
+              height: visualSpec.controlExtent,
+              decoration: BoxDecoration(
+                color: paperColors.tint.withValues(
+                  alpha: _todoAppendHovered ? 26 / 255 : 12 / 255,
+                ),
+                border: Border.all(
+                  color: paperColors.tint.withValues(alpha: borderAlpha),
+                ),
+                borderRadius: BorderRadius.circular(8),
               ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.add,
-              size: visualSpec.appendGlyphSize,
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.42),
+              alignment: Alignment.center,
+              child: Opacity(
+                opacity: _todoAppendHovered ? 0.7 : 0.42,
+                child: Text(
+                  '\uFF0B',
+                  style: TextStyle(
+                    fontFamily: 'Segoe UI Symbol',
+                    fontFamilyFallback: const <String>['Segoe UI Emoji'],
+                    fontSize: visualSpec.appendGlyphSize,
+                    color: paperColors.weakText,
+                    height: 1,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -9095,12 +11217,11 @@ class _TodoEditorState extends State<_TodoEditor> {
                     borderRadius: BorderRadius.circular(8),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: colorScheme.primary.withValues(
+                        color: paperColors.tint.withValues(
                           alpha: isDark ? 18 / 255 : 12 / 255,
                         ),
                         border: Border.all(
-                          color:
-                              colorScheme.primary.withValues(alpha: 45 / 255),
+                          color: paperColors.tint.withValues(alpha: 45 / 255),
                         ),
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -9163,7 +11284,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     return Container(
       margin: const EdgeInsets.only(top: 5),
       decoration: BoxDecoration(
-        color: colorScheme.primary.withValues(alpha: 0.035),
+        color: paperColors.tint.withValues(alpha: 12 / 255),
         border: Border.all(
             color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
         borderRadius: BorderRadius.circular(8),
@@ -9215,94 +11336,147 @@ class _TodoEditorState extends State<_TodoEditor> {
   }) {
     final mobileBoard = !widget.standaloneSurface &&
         MediaQuery.sizeOf(context).shortestSide < 600;
-    final leadingExtent = mobileBoard ? 48.0 : visualSpec.controlExtent;
-    final dueIndicator = _todoDueIndicator(context, item, visualSpec);
-    final row = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final leadingExtent = mobileBoard ? 48.0 : visualSpec.checkColumnWidth;
+    final linkedNote = widget.enableTodoNoteLinks ? _linkedNoteFor(item) : null;
+    final dueIndicator = _todoDueIndicator(
+      context,
+      item,
+      visualSpec,
+      showRelativeBadge: widget.showDueRelativeTime,
+    );
+    final itemActions = _todoItemActions(
+      context: context,
+      item: item,
+      visualSpec: visualSpec,
+      compact: compactActions,
+    );
+    final trailingRow = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox.square(
-          dimension: leadingExtent,
-          child: Transform.scale(
-            scale: visualSpec.checkboxScale,
-            child: Checkbox(
-              value: item.done,
-              onChanged: (value) {
-                _pushTodoUndoSnapshot();
-                setState(() => item.done = value ?? false);
-                unawaited(widget.onChanged());
-              },
-            ),
-          ),
-        ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _todoColumnFields(context, item, itemTextStyle, visualSpec),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  if (_formatReminderInterval(item)
-                      case final reminderInterval?)
-                    InputChip(
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      avatar: Icon(
-                        Icons.notifications_active_outlined,
-                        size: visualSpec.chipIconSize,
-                      ),
-                      labelStyle: _todoChipTextStyle(visualSpec),
-                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      label: Text(reminderInterval),
-                      onPressed: () =>
-                          unawaited(_pickReminderInterval(context, item)),
-                      onDeleted: () => _clearReminderInterval(item),
-                      deleteIcon: Icon(
-                        Icons.close_outlined,
-                        size: visualSpec.chipIconSize,
-                      ),
-                      deleteButtonTooltipMessage: _tooltipLabel(
-                        widget.enableToolTips,
-                        strings.get(
-                          PaperTodoStringKeys.actionClearReminderInterval,
-                        ),
-                      ),
-                    ),
-                  if (widget.enableTodoNoteLinks)
-                    if (_linkedNoteFor(item) case final linkedNote?)
-                      _linkedNoteChip(
-                        linkedNote,
-                        item,
-                        visualSpec,
-                      ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        ..._todoItemActions(
-          context: context,
-          item: item,
-          visualSpec: visualSpec,
-          compact: compactActions,
-        ),
         if (dueIndicator != null) ...[
           const SizedBox(width: 4),
           dueIndicator,
         ],
+        if (linkedNote != null) ...[
+          const SizedBox(width: 1),
+          _linkedNoteButton(linkedNote, item, visualSpec),
+        ],
+        ...itemActions,
+      ],
+    );
+    // 16px transparent window chrome + 14px Todo body insets + the row's
+    // 8px border/padding leave the same clipped trailing viewport as WPF.
+    const standaloneTodoHorizontalInsets = 38.0;
+    final maximumTrailingWidth = math.max(
+      0.0,
+      widget.paper.width - standaloneTodoHorizontalInsets - leadingExtent,
+    );
+    final trailing = widget.standaloneSurface
+        ? ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: maximumTrailingWidth,
+            ),
+            child: _HorizontalOverflowClip(child: trailingRow),
+          )
+        : trailingRow;
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox.square(
+          dimension: leadingExtent,
+          child: Center(
+            child: widget.standaloneSurface
+                ? _PaperTodoTodoCheckBox(
+                    key: ValueKey(
+                      '${widget.paper.id}-${item.id}-checkbox',
+                    ),
+                    value: item.done,
+                    onChanged: (value) {
+                      _pushTodoUndoSnapshot();
+                      setState(() => item.done = value);
+                      unawaited(widget.onChanged());
+                    },
+                  )
+                : Transform.scale(
+                    scale: 16 / 18,
+                    child: Checkbox(
+                      value: item.done,
+                      onChanged: (value) {
+                        _pushTodoUndoSnapshot();
+                        setState(() => item.done = value ?? false);
+                        unawaited(widget.onChanged());
+                      },
+                    ),
+                  ),
+          ),
+        ),
+        Expanded(
+          child: _todoColumnFields(context, item, itemTextStyle, visualSpec),
+        ),
+        trailing,
       ],
     );
     final rowBody =
         widget.enableTodoNoteLinks ? _noteLinkDropTarget(item, row) : row;
+    final dragging = _draggingTodoItemId == item.id;
+    final hovered = _hoveredTodoItemId == item.id || dragging;
+    // Row hover is an immediate brush change in PaperTodo. Completion and
+    // drag opacity still use the source-timed AnimatedOpacity below.
+    const hoverDuration = Duration.zero;
+    final stateDuration = widget.enableAnimations
+        ? dragging
+            ? Duration.zero
+            : Duration(milliseconds: item.done ? 200 : 150)
+        : Duration.zero;
+    final paperColors = PaperTodoThemeColors.of(context);
     return Padding(
       key: ValueKey('${widget.paper.id}-${item.id}-row'),
-      padding: EdgeInsets.only(bottom: visualSpec.itemGap),
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (event) =>
-            _handleTodoContextMenuPointerDown(context, item, event),
-        child: rowBody,
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: MouseRegion(
+        onEnter: (_) {
+          if (_hoveredTodoItemId != item.id) {
+            setState(() => _hoveredTodoItemId = item.id);
+          }
+        },
+        onExit: (_) {
+          if (_hoveredTodoItemId == item.id) {
+            setState(() => _hoveredTodoItemId = null);
+          }
+        },
+        child: AnimatedContainer(
+          duration: hoverDuration,
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+          decoration: BoxDecoration(
+            color: hovered
+                ? paperColors.tint.withValues(
+                    alpha: Theme.of(context).brightness == Brightness.dark
+                        ? 48 / 255
+                        : 32 / 255,
+                  )
+                : Colors.transparent,
+            border: Border.all(
+              color: paperColors.tint.withValues(
+                alpha: Theme.of(context).brightness == Brightness.dark
+                    ? 18 / 255
+                    : 12 / 255,
+              ),
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: AnimatedOpacity(
+            duration: stateDuration,
+            curve: Curves.easeOutCubic,
+            opacity: dragging ? 0.25 : (item.done ? 0.75 : 1),
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (event) =>
+                  _handleTodoContextMenuPointerDown(context, item, event),
+              child: rowBody,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -9340,13 +11514,17 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (overlay is! RenderBox) {
       return;
     }
+    final entries = _todoItemContextMenuItems(item, columnIndex);
     final selected = await showMenu<String>(
       context: context,
       position: RelativeRect.fromRect(
-        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
         Offset.zero & overlay.size,
       ),
-      items: _todoItemContextMenuItems(item, columnIndex),
+      items: entries,
+      constraints: widget.standaloneSurface
+          ? _paperTodoStandaloneMenuConstraints(context, entries)
+          : null,
     );
     if (!mounted || !context.mounted) {
       return;
@@ -9366,7 +11544,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     final normalizedColumnIndex =
         columnIndex.clamp(0, math.max(0, item.todoColumnCount - 1)).toInt();
     return [
-      _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuTodoItem)),
+      _todoItemMenuHeader(strings.get(PaperTodoStringKeys.menuTodoItem)),
       if (widget.enableTodoNoteLinks && hasLinkedNote) ...[
         if (_linkedNoteFor(item) case final PaperData linkedNote)
           _todoActionMenuItem(
@@ -9374,15 +11552,21 @@ class _TodoEditorState extends State<_TodoEditor> {
             icon: Icons.open_in_new,
             label: widget.runLinkedScriptCapsulesOnClick &&
                     ScriptCapsuleSpec.tryParse(linkedNote.content) != null
-                ? strings.get(PaperTodoStringKeys.actionEditLinkedScript)
-                : strings.get(PaperTodoStringKeys.actionOpenLinkedNote),
+                ? strings.format(
+                    PaperTodoStringKeys.menuEditLinkedScriptCapsule,
+                    [_displayPaperTitle(linkedNote)],
+                  )
+                : strings.format(
+                    PaperTodoStringKeys.menuOpenLinkedNote,
+                    [_displayPaperTitle(linkedNote)],
+                  ),
           ),
         _todoActionMenuItem(
           value: _compactTodoActionUnlinkNote,
           icon: Icons.link_off_outlined,
           label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
         ),
-        const PopupMenuDivider(),
+        _todoItemMenuDivider(),
       ],
       _todoActionMenuItem(
         value: _compactTodoActionDueDate,
@@ -9410,10 +11594,11 @@ class _TodoEditorState extends State<_TodoEditor> {
           icon: Icons.notifications_off_outlined,
           label: strings.get(PaperTodoStringKeys.actionClearReminder),
         ),
-      if (widget.enableTodoNoteLinks &&
+      if (!widget.standaloneSurface &&
+          widget.enableTodoNoteLinks &&
           widget.notePapers.isNotEmpty &&
           !hasLinkedNote) ...[
-        const PopupMenuDivider(),
+        _todoItemMenuDivider(),
         for (final note in widget.notePapers)
           _todoActionMenuItem(
             value: '$_compactTodoLinkActionPrefix${note.id}',
@@ -9421,65 +11606,75 @@ class _TodoEditorState extends State<_TodoEditor> {
             label: _displayPaperTitle(note),
           ),
       ],
-      const PopupMenuDivider(),
+      _todoItemMenuDivider(),
       _todoActionMenuItem(
         value:
             '$_compactTodoColumnActionPrefix$_columnActionInsertBeforePrefix$normalizedColumnIndex',
         icon: Icons.add_box_outlined,
-        label: strings.format(
-          PaperTodoStringKeys.actionInsertBeforeColumn,
-          [normalizedColumnIndex + 1],
-        ),
+        label: widget.standaloneSurface
+            ? strings.get(PaperTodoStringKeys.menuInsertTodoColumnBefore)
+            : strings.format(
+                PaperTodoStringKeys.actionInsertBeforeColumn,
+                [normalizedColumnIndex + 1],
+              ),
         enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
       ),
       _todoActionMenuItem(
         value:
             '$_compactTodoColumnActionPrefix$_columnActionDeletePrefix$normalizedColumnIndex',
         icon: Icons.delete_sweep_outlined,
-        label: strings.format(
-          PaperTodoStringKeys.actionDeleteColumn,
-          [normalizedColumnIndex + 1],
-        ),
+        label: widget.standaloneSurface
+            ? strings.get(PaperTodoStringKeys.menuDeleteTodoColumn)
+            : strings.format(
+                PaperTodoStringKeys.actionDeleteColumn,
+                [normalizedColumnIndex + 1],
+              ),
         enabled: item.todoColumnCount > 1,
       ),
       _todoActionMenuItem(
         value: '$_compactTodoColumnActionPrefix$_columnActionAdd',
         icon: Icons.add,
-        label: strings.get(PaperTodoStringKeys.actionAddColumn),
+        label: widget.standaloneSurface
+            ? strings.get(PaperTodoStringKeys.menuIncreaseTodoColumns)
+            : strings.get(PaperTodoStringKeys.actionAddColumn),
         enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
       ),
       _todoActionMenuItem(
         value: '$_compactTodoColumnActionPrefix$_columnActionRemove',
         icon: Icons.remove,
-        label: strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
+        label: widget.standaloneSurface
+            ? strings.get(PaperTodoStringKeys.menuDecreaseTodoColumns)
+            : strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
         enabled: item.todoColumnCount > 1,
       ),
-      _todoActionMenuItem(
-        value: '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
-        icon: Icons.view_column_outlined,
-        label: strings.get(PaperTodoStringKeys.actionEqualWidths),
-        enabled: item.todoColumnCount > 1,
-      ),
-      _todoActionMenuItem(
-        value: '$_compactTodoColumnActionPrefix$_columnActionWideFirst',
-        icon: Icons.view_week_outlined,
-        label: strings.get(PaperTodoStringKeys.actionWideFirstColumn),
-        enabled: item.todoColumnCount > 1,
-      ),
-      const PopupMenuDivider(),
-      _todoActionMenuItem(
-        value: _compactTodoActionMoveUp,
-        icon: Icons.keyboard_arrow_up,
-        label: strings.get(PaperTodoStringKeys.actionMoveItemUp),
-        enabled: _canMoveTodoItem(item, -1),
-      ),
-      _todoActionMenuItem(
-        value: _compactTodoActionMoveDown,
-        icon: Icons.keyboard_arrow_down,
-        label: strings.get(PaperTodoStringKeys.actionMoveItemDown),
-        enabled: _canMoveTodoItem(item, 1),
-      ),
-      const PopupMenuDivider(),
+      if (!widget.standaloneSurface) ...[
+        _todoActionMenuItem(
+          value: '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
+          icon: Icons.view_column_outlined,
+          label: strings.get(PaperTodoStringKeys.actionEqualWidths),
+          enabled: item.todoColumnCount > 1,
+        ),
+        _todoActionMenuItem(
+          value: '$_compactTodoColumnActionPrefix$_columnActionWideFirst',
+          icon: Icons.view_week_outlined,
+          label: strings.get(PaperTodoStringKeys.actionWideFirstColumn),
+          enabled: item.todoColumnCount > 1,
+        ),
+        _todoItemMenuDivider(),
+        _todoActionMenuItem(
+          value: _compactTodoActionMoveUp,
+          icon: Icons.keyboard_arrow_up,
+          label: strings.get(PaperTodoStringKeys.actionMoveItemUp),
+          enabled: _canMoveTodoItem(item, -1),
+        ),
+        _todoActionMenuItem(
+          value: _compactTodoActionMoveDown,
+          icon: Icons.keyboard_arrow_down,
+          label: strings.get(PaperTodoStringKeys.actionMoveItemDown),
+          enabled: _canMoveTodoItem(item, 1),
+        ),
+      ],
+      _todoItemMenuDivider(),
       _todoActionMenuItem(
         value: _compactTodoActionDelete,
         icon: Icons.delete_outline,
@@ -9492,6 +11687,22 @@ class _TodoEditorState extends State<_TodoEditor> {
         enabled: _hasDoneTodoItems,
       ),
     ];
+  }
+
+  PopupMenuItem<String> _todoItemMenuHeader(String label) {
+    if (!widget.standaloneSurface) {
+      return _paperTodoMenuHeader(label);
+    }
+    return PopupMenuItem<String>(
+      enabled: false,
+      height: 17,
+      padding: _paperTodoStandalonePopupMenuItemPadding,
+      child: _PaperTodoPopupMenuHeaderLabel(label),
+    );
+  }
+
+  PopupMenuDivider _todoItemMenuDivider() {
+    return PopupMenuDivider(height: widget.standaloneSurface ? 7 : 16);
   }
 
   int _todoContextColumnIndexForPosition(
@@ -9524,105 +11735,177 @@ class _TodoEditorState extends State<_TodoEditor> {
   Widget? _todoDueIndicator(
     BuildContext context,
     PaperItem item,
-    _TodoVisualSpec visualSpec,
-  ) {
+    _TodoVisualSpec visualSpec, {
+    required bool showRelativeBadge,
+  }) {
     final dueAt = parsePaperTodoDueAtLocal(item.dueAtLocal);
     if (dueAt == null) {
       return null;
     }
-    final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
     final difference = dueAt.difference(DateTime.now());
-    final statusColor = difference.isNegative
-        ? colorScheme.error
-        : difference <= const Duration(hours: 1)
-            ? colorScheme.tertiary
-            : colorScheme.onSurfaceVariant;
-    final statusBackground = difference.isNegative
-        ? colorScheme.errorContainer.withValues(alpha: 0.72)
-        : difference <= const Duration(hours: 1)
-            ? colorScheme.tertiaryContainer.withValues(alpha: 0.72)
-            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.76);
+    final isPastDue = difference.isNegative;
+    final isSoon = !isPastDue && difference <= const Duration(minutes: 10);
+    final hovered = _hoveredTodoDueItemId == item.id;
+    final pressed = _pressedTodoDueItemId == item.id;
+    final statusColor = isPastDue
+        ? paperColors.danger
+        : isSoon
+            ? paperColors.active
+            : paperColors.weakText;
+    final statusBackground = isPastDue
+        ? paperColors.danger.withValues(
+            alpha: paperColors.isDark ? 28 / 255 : 18 / 255,
+          )
+        : isSoon
+            ? paperColors.tint.withValues(
+                alpha: paperColors.isDark ? 42 / 255 : 28 / 255,
+              )
+            : paperColors.tint.withValues(
+                alpha: paperColors.isDark ? 28 / 255 : 18 / 255,
+              );
+    final hoveredBackground = isPastDue
+        ? paperColors.danger.withValues(
+            alpha: paperColors.isDark ? 42 / 255 : 30 / 255,
+          )
+        : paperColors.hover;
+    final badgeMinHeight = math.max(22.0, visualSpec.rowMinHeight - 2);
     final absolute = _formatAbsoluteDueDate(dueAt);
     final relative = _formatRelativeDueDate(dueAt);
     final label = strings.format(PaperTodoStringKeys.dueLabel, [
       widget.showDueRelativeTime ? '$relative, $absolute' : absolute,
     ]);
     return Semantics(
-      button: true,
       label: label,
-      child: InkWell(
-        key: ValueKey('${widget.paper.id}-${item.id}-due-absolute'),
-        borderRadius: BorderRadius.circular(6),
-        onTap: () => unawaited(_pickDueDate(context, item)),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: statusBackground,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: statusColor.withValues(alpha: 0.28)),
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: widget.standaloneSurface ? 62 : 72,
-              maxWidth: widget.standaloneSurface ? 106 : 118,
-              minHeight: widget.standaloneSurface ? 30 : 36,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(
-                    difference.isNegative
-                        ? Icons.warning_amber_rounded
-                        : Icons.schedule_outlined,
-                    size: visualSpec.chipIconSize,
-                    color: statusColor,
-                  ),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (widget.showDueRelativeTime)
-                          Text(
-                            relative,
-                            key: ValueKey(
-                              '${widget.paper.id}-${item.id}-due-relative',
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.right,
-                            style: _todoChipTextStyle(visualSpec)?.copyWith(
-                              color: statusColor,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        Text(
-                          absolute,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                          style: _todoChipTextStyle(visualSpec)?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showRelativeBadge) ...[
+            Container(
+              key: ValueKey(
+                '${widget.paper.id}-${item.id}-due-relative-surface',
+              ),
+              margin: const EdgeInsets.only(left: 1),
+              constraints: BoxConstraints(
+                minHeight: badgeMinHeight,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: isPastDue
+                    ? paperColors.danger.withValues(
+                        alpha: paperColors.isDark ? 22 / 255 : 14 / 255,
+                      )
+                    : paperColors.tint.withValues(
+                        alpha: paperColors.isDark ? 24 / 255 : 16 / 255,
+                      ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Transform.translate(
+                    offset: const Offset(0, 1),
+                    child: Text(
+                      relative,
+                      key: ValueKey(
+                        '${widget.paper.id}-${item.id}-due-relative',
+                      ),
+                      maxLines: 1,
+                      softWrap: false,
+                      style: _todoChipTextStyle(visualSpec)?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.04,
+                      ),
                     ),
                   ),
-                ],
+                ),
+              ),
+            ),
+          ],
+          Padding(
+            padding: const EdgeInsets.only(left: 1),
+            child: Opacity(
+              key: ValueKey(
+                '${widget.paper.id}-${item.id}-due-absolute-opacity',
+              ),
+              opacity: pressed ? 0.72 : 1,
+              child: Material(
+                key: ValueKey(
+                  '${widget.paper.id}-${item.id}-due-absolute-surface',
+                ),
+                color: hovered ? hoveredBackground : statusBackground,
+                borderRadius: BorderRadius.circular(8),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: ValueKey('${widget.paper.id}-${item.id}-due-absolute'),
+                  borderRadius: BorderRadius.circular(8),
+                  hoverColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                  splashColor: Colors.transparent,
+                  onHover: (value) {
+                    setState(() {
+                      _hoveredTodoDueItemId = value ? item.id : null;
+                      if (!value && _pressedTodoDueItemId == item.id) {
+                        _pressedTodoDueItemId = null;
+                      }
+                    });
+                  },
+                  onTapDown: (_) =>
+                      setState(() => _pressedTodoDueItemId = item.id),
+                  onTapCancel: () {
+                    if (_pressedTodoDueItemId == item.id) {
+                      setState(() => _pressedTodoDueItemId = null);
+                    }
+                  },
+                  onTapUp: (_) {
+                    if (_pressedTodoDueItemId == item.id) {
+                      setState(() => _pressedTodoDueItemId = null);
+                    }
+                  },
+                  onTap: () => unawaited(_pickDueDate(context, item)),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minWidth: math.max(
+                        38.0,
+                        visualSpec.checkColumnWidth * 1.5,
+                      ),
+                      minHeight: badgeMinHeight,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            absolute,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: _todoChipTextStyle(visualSpec)?.copyWith(
+                              color: hovered ? paperColors.text : statusColor,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.04,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _noteLinkDropTarget(PaperItem item, Widget row) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return DragTarget<String>(
       onWillAcceptWithDetails: (details) =>
           _canAcceptNoteLinkDrop(details.data),
@@ -9633,12 +11916,16 @@ class _TodoEditorState extends State<_TodoEditor> {
         return DecoratedBox(
           decoration: BoxDecoration(
             color: highlighted
-                ? colorScheme.primaryContainer.withValues(alpha: 0.38)
+                ? paperColors.tint.withValues(
+                    alpha: isDark ? 36 / 255 : 28 / 255,
+                  )
                 : Colors.transparent,
             border: Border.all(
-              color: highlighted ? colorScheme.primary : Colors.transparent,
+              color: highlighted
+                  ? paperColors.tint.withValues(alpha: 150 / 255)
+                  : Colors.transparent,
             ),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: row,
         );
@@ -9679,20 +11966,28 @@ class _TodoEditorState extends State<_TodoEditor> {
     final hasLinkedNote = item.linkedNoteId?.trim().isNotEmpty ?? false;
     if (widget.standaloneSurface) {
       return [
-        Draggable<PaperItem>(
-          key: ValueKey('${widget.paper.id}-${item.id}-drag-handle'),
-          data: item,
-          dragAnchorStrategy: pointerDragAnchorStrategy,
-          feedback: _todoDragFeedback(item, visualSpec),
-          childWhenDragging: Opacity(
-            opacity: 0.35,
-            child: _standaloneTodoDragHandle(visualSpec),
+        SizedBox(
+          key: ValueKey('${widget.paper.id}-${item.id}-drag-handle-slot'),
+          width: visualSpec.dragHandleSlotWidth,
+          height: visualSpec.rowMinHeight,
+          child: Center(
+            child: Draggable<PaperItem>(
+              key: ValueKey('${widget.paper.id}-${item.id}-drag-handle'),
+              data: item,
+              dragAnchorStrategy: pointerDragAnchorStrategy,
+              feedback: _todoDragFeedback(item, visualSpec),
+              childWhenDragging: _standaloneTodoDragHandle(
+                item,
+                visualSpec,
+                dragging: true,
+              ),
+              onDragStarted: () => _setTodoItemDragging(true, itemId: item.id),
+              onDragCompleted: () => _setTodoItemDragging(false),
+              onDraggableCanceled: (_, __) => _setTodoItemDragging(false),
+              onDragEnd: (_) => _setTodoItemDragging(false),
+              child: _standaloneTodoDragHandle(item, visualSpec),
+            ),
           ),
-          onDragStarted: () => _setTodoItemDragging(true),
-          onDragCompleted: () => _setTodoItemDragging(false),
-          onDraggableCanceled: (_, __) => _setTodoItemDragging(false),
-          onDragEnd: (_) => _setTodoItemDragging(false),
-          child: _standaloneTodoDragHandle(visualSpec),
         ),
       ];
     }
@@ -9753,9 +12048,14 @@ class _TodoEditorState extends State<_TodoEditor> {
                     label: widget.runLinkedScriptCapsulesOnClick &&
                             ScriptCapsuleSpec.tryParse(linkedNote.content) !=
                                 null
-                        ? strings
-                            .get(PaperTodoStringKeys.actionEditLinkedScript)
-                        : strings.get(PaperTodoStringKeys.actionOpenLinkedNote),
+                        ? strings.format(
+                            PaperTodoStringKeys.menuEditLinkedScriptCapsule,
+                            [_displayPaperTitle(linkedNote)],
+                          )
+                        : strings.format(
+                            PaperTodoStringKeys.menuOpenLinkedNote,
+                            [_displayPaperTitle(linkedNote)],
+                          ),
                   ),
                 _todoActionMenuItem(
                   value: _compactTodoActionUnlinkNote,
@@ -9881,7 +12181,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           opacity: 0.35,
           child: _todoDragHandle(visualSpec),
         ),
-        onDragStarted: () => _setTodoItemDragging(true),
+        onDragStarted: () => _setTodoItemDragging(true, itemId: item.id),
         onDragCompleted: () => _setTodoItemDragging(false),
         onDraggableCanceled: (_, __) => _setTodoItemDragging(false),
         onDragEnd: (_) => _setTodoItemDragging(false),
@@ -9931,82 +12231,55 @@ class _TodoEditorState extends State<_TodoEditor> {
           onSelected: (value) => _updateColumns(item, value),
           itemBuilder: (context) {
             return [
-              PopupMenuItem(
+              _todoActionMenuItem(
                 value: _columnActionAdd,
                 enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
-                child: ListTile(
-                  leading: const Icon(Icons.add),
-                  title: Text(strings.get(PaperTodoStringKeys.actionAddColumn)),
-                  contentPadding: EdgeInsets.zero,
-                ),
+                icon: Icons.add,
+                label: strings.get(PaperTodoStringKeys.actionAddColumn),
               ),
-              PopupMenuItem(
+              _todoActionMenuItem(
                 value: _columnActionRemove,
                 enabled: item.todoColumnCount > 1,
-                child: ListTile(
-                  leading: const Icon(Icons.remove),
-                  title: Text(
-                    strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
-                  ),
-                  contentPadding: EdgeInsets.zero,
-                ),
+                icon: Icons.remove,
+                label: strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
               ),
               const PopupMenuDivider(),
               for (var columnIndex = 0;
                   columnIndex < item.todoColumnCount;
                   columnIndex++)
-                PopupMenuItem(
+                _todoActionMenuItem(
                   value: '$_columnActionInsertBeforePrefix$columnIndex',
                   enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
-                  child: ListTile(
-                    leading: const Icon(Icons.add_box_outlined),
-                    title: Text(
-                      strings.format(
-                        PaperTodoStringKeys.actionInsertBeforeColumn,
-                        [columnIndex + 1],
-                      ),
-                    ),
-                    contentPadding: EdgeInsets.zero,
+                  icon: Icons.add_box_outlined,
+                  label: strings.format(
+                    PaperTodoStringKeys.actionInsertBeforeColumn,
+                    [columnIndex + 1],
                   ),
                 ),
               for (var columnIndex = 0;
                   columnIndex < item.todoColumnCount;
                   columnIndex++)
-                PopupMenuItem(
+                _todoActionMenuItem(
                   value: '$_columnActionDeletePrefix$columnIndex',
                   enabled: item.todoColumnCount > 1,
-                  child: ListTile(
-                    leading: const Icon(Icons.delete_sweep_outlined),
-                    title: Text(
-                      strings.format(
-                        PaperTodoStringKeys.actionDeleteColumn,
-                        [columnIndex + 1],
-                      ),
-                    ),
-                    contentPadding: EdgeInsets.zero,
+                  icon: Icons.delete_sweep_outlined,
+                  label: strings.format(
+                    PaperTodoStringKeys.actionDeleteColumn,
+                    [columnIndex + 1],
                   ),
                 ),
               const PopupMenuDivider(),
-              PopupMenuItem(
+              _todoActionMenuItem(
                 value: _columnActionEqualWidths,
                 enabled: item.todoColumnCount > 1,
-                child: ListTile(
-                  leading: const Icon(Icons.view_column_outlined),
-                  title:
-                      Text(strings.get(PaperTodoStringKeys.actionEqualWidths)),
-                  contentPadding: EdgeInsets.zero,
-                ),
+                icon: Icons.view_column_outlined,
+                label: strings.get(PaperTodoStringKeys.actionEqualWidths),
               ),
-              PopupMenuItem(
+              _todoActionMenuItem(
                 value: _columnActionWideFirst,
                 enabled: item.todoColumnCount > 1,
-                child: ListTile(
-                  leading: const Icon(Icons.view_week_outlined),
-                  title: Text(
-                    strings.get(PaperTodoStringKeys.actionWideFirstColumn),
-                  ),
-                  contentPadding: EdgeInsets.zero,
-                ),
+                icon: Icons.view_week_outlined,
+                label: strings.get(PaperTodoStringKeys.actionWideFirstColumn),
               ),
             ];
           },
@@ -10060,6 +12333,32 @@ class _TodoEditorState extends State<_TodoEditor> {
       IconButton(
         tooltip: _tooltipLabel(
           widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionDeleteItem),
+        ),
+        onPressed: () => _deleteItem(context, item),
+        iconSize: visualSpec.iconSize,
+        constraints: BoxConstraints.tightFor(
+          width: visualSpec.controlExtent,
+          height: visualSpec.controlExtent,
+        ),
+        icon: const Icon(Icons.delete_outline),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionClearCompletedItems),
+        ),
+        onPressed: _hasDoneTodoItems ? _clearDoneItems : null,
+        iconSize: visualSpec.iconSize,
+        constraints: BoxConstraints.tightFor(
+          width: visualSpec.controlExtent,
+          height: visualSpec.controlExtent,
+        ),
+        icon: const Icon(Icons.delete_sweep_outlined),
+      ),
+      IconButton(
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
           strings.get(PaperTodoStringKeys.actionMoveItemUp),
         ),
         onPressed:
@@ -10085,51 +12384,48 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
         icon: const Icon(Icons.keyboard_arrow_down),
       ),
-      IconButton(
-        tooltip: _tooltipLabel(
-          widget.enableToolTips,
-          strings.get(PaperTodoStringKeys.actionDeleteItem),
-        ),
-        onPressed: () => _deleteItem(context, item),
-        iconSize: visualSpec.iconSize,
-        constraints: BoxConstraints.tightFor(
-          width: visualSpec.controlExtent,
-          height: visualSpec.controlExtent,
-        ),
-        icon: const Icon(Icons.delete_outline),
-      ),
-      IconButton(
-        tooltip: _tooltipLabel(
-          widget.enableToolTips,
-          strings.get(PaperTodoStringKeys.actionClearCompletedItems),
-        ),
-        onPressed: _hasDoneTodoItems ? _clearDoneItems : null,
-        iconSize: visualSpec.iconSize,
-        constraints: BoxConstraints.tightFor(
-          width: visualSpec.controlExtent,
-          height: visualSpec.controlExtent,
-        ),
-        icon: const Icon(Icons.delete_sweep_outlined),
-      ),
     ];
   }
 
-  Widget _standaloneTodoDragHandle(_TodoVisualSpec visualSpec) {
+  Widget _standaloneTodoDragHandle(
+    PaperItem item,
+    _TodoVisualSpec visualSpec, {
+    bool dragging = false,
+  }) {
+    final hovered = _hoveredTodoDragHandleItemId == item.id;
+    final paperColors = PaperTodoThemeColors.of(context);
     return _maybeTooltip(
       enabled: widget.enableToolTips,
       message: strings.get(PaperTodoStringKeys.actionDragToReorder),
       child: MouseRegion(
-        cursor: SystemMouseCursors.grab,
+        cursor: SystemMouseCursors.move,
+        onEnter: (_) {
+          if (_hoveredTodoDragHandleItemId != item.id) {
+            setState(() => _hoveredTodoDragHandleItemId = item.id);
+          }
+        },
+        onExit: (_) {
+          if (_hoveredTodoDragHandleItemId == item.id && !dragging) {
+            setState(() => _hoveredTodoDragHandleItemId = null);
+          }
+        },
         child: SizedBox(
-          width: visualSpec.controlExtent,
-          height: visualSpec.controlExtent,
-          child: Icon(
-            Icons.drag_handle,
-            size: visualSpec.iconSize,
-            color: Theme.of(context)
-                .colorScheme
-                .onSurfaceVariant
-                .withValues(alpha: 0.62),
+          width: visualSpec.dragHandleWidth,
+          height: visualSpec.rowMinHeight,
+          child: Center(
+            child: Opacity(
+              opacity: dragging ? 0.9 : (hovered ? 0.78 : 0.48),
+              child: Text(
+                '\u2261',
+                style: TextStyle(
+                  color: paperColors.weakText,
+                  fontFamily: 'Segoe UI Symbol',
+                  fontFamilyFallback: const <String>['Segoe UI Emoji'],
+                  fontSize: visualSpec.dragGlyphSize,
+                  height: 1,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -10198,14 +12494,24 @@ class _TodoEditorState extends State<_TodoEditor> {
     required String label,
     bool enabled = true,
   }) {
+    if (widget.standaloneSurface) {
+      return _PaperTodoPopupMenuItem<String>(
+        value: value,
+        enabled: enabled,
+        height: 21,
+        padding: _paperTodoStandalonePopupMenuItemPadding,
+        child: Text(label),
+      );
+    }
     return PopupMenuItem<String>(
       value: value,
       enabled: enabled,
       height: _paperTodoPopupMenuHeight(),
+      padding: _paperTodoPopupMenuItemPadding,
       child: Row(
         children: [
-          Icon(icon),
-          const SizedBox(width: 12),
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
           Flexible(child: Text(label)),
         ],
       ),
@@ -10343,6 +12649,8 @@ class _TodoEditorState extends State<_TodoEditor> {
     final beforeItems = [...widget.paper.items];
     late final List<PaperItem> afterItems;
     setState(() {
+      _clearEnteringTodoRows();
+      _clearDepartingTodoRows();
       afterItems = [
         for (final itemJson in snapshot)
           PaperItem.fromJson(Map<String, Object?>.from(itemJson)),
@@ -10798,38 +13106,59 @@ class _TodoEditorState extends State<_TodoEditor> {
       for (var index = 0; index < item.todoExtraColumns.length; index++)
         _extraColumnField(context, item, index, itemTextStyle, visualSpec),
     ];
-    if (item.todoColumnCount <= 1) {
-      return fields.first;
-    }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  flex: _columnFlex(item, 0),
-                  child: fields.first,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < visualSpec.checkColumnWidth) {
+          return SizedBox(height: visualSpec.rowMinHeight);
+        }
+        if (item.todoColumnCount <= 1) {
+          return fields.first;
+        }
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: _columnFlex(item, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 3),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: fields.first,
+                    ),
+                  ),
                 ),
-                for (var index = 1; index < fields.length; index++) ...[
-                  _todoColumnSplitter(
-                    context: context,
-                    item: item,
-                    leftColumnIndex: index - 1,
-                    availableWidth: constraints.maxWidth,
+              ),
+              for (var index = 1; index < fields.length; index++) ...[
+                _todoColumnSplitter(
+                  context: context,
+                  item: item,
+                  leftColumnIndex: index - 1,
+                  availableWidth: constraints.maxWidth,
+                ),
+                Expanded(
+                  flex: _columnFlex(item, index),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: 6,
+                        right: index == fields.length - 1 ? 0 : 3,
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: fields[index],
+                      ),
+                    ),
                   ),
-                  Expanded(
-                    flex: _columnFlex(item, index),
-                    child: fields[index],
-                  ),
-                ],
+                ),
               ],
-            ),
-          );
-        },
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -10839,7 +13168,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     required int leftColumnIndex,
     required double availableWidth,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
     return MouseRegion(
       cursor: SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
@@ -10855,16 +13184,9 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
         child: SizedBox(
           width: _todoColumnSplitterWidth,
-          child: Center(
-            child: FractionallySizedBox(
-              heightFactor: 0.72,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-                child: const SizedBox(width: 1),
-              ),
+          child: CustomPaint(
+            painter: _TodoColumnSeparatorPainter(
+              paperColors.paperBorder.withValues(alpha: 0.9),
             ),
           ),
         ),
@@ -10927,6 +13249,19 @@ class _TodoEditorState extends State<_TodoEditor> {
         1000;
   }
 
+  Widget _todoTextContextMenuBuilder(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    final buttonItems = editableTextState.contextMenuButtonItems
+        .where((item) => item.type != ContextMenuButtonType.paste)
+        .toList();
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: buttonItems,
+    );
+  }
+
   Widget _mainColumnField(
     BuildContext context,
     PaperItem item,
@@ -10934,62 +13269,154 @@ class _TodoEditorState extends State<_TodoEditor> {
     _TodoVisualSpec visualSpec,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
+    _queueTodoLineMeasurement(item);
     return KeyedSubtree(
       key: ValueKey('${widget.paper.id}-${item.id}-text'),
       child: KeyedSubtree(
         key: _todoColumnHitTestKey(item, 0),
         child: _todoItemKeyboardScope(
           item,
-          ConstrainedBox(
-            constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
-            child: TextFormField(
-              key: ValueKey(
-                '${widget.paper.id}-${item.id}-text-field-$_textFieldRevision',
-              ),
-              focusNode: _mainTodoFieldFocusNode(item),
-              initialValue: item.text,
-              keyboardType: TextInputType.multiline,
-              minLines: 1,
-              maxLines: null,
-              textInputAction: TextInputAction.next,
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: false,
-                hintText: strings.get(PaperTodoStringKeys.todoNewItemHint),
-                isDense: true,
-                contentPadding: visualSpec.mainContentPadding,
-              ),
-              style: itemTextStyle?.copyWith(
-                color: item.done ? colorScheme.outline : colorScheme.onSurface,
-                decoration: item.done ? TextDecoration.lineThrough : null,
-              ),
-              inputFormatters: [
-                _TodoPasteTextInputFormatter(
-                  onPaste: (lines, replacementText, previousValue) =>
-                      _handleMultiLinePaste(
-                    item,
-                    replacementText,
-                    previousColumnText: previousValue,
-                    parsedLines: lines,
-                  ),
+          NotificationListener<SizeChangedLayoutNotification>(
+            onNotification: (_) {
+              _queueTodoLineMeasurement(item);
+              return false;
+            },
+            child: SizeChangedLayoutNotifier(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
+                child: Stack(
+                  children: [
+                    TextFormField(
+                      key: ValueKey(
+                        '${widget.paper.id}-${item.id}-text-field-$_textFieldRevision',
+                      ),
+                      focusNode: _mainTodoFieldFocusNode(item),
+                      initialValue: item.text,
+                      keyboardType: TextInputType.multiline,
+                      minLines: 1,
+                      maxLines: null,
+                      textAlignVertical: TextAlignVertical.center,
+                      textInputAction: TextInputAction.next,
+                      contextMenuBuilder: _todoTextContextMenuBuilder,
+                      decoration: InputDecoration(
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                        hintText:
+                            strings.get(PaperTodoStringKeys.todoNewItemHint),
+                        isDense: true,
+                        isCollapsed: true,
+                        contentPadding: visualSpec.mainContentPadding,
+                      ),
+                      style: itemTextStyle?.copyWith(
+                        color: item.done
+                            ? paperColors.brightWeakText
+                            : colorScheme.onSurface,
+                      ),
+                      inputFormatters: [
+                        _TodoPasteTextInputFormatter(
+                          onPaste: (lines, replacementText, previousValue) =>
+                              _handleMultiLinePaste(
+                            item,
+                            replacementText,
+                            previousColumnText: previousValue,
+                            parsedLines: lines,
+                          ),
+                        ),
+                        LengthLimitingTextInputFormatter(
+                          TodoPasteItems.maxLineLength,
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (_handleMultiLinePaste(item, value)) {
+                          return;
+                        }
+                        _recordTodoTextInput(item, null, value);
+                        unawaited(widget.onChanged());
+                      },
+                      onFieldSubmitted: (_) => _insertItemAfter(item),
+                    ),
+                    if (item.done)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            key: ValueKey(
+                              '${widget.paper.id}-${item.id}-completion-line-main',
+                            ),
+                            painter: _TodoCompletionLinePainter(
+                              paperColors.brightWeakText.withValues(
+                                alpha: 205 / 255,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
-              ],
-              onChanged: (value) {
-                if (_handleMultiLinePaste(item, value)) {
-                  return;
-                }
-                _recordTodoTextInput(item, null, value);
-                unawaited(widget.onChanged());
-              },
-              onFieldSubmitted: (_) => _insertItemAfter(item),
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  void _queueTodoLineMeasurement(PaperItem item) {
+    if (!_queuedTodoLineMeasurements.add(item.id)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _queuedTodoLineMeasurements.remove(item.id);
+      if (!mounted || _todoItemById(item.id) == null) {
+        return;
+      }
+      final editableState = _editableTextStateFor(
+        _todoMainFieldFocusNodes[item.id]?.context,
+      );
+      final renderEditable = editableState?.renderEditable;
+      if (renderEditable == null || !renderEditable.attached) {
+        return;
+      }
+      final firstLine = renderEditable.getLineAtOffset(
+        const TextPosition(offset: 0, affinity: TextAffinity.downstream),
+      );
+      final rowRenderObject =
+          _todoDropTargetKeys[item.id]?.currentContext?.findRenderObject();
+      final rowWidth = rowRenderObject is RenderBox && rowRenderObject.hasSize
+          ? rowRenderObject.size.width
+          : null;
+      final previousText = _todoLineMeasurementTexts[item.id];
+      final previousRowWidth = _todoLineMeasurementRowWidths[item.id];
+      final textChanged = previousText != null && previousText != item.text;
+      final rowWidthChanged = rowWidth != null &&
+          previousRowWidth != null &&
+          (rowWidth - previousRowWidth).abs() > 0.5;
+      var multiline = item.text.contains('\n') ||
+          item.text.contains('\r') ||
+          firstLine.end < item.text.length;
+      if (!multiline &&
+          _multilineTodoItemIds.contains(item.id) &&
+          !textChanged &&
+          !rowWidthChanged) {
+        multiline = true;
+      }
+      _todoLineMeasurementTexts[item.id] = item.text;
+      if (rowWidth != null) {
+        _todoLineMeasurementRowWidths[item.id] = rowWidth;
+      }
+      if (_multilineTodoItemIds.contains(item.id) == multiline) {
+        return;
+      }
+      setState(() {
+        if (multiline) {
+          _multilineTodoItemIds.add(item.id);
+        } else {
+          _multilineTodoItemIds.remove(item.id);
+        }
+      });
+    });
   }
 
   bool _handleMultiLinePaste(
@@ -11031,6 +13458,20 @@ class _TodoEditorState extends State<_TodoEditor> {
     setState(() {
       _setTodoColumnText(item, extraColumnIndex, replacementText);
       newItems = _addItemsAfter(item, lines.skip(1));
+      if (widget.enableAnimations && newItems.length > 1) {
+        for (var index = 0; index < math.min(newItems.length, 15); index++) {
+          _queueTodoEntrance(
+            _EnteringTodoRow(
+              itemId: newItems[index].id,
+              delay: Duration(milliseconds: index * 40),
+              opacityDuration: const Duration(milliseconds: 200),
+              slideDuration: const Duration(milliseconds: 220),
+              slideDistance: 15,
+              slideCurve: Curves.easeOutQuad,
+            ),
+          );
+        }
+      }
       widget.paper.normalize();
       _textFieldRevision++;
     });
@@ -11074,54 +13515,85 @@ class _TodoEditorState extends State<_TodoEditor> {
     _TodoVisualSpec visualSpec,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
     return KeyedSubtree(
       key: _todoColumnHitTestKey(item, index + 1),
       child: _todoItemKeyboardScope(
         item,
         ConstrainedBox(
           constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
-          child: TextFormField(
-            key: ValueKey(
-              '${widget.paper.id}-${item.id}-column-${index + 2}',
-            ),
-            focusNode: _extraTodoFieldFocusNode(item, index),
-            initialValue: item.todoExtraColumns[index],
-            keyboardType: TextInputType.multiline,
-            minLines: 1,
-            maxLines: null,
-            textInputAction: TextInputAction.next,
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              isDense: true,
-              contentPadding: visualSpec.extraContentPadding,
-            ),
-            style: itemTextStyle?.copyWith(
-              color: item.done ? colorScheme.outline : colorScheme.onSurface,
-              decoration: item.done ? TextDecoration.lineThrough : null,
-            ),
-            inputFormatters: [
-              _TodoPasteTextInputFormatter(
-                onPaste: (lines, replacementText, previousValue) =>
-                    _handleMultiLinePaste(
-                  item,
-                  replacementText,
-                  extraColumnIndex: index,
-                  previousColumnText: previousValue,
-                  parsedLines: lines,
+          child: Stack(
+            children: [
+              TextFormField(
+                key: ValueKey(
+                  '${widget.paper.id}-${item.id}-column-${index + 2}',
                 ),
+                focusNode: _extraTodoFieldFocusNode(item, index),
+                initialValue: item.todoExtraColumns[index],
+                keyboardType: TextInputType.multiline,
+                minLines: 1,
+                maxLines: null,
+                textAlignVertical: TextAlignVertical.center,
+                textInputAction: TextInputAction.next,
+                contextMenuBuilder: _todoTextContextMenuBuilder,
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: false,
+                  isDense: true,
+                  isCollapsed: true,
+                  contentPadding: visualSpec.extraContentPadding,
+                ),
+                style: itemTextStyle?.copyWith(
+                  color: item.done
+                      ? paperColors.brightWeakText
+                      : colorScheme.onSurface,
+                ),
+                inputFormatters: [
+                  _TodoPasteTextInputFormatter(
+                    onPaste: (lines, replacementText, previousValue) =>
+                        _handleMultiLinePaste(
+                      item,
+                      replacementText,
+                      extraColumnIndex: index,
+                      previousColumnText: previousValue,
+                      parsedLines: lines,
+                    ),
+                  ),
+                  LengthLimitingTextInputFormatter(
+                    TodoPasteItems.maxLineLength,
+                  ),
+                ],
+                onChanged: (value) {
+                  if (_handleMultiLinePaste(
+                    item,
+                    value,
+                    extraColumnIndex: index,
+                  )) {
+                    return;
+                  }
+                  _recordTodoTextInput(item, index, value);
+                  unawaited(widget.onChanged());
+                },
+                onFieldSubmitted: (_) => _insertItemAfter(item),
               ),
-              LengthLimitingTextInputFormatter(TodoPasteItems.maxLineLength),
+              if (item.done)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      key: ValueKey(
+                        '${widget.paper.id}-${item.id}-completion-line-${index + 2}',
+                      ),
+                      painter: _TodoCompletionLinePainter(
+                        paperColors.brightWeakText.withValues(
+                          alpha: 205 / 255,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
-            onChanged: (value) {
-              if (_handleMultiLinePaste(item, value, extraColumnIndex: index)) {
-                return;
-              }
-              _recordTodoTextInput(item, index, value);
-              unawaited(widget.onChanged());
-            },
-            onFieldSubmitted: (_) => _insertItemAfter(item),
           ),
         ),
       ),
@@ -11309,11 +13781,16 @@ class _TodoEditorState extends State<_TodoEditor> {
     unawaited(widget.onChanged());
   }
 
-  void _setTodoItemDragging(bool value) {
-    if (!mounted || _isDraggingTodoItem == value) {
+  void _setTodoItemDragging(bool value, {String? itemId}) {
+    final nextItemId = value ? itemId : null;
+    if (!mounted ||
+        (_isDraggingTodoItem == value && _draggingTodoItemId == nextItemId)) {
       return;
     }
-    setState(() => _isDraggingTodoItem = value);
+    setState(() {
+      _isDraggingTodoItem = value;
+      _draggingTodoItemId = nextItemId;
+    });
   }
 
   void _insertTodoColumnBefore(PaperItem item, int columnIndex) {
@@ -11378,6 +13855,18 @@ class _TodoEditorState extends State<_TodoEditor> {
     final newItem = _newTodoItem(text: text);
     setState(() {
       widget.paper.items.insert(normalizedInsertIndex, newItem);
+      if (widget.enableAnimations) {
+        _queueTodoEntrance(
+          _EnteringTodoRow(
+            itemId: newItem.id,
+            delay: Duration.zero,
+            opacityDuration: const Duration(milliseconds: 250),
+            slideDuration: const Duration(milliseconds: 250),
+            slideDistance: 20,
+            slideCurve: Curves.easeOutCubic,
+          ),
+        );
+      }
       widget.paper.normalize();
     });
     _requestTodoItemFocus(newItem.id);
@@ -11431,6 +13920,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     _pushTodoUndoSnapshot();
     _unfocusTodoItem(item);
     setState(() {
+      _enteringTodoRows.remove(item.id);
       widget.paper.items.removeAt(removedIndex);
       if (widget.paper.items.isEmpty) {
         widget.paper.items.add(_newTodoItem());
@@ -11480,6 +13970,14 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
     final focusedId = _currentFocusedTodoItemId();
     final completedIds = completedItems.map((item) => item.id).toSet();
+    final animatedCompletedItems = widget.enableAnimations
+        ? completedItems.take(15).toList(growable: false)
+        : const <PaperItem>[];
+    final departureGroup = Object();
+    final originalIndexes = <String, int>{
+      for (var index = 0; index < widget.paper.items.length; index++)
+        widget.paper.items[index].id: index,
+    };
 
     _pushTodoUndoSnapshot();
     for (final item in completedItems) {
@@ -11487,6 +13985,22 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
     String? focusTargetId;
     setState(() {
+      _clearEnteringTodoRows();
+      _clearDepartingTodoRows();
+      for (var index = 0; index < animatedCompletedItems.length; index++) {
+        final item = animatedCompletedItems[index];
+        _departingTodoRows.add(
+          _DepartingTodoRow(
+            item: item,
+            originalIndex: originalIndexes[item.id] ?? index,
+            groupToken: departureGroup,
+            delay: Duration(milliseconds: index * 30),
+            duration: const Duration(milliseconds: 180),
+            slideDistance: 20,
+            completesGroup: index == animatedCompletedItems.length - 1,
+          ),
+        );
+      }
       final remainingItems = widget.paper.items
           .where((item) => !completedIds.contains(item.id))
           .toList();
@@ -11533,6 +14047,22 @@ class _TodoEditorState extends State<_TodoEditor> {
     _pushTodoUndoSnapshot();
     _unfocusTodoItem(item);
     setState(() {
+      _enteringTodoRows.remove(item.id);
+      _clearDepartingTodoRows();
+      if (widget.enableAnimations) {
+        final departureGroup = Object();
+        _departingTodoRows.add(
+          _DepartingTodoRow(
+            item: item,
+            originalIndex: removedIndex,
+            groupToken: departureGroup,
+            delay: Duration.zero,
+            duration: const Duration(milliseconds: 200),
+            slideDistance: 30,
+            completesGroup: true,
+          ),
+        );
+      }
       widget.paper.items.removeAt(removedIndex);
       if (widget.paper.items.isEmpty) {
         final replacement = _newTodoItem();
@@ -11548,6 +14078,7 @@ class _TodoEditorState extends State<_TodoEditor> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
+        duration: const Duration(seconds: 10),
         content: Text(
           strings.format(
             PaperTodoStringKeys.todoItemDeleted,
@@ -11558,6 +14089,8 @@ class _TodoEditorState extends State<_TodoEditor> {
           label: strings.get(PaperTodoStringKeys.actionUndo),
           onPressed: () {
             setState(() {
+              _clearEnteringTodoRows();
+              _clearDepartingTodoRows();
               if (fallbackItemId != null) {
                 widget.paper.items.removeWhere(
                   (candidate) => candidate.id == fallbackItemId,
@@ -11582,12 +14115,15 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   Future<void> _pickDueDate(BuildContext context, PaperItem item) async {
     final now = DateTime.now();
-    final initialDate = parsePaperTodoDueAtLocal(item.dueAtLocal) ??
-        now.add(const Duration(hours: 1));
+    final existingDueDate = parsePaperTodoDueAtLocal(item.dueAtLocal);
+    final initialDate = existingDueDate ?? now.add(const Duration(hours: 1));
     if (widget.standaloneSurface && Platform.isWindows) {
       // A null native result means the user cancelled. Falling through to the
       // Flutter dialog would show a second picker for the same action.
-      final result = await _pickNativeWindowsDueDate(initialDate);
+      final result = await _pickNativeWindowsDueDate(
+        initialDate,
+        openCalendar: existingDueDate == null,
+      );
       if (result == null) {
         return;
       }
@@ -11620,9 +14156,12 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   Future<_TodoDueSelection?> _pickNativeWindowsDueDate(
-    DateTime initialDate,
-  ) async {
+    DateTime initialDate, {
+    required bool openCalendar,
+  }) async {
     try {
+      final colorScheme = Theme.of(context).colorScheme;
+      final paperColors = PaperTodoThemeColors.of(context);
       final result =
           await _paperWindowMethodChannel.invokeMapMethod<String, Object?>(
         'pickDateTime',
@@ -11632,6 +14171,29 @@ class _TodoEditorState extends State<_TodoEditor> {
           'day': initialDate.day,
           'hour': initialDate.hour,
           'minute': initialDate.minute,
+          'openCalendar': openCalendar,
+          'title': strings.get(PaperTodoStringKeys.dialogDueDate),
+          'message': strings.get(PaperTodoStringKeys.dialogDueDateMessage),
+          'clearLabel': strings.get(PaperTodoStringKeys.actionClear),
+          'cancelLabel': strings.get(PaperTodoStringKeys.actionCancel),
+          'okLabel': strings.get(PaperTodoStringKeys.dialogDueDateConfirm),
+          'fontFamily': widget.nativeDialogFontFamily,
+          'backgroundColor': colorScheme.surface.toARGB32(),
+          'borderColor': colorScheme.outlineVariant.toARGB32(),
+          'accentColor': colorScheme.primary.toARGB32(),
+          'primaryTextColor': colorScheme.onPrimary.toARGB32(),
+          'textColor': colorScheme.onSurface.toARGB32(),
+          'weakTextColor': colorScheme.onSurfaceVariant.toARGB32(),
+          'inputBackgroundColor': _paperTodoBlend(
+            paperColors.paper,
+            paperColors.tint,
+            paperColors.isDark ? 22 : 12,
+          ).toARGB32(),
+          'secondaryButtonColor': _paperTodoBlend(
+            paperColors.paper,
+            paperColors.tint,
+            paperColors.isDark ? 48 : 32,
+          ).toARGB32(),
         },
       );
       if (result == null) return null;
@@ -11672,30 +14234,101 @@ class _TodoEditorState extends State<_TodoEditor> {
     BuildContext context,
     PaperItem item,
   ) async {
-    final result = await showDialog<_ReminderIntervalSelection>(
-      context: context,
-      builder: (context) => _ReminderIntervalDialog(
-        initialValue:
-            item.reminderIntervalValue ?? widget.defaultReminderIntervalValue,
-        initialUnit:
-            item.reminderIntervalUnit ?? widget.defaultReminderIntervalUnit,
-      ),
-    );
-    if (result == null) {
+    final initialValue =
+        item.reminderIntervalValue ?? widget.defaultReminderIntervalValue;
+    final initialUnit =
+        item.reminderIntervalUnit ?? widget.defaultReminderIntervalUnit;
+    final _ReminderIntervalSelection? result;
+    if (widget.standaloneSurface && Platform.isWindows) {
+      result = await _pickNativeWindowsReminderInterval(
+        initialValue,
+        initialUnit,
+      );
+    } else {
+      result = await showDialog<_ReminderIntervalSelection>(
+        context: context,
+        builder: (context) => _ReminderIntervalDialog(
+          initialValue: initialValue,
+          initialUnit: initialUnit,
+        ),
+      );
+    }
+    final selection = result;
+    if (selection == null) {
       return;
     }
     _pushTodoUndoSnapshot();
     setState(() {
-      if (result.clear) {
+      if (selection.clear) {
         item.reminderIntervalValue = null;
         item.reminderIntervalUnit = null;
       } else {
-        item.reminderIntervalValue = result.value;
-        item.reminderIntervalUnit = result.unit;
+        item.reminderIntervalValue = selection.value;
+        item.reminderIntervalUnit = selection.unit;
       }
     });
     widget.onReminderReset(item);
     unawaited(widget.onChanged());
+  }
+
+  Future<_ReminderIntervalSelection?> _pickNativeWindowsReminderInterval(
+    int initialValue,
+    String initialUnit,
+  ) async {
+    try {
+      final colorScheme = Theme.of(context).colorScheme;
+      final paperColors = PaperTodoThemeColors.of(context);
+      final result =
+          await _paperWindowMethodChannel.invokeMapMethod<String, Object?>(
+        'pickReminderInterval',
+        <String, Object?>{
+          'value': initialValue.clamp(1, 240),
+          'unit': TodoReminderIntervalUnits.normalize(initialUnit),
+          'title': strings.get(PaperTodoStringKeys.reminderInterval),
+          'message': strings.get(PaperTodoStringKeys.reminderIntervalMessage),
+          'globalLabel':
+              strings.get(PaperTodoStringKeys.reminderIntervalGlobal),
+          'cancelLabel': strings.get(PaperTodoStringKeys.actionCancel),
+          'okLabel': strings.get(PaperTodoStringKeys.dialogDueDateConfirm),
+          'minutesLabel': strings.get(PaperTodoStringKeys.minutes),
+          'hoursLabel': strings.get(PaperTodoStringKeys.hours),
+          'fontFamily': widget.nativeDialogFontFamily,
+          'backgroundColor': colorScheme.surface.toARGB32(),
+          'borderColor': colorScheme.outlineVariant.toARGB32(),
+          'accentColor': colorScheme.primary.toARGB32(),
+          'primaryTextColor': colorScheme.onPrimary.toARGB32(),
+          'textColor': colorScheme.onSurface.toARGB32(),
+          'weakTextColor': colorScheme.onSurfaceVariant.toARGB32(),
+          'inputBackgroundColor': _paperTodoBlend(
+            paperColors.paper,
+            paperColors.tint,
+            paperColors.isDark ? 22 : 12,
+          ).toARGB32(),
+          'secondaryButtonColor': _paperTodoBlend(
+            paperColors.paper,
+            paperColors.tint,
+            paperColors.isDark ? 48 : 32,
+          ).toARGB32(),
+        },
+      );
+      if (result == null) return null;
+      if (result['clear'] == true) {
+        return const _ReminderIntervalSelection.clear();
+      }
+      final value = result['value'];
+      final unit = result['unit'];
+      if (value is! num || unit is! String) {
+        return null;
+      }
+      return _ReminderIntervalSelection.set(
+        value.toInt().clamp(1, 240),
+        TodoReminderIntervalUnits.normalize(unit),
+      );
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
   }
 
   void _clearReminderInterval(PaperItem item) {
@@ -11764,48 +14397,160 @@ class _TodoEditorState extends State<_TodoEditor> {
     return _notePaperById(noteId);
   }
 
-  InputChip _linkedNoteChip(
+  Widget _linkedNoteButton(
     PaperData linkedNote,
     PaperItem item,
     _TodoVisualSpec visualSpec,
   ) {
+    final paperColors = PaperTodoThemeColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hovered = _hoveredTodoLinkedNoteItemId == item.id;
+    final pressed = _pressedTodoLinkedNoteItemId == item.id;
     final scriptSpec = widget.runLinkedScriptCapsulesOnClick
         ? ScriptCapsuleSpec.tryParse(linkedNote.content)
         : null;
     final isScriptCapsule = scriptSpec != null;
-    return InputChip(
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      avatar: Icon(
-        isScriptCapsule ? Icons.bolt_outlined : Icons.notes_outlined,
-        size: visualSpec.chipIconSize,
+    final multiline = _multilineTodoItemIds.contains(item.id) ||
+        item.text.contains('\n') ||
+        item.text.contains('\r');
+    final showName = widget.showLinkedNoteName;
+    final compactTitle = _compactLinkedNoteTitle(
+      _displayPaperTitle(linkedNote),
+      multiline: multiline,
+    );
+    final label = isScriptCapsule && widget.standaloneSurface
+        ? '⚡ $compactTitle'
+        : isScriptCapsule
+            ? '⚡$compactTitle'
+            : compactTitle;
+    final minWidth = math.max(23.0, visualSpec.checkColumnWidth);
+    final legacyWidth = multiline
+        ? math.max(
+            isScriptCapsule ? 52.0 : 44.0,
+            visualSpec.checkColumnWidth * (isScriptCapsule ? 2.35 : 2),
+          )
+        : math.max(
+            isScriptCapsule ? 58.0 : 50.0,
+            visualSpec.checkColumnWidth * (isScriptCapsule ? 2.55 : 2.2),
+          );
+    final labelStyle = _todoChipTextStyle(visualSpec)?.copyWith(height: 1.05);
+    final measuredLabelWidth = TextPainter(
+      text: TextSpan(text: label, style: labelStyle),
+      textDirection: Directionality.of(context),
+      maxLines: multiline ? 2 : 1,
+    )..layout();
+    final buttonWidth = showName
+        ? (widget.allowLongLinkedNoteTitles
+            ? math.max(
+                legacyWidth,
+                (measuredLabelWidth.width.ceil() + 10).toDouble(),
+              )
+            : legacyWidth)
+        : minWidth;
+    final tooltip = isScriptCapsule
+        ? strings.get(PaperTodoStringKeys.actionRunLinkedScriptCapsule)
+        : strings.get(PaperTodoStringKeys.actionOpenLinkedNote);
+    final button = Opacity(
+      opacity: pressed ? 0.72 : 1,
+      child: Material(
+        key: ValueKey('${widget.paper.id}-${item.id}-linked-note-button'),
+        color: paperColors.tint.withValues(
+          alpha: hovered
+              ? (isDark ? 48 / 255 : 34 / 255)
+              : (isDark ? 28 / 255 : 18 / 255),
+        ),
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          onHover: (value) {
+            setState(() {
+              _hoveredTodoLinkedNoteItemId = value ? item.id : null;
+              if (!value && _pressedTodoLinkedNoteItemId == item.id) {
+                _pressedTodoLinkedNoteItemId = null;
+              }
+            });
+          },
+          onTapDown: (_) =>
+              setState(() => _pressedTodoLinkedNoteItemId = item.id),
+          onTapCancel: () {
+            if (_pressedTodoLinkedNoteItemId == item.id) {
+              setState(() => _pressedTodoLinkedNoteItemId = null);
+            }
+          },
+          onTapUp: (_) {
+            if (_pressedTodoLinkedNoteItemId == item.id) {
+              setState(() => _pressedTodoLinkedNoteItemId = null);
+            }
+          },
+          onTap: () {
+            if (scriptSpec != null) {
+              unawaited(widget.onRunScriptCapsule(scriptSpec));
+              return;
+            }
+            unawaited(widget.onOpenLinkedNote(linkedNote, widget.paper));
+          },
+          child: SizedBox(
+            width: buttonWidth,
+            height: math.max(22, visualSpec.rowMinHeight - 2),
+            child: Center(
+              child: showName
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 3,
+                        vertical: 1,
+                      ),
+                      child: Text(
+                        label,
+                        maxLines: multiline ? 2 : 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: labelStyle?.copyWith(
+                          color: hovered
+                              ? paperColors.text
+                              : paperColors.weakText.withValues(alpha: 0.72),
+                        ),
+                      ),
+                    )
+                  : widget.standaloneSurface
+                      ? Text(
+                          isScriptCapsule ? '⚡' : '\uE71B',
+                          style: TextStyle(
+                            fontFamily: isScriptCapsule
+                                ? 'Segoe UI Symbol'
+                                : 'Segoe MDL2 Assets',
+                            fontFamilyFallback: const <String>[
+                              'Segoe UI Emoji',
+                            ],
+                            fontSize: visualSpec.chipIconSize +
+                                (isScriptCapsule ? 1 : 0),
+                            fontWeight: FontWeight.w600,
+                            color: hovered
+                                ? paperColors.text
+                                : paperColors.weakText.withValues(alpha: 0.72),
+                            height: 1,
+                          ),
+                        )
+                      : Icon(
+                          isScriptCapsule ? Icons.bolt : Icons.notes_outlined,
+                          size: visualSpec.chipIconSize +
+                              (isScriptCapsule ? 1 : 0),
+                          color: hovered
+                              ? paperColors.text
+                              : paperColors.weakText.withValues(alpha: 0.72),
+                        ),
+            ),
+          ),
+        ),
       ),
-      labelStyle: _todoChipTextStyle(visualSpec),
-      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-      label: Text(
-        isScriptCapsule
-            ? _scriptChipLabel(linkedNote)
-            : _noteChipLabel(linkedNote),
-      ),
-      tooltip: _tooltipLabel(
-        widget.enableToolTips,
-        isScriptCapsule
-            ? strings.get(PaperTodoStringKeys.actionRunLinkedScriptCapsule)
-            : strings.get(PaperTodoStringKeys.actionOpenLinkedNote),
-      ),
-      onPressed: () {
-        if (scriptSpec != null) {
-          unawaited(widget.onRunScriptCapsule(scriptSpec));
-          return;
-        }
-        unawaited(widget.onOpenLinkedNote(linkedNote, widget.paper));
-      },
-      onDeleted: () => _clearLinkedNote(item),
-      deleteIcon: Icon(Icons.close_outlined, size: visualSpec.chipIconSize),
-      deleteButtonTooltipMessage: _tooltipLabel(
-        widget.enableToolTips,
-        strings.get(PaperTodoStringKeys.actionUnlinkNote),
-      ),
+    );
+    return _conditionalTooltip(
+      enabled: widget.enableToolTips,
+      message: tooltip,
+      child: button,
     );
   }
 
@@ -11816,24 +14561,43 @@ class _TodoEditorState extends State<_TodoEditor> {
         );
   }
 
-  String _noteChipLabel(PaperData note) {
-    if (!widget.showLinkedNoteName) {
-      return strings.get(PaperTodoStringKeys.labelNote);
+  String _compactLinkedNoteTitle(
+    String title, {
+    required bool multiline,
+  }) {
+    final text = title.trim();
+    if (text.isEmpty) return '';
+    final runes = text.runes.toList(growable: false);
+    if (!widget.allowLongLinkedNoteTitles) {
+      final fullLimit = multiline ? 6 : 3;
+      final keep = multiline ? 5 : 3;
+      if (runes.length <= fullLimit) return text;
+      return '${String.fromCharCodes(runes.take(keep))}…';
     }
-    final title = widget.allowLongLinkedNoteTitles
-        ? _displayPaperTitle(note)
-        : _shortenTitle(_displayPaperTitle(note), widget.maxTitleLength);
-    return strings.format(PaperTodoStringKeys.labelNoteTitle, [title]);
+    final fullWidthLimit = multiline ? 20 : 10;
+    var width = 0;
+    var keepCount = 0;
+    for (final rune in runes) {
+      final runeWidth = _isWideLinkedNoteRune(rune) ? 2 : 1;
+      if (width > 0 && width + runeWidth > fullWidthLimit) break;
+      width += runeWidth;
+      keepCount += 1;
+    }
+    if (keepCount >= runes.length) return text;
+    return '${String.fromCharCodes(runes.take(keepCount))}…';
   }
 
-  String _scriptChipLabel(PaperData note) {
-    if (!widget.showLinkedNoteName) {
-      return strings.get(PaperTodoStringKeys.labelScript);
-    }
-    final title = widget.allowLongLinkedNoteTitles
-        ? _displayPaperTitle(note)
-        : _shortenTitle(_displayPaperTitle(note), widget.maxTitleLength);
-    return strings.format(PaperTodoStringKeys.actionRunPaper, [title]);
+  bool _isWideLinkedNoteRune(int rune) {
+    return (rune >= 0x1100 && rune <= 0x115F) ||
+        (rune >= 0x2E80 && rune <= 0x303E) ||
+        (rune >= 0x3041 && rune <= 0x33FF) ||
+        (rune >= 0x3400 && rune <= 0x4DBF) ||
+        (rune >= 0x4E00 && rune <= 0x9FFF) ||
+        (rune >= 0xA000 && rune <= 0xA4CF) ||
+        (rune >= 0xAC00 && rune <= 0xD7A3) ||
+        (rune >= 0xF900 && rune <= 0xFAFF) ||
+        (rune >= 0xFF00 && rune <= 0xFF60) ||
+        (rune >= 0xFFE0 && rune <= 0xFFE6);
   }
 
   String _displayPaperTitle(PaperData paper) {
@@ -11867,16 +14631,16 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   String _formatAbsoluteDueDate(DateTime date) {
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString();
+    final day = date.day.toString();
     final time = _formatDueTime(date);
     final yearDisplayMode = TodoDueYearDisplayModes.normalize(
       widget.dueYearDisplayMode,
     );
     return switch (yearDisplayMode) {
       TodoDueYearDisplayModes.short =>
-        '${(date.year % 100).toString().padLeft(2, '0')}-$month-$day $time',
-      TodoDueYearDisplayModes.full => '${date.year}-$month-$day $time',
+        '${(date.year % 100).toString().padLeft(2, '0')}年$month/$day $time',
+      TodoDueYearDisplayModes.full => '${date.year}年$month/$day $time',
       _ => _formatCompactAbsoluteDueDate(date, time, month, day),
     };
   }
@@ -11896,7 +14660,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (dueDay == today.add(const Duration(days: 1))) {
       return strings.format(PaperTodoStringKeys.dueTomorrow, [time]);
     }
-    return '$month-$day $time';
+    return '$month/$day $time';
   }
 
   String _formatDueTime(DateTime date) {
@@ -11907,18 +14671,6 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   String _formatDueAtLocalValue(DateTime date) {
     return formatPaperTodoDueAtLocal(date);
-  }
-
-  String? _formatReminderInterval(PaperItem item) {
-    final value = item.reminderIntervalValue;
-    if (value == null || value < 1) {
-      return null;
-    }
-    final unit = TodoReminderIntervalUnits.normalize(item.reminderIntervalUnit);
-    final key = unit == TodoReminderIntervalUnits.hours
-        ? PaperTodoStringKeys.reminderEveryHours
-        : PaperTodoStringKeys.reminderEveryMinutes;
-    return strings.format(key, [value]);
   }
 
   String _formatRelativeDueDate(DateTime date) {
@@ -11935,16 +14687,80 @@ class _TodoEditorState extends State<_TodoEditor> {
     final hours = (totalMinutes % (24 * 60)) ~/ 60;
     final minutes = totalMinutes % 60;
     final parts = <String>[
-      if (days > 0) '${days}d',
-      if (hours > 0) '${hours}h',
+      if (days > 0)
+        strings.format(PaperTodoStringKeys.relativeDueDayUnit, [days]),
+      if (hours > 0)
+        strings.format(PaperTodoStringKeys.relativeDueHourUnit, [hours]),
       if (minutes > 0 || (days == 0 && hours == 0))
-        '${minutes <= 0 ? 1 : minutes}m',
+        strings.format(PaperTodoStringKeys.relativeDueMinuteUnit, [
+          minutes <= 0 ? 1 : minutes,
+        ]),
     ];
     final text = parts.join();
     if (isPast) {
       return strings.format(PaperTodoStringKeys.relativeDueOverdue, [text]);
     }
     return strings.format(PaperTodoStringKeys.relativeDueFuture, [text]);
+  }
+}
+
+class _HorizontalOverflowClip extends SingleChildRenderObjectWidget {
+  const _HorizontalOverflowClip({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderHorizontalOverflowClip();
+  }
+}
+
+class _RenderHorizontalOverflowClip extends RenderProxyBox {
+  BoxConstraints _childConstraints(BoxConstraints parentConstraints) {
+    return BoxConstraints(
+      minWidth: 0,
+      maxWidth: double.infinity,
+      minHeight: parentConstraints.minHeight,
+      maxHeight: parentConstraints.maxHeight,
+    );
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    child.layout(_childConstraints(constraints), parentUsesSize: true);
+    size = constraints.constrain(child.size);
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final child = this.child;
+    if (child == null) {
+      return constraints.smallest;
+    }
+    return constraints.constrain(
+      child.getDryLayout(_childConstraints(constraints)),
+    );
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child == null) {
+      return;
+    }
+    if (child.size.width <= size.width && child.size.height <= size.height) {
+      super.paint(context, offset);
+      return;
+    }
+    context.pushClipRect(
+      needsCompositing,
+      offset,
+      Offset.zero & size,
+      (clipContext, clipOffset) => super.paint(clipContext, clipOffset),
+    );
   }
 }
 
@@ -11989,6 +14805,7 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
   @override
   Widget build(BuildContext context) {
     final strings = PaperTodoStringsScope.of(context);
+    final colors = PaperTodoThemeColors.of(context);
     return Focus(
       autofocus: true,
       onKeyEvent: _handleDialogKeyEvent,
@@ -11997,112 +14814,119 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
           const SingleActivator(LogicalKeyboardKey.enter): _save,
           const SingleActivator(LogicalKeyboardKey.escape): _cancel,
         },
-        child: AlertDialog(
-          title: Text(strings.get(PaperTodoStringKeys.dialogDueDate)),
+        child: _PaperDialog(
+          surfaceKey: const ValueKey('todo-due-dialog-surface'),
+          width: 354,
+          height: 242,
+          radius: 12,
+          padding: const EdgeInsets.all(16),
+          contentSpacing: 8,
+          actionSpacing: 16,
+          actionsGap: 6,
+          title: strings.get(PaperTodoStringKeys.dialogDueDate),
           content: SizedBox(
-            width: 320,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: _datePartDropdown(
-                        key: const ValueKey('todo-due-year'),
-                        label: strings.get(PaperTodoStringKeys.year),
-                        value: _selectedDate.year,
-                        values: [
-                          for (var value = 2000; value <= 2100; value++) value
-                        ],
-                        onChanged: (value) => _setDate(year: value),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 2,
-                      child: _datePartDropdown(
-                        key: const ValueKey('todo-due-month'),
-                        label: strings.get(PaperTodoStringKeys.month),
-                        value: _selectedDate.month,
-                        values: [
-                          for (var value = 1; value <= 12; value++) value
-                        ],
-                        onChanged: (value) => _setDate(month: value),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 2,
-                      child: _datePartDropdown(
-                        key: const ValueKey('todo-due-day'),
-                        label: strings.get(PaperTodoStringKeys.day),
-                        value: _selectedDate.day,
-                        values: [
-                          for (var value = 1;
-                              value <=
-                                  _daysInMonth(
-                                      _selectedDate.year, _selectedDate.month);
-                              value++)
-                            value,
-                        ],
-                        onChanged: (value) => _setDate(day: value),
-                      ),
-                    ),
-                  ],
+                Text(
+                  strings.get(PaperTodoStringKeys.dialogDueDateMessage),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                    height: 1.25,
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _datePartDropdown(
-                        key: const ValueKey('todo-due-hour'),
-                        label: strings.get(PaperTodoStringKeys.hour),
-                        value: _hour,
-                        values: [
-                          for (var value = 0; value < 24; value++) value
-                        ],
-                        padValue: true,
-                        onChanged: (value) => setState(() => _hour = value),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 32,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          key: const ValueKey('todo-due-date'),
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: _pickDate,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: colors.tint.withValues(
+                                alpha: colors.isDark ? 22 / 255 : 12 / 255,
+                              ),
+                              border: Border.all(
+                                color: colors.tint.withValues(alpha: 80 / 255),
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 7),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _formatDate(_selectedDate),
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: colors.text,
+                                        fontSize: 13,
+                                        height: 1.15,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.calendar_month_outlined,
+                                    size: 16,
+                                    color: colors.weakText,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        ':',
-                        style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.w600),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 74,
+                        child: _TodoDialogDropdown<int>(
+                          dropdownKey: const ValueKey('todo-due-hour'),
+                          value: _hour,
+                          items: _timeItems(24),
+                          onChanged: (value) => setState(() => _hour = value),
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: _datePartDropdown(
-                        key: const ValueKey('todo-due-minute'),
-                        label: strings.get(PaperTodoStringKeys.minute),
-                        value: _minute,
-                        values: [
-                          for (var value = 0; value < 60; value++) value
-                        ],
-                        padValue: true,
-                        onChanged: (value) => setState(() => _minute = value),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        width: 74,
+                        child: _TodoDialogDropdown<int>(
+                          dropdownKey: const ValueKey('todo-due-minute'),
+                          value: _minute,
+                          items: _timeItems(60),
+                          onChanged: (value) => setState(() => _minute = value),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: _clear,
-              child: Text(strings.get(PaperTodoStringKeys.actionClear)),
+              onPressed: _cancel,
+              style: _todoDialogActionStyle(context),
+              child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
             ),
             TextButton(
-              onPressed: _cancel,
-              child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
+              onPressed: _clear,
+              style: _todoDialogActionStyle(context),
+              child: Text(strings.get(PaperTodoStringKeys.actionClear)),
             ),
             FilledButton(
               onPressed: _save,
-              child: Text(strings.get(PaperTodoStringKeys.actionSave)),
+              style: _todoDialogActionStyle(context, primary: true),
+              child: Text(
+                strings.get(PaperTodoStringKeys.dialogDueDateConfirm),
+              ),
             ),
           ],
         ),
@@ -12110,54 +14934,39 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
     );
   }
 
-  Widget _datePartDropdown({
-    required Key key,
-    required String label,
-    required int value,
-    required List<int> values,
-    required ValueChanged<int> onChanged,
-    bool padValue = false,
-  }) {
-    return DropdownButtonFormField<int>(
-      key: key,
-      initialValue: value,
-      menuMaxHeight: 280,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-        isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+  List<DropdownMenuItem<int>> _timeItems(int count) {
+    return [
+      for (var value = 0; value < count; value++)
+        DropdownMenuItem(
+          value: value,
+          child: Center(child: Text(value.toString().padLeft(2, '0'))),
+        ),
+    ];
+  }
+
+  String _formatDate(DateTime date) {
+    final languageCode = Localizations.localeOf(context).languageCode;
+    if (languageCode == 'zh') {
+      return '${date.year}/${date.month}/${date.day}';
+    }
+    return '${date.month}/${date.day}/${date.year}';
+  }
+
+  Future<void> _pickDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100, 12, 31),
+      helpText: PaperTodoStringsScope.of(context).get(
+        PaperTodoStringKeys.dialogDueDate,
       ),
-      items: [
-        for (final option in values)
-          DropdownMenuItem(
-            value: option,
-            child:
-                Text(padValue ? option.toString().padLeft(2, '0') : '$option'),
-          ),
-      ],
-      onChanged: (next) {
-        if (next != null) {
-          onChanged(next);
-        }
-      },
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
     );
+    if (selected != null && mounted) {
+      setState(() => _selectedDate = selected);
+    }
   }
-
-  void _setDate({int? year, int? month, int? day}) {
-    final nextYear = year ?? _selectedDate.year;
-    final nextMonth = month ?? _selectedDate.month;
-    final nextDay = (day ?? _selectedDate.day)
-        .clamp(1, _daysInMonth(nextYear, nextMonth))
-        .toInt();
-    setState(() {
-      _selectedDate = DateTime(nextYear, nextMonth, nextDay);
-    });
-  }
-
-  int _daysInMonth(int year, int month) => DateTime(year, month + 1, 0).day;
 
   KeyEventResult _handleDialogKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) {
@@ -12365,10 +15174,111 @@ class _PaperTitleTextInputFormatter extends TextInputFormatter {
   }
 }
 
+class _TodoCompletionLinePainter extends CustomPainter {
+  const _TodoCompletionLinePainter(this.color);
+
+  final Color color;
+  final double strokeWidth = 1.35;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+    final y = math.max(size.height / 2, 10.0);
+    canvas.drawLine(
+      Offset(3, y),
+      Offset(math.max(3.0, size.width - 3), y),
+      Paint()
+        ..color = color
+        ..strokeWidth = strokeWidth,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _TodoCompletionLinePainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
+class _TodoColumnSeparatorPainter extends CustomPainter {
+  const _TodoColumnSeparatorPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width < 1 || size.height <= 8) {
+      return;
+    }
+    final left = (size.width - 1) / 2;
+    canvas.drawRect(
+      Rect.fromLTWH(left, 4, 1, size.height - 8),
+      Paint()
+        ..color = color
+        ..isAntiAlias = false,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _TodoColumnSeparatorPainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
+}
+
+class _PaperResizeGripPainter extends CustomPainter {
+  const _PaperResizeGripPainter();
+
+  final Color topLeftColor = const Color(0xFFFAFBFB);
+  final Color topRightColor = const Color(0xFFC7CFDE);
+  final Color bottomLeftColor = const Color(0xFFE4E8EF);
+  final Color bottomRightColor = const Color(0xFFAAB7CD);
+  final List<int> dotCountsByBottomRow = const [4, 3, 2, 1];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const gap = 3.0;
+    final origin = Offset(size.width - 4, size.height - 4);
+    final paint = Paint()..isAntiAlias = false;
+    for (var row = 0; row < dotCountsByBottomRow.length; row++) {
+      for (var column = 0; column < dotCountsByBottomRow[row]; column++) {
+        final topLeft = origin - Offset(column * gap, row * gap);
+        canvas
+          ..drawRect(
+            Rect.fromLTWH(topLeft.dx, topLeft.dy, 1, 1),
+            paint..color = topLeftColor,
+          )
+          ..drawRect(
+            Rect.fromLTWH(topLeft.dx + 1, topLeft.dy, 1, 1),
+            paint..color = topRightColor,
+          )
+          ..drawRect(
+            Rect.fromLTWH(topLeft.dx, topLeft.dy + 1, 1, 1),
+            paint..color = bottomLeftColor,
+          )
+          ..drawRect(
+            Rect.fromLTWH(topLeft.dx + 1, topLeft.dy + 1, 1, 1),
+            paint..color = bottomRightColor,
+          );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PaperResizeGripPainter oldDelegate) {
+    return oldDelegate.topLeftColor != topLeftColor ||
+        oldDelegate.topRightColor != topRightColor ||
+        oldDelegate.bottomLeftColor != bottomLeftColor ||
+        oldDelegate.bottomRightColor != bottomRightColor ||
+        !listEquals(
+          oldDelegate.dotCountsByBottomRow,
+          dotCountsByBottomRow,
+        );
+  }
+}
+
 class _TodoVisualSpec {
   const _TodoVisualSpec({
     required this.textScale,
-    required this.checkboxScale,
     required this.iconSize,
     required this.chipIconSize,
     required this.chipFontSize,
@@ -12379,7 +15289,6 @@ class _TodoVisualSpec {
   });
 
   final double textScale;
-  final double checkboxScale;
   final double iconSize;
   final double chipIconSize;
   final double chipFontSize;
@@ -12387,6 +15296,26 @@ class _TodoVisualSpec {
   final double itemGap;
   final double rowMinHeight;
   final double textVerticalPadding;
+
+  double get checkColumnWidth => switch (controlExtent) {
+        28 => 21,
+        30 => 22,
+        32 => 24,
+        36 => 27,
+        _ => math.max(21, controlExtent - 8),
+      };
+
+  double get dragHandleWidth => math.max(14, checkColumnWidth - 8);
+
+  double get dragHandleSlotWidth => math.max(18, checkColumnWidth - 4);
+
+  double get dragGlyphSize => switch (controlExtent) {
+        28 => 11,
+        30 => 12,
+        32 => 13,
+        36 => 14.5,
+        _ => math.max(11, controlExtent - 18),
+      };
 
   double get appendGlyphSize => switch (controlExtent) {
         28 => 13,
@@ -12396,17 +15325,32 @@ class _TodoVisualSpec {
         _ => math.max(13, controlExtent - 16),
       };
 
-  EdgeInsets get mainContentPadding =>
-      EdgeInsets.symmetric(horizontal: 2, vertical: textVerticalPadding);
+  double get trashGlyphSize => switch (controlExtent) {
+        28 => 12,
+        30 => 13,
+        32 => 14,
+        36 => 15.5,
+        _ => math.max(12, controlExtent - 17),
+      };
 
-  EdgeInsets get extraContentPadding =>
-      EdgeInsets.fromLTRB(8, textVerticalPadding, 4, textVerticalPadding);
+  EdgeInsets get mainContentPadding => EdgeInsets.fromLTRB(
+        4,
+        textVerticalPadding + 1,
+        0,
+        math.max(0, textVerticalPadding - 1),
+      );
+
+  EdgeInsets get extraContentPadding => EdgeInsets.fromLTRB(
+        10,
+        textVerticalPadding + 1,
+        2,
+        math.max(0, textVerticalPadding - 1),
+      );
 
   static _TodoVisualSpec from(String value) {
     return switch (TodoVisualSizes.normalize(value)) {
       TodoVisualSizes.small => const _TodoVisualSpec(
           textScale: 12 / 14,
-          checkboxScale: 0.86,
           iconSize: 21,
           chipIconSize: 11.5,
           chipFontSize: 9.5,
@@ -12417,7 +15361,6 @@ class _TodoVisualSpec {
         ),
       TodoVisualSizes.large => const _TodoVisualSpec(
           textScale: 1,
-          checkboxScale: 1,
           iconSize: 24,
           chipIconSize: 13.5,
           chipFontSize: 11.5,
@@ -12428,7 +15371,6 @@ class _TodoVisualSpec {
         ),
       TodoVisualSizes.extraLarge => const _TodoVisualSpec(
           textScale: 15.5 / 14,
-          checkboxScale: 1.08,
           iconSize: 27,
           chipIconSize: 15,
           chipFontSize: 13,
@@ -12439,7 +15381,6 @@ class _TodoVisualSpec {
         ),
       _ => const _TodoVisualSpec(
           textScale: 13 / 14,
-          checkboxScale: 0.94,
           iconSize: 22,
           chipIconSize: 12.5,
           chipFontSize: 10.5,

@@ -126,15 +126,105 @@ void main() {
     final yaHeiState = AppState(uiFontPreset: UiFontPresets.yaHei);
     final dengXianState = AppState(uiFontPreset: UiFontPresets.dengXian);
 
-    expect(resolveAppFontFamily(yaHeiState), 'Microsoft YaHei UI');
-    expect(
-      resolveAppFontFamilyFallback(yaHeiState),
-      containsAll(['Microsoft YaHei', 'Segoe UI', 'Segoe UI Emoji']),
-    );
+    expect(resolveAppFontFamily(yaHeiState), isNull);
+    expect(resolveAppFontFamilyFallback(yaHeiState), isNull);
     expect(resolveAppFontFamily(dengXianState), 'DengXian');
     expect(
       resolveAppFontFamilyFallback(dengXianState),
-      containsAll(['Microsoft YaHei UI', 'Segoe UI', 'Segoe UI Emoji']),
+      const [
+        'Segoe UI',
+        'Microsoft YaHei UI',
+        'Microsoft YaHei',
+        'Microsoft JhengHei UI',
+        'Microsoft JhengHei',
+        'Yu Gothic UI',
+        'Malgun Gothic',
+        'Meiryo',
+        'Segoe UI Symbol',
+        'Segoe UI Emoji',
+      ],
+    );
+  });
+
+  test('native Windows dialogs use the same configured UI font family', () {
+    expect(resolveWindowsNativeDialogFontFamily(AppState()), isEmpty);
+    expect(
+      resolveWindowsNativeDialogFontFamily(
+        AppState(uiFontPreset: UiFontPresets.yaHei),
+      ),
+      'Microsoft YaHei UI',
+    );
+    expect(
+      resolveWindowsNativeDialogFontFamily(
+        AppState(uiFontPreset: UiFontPresets.dengXian),
+      ),
+      'DengXian',
+    );
+    expect(
+      resolveWindowsNativeDialogFontFamily(
+        AppState(uiFontPreset: UiFontPresets.serif),
+      ),
+      'Georgia',
+    );
+    expect(
+      resolveWindowsNativeDialogFontFamily(
+        AppState(uiFontPreset: UiFontPresets.mono),
+      ),
+      'Consolas',
+    );
+    expect(
+      resolveWindowsNativeDialogFontFamily(
+        AppState(),
+        runtimeCustomFontFamily: ' PaperTodo Custom ',
+      ),
+      'PaperTodo Custom',
+    );
+    expect(
+      resolveWindowsNativeDialogFontFamily(
+        AppState(systemFontFamilyName: 'Consolas'),
+        runtimeCustomFontFamily: 'PaperTodo Custom',
+      ),
+      'Consolas',
+    );
+  });
+
+  test('note content font family preserves PaperTodo content chains', () {
+    expect(resolveAppContentFontFamily(AppState()), 'Microsoft YaHei UI');
+    expect(
+      resolveAppContentFontFamilyFallback(AppState()),
+      const [
+        'Segoe UI',
+        'Microsoft YaHei',
+        'Segoe UI Symbol',
+        'Segoe UI Emoji',
+      ],
+    );
+
+    final dengXianState = AppState(uiFontPreset: UiFontPresets.dengXian);
+    final yaHeiState = AppState(uiFontPreset: UiFontPresets.yaHei);
+    expect(resolveAppContentFontFamily(yaHeiState), 'Microsoft YaHei UI');
+    expect(
+      resolveAppContentFontFamilyFallback(yaHeiState),
+      resolveAppContentFontFamilyFallback(AppState()),
+    );
+    expect(resolveAppContentFontFamily(dengXianState), 'DengXian');
+    expect(
+      resolveAppContentFontFamilyFallback(dengXianState)?.first,
+      'Segoe UI',
+    );
+    expect(
+      resolveAppContentFontFamily(
+        AppState(systemFontFamilyName: 'Consolas'),
+        runtimeCustomFontFamily: paperTodoRuntimeCustomFontFamily,
+      ),
+      'Consolas',
+    );
+    expect(
+      resolveAppContentFontFamily(
+        AppState(),
+        runtimeCustomFontFamily: paperTodoRuntimeCustomFontFamily,
+      ),
+      paperTodoRuntimeCustomFontFamily,
     );
   });
 }

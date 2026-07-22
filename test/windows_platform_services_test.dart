@@ -252,6 +252,8 @@ void main() {
         'hideFromWindowSwitcher': false,
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
+        'enableAnimations': true,
+        'fontFamily': 'Segoe UI',
         'isScriptCapsule': false,
       },
     ]);
@@ -498,6 +500,38 @@ void main() {
       ['Alpha', 'Beta Font', 'Paper Sans'],
     );
     expect(calls.map((call) => call.method), ['listInstalledFontFamilies']);
+  });
+
+  test('Windows custom color picker validates native channel results',
+      () async {
+    const channel = MethodChannel('repapertodo/window_color_picker_test');
+    final calls = <MethodCall>[];
+    var result = '#33aa77';
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return result;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final services = WindowsPlatformServices(channel: channel);
+
+    expect(services.systemIntegration.supportsCustomColorPicker, isTrue);
+    expect(
+      await services.systemIntegration.chooseCustomColor('#8C7350'),
+      '#33AA77',
+    );
+    expect(calls.single.method, 'chooseCustomColor');
+    expect(calls.single.arguments, '#8C7350');
+
+    result = 'not-a-color';
+    expect(
+      await services.systemIntegration.chooseCustomColor('#8C7350'),
+      isNull,
+    );
   });
 
   test('Windows platform services reject blank channel arguments locally',
@@ -938,6 +972,8 @@ void main() {
         'hideFromWindowSwitcher': false,
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
+        'enableAnimations': true,
+        'fontFamily': 'Segoe UI',
         'isScriptCapsule': false,
       },
       {
@@ -959,6 +995,8 @@ void main() {
         'hideFromWindowSwitcher': false,
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
+        'enableAnimations': true,
+        'fontFamily': 'Segoe UI',
         'isScriptCapsule': true,
       },
     ]);
@@ -1073,6 +1111,8 @@ void main() {
         'hideFromWindowSwitcher': false,
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
+        'enableAnimations': true,
+        'fontFamily': 'Segoe UI',
         'isScriptCapsule': false,
       },
       {
@@ -1094,6 +1134,8 @@ void main() {
         'hideFromWindowSwitcher': false,
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
+        'enableAnimations': true,
+        'fontFamily': 'Segoe UI',
         'isScriptCapsule': true,
       },
     ]);
@@ -1360,7 +1402,8 @@ void main() {
     expect(calls.where((call) => call.method == 'setBounds'), isEmpty);
   });
 
-  test('collapse all exposes persistent native master capsules and proxies',
+  test(
+      'collapse all keeps paper windows visible and exposes native master capsules',
       () async {
     const channel = MethodChannel('test/windows-collapse-all-master');
     final calls = <MethodCall>[];
@@ -1378,6 +1421,7 @@ void main() {
       useCapsuleCollapseAll: true,
       capsuleCollapseAllActive: true,
       collapseExpandedDeepCapsuleOnClick: true,
+      systemFontFamilyName: 'Microsoft YaHei UI',
       papers: [
         PaperData(
           id: 'master-paper',
@@ -1402,9 +1446,10 @@ void main() {
     expect(surfaces[0]['isCollapsed'], false);
     expect(surfaces[1]['isVisible'], true);
     expect(surfaces[1]['isCollapsed'], false);
+    expect(surfaces[0], containsPair('fontFamily', 'Microsoft YaHei UI'));
     expect(surfaces.where((surface) => surface['isMasterCapsule'] == true),
         isEmpty);
-    expect(calls.where((call) => call.method == 'show'), isEmpty);
+    expect(calls.where((call) => call.method == 'show'), hasLength(1));
 
     final collapsedNative = (calls
             .where((call) => call.method == 'setNativeCapsuleSurfaces')
@@ -1419,6 +1464,11 @@ void main() {
     expect(collapsedNative.single, containsPair('isActive', true));
     expect(collapsedNative.single, containsPair('count', 2));
     expect(collapsedNative.single, containsPair('labelEn', 'Collapse all'));
+    expect(
+      collapsedNative.single,
+      containsPair('fontFamily', 'Microsoft YaHei UI'),
+    );
+    expect(collapsedNative.single, containsPair('enableAnimations', true));
     expect(collapsedNative.single, containsPair('labelZh', '收起全部'));
 
     state.setCapsuleCollapseAllActiveFor(state.papers.first, false);
@@ -1451,14 +1501,63 @@ void main() {
       true,
     );
     expect(
+      proxies.every((surface) => surface['isScriptCapsule'] == false),
+      true,
+    );
+    expect(
+      proxies.every(
+        (surface) => surface['fontFamily'] == 'Microsoft YaHei UI',
+      ),
+      true,
+    );
+    expect(
       expandedNative
           .singleWhere((surface) => surface['kind'] == 'master')['isActive'],
       false,
     );
   });
 
+  test('paper and capsule surfaces resolve PaperTodo UI font presets',
+      () async {
+    const channel = MethodChannel('test/windows-paper-surface-font-family');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+    final services = WindowsPlatformServices(channel: channel);
+    final state = AppState(
+      uiFontPreset: UiFontPresets.mono,
+      papers: [
+        PaperData(
+          id: 'font-paper',
+          title: 'Measured capsule',
+        ),
+      ],
+    )..normalize();
+
+    await services.paperWindows.refreshSurfaceRegistry(state);
+
+    final paperSurfaces = (calls
+            .singleWhere((call) => call.method == 'setPaperSurfaces')
+            .arguments as List)
+        .cast<Map>();
+    expect(paperSurfaces.single, containsPair('fontFamily', 'Consolas'));
+
+    final nativeSurfaces = (calls
+            .singleWhere((call) => call.method == 'setNativeCapsuleSurfaces')
+            .arguments as List)
+        .cast<Map>();
+    expect(nativeSurfaces.single, containsPair('fontFamily', 'Consolas'));
+  });
+
   test(
-      'native master keeps expanded proxies and collapsed papers do not duplicate',
+      'native master excludes expanded proxies when the preference is disabled',
       () async {
     const channel = MethodChannel('test/windows-native-capsule-membership');
     final calls = <MethodCall>[];
@@ -1499,16 +1598,14 @@ void main() {
         native.where((surface) => surface['kind'] == 'master'), hasLength(1));
     final proxies =
         native.where((surface) => surface['kind'] == 'proxy').toList();
-    expect(proxies, hasLength(1));
-    expect(proxies.single['paperId'], 'expanded-paper');
-    expect(proxies.single['collapseOnClick'], true);
+    expect(proxies, isEmpty);
     final real = (calls
             .singleWhere((call) => call.method == 'setPaperSurfaces')
             .arguments as List)
         .cast<Map>();
     expect(
         real.singleWhere((surface) => surface['id'] == 'collapsed-paper')['y'],
-        148.0);
+        98.0);
   });
 
   test('desktop-pinned expanded proxy opens instead of collapsing', () async {
@@ -1529,7 +1626,9 @@ void main() {
       papers: [
         PaperData(
           id: 'pinned-expanded-paper',
+          type: PaperTypes.note,
           title: 'Pinned expanded',
+          content: '!p\nWrite-Output pinned',
           isPinnedToDesktop: true,
         ),
       ],
@@ -1542,6 +1641,8 @@ void main() {
         .cast<Map>();
     final proxy = native.singleWhere((surface) => surface['kind'] == 'proxy');
     expect(proxy['paperId'], 'pinned-expanded-paper');
+    expect(proxy['paperType'], PaperTypes.note);
+    expect(proxy['isScriptCapsule'], true);
     expect(proxy['collapseOnClick'], false);
   });
 
@@ -2100,10 +2201,10 @@ void main() {
     final payload = trayMenuCall.arguments as Map<Object?, Object?>;
     expect(payload['labels'], _localizedTrayLabels.toJson());
     final papers = payload['papers'] as List<Object?>;
-    expect((papers[0] as Map<Object?, Object?>)['trayLabel'], 'Task - First');
+    expect((papers[0] as Map<Object?, Object?>)['trayLabel'], 'First');
     expect(
       (papers[1] as Map<Object?, Object?>)['trayLabel'],
-      'ScriptLocal - Second (hidden-l10n, collapsed-l10n, desktop-l10n, topmost-l10n)',
+      'Second (hidden-l10n, collapsed-l10n, desktop-l10n, topmost-l10n)',
     );
   });
 
@@ -2558,9 +2659,12 @@ void main() {
       (_) {},
     );
     await pumpEventQueue();
+    await services.paperWindows.setCoordinatorBackgroundColor(0xFFFFF9EA);
     await services.paperWindows.hideCoordinatorWindow();
 
     expect(closeRequests, 1);
+    expect(calls[calls.length - 2].method, 'setCoordinatorBackgroundColor');
+    expect(calls[calls.length - 2].arguments, 0xFFFFF9EA);
     expect(calls.last.method, 'hideCoordinator');
   });
 

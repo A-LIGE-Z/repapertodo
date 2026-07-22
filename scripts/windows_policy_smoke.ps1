@@ -89,7 +89,12 @@ public static class RePaperTodoPolicyNative {
 
   static bool Belongs(IntPtr window, uint expectedPid, bool visible) {
     uint actualPid; GetWindowThreadProcessId(window, out actualPid);
-    return actualPid == expectedPid && (!visible || IsWindowVisible(window));
+    if (actualPid != expectedPid || (visible && !IsWindowVisible(window))) {
+      return false;
+    }
+    var className = new System.Text.StringBuilder(128);
+    GetClassName(window, className, className.Capacity);
+    return className.ToString() != "RePaperTodo.PaperShadow";
   }
 
   public static IntPtr FindCoordinator(uint pid) {
@@ -127,7 +132,7 @@ public static class RePaperTodoPolicyNative {
     IntPtr result = IntPtr.Zero;
     EnumWindows((window, parameter) => {
       RECT r; if (Belongs(window, pid, true) && GetWindowRect(window, out r) &&
-          r.Right - r.Left >= 76 && r.Bottom - r.Top == 46) {
+          r.Right - r.Left >= 34 && r.Bottom - r.Top == 46) {
         result = window; return false;
       }
       return true;
@@ -194,7 +199,7 @@ public static class RePaperTodoPolicyNative {
     int count = 0;
     EnumWindows((window, parameter) => {
       RECT r; if (Belongs(window, pid, true) && GetWindowRect(window, out r) &&
-          r.Right - r.Left >= 76 && r.Bottom - r.Top == 46) count++;
+          r.Right - r.Left >= 34 && r.Bottom - r.Top == 46) count++;
       return true;
     }, IntPtr.Zero);
     return count;
@@ -285,8 +290,11 @@ public static class RePaperTodoPolicyNative {
 
   public static void HoverWindow(IntPtr window) {
     RECT bounds; if (!GetWindowRect(window, out bounds)) return;
-    SetCursorPos((bounds.Left + bounds.Right) / 2,
-                 (bounds.Top + bounds.Bottom) / 2);
+    int x = Math.Max(1, (bounds.Right - bounds.Left) / 2);
+    int y = Math.Max(1, (bounds.Bottom - bounds.Top) / 2);
+    SetCursorPos(bounds.Left + x, bounds.Top + y);
+    SendMessage(window, 0x0200, IntPtr.Zero,
+                new IntPtr((y << 16) | (x & 0xFFFF)));
     System.Threading.Thread.Sleep(250);
   }
 
@@ -355,8 +363,13 @@ public static class RePaperTodoPolicyNative {
 
   public static void ClickNativeCapsule(IntPtr window) {
     if (window == IntPtr.Zero) return;
-    PostMessage(window, 0x0201, new IntPtr(1), IntPtr.Zero);
-    PostMessage(window, 0x0202, IntPtr.Zero, IntPtr.Zero);
+    RECT bounds;
+    if (!GetWindowRect(window, out bounds)) return;
+    int x = Math.Max(1, (bounds.Right - bounds.Left) / 2);
+    int y = Math.Max(1, (bounds.Bottom - bounds.Top) / 2);
+    IntPtr point = new IntPtr((y << 16) | (x & 0xFFFF));
+    SendMessage(window, 0x0201, new IntPtr(1), point);
+    SendMessage(window, 0x0202, IntPtr.Zero, point);
     System.Threading.Thread.Sleep(300);
   }
 
@@ -373,7 +386,9 @@ public static class RePaperTodoPolicyNative {
     int startY = (bounds.Top + bounds.Bottom) / 2;
     int targetX = workArea.Left + 24;
     int targetY = startY;
+    SetForegroundWindow(window);
     SetCursorPos(startX, startY);
+    System.Threading.Thread.Sleep(120);
     mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
     for (int step = 1; step <= 12; step++) {
       SetCursorPos(startX + ((targetX - startX) * step / 12),
@@ -401,6 +416,21 @@ public static class RePaperTodoPolicyNative {
     }
     mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
     System.Threading.Thread.Sleep(300);
+  }
+
+  public static void MoveFlutterCapsuleToLeftAndFinish(IntPtr window) {
+    RECT bounds, workArea;
+    if (!GetWindowRect(window, out bounds) ||
+        !SystemParametersInfo(0x0030, 0, out workArea, 0)) return;
+    int width = bounds.Right - bounds.Left;
+    int height = bounds.Bottom - bounds.Top;
+    int cursorX = workArea.Left + 24;
+    int cursorY = (bounds.Top + bounds.Bottom) / 2;
+    SetCursorPos(cursorX, cursorY);
+    SetWindowPos(window, IntPtr.Zero, workArea.Left, bounds.Top, width, height,
+                 0x0004 | 0x0010);
+    SendMessage(window, 0x0232, IntPtr.Zero, IntPtr.Zero);
+    System.Threading.Thread.Sleep(500);
   }
 
   public static void DragPaperBy(IntPtr window, int deltaX, int deltaY) {
@@ -635,8 +665,8 @@ try {
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke collapse-all did not expose exactly one master capsule for the queue." -Condition {
     [RePaperTodoPolicyNative]::CountCapsules([uint32]$primary.Id) -eq 1
   }
-  $masterCapsule = [RePaperTodoPolicyNative]::FindCapsule([uint32]$primary.Id)
   Start-Sleep -Milliseconds 3000
+  $masterCapsule = [RePaperTodoPolicyNative]::FindCapsule([uint32]$primary.Id)
   [RePaperTodoPolicyNative]::ClickNativeCapsule($masterCapsule)
   try {
     Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke master capsule did not expand the queue." -Condition {
@@ -649,9 +679,14 @@ try {
     throw "Policy smoke master capsule did not expand the queue (processExited=$exited, exitCode=$exitCode). Visible windows: $windows"
   }
   $collapseAllMasterCapsule = $true
-  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke did not reconcile native master/proxy surfaces after expanding the queue." -Condition {
-    ([RePaperTodoPolicyNative]::FindWindowByTitleFragment([uint32]$primary.Id, "Native Capsule [master:") -ne [IntPtr]::Zero) -and
-    ([RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]") -ne [IntPtr]::Zero)
+  try {
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke did not reconcile native master/proxy surfaces after expanding the queue." -Condition {
+      ([RePaperTodoPolicyNative]::FindWindowByTitleFragment([uint32]$primary.Id, "Native Capsule [master:") -ne [IntPtr]::Zero) -and
+      ([RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]") -ne [IntPtr]::Zero)
+    }
+  } catch {
+    $windows = [RePaperTodoPolicyNative]::VisibleWindowSummary([uint32]$primary.Id)
+    throw "Policy smoke did not reconcile native master/proxy surfaces after expanding the queue. Visible windows: $windows"
   }
   $nativeMaster = [RePaperTodoPolicyNative]::FindWindowByTitleFragment([uint32]$primary.Id, "Native Capsule [master:")
   $expandedProxy = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]")
@@ -725,6 +760,12 @@ try {
     [RePaperTodoPolicyNative]::IsVisible($paper)
   }
   $expandedProxyClickActivates = $true
+  if ([RePaperTodoPolicyNative]::CapsuleWindowWidth($paper) -ne 360) {
+    [RePaperTodoPolicyNative]::ClickCapsule($paper)
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke routed proxy paper did not expand from its real capsule." -Condition {
+      [RePaperTodoPolicyNative]::CapsuleWindowWidth($paper) -eq 360
+    }
+  }
   [RePaperTodoPolicyNative]::SetForegroundWindow($reminderPaper) | Out-Null
   $coordinator = [RePaperTodoPolicyNative]::FindCoordinator([uint32]$primary.Id)
   $borderlessResizableWindow =
@@ -764,8 +805,16 @@ try {
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke fullscreen probe did not become the foreground process." -Condition {
     [RePaperTodoPolicyNative]::ForegroundProcessId() -eq $fullscreen.Id
   }
-  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke paper did not avoid the fullscreen foreground window." -Condition {
-    -not [RePaperTodoPolicyNative]::IsTopmost($paper)
+  try {
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke paper did not avoid the fullscreen foreground window." -Condition {
+      -not [RePaperTodoPolicyNative]::IsTopmost($paper)
+    }
+  } catch {
+    $paperBounds = [RePaperTodoPolicyNative]::BoundsString($paper)
+    $fullscreenBounds = [RePaperTodoPolicyNative]::BoundsString($fullscreenWindow)
+    $foregroundPid = [RePaperTodoPolicyNative]::ForegroundProcessId()
+    $paperTopmost = [RePaperTodoPolicyNative]::IsTopmost($paper)
+    throw "Policy smoke paper did not avoid the fullscreen foreground window (paperBounds=$paperBounds, fullscreenBounds=$fullscreenBounds, foregroundPid=$foregroundPid, expectedForegroundPid=$($fullscreen.Id), paperTopmost=$paperTopmost)."
   }
   $fullscreenAvoided = $true
   Stop-Process -Id $fullscreen.Id -Force -ErrorAction SilentlyContinue
@@ -792,8 +841,10 @@ try {
   [RePaperTodoPolicyNative]::ClickRelative($paper, 140, 52)
   [System.Windows.Forms.SendKeys]::SendWait(" updated")
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke could not edit todo content after dragging the paper." -Condition {
-    if (-not (Test-Path -LiteralPath $stateFile -PathType Leaf)) { return $false }
-    try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
+    try {
+      if (-not (Test-Path -LiteralPath $stateFile -PathType Leaf)) { return $false }
+      $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+    } catch { return $false }
     $paperState = @($saved.papers | Where-Object { $_.id -eq "policy-paper" })[0]
     $null -ne $paperState -and
       @($paperState.items).Count -gt 0 -and
@@ -806,8 +857,10 @@ try {
   }
   $contentEditGeometryStable = $true
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke ordinary paper drag did not persist its geometry." -Condition {
-    if (-not (Test-Path -LiteralPath $stateFile -PathType Leaf)) { return $false }
-    try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
+    try {
+      if (-not (Test-Path -LiteralPath $stateFile -PathType Leaf)) { return $false }
+      $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+    } catch { return $false }
     $paperState = @($saved.papers | Where-Object { $_.id -eq "policy-paper" })[0]
     $null -ne $paperState -and
       (([int][Math]::Round([double]$paperState.x)) -ne 220 -or
@@ -854,7 +907,11 @@ try {
       ($_.Name -eq "pwsh.exe" -or $_.Name -eq "powershell.exe")
     })
   if ($persistentWorkers.Count -lt 1) { throw "Policy smoke persistent PowerShell worker was not found." }
-  [RePaperTodoPolicyNative]::DragCapsuleToLeft($scriptPaper)
+  $scriptPaper = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Long s")
+  if ($scriptPaper -eq [IntPtr]::Zero) {
+    throw "Policy smoke script capsule disappeared before drag validation."
+  }
+  [RePaperTodoPolicyNative]::MoveFlutterCapsuleToLeftAndFinish($scriptPaper)
   Wait-ForCondition -TimeoutSeconds 15 -Message "Policy smoke capsule drag did not snap to the opposite edge." -Condition {
     [RePaperTodoPolicyNative]::IsLeftWorkAreaCapsule($scriptPaper)
   }
@@ -918,7 +975,9 @@ try {
 } finally {
   if ($null -ne $fullscreen -and -not $fullscreen.HasExited) { Stop-Process -Id $fullscreen.Id -Force -ErrorAction SilentlyContinue }
   if ($null -ne $primary -and -not $primary.HasExited) { Stop-Process -Id $primary.Id -Force -ErrorAction SilentlyContinue }
-  if (Test-Path -LiteralPath $smokeRoot) {
+  if ($null -eq $failure -and (Test-Path -LiteralPath $smokeRoot)) {
     Remove-Item -LiteralPath $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue
+  } elseif ($null -ne $failure) {
+    Write-Warning "Windows policy smoke failure artifacts were preserved at $smokeRoot"
   }
 }

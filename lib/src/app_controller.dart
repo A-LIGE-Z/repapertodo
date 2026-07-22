@@ -60,11 +60,18 @@ class RePaperTodoController {
   bool get supportsGlobalHotkeys =>
       _platform.systemIntegration.supportsGlobalHotkeys;
 
+  bool get supportsCustomColorPicker =>
+      _platform.systemIntegration.supportsCustomColorPicker;
+
   bool get supportsScriptCapsules =>
       _platform.scriptCapsules.supportsScriptCapsules;
 
   Future<List<String>> installedFontFamilies() {
     return _platform.systemIntegration.installedFontFamilies();
+  }
+
+  Future<String?> chooseCustomColor(String initialColorHex) {
+    return _platform.systemIntegration.chooseCustomColor(initialColorHex);
   }
 
   Future<void> hideCoordinatorWindow() {
@@ -234,6 +241,10 @@ class RePaperTodoController {
 
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {
     await _platform.paperWindows.capturePaperSurfaceBounds(paper);
+  }
+
+  Future<void> setCoordinatorBackgroundColor(int argb) async {
+    await _platform.paperWindows.setCoordinatorBackgroundColor(argb);
   }
 
   void setPaperAlwaysOnTop(PaperData paper, bool enabled) {

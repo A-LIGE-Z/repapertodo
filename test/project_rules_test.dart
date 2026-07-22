@@ -266,9 +266,178 @@ void main() {
     }).toList();
     expect(forbiddenAndroidResourceLocales, isEmpty);
     expect(design, contains('Tooltips setting only controls'));
-    expect(strings, contains('tooltipsHelp'));
+    expect(strings, contains('tipEnableToolTips'));
     expect(syncSettingsDialog, contains('class _SettingsHelpIcon'));
-    expect(syncSettingsDialog, contains('PaperTodoStringKeys.tooltipsHelp'));
+    expect(syncSettingsDialog, contains('tipEnableToolTips'));
+  });
+
+  test('PaperTodo settings toggle and close chrome are preserved', () {
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final widgetTest = _readProjectText('test/widget_test.dart');
+
+    expect(design, contains('Windows settings toggles follow PaperTodo'));
+    expect(design, contains('M 4,8.1 L 7,11 L 12,5'));
+    expect(design, contains('0.55 disabled option opacity'));
+    expect(settings, contains('class _SettingsCheckboxTile'));
+    expect(settings, contains('class _SettingsCheckMarkPainter'));
+    expect(settings, contains('dimension: 16'));
+    expect(settings, contains('static const double borderWidth = 1.5'));
+    expect(settings, contains('..moveTo(4, 8.1)'));
+    expect(settings, contains('..lineTo(7, 11)'));
+    expect(settings, contains('..lineTo(12, 5)'));
+    expect(settings, contains('opacity: enabled ? 1 : 0.55'));
+    expect(settings, isNot(contains('CheckboxListTile(')));
+    expect(settings, contains('class _SettingsCloseButton'));
+    expect(settings, contains("ValueKey('settings-close-button-surface')"));
+    expect(settings, contains("'\\u00D7'"));
+    expect(widgetTest,
+        contains('settings toggles and close button match PaperTodo chrome'));
+  });
+
+  test('PaperTodo settings hints preserve source coverage and chrome', () {
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final strings = _readProjectText('lib/src/ui/papertodo_strings.dart');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final widgetTest = _readProjectText('test/widget_test.dart');
+    const tipKeys = <String>{
+      'tipAllowLongLinkedNoteTitles',
+      'tipCapsuleCollapseAll',
+      'tipCapsuleMode',
+      'tipCollapseExpandedDeepCapsuleOnClick',
+      'tipCustomThemeColor',
+      'tipDeepCapsuleMode',
+      'tipEnableAnimations',
+      'tipEnableTodoNoteLinks',
+      'tipEnableToolTips',
+      'tipExternalExtension',
+      'tipExternalOpenButton',
+      'tipFullscreenTopmostMode',
+      'tipHideDeepCapsulesWhenCovered',
+      'tipHideLinkedNotesFromCapsules',
+      'tipHidePapersFromWindowSwitcher',
+      'tipHideScriptRunWindow',
+      'tipMarkdownRender',
+      'tipMaxTitleLength',
+      'tipNewNoteButton',
+      'tipNewTodoButton',
+      'tipNoteLineSpacing',
+      'tipPersistentPowerShellProcess',
+      'tipPinnedNoteHotKey',
+      'tipPinnedTodoHotKey',
+      'tipPreferPowerShell7',
+      'tipRunLinkedScriptCapsulesOnClick',
+      'tipShowDeepCapsuleWhileExpanded',
+      'tipShowLinkedNoteName',
+      'tipShowTodoDueRelativeTime',
+      'tipStartup',
+      'tipSystemFont',
+      'tipThemeMode',
+      'tipTodoDueYearDisplay',
+      'tipTodoLineSpacing',
+      'tipTodoReminderBubbleDuration',
+      'tipTodoReminderInterval',
+      'tipTodoReminderIntervalUnit',
+      'tipTodoReminderScope',
+      'tipTodoVisualSize',
+      'tipUseTodoReminderInterval',
+    };
+
+    for (final tipKey in tipKeys) {
+      expect(
+        strings,
+        matches(
+          RegExp("static const $tipKey\\s*=\\s*'$tipKey';"),
+        ),
+        reason: '$tipKey must remain declared and localized.',
+      );
+      expect(
+        settings,
+        matches(RegExp('PaperTodoStringKeys\\s*\\.\\s*$tipKey')),
+        reason: '$tipKey must remain connected to its settings option.',
+      );
+    }
+    expect(design, contains('40 source `WrapWithHint` options'));
+    expect(settings, contains("'\\u24D8'"));
+    expect(settings, contains('dimension: 18'));
+    expect(settings, contains('Duration(milliseconds: 200)'));
+    expect(settings, contains('Duration(seconds: 20)'));
+    expect(settings, contains('SystemMouseCursors.help'));
+    expect(widgetTest, contains('expect(tester.getSize(capsuleHelp),'));
+  });
+
+  test('PaperTodo settings groups and 28px controls preserve source chrome',
+      () {
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
+    final strings = _readProjectText('lib/src/ui/papertodo_strings.dart');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final widgetTest = _readProjectText('test/widget_test.dart');
+    final adaptiveSelector = _sliceBetween(
+      settings,
+      'Widget _adaptiveChoiceSelector',
+      'Widget _adaptiveFieldPair',
+    );
+    final sourceStepper = _sliceBetween(
+      settings,
+      'class _SettingsStepper extends',
+      'class _SettingsWindowDialog extends',
+    );
+
+    expect(strings, contains("PaperTodoStringKeys.appearance: 'Display'"));
+    expect(
+      strings,
+      contains("PaperTodoStringKeys.themeColorDefault: "
+          "'Use default palette'"),
+    );
+    expect(
+      strings,
+      contains("PaperTodoStringKeys.themeColorClear: 'Default color'"),
+    );
+    expect(
+      strings,
+      contains("PaperTodoStringKeys.settingsTodoAndNotes: 'Todo / Notes'"),
+    );
+    expect(
+      strings,
+      contains("PaperTodoStringKeys.settingsGeneralAdvanced: "
+          "'General / Advanced'"),
+    );
+    expect(
+        strings, contains("settingsSectionTopBarButtons: 'Top-bar buttons'"));
+    expect(settings, contains('Widget _settingsGroupLabel'));
+    expect(settings, contains('EdgeInsets.only(top: 12, bottom: 3)'));
+    expect(settings, contains('class _SettingsSegmentSelector'));
+    expect(settings, contains('class _SettingsSegmentButton'));
+    expect(adaptiveSelector, contains('_SettingsSegmentSelector('));
+    expect(adaptiveSelector, isNot(contains('SegmentedButton<String>(')));
+    expect(settings, contains('padding: const EdgeInsets.all(1)'));
+    expect(settings, contains('fontSize: 12'));
+    expect(settings, contains('FontWeight.w600'));
+    expect(settings, contains('FontWeight.w400'));
+    expect(sourceStepper, contains('height: 28'));
+    expect(sourceStepper, contains('width: 34'));
+    expect(sourceStepper, contains("fontFamily: 'Segoe UI Symbol'"));
+    expect(sourceStepper, contains('onTapDown: (_) => widget.onPressed()'));
+    expect(sourceStepper, isNot(contains('Tooltip(')));
+    expect(settings, contains('BoxConstraints.tightFor(height: height)'));
+    expect(settings, contains("'settings-reminder-interval'"));
+    expect(settings, contains("'settings-reminder-duration'"));
+    expect(settings, contains("'settings-pinned-todo-hotkey'"));
+    expect(settings, contains('BoxConstraints(minWidth: 76)'));
+    expect(settings, contains('BoxConstraints(minWidth: 82)'));
+    expect(settings, contains('height: 27'));
+    expect(settings, contains('class _SettingsAuthorLink'));
+    expect(settings, contains('https://github.com/snownico0722'));
+    expect(settings, contains('Duration(milliseconds: 300)'));
+    expect(settings, contains('Duration(seconds: 12)'));
+    expect(app, contains("openAuthorLink: () => _openUri("));
+    expect(
+      widgetTest,
+      contains('inactive reminder mode keeps timing editors available'),
+    );
+    expect(widgetTest, contains('expect(tester.getSize(swatch),'));
+    expect(design, contains('28px source segment selectors'));
   });
 
   test('runtime localization maps cover every declared string key', () {
@@ -1704,7 +1873,8 @@ void main() {
     expect(runner, contains('FLUTTER_VERSION'));
     expect(runner, contains("version.find('+')"));
     expect(runner, contains('RePaperTodo v'));
-    expect(runner, contains('AppDisplayName().c_str()'));
+    expect(
+        runner, contains('append_owner_draw(menu.get(), 0, AppDisplayName()'));
     expect(runner, contains('ExecutableDirectory()'));
     expect(
         runner,
@@ -2051,6 +2221,8 @@ void main() {
     expect(app, contains('resolveAppFontFamilyFallback'));
     expect(app, contains('Microsoft YaHei UI'));
     expect(app, contains('DengXian'));
+    expect(app, contains('const _paperTodoDengXianAdvanceScale = 12.5 / 13'));
+    expect(app, contains('height: widget.lineSpacing / textMetricScale'));
     expect(platform, contains('normalizeInstalledFontFamilies'));
     expect(windowsPlatform, contains('listInstalledFontFamilies'));
     expect(settingsDialog, isNot(contains('value: UiFontPresets.yaHei')));
@@ -2231,6 +2403,11 @@ void main() {
     expect(app, contains('_resizeTodoColumnPair'));
     expect(app, contains('column-splitter-'));
     expect(app, contains('SystemMouseCursors.resizeLeftRight'));
+    expect(app, contains('class _TodoColumnSeparatorPainter'));
+    expect(app, contains('paperBorder.withValues(alpha: 0.9)'));
+    expect(app, contains('Rect.fromLTWH(left, 4, 1, size.height - 8)'));
+    expect(app, contains('..isAntiAlias = false'));
+    expect(app, contains("fontFamily: 'Segoe UI Symbol'"));
     expect(app, contains('unawaited(widget.onChanged())'));
   });
 
@@ -2240,12 +2417,14 @@ void main() {
     final paperWindow =
         _readProjectText('windows/runner/paper_flutter_window.cpp');
     final runnerCmake = _readProjectText('windows/runner/CMakeLists.txt');
+    final runnerResources = _readProjectText('windows/runner/Runner.rc');
+    final resourceHeader = _readProjectText('windows/runner/resource.h');
     final dueDateHelper =
         _readProjectText('lib/src/core/model/todo_due_date.dart');
 
     expect(design, contains('Todo due editing should preserve PaperTodo'));
     expect(design, contains('PaperTodo-compatible due dates'));
-    expect(design, contains('existing Todo due chip'));
+    expect(design, contains('existing Todo due value'));
     expect(design, contains("PaperTodo's due badge"));
     expect(design, contains('existing Todo reminder chip'));
     expect(design, contains('Todo overflow actions should mirror PaperTodo'));
@@ -2264,14 +2443,103 @@ void main() {
     expect(design, contains('seven-digit fractional-second'));
     expect(design, contains('today is `HH:mm`'));
     expect(design, contains('Tomorrow HH:mm'));
+    expect(design, contains('`M/d HH:mm`'));
+    expect(design, contains('`yyyy年M/d HH:mm`'));
     expect(design, contains('round the absolute distance up'));
     expect(design, contains('`2h5m`'));
-    expect(design, contains('{duration} overdue'));
+    expect(design, contains('localized future/overdue wrapper'));
+    expect(design, contains('`2小时5分`'));
     expect(design, contains('visible countdown text does not go stale'));
     expect(app, contains('_TodoDueSelectionDialog'));
     expect(app, contains("'pickDateTime'"));
+    expect(app, contains("'pickReminderInterval'"));
+    expect(app, contains('_pickNativeWindowsReminderInterval'));
+    expect(app, contains('PaperTodoStringKeys.dialogDueDateMessage'));
+    expect(app, contains('PaperTodoStringKeys.reminderIntervalMessage'));
+    expect(app, contains('PaperTodoStringKeys.reminderIntervalGlobal'));
+    expect(app, contains("'openCalendar': openCalendar"));
+    expect(app, contains("'backgroundColor': colorScheme.surface.toARGB32()"));
     expect(paperWindow, contains('DATETIMEPICK_CLASSW'));
     expect(paperWindow, contains('ShowNativeDateTimePicker'));
+    expect(paperWindow, contains('ShowNativeReminderIntervalPicker'));
+    expect(paperWindow, contains('MulDiv(354'));
+    expect(paperWindow, contains('MulDiv(242'));
+    expect(paperWindow, contains('MulDiv(326'));
+    expect(paperWindow, contains('MulDiv(216'));
+    expect(paperWindow, contains('WS_POPUP | WS_CLIPCHILDREN'));
+    expect(paperWindow, isNot(contains('WS_POPUP | WS_CAPTION')));
+    expect(paperWindow, contains('CreateRoundRectRgn'));
+    expect(paperWindow, contains('WC_COMBOBOXW'));
+    expect(paperWindow, contains('CBS_DROPDOWNLIST'));
+    expect(paperWindow, contains('BS_OWNERDRAW'));
+    expect(paperWindow, contains('kDatePickerDateSurfaceId'));
+    expect(paperWindow, contains('kDatePickerHourSurfaceId'));
+    expect(paperWindow, contains('kDatePickerMinuteSurfaceId'));
+    expect(paperWindow, contains('DrawDateTimePickerCalendarIcon'));
+    expect(paperWindow, contains('IDB_DATE_PICKER_CALENDAR_LIGHT'));
+    expect(paperWindow, contains('LR_CREATEDIBSECTION'));
+    expect(
+      runnerResources,
+      contains('date_picker_calendar_light.bmp'),
+    );
+    expect(resourceHeader, contains('IDB_DATE_PICKER_CALENDAR_LIGHT'));
+    expect(
+      File('windows/runner/resources/date_picker_calendar_light.bmp')
+          .existsSync(),
+      isTrue,
+    );
+    expect(paperWindow, contains('POINT chevron_points[]'));
+    expect(paperWindow, contains('Polygon(draw->hDC, chevron_points'));
+    expect(
+      paperWindow,
+      contains('OffsetRect(&text_bounds, 0, -ScaleForDpi(state->dialog, 3))'),
+    );
+    expect(paperWindow, contains('old_numeric_character_extra'));
+    expect(paperWindow, contains('const int second_line_top'));
+    expect(paperWindow, contains('const int first_line_dc = SaveDC(context)'));
+    expect(
+      paperWindow,
+      contains('OffsetRect(&message_bounds, 0, -ScaleForDpi(window, 1))'),
+    );
+    expect(
+      paperWindow,
+      contains('OffsetRect(&text_bounds, ScaleForDpi(state->dialog, 1), 0)'),
+    );
+    expect(
+      RegExp(
+        r'state->control_font = CreateFontW\([\s\S]*?ANTIALIASED_QUALITY',
+      ).hasMatch(paperWindow),
+      isTrue,
+    );
+    expect(paperWindow, contains('RGB(153, 201, 238)'));
+    expect(paperWindow, contains('RGB(213, 200, 176)'));
+    expect(paperWindow, contains('RECT editor_surface'));
+    expect(
+      RegExp(
+        r'state->button_font = CreateFontW\([\s\S]*?ANTIALIASED_QUALITY',
+      ).allMatches(paperWindow).length,
+      greaterThanOrEqualTo(2),
+    );
+    expect(
+      RegExp(
+        r'OffsetRect\(&text_bounds, 0, ScaleForDpi\(state->dialog, 1\)\)',
+      ).allMatches(paperWindow).length,
+      greaterThanOrEqualTo(2),
+    );
+    expect(paperWindow, contains('kReminderIntervalUnitSurfaceId'));
+    expect(paperWindow, contains('ReminderIntervalValueSubclassProc'));
+    expect(paperWindow, contains('RGB(86, 157, 229)'));
+    expect(paperWindow, contains('RGB(149, 193, 220)'));
+    expect(paperWindow, contains('scaled(170), scaled(21)'));
+    expect(paperWindow, contains('scaled(112), scaled(27)'));
+    expect(
+      RegExp(r'const int shade = 240').allMatches(paperWindow).length,
+      greaterThanOrEqualTo(2),
+    );
+    expect(paperWindow, contains('value_focused'));
+    expect(paperWindow, contains('IsDialogMessageW'));
+    expect(paperWindow, contains('kReminderIntervalGlobalId'));
+    expect(paperWindow, contains('EM_SETSEL'));
     expect(runnerCmake, contains('comctl32.lib'));
     expect(app, contains('CallbackShortcuts'));
     expect(app, contains('SingleActivator(LogicalKeyboardKey.enter)'));
@@ -2293,6 +2561,10 @@ void main() {
     expect(app, contains('Duration.microsecondsPerMinute'));
     expect(app, contains('PaperTodoStringKeys.relativeDueOverdue'));
     expect(app, contains('PaperTodoStringKeys.relativeDueFuture'));
+    expect(app, contains('class _HorizontalOverflowClip'));
+    expect(app, contains('class _RenderHorizontalOverflowClip'));
+    expect(design, contains('clip its right edge at the paper viewport'));
+    expect(design, contains('wrapping individual letters vertically'));
     expect(app, contains('now.add(const Duration(hours: 1))'));
     expect(app, contains('_compactTodoActionClearDueDate'));
     expect(app, contains('_compactTodoActionClearReminder'));
@@ -2308,6 +2580,36 @@ void main() {
     expect(dueDateHelper, contains(r'\d{1,7}'));
     expect(dueDateHelper, contains('_normalizeIsoFractionForDart'));
     expect(dueDateHelper, contains(r"replaceAll('\u5e74', '-')"));
+  });
+
+  test('Windows reminder bubble keeps PaperTodo paper and icon layers', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final paperWindow =
+        _readProjectText('windows/runner/paper_flutter_window.cpp');
+    final header = _readProjectText('windows/runner/paper_flutter_window.h');
+
+    expect(app, contains("'borderColor': reminderTint.toARGB32()"));
+    expect(app, contains("'borderAlpha': 150"));
+    expect(app, contains("'iconBackgroundColor': Color.alphaBlend("));
+    expect(app, contains('(isDark ? 48 : 32) / 255'));
+    expect(header, contains('reminder_icon_background_color_'));
+    expect(header, contains('int reminder_border_alpha_ = 150'));
+    expect(paperWindow, contains('CS_DROPSHADOW'));
+    expect(paperWindow, contains('WS_EX_LAYERED'));
+    expect(paperWindow, contains('ScaleForDpi(reminder_bubble_, 260)'));
+    expect(paperWindow, contains('ScaleForDpi(reminder_bubble_, 104)'));
+    expect(paperWindow, contains('RoundedRectPixelCoverage'));
+    expect(paperWindow, contains('CirclePixelCoverage'));
+    expect(paperWindow, contains('const double outer_radius = 15.0'));
+    expect(
+      paperWindow,
+      contains('GetBValue(reminder_icon_background_color_)'),
+    );
+    expect(
+      paperWindow,
+      contains('SetTextColor(buffer, reminder_accent_color_)'),
+    );
+    expect(paperWindow, contains('UpdateLayeredWindow'));
   });
 
   test('PaperTodo todo reorder data semantics are preserved', () {
@@ -2349,10 +2651,54 @@ void main() {
     expect(app, contains('_todoDeleteDropTarget'));
     expect(app,
         contains("ValueKey('\${widget.paper.id}-todo-delete-drop-target')"));
+    expect(app, contains("ValueKey('\${widget.paper.id}-todo-trash-area')"));
+    expect(app, contains('paperColors.danger.withValues'));
+    expect(app, contains('width: highlighted ? 1.5 : 1'));
+    expect(app, contains('opacity: highlighted ? 1 : 0.65'));
     expect(app, contains('_setTodoItemDragging(false);'));
     expect(app, contains('_deleteItem(context, details.data)'));
     expect(widgetTest,
         contains('drags todo items to the bottom delete area like PaperTodo'));
+    expect(widgetTest, contains('trashColors.danger.withValues'));
+  });
+
+  test('PaperTodo todo completion and due visual metrics are preserved', () {
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final app = _readProjectText('lib/src/app.dart');
+    final widgetTest = _readProjectText('test/widget_test.dart');
+
+    expect(design, contains('Completed rows animate to 0.75'));
+    expect(design, contains('1.35px BrightWeakText rule'));
+    expect(design, contains('due urgency begins ten minutes'));
+    expect(app, contains('opacity: dragging ? 0.25 : (item.done ? 0.75 : 1)'));
+    expect(app, contains('class _TodoCompletionLinePainter'));
+    expect(app, contains('final double strokeWidth = 1.35'));
+    expect(app, contains('difference <= const Duration(minutes: 10)'));
+    expect(app, contains('padding: const EdgeInsets.only(left: 1)'));
+    expect(app, contains('class _PaperTodoTodoCheckBox'));
+    expect(app, contains('dimension: 16'));
+    expect(app, contains('static const double borderWidth = 1.5'));
+    expect(app, contains('static const double radius = 4'));
+    expect(app, contains('moveTo(3 * scaleX, 7.5 * scaleY)'));
+    expect(app, contains('lineTo(6.5 * scaleX, 11 * scaleY)'));
+    expect(app, contains('lineTo(13 * scaleX, 4 * scaleY)'));
+    expect(app, contains(r"'\u2261'"));
+    expect(app, contains('opacity: dragging ? 0.9 : (hovered ? 0.78 : 0.48)'));
+    expect(app, contains('opacity: dragging ? 0.25'));
+    expect(app, contains('SizeChangedLayoutNotifier'));
+    expect(app, contains('firstLine.end < item.text.length'));
+    expect(widgetTest,
+        contains('todo due badges match PaperTodo timing and visual metrics'));
+    expect(
+        widgetTest, contains('all Todo visual size metrics match PaperTodo'));
+    expect(
+        widgetTest,
+        contains(
+            'linked note button matches PaperTodo metrics and pointer states'));
+    expect(
+        widgetTest,
+        contains(
+            'auto-wrapped todo text switches linked note multiline metrics'));
   });
 
   test('PaperTodo individual todo delete semantics are preserved', () {
@@ -2526,6 +2872,8 @@ void main() {
         _readProjectText('lib/src/core/model/external_uri_targets.dart');
     final markdownLinks =
         _readProjectText('lib/src/core/model/markdown_links.dart');
+    final markdownSource =
+        _readProjectText('lib/src/ui/papertodo_markdown_source.dart');
 
     expect(design, contains('Markdown note link interaction should preserve'));
     expect(design, contains('preview-mode links open directly'));
@@ -2559,9 +2907,13 @@ void main() {
     expect(design, contains('Markdown image syntax should follow'));
     expect(design, contains('treated as a source'));
     expect(design, contains('link hit target'));
-    expect(design, contains('PaperTodo-scoped extension set'));
-    expect(design, contains('no GitHub'));
-    expect(design, contains('table or task-checkbox expansion'));
+    expect(design, contains('PaperTodo-scoped source renderer'));
+    expect(design, contains('Basic mode keeps source'));
+    expect(design, contains('Enhanced preview fades syntax'));
+    expect(design, contains('redraws list bullets/numbers'));
+    expect(design, contains('source-like images/tables'));
+    expect(design, contains('active IME composing ranges'));
+    expect(design, contains('track its scroll offset'));
     expect(design, contains('Markdown source link scanning'));
     expect(design, contains('first literal `](`'));
     expect(design, contains('backslash'));
@@ -2601,14 +2953,24 @@ void main() {
     expect(app, contains('_resetTextZoom'));
     expect(app, contains('PaperTodoStringKeys.actionResetTextZoom'));
     expect(app, contains('widget.onTextZoomChanged(1)'));
-    expect(app, contains('paperTodoMarkdownInlineHtmlSyntaxes'));
-    expect(app, contains('_paperTodoMarkdownExtensionSet'));
-    expect(app, contains('md.ExtensionSet.commonMark'));
-    expect(app, contains('md.StrikethroughSyntax'));
-    expect(app, contains('_paperTodoMarkdownImageBuilder'));
-    expect(app, contains('_paperTodoMarkdownBuilders'));
-    expect(app, contains('class _UnderlineMarkdownElementBuilder'));
-    expect(app, contains("_previewMarkdownStyleSheet"));
+    expect(app, contains('PaperTodoMarkdownSourcePreview'));
+    expect(app, contains('PaperTodoMarkdownTextEditingController'));
+    expect(app, contains('PaperTodoMarkdownEditorBackgroundPainter'));
+    expect(app, contains("'markdown-editor-block-background'"));
+    expect(markdownSource, contains('class PaperTodoMarkdownSourcePreview'));
+    expect(markdownSource,
+        contains('class PaperTodoMarkdownTextEditingController'));
+    expect(markdownSource,
+        contains('class PaperTodoMarkdownEditorBackgroundPainter'));
+    expect(markdownSource, contains('hasActiveComposing'));
+    expect(markdownSource, contains('Colors.transparent'));
+    expect(
+        markdownSource, contains("'papertodo-markdown-list-marker-\$index'"));
+    expect(markdownSource,
+        contains('const _paperTodoHiddenListMarkerFontSize = 12.0'));
+    expect(
+        markdownSource, contains('final centerY = markerPainter.height / 2'));
+    expect(markdownSource, contains('scrollController.offset'));
     expect(externalUriTargets, contains("startsWith('www.')"));
     expect(app, contains('_normalizeMarkdownLocalPath'));
     expect(app, contains('controller.openExternalFile(localPath)'));
@@ -2716,6 +3078,58 @@ void main() {
     expect(app, contains('clamp(48, maxHeight)'));
   });
 
+  test('PaperTodo note status and canvas chrome metrics are preserved', () {
+    final app = _readProjectText('lib/src/app.dart');
+
+    expect(app, contains("ValueKey('note-canvas-toolbar')"));
+    expect(app, contains('constraints: const BoxConstraints(minHeight: 31)'));
+    expect(app, contains("ValueKey('note-add-canvas-block')"));
+    expect(app, contains("ValueKey('note-add-canvas-block-surface')"));
+    expect(app, contains('width: 28'));
+    expect(app, contains('height: 24'));
+    expect(app, contains('fontSize: 13'));
+    expect(
+        app,
+        contains(
+            'opacity: enabled ? (_canvasAddButtonPressed ? 0.7 : 1) : 0.72'));
+    expect(app, contains('maxLines: 1'));
+    expect(app, contains('fit: BoxFit.scaleDown'));
+    expect(app, contains("ValueKey('note-status-mode-pill')"));
+    expect(app, contains('constraints: const BoxConstraints(minWidth: 42)'));
+    expect(app, contains("ValueKey('note-status-zoom')"));
+    expect(app, contains('width: 38'));
+    expect(app, contains("ValueKey('note-text-zoom-overlay')"));
+    expect(app, contains("(widget.textZoom - 1).abs() < 0.001"));
+    expect(app, contains('right: 12'));
+    expect(app, contains('bottom: 7'));
+    expect(app, contains('opacity: _zoomOverlayHovered ? 1 : 0.55'));
+    expect(app, contains('fontSize: 10.5'));
+    expect(app, contains('EdgeInsets.fromLTRB(26, 12, 14, 12)'));
+    expect(app, contains('alpha: isDark ? 88 / 255 : 104 / 255'));
+    expect(app, contains('alpha: isDark ? 34 / 255 : 28 / 255'));
+    expect(app, contains("ValueKey('note-preview-scroll')"));
+    expect(app, contains('padding: EdgeInsets.zero'));
+    expect(app, isNot(contains('final compactContent =')));
+    expect(app, isNot(contains('final compactHeader =')));
+    expect(app, contains('fontSize: (isCode ? 13 : 14) * widget.scale'));
+    expect(app, contains('fontFamily: _paperTodoCodeFontFamily'));
+    expect(app, contains('PaperTodoTypography.of(context).contentStyle'));
+    expect(app, contains("const _paperTodoCodeFontFamily = 'Cascadia Mono'"));
+    expect(app, contains("'Consolas'"));
+    expect(app, contains('final emphasized = widget.isSelected || isTopLayer'));
+    expect(app, contains(': const []'));
+    expect(app, contains('alpha: isDark ? 0.22 : 0.13'));
+    expect(app, contains('blurRadius: 6'));
+    expect(app, contains('final shadowAxis = 2 / math.sqrt(2)'));
+    expect(app, contains('offset: Offset(shadowAxis, shadowAxis)'));
+    expect(app,
+        contains('final origin = embedded ? const Offset(2, 1) : Offset.zero'));
+    expect(app,
+        contains("String _noteCanvasElementTypeLabel(String type) => 'CODE';"));
+    expect(app, contains("return '顶层 \$layerRank';"));
+    expect(app, contains("return '层 \$layerRank';"));
+  });
+
   test('PaperTodo note canvas placement and layer rules are preserved', () {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final app = _readProjectText('lib/src/app.dart');
@@ -2814,17 +3228,17 @@ void main() {
     expect(header, contains('std::wstring show_all = L"Show all papers"'));
     expect(header, contains('std::wstring hide_all = L"Hide all papers"'));
     expect(header, contains('std::wstring toggle_all = L"Toggle all papers"'));
-    expect(runner,
-        contains('MF_STRING | MF_DISABLED, 0, AppDisplayName().c_str()'));
+    expect(
+        runner, contains('append_owner_draw(menu.get(), 0, AppDisplayName()'));
     expect(runner, contains('TrayMenuLabelsFromMap'));
-    expect(runner, contains('tray_labels_.new_todo.c_str()'));
-    expect(runner, contains('tray_labels_.new_note.c_str()'));
-    expect(runner, contains('tray_labels_.show_all.c_str()'));
-    expect(runner, contains('tray_labels_.hide_all.c_str()'));
-    expect(runner, contains('tray_labels_.toggle_all.c_str()'));
+    expect(runner, contains('kTrayNewTodoCommand, tray_labels_.new_todo'));
+    expect(runner, contains('kTrayNewNoteCommand, tray_labels_.new_note'));
+    expect(runner, contains('kTrayShowCommand, tray_labels_.show_all'));
+    expect(runner, contains('kTrayHideCommand, tray_labels_.hide_all'));
+    expect(runner, contains('kTrayToggleCommand, tray_labels_.toggle_all'));
     expect(runner, contains('tray_labels_.inline_confirm_delete'));
-    expect(runner, contains('tray_labels_.inline_confirm_action.c_str()'));
-    expect(runner, contains('tray_labels_.cancel.c_str()'));
+    expect(runner, contains('tray_labels_.inline_confirm_action,'));
+    expect(runner, contains('tray_labels_.cancel,'));
     expect(platform, contains("'labels': labels.toJson()"));
     expect(platform,
         contains("'trayLabel': _trayPaperLabel(paper, title, labels)"));
@@ -2837,6 +3251,204 @@ void main() {
     expect(runner, contains('SendStartupCommandRequested("show");'));
     expect(runner, contains('SendStartupCommandRequested("hide");'));
     expect(runner, contains('SendStartupCommandRequested("toggle");'));
+  });
+
+  test('Windows tray menu follows PaperTodo owner-drawn metrics and theme', () {
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final header = _readProjectText('windows/runner/flutter_window.h');
+
+    expect(header, contains('enum class TrayOwnerDrawKind'));
+    expect(header, contains('std::vector<std::unique_ptr<TrayOwnerDrawItem>>'));
+    expect(runner, contains('MFT_OWNERDRAW'));
+    expect(runner, contains('case WM_MEASUREITEM:'));
+    expect(runner, contains('case WM_DRAWITEM:'));
+    expect(runner, contains('constexpr int kTrayMenuMinimumWidth = 190'));
+    expect(runner, contains('kTrayMenuNativeWidthCompensation = 21'));
+    expect(runner, contains('constexpr int kTrayMenuItemHeight = 24'));
+    expect(runner, contains('constexpr int kTrayMenuHeaderHeight = 22'));
+    expect(runner, contains('constexpr int kTrayMenuItemRadius = 8'));
+    expect(runner, contains('constexpr int kTrayMenuShellRadius = 10'));
+    expect(runner, contains('constexpr int kTrayMenuCheckboxSize = 13'));
+    expect(runner, contains('header ? 11 : 12'));
+    expect(runner, contains('MixTrayColor(palette.paper, palette.weak, 0.72)'));
+    expect(runner, contains('L"\\u270E"'));
+    expect(runner, contains('L"\\u26A1"'));
+    expect(runner, contains('item->paper_type == "script" ? 15 : 14'));
+    expect(runner, contains('ANTIALIASED_QUALITY'));
+    expect(
+        runner, contains('MixTrayColor(palette.paper, palette.active, 0.92)'));
+    expect(runner, contains('GetWindowRgn(window, current_region)'));
+    expect(runner, contains('!IsWindowVisible(window)'));
+    expect(runner, contains('std::atomic_bool keep_styling_menu'));
+    expect(runner, contains('chrome_thread.join()'));
+    expect(runner, contains('GetStringArgument(*state, "theme", theme)'));
+    expect(
+        runner, contains('GetStringArgument(*state, "colorScheme", scheme)'));
+    expect(
+      runner,
+      contains('GetStringArgument(*state, "customThemeColorHex", "")'),
+    );
+    expect(runner, contains('ApplyTrayMenuWindowChrome'));
+    expect(runner, contains('CreateRoundRectRgn'));
+    expect(runner, contains('L"#32768"'));
+  });
+
+  test('Windows custom theme color uses the native PaperTodo picker', () {
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final cmake = _readProjectText('windows/runner/CMakeLists.txt');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+
+    expect(runner, contains('if (method == "chooseCustomColor")'));
+    expect(runner, contains('CHOOSECOLORW chooser = {}'));
+    expect(runner, contains('CC_ANYCOLOR | CC_FULLOPEN | CC_RGBINIT'));
+    expect(cmake, contains('"comdlg32.lib"'));
+    expect(settings, contains('widget.pickCustomThemeColor'));
+  });
+
+  test('Paper menus use the original hover tint strengths', () {
+    final app = _readProjectText('lib/src/app.dart');
+
+    expect(app, contains('elevation: 0'));
+    expect(
+      app,
+      contains('shadowColor: const WidgetStatePropertyAll(Colors.transparent)'),
+    );
+    expect(app, contains('alpha: isDark ? 48 / 255 : 32 / 255'));
+    expect(app, contains('hoverColor: hoverTint'));
+    expect(app, contains('focusColor: hoverTint'));
+    expect(app, contains('highlightColor: hoverTint'));
+    expect(app, contains('class _PaperTodoPopupMenuItem<T>'));
+    expect(app, contains('borderRadius: BorderRadius.circular(8)'));
+    expect(app, contains('highlightColor: Colors.transparent'));
+    expect(app, contains('class _PaperTodoPopupMenuHeaderLabel'));
+    expect(app, contains('colors.weakText.withValues(alpha: 0.72)'));
+    expect(app, contains('colors.onSurface.withValues(alpha: 0.72)'));
+    expect(app, contains('? _PaperTodoPopupMenuItem<String>('));
+    expect(app, contains('height: 21'));
+    expect(app, contains('widget.standaloneSurface ? 7 : 16'));
+  });
+
+  test('Todo removals preserve PaperTodo fade and stagger timing', () {
+    final app = _readProjectText('lib/src/app.dart');
+
+    expect(app, contains('class _TodoDepartureAnimation'));
+    expect(app, contains('duration: const Duration(milliseconds: 200)'));
+    expect(app, contains('slideDistance: 30'));
+    expect(app, contains('delay: Duration(milliseconds: index * 30)'));
+    expect(app, contains('duration: const Duration(milliseconds: 180)'));
+    expect(app, contains('slideDistance: 20'));
+    expect(app, contains('Curves.easeOutQuad.transform(fadeProgress)'));
+  });
+
+  test('Todo entrances preserve PaperTodo new and paste timing', () {
+    final app = _readProjectText('lib/src/app.dart');
+
+    expect(app, contains('class _TodoEntranceAnimation'));
+    expect(app, contains('opacityDuration: const Duration(milliseconds: 250)'));
+    expect(app, contains('slideDuration: const Duration(milliseconds: 250)'));
+    expect(app, contains('slideDistance: 20'));
+    expect(app, contains('delay: Duration(milliseconds: index * 40)'));
+    expect(app, contains('opacityDuration: const Duration(milliseconds: 200)'));
+    expect(app, contains('slideDuration: const Duration(milliseconds: 220)'));
+    expect(app, contains('slideDistance: 15'));
+  });
+
+  test('Flutter secondary surfaces keep PaperTodo paper dialog chrome', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+
+    expect(app, isNot(contains('AlertDialog(')));
+    expect(settings, isNot(contains('AlertDialog(')));
+    expect(settings, contains('_SettingsWindowDialog('));
+    expect(settings, contains("'settings-max-title-length'"));
+    expect(settings, contains('_SettingsStepper('));
+    expect(settings, isNot(contains('_SettingsSlider(')));
+    expect(settings, isNot(contains("'settings-color-scheme-selector'")));
+  });
+
+  test('Windows paper HWNDs preserve PaperTodo transparent shadow chrome', () {
+    final app = _readProjectText('lib/src/app.dart');
+
+    expect(app, contains('const _paperWindowChromeMargin = 8.0'));
+    expect(app, contains('EdgeInsets.all(_paperWindowChromeMargin)'));
+    expect(app, contains('standaloneSurface'));
+    expect(app, contains('const <BoxShadow>[]'));
+    expect(app, contains('_paperWindowTransparencyGuards()'));
+    expect(app, contains('paper-window-transparency-guard-left'));
+    expect(app, contains('clipBehavior: standaloneSurface ? Clip.hardEdge'));
+    expect(app, contains('paper-window-capsule-surface'));
+    expect(app, contains('scaleX: paper.isNote ? 0.93 : 0.94'));
+    expect(app, contains('offset: const Offset(-1, -1)'));
+    expect(app, contains('paper.isNote ? -1 : -1.25'));
+  });
+
+  test('Windows paper HWND geometry stays logical across monitor DPI', () {
+    final paperWindow =
+        _readProjectText('windows/runner/paper_flutter_window.cpp');
+    final coordinator = _readProjectText('windows/runner/flutter_window.cpp');
+
+    expect(paperWindow, contains('DpiForPhysicalPoint'));
+    expect(paperWindow, contains('ScaleLogicalValue'));
+    expect(paperWindow, contains('UnscalePhysicalValue'));
+    expect(paperWindow, contains('ScaleForDpi(window, 220)'));
+    expect(paperWindow, contains('FlutterDesktopGetDpiForMonitor(monitor)'));
+    expect(
+      coordinator,
+      contains('GetWindowRect(paper_window->GetHandle(), &native_bounds)'),
+    );
+  });
+
+  test('Windows native capsules scale their paper metrics per monitor', () {
+    final capsule =
+        _readProjectText('windows/runner/native_capsule_window.cpp');
+    final header = _readProjectText('windows/runner/native_capsule_window.h');
+
+    expect(capsule, contains('FlutterDesktopGetDpiForMonitor'));
+    expect(capsule, contains('ScaleMetric(kCapsuleChromeMargin)'));
+    expect(capsule, contains('ScaleMetric(kCapsuleBodyHeight)'));
+    expect(capsule, contains('height_ = ScaleMetric(46)'));
+    expect(capsule, contains('ScaleMetric(13)'));
+    expect(capsule, contains('ScaleMetric(15)'));
+    expect(capsule, contains('L"\\u270E"'));
+    expect(capsule, contains('L"\\u26A1"'));
+    expect(capsule, contains('script_capsule_ = BoolValue('));
+    expect(capsule, contains('constexpr int kCapsuleCloseWidth = 30'));
+    expect(capsule, contains('bool NativeCapsuleWindow::IsClosePoint('));
+    expect(capsule, contains('DrawTextW(buffer, L"\\u00D7"'));
+    expect(capsule, contains('SendHide();'));
+    expect(capsule, contains('"hideRequested"'));
+    expect(capsule, contains('struct CapsulePalette'));
+    expect(capsule, contains('RelativeLuminance(COLORREF color)'));
+    expect(capsule, contains('BlendAlpha(background, palette.tint'));
+    expect(capsule, contains('dark ? 48 : 32'));
+    expect(capsule, contains('Mix(custom, RGB(0, 0, 0), 82)'));
+    expect(capsule, contains('Mix(custom, RGB(255, 255, 255), 90)'));
+    expect(capsule,
+        contains('palette.weak = Mix(palette.text, palette.paper, 46)'));
+    expect(
+        capsule, contains('font_family_ = StringValue(surface, "fontFamily"'));
+    expect(capsule, contains('GetTextExtentPoint32W('));
+    expect(capsule, contains('std::ceil(UnscaleMetric(measured.cx))'));
+    expect(capsule, contains('int NativeCapsuleWindow::MeasureTextWidth('));
+    expect(capsule, contains('62 + glyph_width + label_width'));
+    expect(capsule, contains('wpf_metric_correction'));
+    expect(capsule, contains('label_width - 3'));
+    expect(capsule, contains('const int title_clip_width ='));
+    expect(capsule, contains('IntersectClipRect(buffer, title_clip.left'));
+    expect(capsule, contains('SetTextColor(buffer, master_ ? text : weak)'));
+    expect(capsule, contains('ANTIALIASED_QUALITY'));
+    expect(capsule, contains('22 + glyph_width +'));
+    expect(capsule, contains('logical_full_width -'));
+    expect(capsule, contains('std::min(54, logical_full_width)'));
+    expect(capsule, contains('? ScaleMetric(12)'));
+    expect(capsule, contains('measured_glyph_width'));
+    expect(capsule, contains('glyph_rect.right + glyph_gap'));
+    expect(header, contains('UINT dpi_ = 96'));
+    expect(header, contains('EffectiveFontFamily() const'));
+    expect(header, contains('int MeasureTextWidth('));
+    expect(header, contains('bool script_capsule_ = false'));
+    expect(header, contains('bool close_hovered_ = false'));
+    expect(header, contains('bool close_pressed_ = false'));
   });
 
   test('Windows tray icon primary click follows PaperTodo double-click model',
@@ -2868,6 +3480,54 @@ void main() {
     final settingsCase = runner.substring(settingsCaseStart, settingsCaseEnd);
     expect(settingsCase, contains('SendStartupCommandRequested("settings");'));
     expect(settingsCase, contains('ShowSettingsCoordinatorWindow(window);'));
+  });
+
+  test('Windows settings coordinator is a DPI-aware borderless paper window',
+      () {
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final app = _readProjectText('lib/src/app.dart');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+
+    expect(
+        runner, contains('ApplySettingsCoordinatorWindowStyle(GetHandle())'));
+    expect(runner, contains('ApplySettingsCoordinatorWindowStyle(window)'));
+    expect(runner, contains('SetWindowTextW(window, L"")'));
+    expect(runner, contains('WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN'));
+    expect(runner, contains('WS_EX_LAYERED | WS_EX_TOOLWINDOW'));
+    expect(runner, contains('SetLayeredWindowAttributes(window, RGB(1, 2, 3)'));
+    expect(runner, contains('DWMNCRP_DISABLED'));
+    expect(runner, contains('MARGINS margins = {0, 0, 0, 0}'));
+    expect(runner, contains('PaintSettingsCoordinatorBackground('));
+    expect(runner, contains('g_settings_coordinator_background'));
+    expect(runner, contains('method == "setCoordinatorBackgroundColor"'));
+    expect(runner, contains('RDW_INVALIDATE | RDW_ERASE | RDW_FRAME'));
+    expect(runner, contains('logical_work_height * 0.72'));
+    expect(runner, contains('kSettingsWindowMinDefaultWidth = 672'));
+    expect(runner, contains('kSettingsWindowMaxDefaultWidth = 792'));
+    expect(runner, contains('kSettingsWindowMinDefaultHeight = 520'));
+    expect(runner, contains('kSettingsWindowMaxDefaultHeight = 720'));
+    expect(runner, isNot(contains('case WM_NCCALCSIZE:')));
+    expect(runner, contains('message == WM_NCCALCSIZE && wparam == TRUE'));
+    expect(runner, contains('message == WM_NCPAINT'));
+    expect(runner, contains('message == WM_NCACTIVATE'));
+    expect(
+      runner.indexOf('message == WM_NCCALCSIZE && wparam == TRUE'),
+      lessThan(runner.indexOf('HandleTopLevelWindowProc(hwnd, message')),
+    );
+    expect(runner, contains('case WM_NCHITTEST:'));
+    expect(runner, contains('return SettingsCoordinatorHitTest(hwnd, lparam)'));
+    expect(
+        runner, contains('ScaleSettingsMetric(dpi, kSettingsWindowMinWidth)'));
+    expect(app, contains('backgroundColor: _windowsPaperTransparencyKey'));
+    expect(app, contains("ValueKey('windows-settings-paper-underlay')"));
+    expect(app, contains('controller.setCoordinatorBackgroundColor('));
+    expect(settings, contains('barrierColor: Colors.transparent'));
+    expect(settings, contains('barrierDismissible: false'));
+    expect(settings, contains('useSafeArea: false'));
+    expect(settings, contains("ValueKey('windows-settings-paper-dialog')"));
+    expect(settings, contains('insetPadding: EdgeInsets.zero'));
+    expect(settings, contains("ValueKey('windows-settings-paper-fill')"));
+    expect(settings, contains('child: SizedBox.expand('));
   });
 
   test('Windows forwarded settings command reveals the coordinator window', () {
@@ -2907,6 +3567,8 @@ void main() {
   test('Windows tray paper command lets Dart toggle the selected paper', () {
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
     final app = _readProjectText('lib/src/app.dart');
+    final nativeCapsule =
+        _readProjectText('windows/runner/native_capsule_window.cpp');
     final paperCommandStart = runner.indexOf(
       'command >= kTrayPaperCommandBase',
     );
@@ -2921,10 +3583,18 @@ void main() {
     expect(app, contains('Future<void> _handlePaperOpenRequest'));
     expect(app, contains('await _hidePaper(paper);'));
     expect(app, contains('await _openPaper(paper);'));
-    expect(app, contains('final isCollapsed = paper.isCollapsed;'));
+    expect(
+        app,
+        contains(
+            'final isCollapsed = Platform.isWindows && paper.isCollapsed;'));
     expect(app, isNot(contains('collapseAllActive || paper.isCollapsed')));
     expect(app, contains('_applyDueSelection(item, result, initialDate)'));
     expect(app, contains("'stale-collapse-rerouted'"));
+    expect(
+        app, contains('Platform.isWindows && controller.state.useCapsuleMode'));
+    expect(app, contains('final isCollapsed = Platform.isWindows &&'));
+    expect(nativeCapsule, contains('const int corner_ellipse'));
+    expect(nativeCapsule, contains('bounds.bottom - bounds.top'));
   });
 
   test('Windows tray visibility state is refreshed without bounds noise', () {
@@ -2986,18 +3656,19 @@ void main() {
     expect(design, contains('Native Windows tray menus'));
     expect(design, contains('do not leak confirmation or delete submenus'));
     expect(runner, contains('kTrayPaperDeleteCommandBase'));
-    expect(runner, contains('tray_labels_.delete_paper.c_str()'));
+    expect(runner, contains('tray_labels_.delete_paper,'));
     expect(runner, contains('class ScopedMenu'));
     expect(runner, contains('DestroyMenu(menu_);'));
     expect(runner, contains('ScopedMenu confirm_menu(CreatePopupMenu());'));
     expect(runner, contains('ScopedMenu delete_menu(CreatePopupMenu());'));
     expect(runner, contains('has_delete_confirmation'));
-    expect(runner, contains('AppendMenu(delete_menu.get(), MF_POPUP'));
-    expect(runner, contains('AppendMenu(menu.get(), MF_POPUP'));
+    expect(runner, contains('append_owner_draw(delete_menu.get()'));
+    expect(runner,
+        contains('append_owner_draw(menu.get(), 0, tray_labels_.delete_paper'));
     expect(runner, contains('confirm_menu.release();'));
     expect(runner, contains('delete_menu.release();'));
-    expect(runner, contains('tray_labels_.inline_confirm_action.c_str()'));
-    expect(runner, contains('tray_labels_.cancel.c_str()'));
+    expect(runner, contains('tray_labels_.inline_confirm_action,'));
+    expect(runner, contains('tray_labels_.cancel,'));
     expect(trayCommandStart, isNonNegative);
     expect(trayCommandEnd, greaterThan(trayCommandStart));
     expect(
@@ -3201,7 +3872,14 @@ void main() {
     final mainDart = _readProjectText('lib/main.dart');
     final paperWindowApp =
         _readProjectText('lib/src/windows/paper_window_app.dart');
+    final windowsPlatform =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
     final windowsSmoke = _readProjectText('scripts/windows_smoke.ps1');
+    final paperNativeStyle = _sliceBetween(
+      paperWindow,
+      'void PaperFlutterWindow::ApplyNativeStyle()',
+      'int PaperFlutterWindow::ResizeBorderHitTest',
+    );
 
     expect(design, contains('one child Flutter engine and one top-level HWND'));
     expect(design, contains('return only their own'));
@@ -3220,18 +3898,37 @@ void main() {
     expect(nativeCapsule, contains('"toggleCollapseAll"'));
     expect(nativeCapsule, contains('"capsuleDropped"'));
     expect(nativeCapsule, contains('"capsuleMasterDragUpdated"'));
+    expect(nativeCapsule, contains('kCapsuleBodyHeight = 30'));
+    expect(nativeCapsule, contains('kCapsuleChromeMargin = 8'));
+    expect(nativeCapsule, contains('kCapsuleCornerRadius = 12'));
+    expect(nativeCapsule, contains('kCapsuleSlideOutMilliseconds = 220'));
+    expect(nativeCapsule, contains('kCapsuleSlideInMilliseconds = 180'));
+    expect(nativeCapsule, contains('UpdateDockAnimation'));
+    expect(
+      windowsPlatform,
+      contains("'enableAnimations': state.enableAnimations"),
+    );
     expect(runner, contains('ApplyQueueDragOffset(delta_y)'));
     expect(paperWindow,
         contains('std::make_unique<flutter::FlutterViewController>'));
     expect(paperWindow, contains('"repapertodo/paper_window"'));
-    expect(paperWindow,
-        contains('CapsuleWindowWidth(capsule_title, deep_capsule_mode_)'));
+    expect(paperWindow, contains('MeasureCapsuleTextWidth('));
+    expect(paperWindow, contains('GetTextExtentPoint32W('));
+    expect(paperWindow, contains('CapsuleFontFamily(font_family)'));
+    expect(paperWindow, contains('script_capsule ? 15 : 13'));
+    expect(paperWindow, contains('CapsuleWpfMetricCorrection('));
+    expect(
+      paperWindow,
+      contains('paper_type == "note" || script_capsule ? -2.0 : -3.0'),
+    );
+    expect(paperWindowHeader, contains('std::string paper_type_ = "todo"'));
+    expect(paperWindowHeader, contains('bool script_capsule_ = false'));
     expect(paperWindow, contains('collapsed_ ? 46.0'));
     expect(paperWindow, isNot(contains('FindDesktopWorkerWindow')));
     expect(paperWindow, isNot(contains('SetParent(window, desktop_parent_)')));
     expect(paperWindow, contains('SetWindowPos(window, HWND_BOTTOM'));
     expect(paperWindow, contains('(current_style & WS_VISIBLE)'));
-    expect(paperWindow, isNot(contains('WS_EX_TRANSPARENT')));
+    expect(paperNativeStyle, isNot(contains('WS_EX_TRANSPARENT')));
     expect(paperWindow, contains('taskbar->DeleteTab(window)'));
     expect(paperWindow, contains('WS_EX_NOACTIVATE'));
     expect(paperWindow, contains('case WM_MOUSEACTIVATE:'));
@@ -3239,7 +3936,13 @@ void main() {
     expect(paperWindow, isNot(contains('case WM_WINDOWPOSCHANGING:')));
     expect(paperWindow, contains('SetHideFromWindowSwitcher'));
     expect(paperWindow, contains('IsExternalFullscreenWindow'));
+    expect(paperWindow, contains('DWMWA_EXTENDED_FRAME_BOUNDS'));
+    expect(paperWindow,
+        contains('bounds.left <= info.rcMonitor.left + tolerance'));
     expect(paperWindow, contains('IsCoveredByAnotherWindow'));
+    expect(paperWindow, contains('SetWindowPos(window, HWND_NOTOPMOST'));
+    expect(paperWindow,
+        contains('wcscmp(class_name, kPaperShadowWindowClass) == 0'));
     expect(paperWindow, contains('case WM_ENTERSIZEMOVE:'));
     expect(paperWindow, contains('case WM_EXITSIZEMOVE:'));
     expect(paperWindow, contains('case WM_GETMINMAXINFO:'));
@@ -3247,6 +3950,22 @@ void main() {
     expect(paperWindow, contains('WS_EX_LAYERED'));
     expect(paperWindow,
         contains('SetLayeredWindowAttributes(window, RGB(1, 2, 3)'));
+    expect(paperWindow, contains('DWMNCRP_DISABLED'));
+    expect(paperWindow, contains('MARGINS margins = {0, 0, 0, 0}'));
+    expect(paperWindow, contains('case WM_NCPAINT:'));
+    expect(paperWindow, contains('case WM_NCACTIVATE:'));
+    expect(paperWindow, contains('case WM_WINDOWPOSCHANGED:'));
+    expect(paperWindow,
+        contains('const int drag_width = ScaleForDpi(window, 26)'));
+    expect(paperWindow, contains('return HTCAPTION;'));
+    expect(paperWindow, contains('kPaperShadowWindowClass'));
+    expect(paperWindow, contains('RoundedRectSignedDistance'));
+    expect(paperWindow,
+        contains('edge_opacity = paper_shadow_dark_ ? 0.17 : 0.09'));
+    expect(paperWindow,
+        contains('UpdateLayeredWindow(paper_shadow_window_, screen'));
+    expect(paperWindow, contains('SetWindowPos(paper_shadow_window_, window'));
+    expect(paperWindow, contains('WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW'));
     expect(paperWindowHeader, contains('void SetAlwaysOnTop(bool enabled);'));
     expect(
         paperWindowHeader, contains('void SetPinnedToDesktop(bool pinned);'));
@@ -3273,11 +3992,20 @@ void main() {
       contains('WorkAreaForWindow(window, capsule_monitor_device_name_)'),
     );
     expect(paperWindow, contains('capsuleTopIsWorkAreaRelative'));
-    expect(paperWindow, contains('static_cast<double>(work_area.top) + y'));
+    expect(paperWindow, contains('ScaleLogicalValue(y, target_dpi)'));
+    expect(paperWindow, contains('DpiForPhysicalPoint(window, x, y)'));
+    expect(paperWindow, contains('UnscalePhysicalValue('));
     expect(paperWindow, contains('capsule_side_ == "left"'));
     expect(paperWindow, contains('CapsuleRestingVisibleWidth'));
     expect(paperWindow, contains('CapsuleHoverVisibleWidth'));
     expect(paperWindow, contains('SetCapsuleHovered(*hovered)'));
+    expect(paperWindow, contains('StartCapsuleDockAnimation'));
+    expect(paperWindow, contains('UpdateCapsuleDockAnimation'));
+    expect(paperWindow, contains('kCapsuleSlideOutMilliseconds = 220'));
+    expect(paperWindow, contains('kCapsuleSlideInMilliseconds = 180'));
+    expect(paperWindow, contains('capsule_animation_active_'));
+    expect(paperWindowHeader,
+        contains('bool capsule_animations_enabled_ = true;'));
     expect(nativeCapsule, contains('!hovered_ && !pointer_down_'));
     expect(paperWindow, contains('collapsed_ && !capsule_hovered_'));
     expect(runner, contains('kFullscreenTopmostRefreshIntervalMs = 250'));
@@ -3387,7 +4115,7 @@ void main() {
     expect(runner, contains('method == "getDataDirectory"'));
     expect(runner, contains('method == "commitDataDirectory"'));
     expect(storage, contains('Future<void> relocate('));
-    expect(settings, contains("ValueKey('settings-data-directory')"));
+    expect(settings, contains("'settings-data-directory'"));
   });
 
   test('Windows release deploys app-local runtime dependencies', () {
@@ -3408,6 +4136,10 @@ void main() {
     expect(package,
         contains('Windows ZIP root must contain only repapertodo.exe'));
     expect(package, contains('runtime/repapertodo.runtime.exe'));
+    expect(package, contains('[IO.Compression.ZipArchiveMode]::Create'));
+    expect(package, contains(').Replace("\\", "/")'));
+    expect(package, contains('Windows ZIP entries must use forward-slash'));
+    expect(package, isNot(contains('Compress-Archive')));
     expect(launcher, contains('CreateProcessW'));
     expect(launcher, contains('repapertodo.runtime.exe'));
     expect(readme, contains('app-local MSVC/Universal CRT DLLs'));
@@ -3517,9 +4249,9 @@ void main() {
     expect(dartHost, contains('ScriptCapsuleSpec.isScriptCapsuleContent'));
     expect(dartHost,
         contains("'trayLabel': _trayPaperLabel(paper, title, labels)"));
-    expect(runner, contains('is_script_capsule'));
-    expect(runner, contains('labels.script_paper + L" - "'));
-    expect(runner, contains('GetBoolArgument(map, "isScriptCapsule"'));
+    expect(runner, contains('? "script"'));
+    expect(runner, contains('L"\\u26A1"'));
+    expect(runner, contains('GetBoolArgument(*paper_map, "isScriptCapsule"'));
   });
 
   test('Windows runner validates external files before opening them', () {
@@ -3571,6 +4303,7 @@ void main() {
     final windows =
         _readProjectText('lib/src/platform/windows_platform_services.dart');
     final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final pubspec = _readProjectText('pubspec.yaml');
 
     expect(design, contains('Paper title editing should preserve PaperTodo'));
     expect(design, contains('40 text elements'));
@@ -3578,12 +4311,35 @@ void main() {
     expect(design, contains('show as plain title\ntext by default'));
     expect(design, contains('Click to edit title'));
     expect(design, contains('restore the pre-edit title\non Escape'));
+    expect(design, contains('23x24 leading control'));
+    expect(design, contains('generic Material icon'));
+    expect(design, contains('0.58 opacity'));
+    expect(design, contains('38 and 86 pixels wide'));
+    expect(design, contains('permanent\nbottom divider'));
+    expect(design, contains('default 280px Todo and 320px Note'));
     expect(design, contains('structured window title updates'));
     expect(app, contains('class _PaperTitleEditor'));
     expect(app, contains('readOnly: !_isEditingTitle'));
     expect(app, contains('LogicalKeyboardKey.escape'));
     expect(app, contains('_titleBeforeEdit'));
     expect(app, contains('_PaperTitleTextInputFormatter'));
+    expect(app, contains('class _PaperWindowTopmostGlyph'));
+    expect(app, contains('widget.active || _hovered ? 1 : 0.58'));
+    expect(app, contains("glyph: paper.isTodo ? '\\u2611' : '\\u270E'"));
+    expect(app, contains("ValueKey('\${widget.paper.id}-title-host')"));
+    expect(app, contains('minWidth: standaloneSurface ? 38 : 0'));
+    expect(
+        app,
+        contains(
+            'final showBaseActions = width >= (paper.isNote ? 230 : 180)'));
+    expect(app, contains('final showUtility = width >= 210'));
+    expect(app, contains('final showSync = width >= 400'));
+    expect(app, contains('_paperTodoDesktopPinGlyph'));
+    expect(app, contains("'assets/icons/pin.png'"));
+    expect(app, contains("'assets/icons/unpin.png'"));
+    expect(app, contains('opacity: pinned ? 1 : 0.72'));
+    expect(pubspec, contains('assets/icons/pin.png'));
+    expect(pubspec, contains('assets/icons/unpin.png'));
     expect(app, contains('PaperTitles.cleanCustomTitle(value)'));
     expect(app, contains('controller.paperTitleText(paper)'));
     expect(paperData, contains('PaperTitles.maxTitleLength'));
@@ -4013,6 +4769,7 @@ void main() {
     );
     expect(windowsPolicySmokeScript, contains('fullscreenAvoidance'));
     expect(windowsPolicySmokeScript, contains('fullscreenTopmostRestored'));
+    expect(windowsPolicySmokeScript, contains('RePaperTodo.PaperShadow'));
     expect(windowsPolicySmokeScript, contains('longRunningScriptCapsule'));
     expect(windowsPolicySmokeScript, contains('borderlessResizableWindow'));
     expect(windowsPolicySmokeScript, contains('taskSwitcherVisibility'));

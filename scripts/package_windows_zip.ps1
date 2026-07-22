@@ -62,15 +62,37 @@ try {
   if (Test-Path -LiteralPath $outputFull) {
     Remove-Item -LiteralPath $outputFull -Force
   }
-  Compress-Archive -Path (Join-Path $workRoot "*") `
-    -DestinationPath $outputFull -CompressionLevel Optimal
-
+  Add-Type -AssemblyName System.IO.Compression
   Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $outputArchive = [IO.Compression.ZipFile]::Open(
+    $outputFull,
+    [IO.Compression.ZipArchiveMode]::Create
+  )
+  try {
+    foreach ($file in Get-ChildItem -LiteralPath $workRoot -File -Recurse) {
+      $relativePath = $file.FullName.Substring($workRoot.Length)
+      $entryName = $relativePath.TrimStart(
+        [char[]]@("\", "/")
+      ).Replace("\", "/")
+      [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+        $outputArchive,
+        $file.FullName,
+        $entryName,
+        [IO.Compression.CompressionLevel]::Optimal
+      ) | Out-Null
+    }
+  } finally {
+    $outputArchive.Dispose()
+  }
+
   $archive = [IO.Compression.ZipFile]::OpenRead($outputFull)
   try {
     $entries = @($archive.Entries | ForEach-Object {
-      $_.FullName.Replace("\", "/")
+      $_.FullName
     })
+    if (@($entries | Where-Object { $_.Contains("\") }).Count -ne 0) {
+      throw "Windows ZIP entries must use forward-slash paths."
+    }
     $rootFiles = @($entries | Where-Object { -not $_.Contains("/") })
     if ($rootFiles.Count -ne 1 -or $rootFiles[0] -ne "repapertodo.exe") {
       throw "Windows ZIP root must contain only repapertodo.exe."
