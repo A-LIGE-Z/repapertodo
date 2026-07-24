@@ -2444,8 +2444,12 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       if (!in_size_move_) {
         UpdatePaperShadowWindow(false);
       }
-      [[fallthrough]];
+      break;
     case WM_SIZE:
+      // The default Win32Window handler uses MoveWindow(..., TRUE), which
+      // erases the hosted Flutter view before its next compositor frame. Use
+      // the no-erase path for this layered paper window instead.
+      ResizeChildContent(!in_size_move_);
       if (message == WM_SIZE && wparam != SIZE_MINIMIZED && !in_size_move_) {
         UpdatePaperShadowWindow(false);
       }
@@ -2454,7 +2458,7 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
           wparam != SIZE_MINIMIZED) {
         SendBoundsChanged();
       }
-      break;
+      return 0;
     case WM_ENTERSIZEMOVE:
       in_size_move_ = true;
       paper_shadow_refresh_pending_ = false;
@@ -2683,8 +2687,12 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       BoolValue(surface, "hideWhenCovered", hide_when_covered_);
   hide_when_fullscreen_ =
       BoolValue(surface, "hideWhenFullscreen", hide_when_fullscreen_);
-  SetHideFromWindowSwitcher(BoolValue(
-      surface, "hideFromWindowSwitcher", hide_from_window_switcher_));
+  // Defer the extended-style update until the complete surface transaction
+  // below has resolved the new pin state.  Applying it once with the old pin
+  // state and again with the new one forces two FRAMECHANGED repaints and can
+  // expose a one-frame black border during a content edit.
+  hide_from_window_switcher_ = BoolValue(
+      surface, "hideFromWindowSwitcher", hide_from_window_switcher_);
   const double logical_native_width = collapsed_
                                           ? CapsuleWindowWidth(
                                                 capsule_title,
@@ -2812,7 +2820,8 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
     } else {
       applying_bounds_ = true;
       SetWindowPos(window, nullptr, target_left, target_top, target_width,
-                   target_height, SWP_NOZORDER | SWP_NOACTIVATE);
+                   target_height,
+                   SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
       applying_bounds_ = false;
     }
   }

@@ -56,6 +56,12 @@ class Win32Window {
   RECT GetClientArea();
 
  protected:
+  // Resize the hosted Flutter view without asking USER32 to erase the child
+  // first.  Transparent/layered paper windows must keep the previous composed
+  // frame until Flutter presents the new one; an eager MoveWindow repaint can
+  // expose a black frame during interactive resize.
+  void ResizeChildContent(bool update_now = true);
+
   // Processes and route salient window messages for mouse handling,
   // size change and DPI. Delegates handling of these to member overloads that
   // inheriting classes can handle.

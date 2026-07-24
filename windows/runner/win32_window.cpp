@@ -3,6 +3,8 @@
 #include <dwmapi.h>
 #include <flutter_windows.h>
 
+#include <algorithm>
+
 #include "resource.h"
 
 namespace {
@@ -198,12 +200,7 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
     }
     case WM_SIZE: {
-      RECT rect = GetClientArea();
-      if (child_content_ != nullptr) {
-        // Size and position the child window.
-        MoveWindow(child_content_, rect.left, rect.top, rect.right - rect.left,
-                   rect.bottom - rect.top, TRUE);
-      }
+      ResizeChildContent(true);
       return 0;
     }
 
@@ -247,6 +244,24 @@ void Win32Window::SetChildContent(HWND content) {
              frame.bottom - frame.top, true);
 
   SetFocus(child_content_);
+}
+
+void Win32Window::ResizeChildContent(bool update_now) {
+  if (!window_handle_ || !child_content_ || !IsWindow(child_content_)) {
+    return;
+  }
+  const RECT frame = GetClientArea();
+  UINT flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER |
+               SWP_NOREDRAW;
+  SetWindowPos(child_content_, nullptr, frame.left, frame.top,
+               std::max<LONG>(0, frame.right - frame.left),
+               std::max<LONG>(0, frame.bottom - frame.top), flags);
+  // Let Flutter repaint through its compositor without a preceding erase.
+  // update_now is intentionally false during WM_ENTERSIZEMOVE so USER32 can
+  // coalesce high-frequency resize frames; WM_SIZE still reaches the child.
+  RedrawWindow(child_content_, nullptr, nullptr,
+               RDW_INVALIDATE | RDW_NOERASE |
+                   (update_now ? RDW_UPDATENOW : 0));
 }
 
 RECT Win32Window::GetClientArea() {

@@ -4795,7 +4795,11 @@ void FlutterWindow::ReconcilePaperWindows(
     if (visible) {
       has_visible_paper = true;
       PaperFlutterWindow* paper_window =
-          EnsurePaperWindow(*paper_id, &resolved_surface);
+          // Apply the resolved surface exactly once below.  Passing it to
+          // EnsurePaperWindow as well used to initialize a new HWND and then
+          // immediately apply the same map a second time, causing duplicate
+          // bounds/shadow/z-order work on the first visible frame.
+          EnsurePaperWindow(*paper_id);
       if (paper_window) {
         paper_window->ApplyState(paper_window_state_);
         paper_window->ApplySurface(resolved_surface);
