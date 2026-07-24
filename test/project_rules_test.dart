@@ -3330,27 +3330,33 @@ void main() {
 
   test('Todo removals preserve PaperTodo fade and stagger timing', () {
     final app = _readProjectText('lib/src/app.dart');
+    final motion = _readProjectText('lib/src/ui/papertodo_motion.dart');
 
     expect(app, contains('class _TodoDepartureAnimation'));
-    expect(app, contains('duration: const Duration(milliseconds: 200)'));
+    expect(app, contains('duration: PaperTodoMotion.move'));
     expect(app, contains('slideDistance: 30'));
-    expect(app, contains('delay: Duration(milliseconds: index * 30)'));
-    expect(app, contains('duration: const Duration(milliseconds: 180)'));
+    expect(app, contains('PaperTodoMotion.todoCompletionDelayUnit'));
+    expect(app, contains('duration: PaperTodoMotion.fadeOut'));
     expect(app, contains('slideDistance: 20'));
-    expect(app, contains('Curves.easeOutQuad.transform(fadeProgress)'));
+    expect(app, contains('PaperTodoMotion.quickCurve.transform'));
+    expect(motion, contains('todoCompletionDelayUnit'));
+    expect(motion, contains('fadeOut = Duration(milliseconds: 180)'));
   });
 
   test('Todo entrances preserve PaperTodo new and paste timing', () {
     final app = _readProjectText('lib/src/app.dart');
+    final motion = _readProjectText('lib/src/ui/papertodo_motion.dart');
 
     expect(app, contains('class _TodoEntranceAnimation'));
-    expect(app, contains('opacityDuration: const Duration(milliseconds: 250)'));
-    expect(app, contains('slideDuration: const Duration(milliseconds: 250)'));
+    expect(app, contains('opacityDuration: PaperTodoMotion.rowEntrance'));
+    expect(app, contains('slideDuration: PaperTodoMotion.rowEntrance'));
     expect(app, contains('slideDistance: 20'));
-    expect(app, contains('delay: Duration(milliseconds: index * 40)'));
-    expect(app, contains('opacityDuration: const Duration(milliseconds: 200)'));
-    expect(app, contains('slideDuration: const Duration(milliseconds: 220)'));
+    expect(app, contains('PaperTodoMotion.todoPasteDelayUnit'));
+    expect(app, contains('opacityDuration: PaperTodoMotion.fadeIn'));
+    expect(app, contains('slideDuration: PaperTodoMotion.moveLong'));
     expect(app, contains('slideDistance: 15'));
+    expect(motion, contains('todoPasteDelayUnit'));
+    expect(motion, contains('rowEntrance = Duration(milliseconds: 250)'));
   });
 
   test('Flutter secondary surfaces keep PaperTodo paper dialog chrome', () {

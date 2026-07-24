@@ -6351,9 +6351,9 @@ class PaperPreview extends StatelessWidget {
     }
     return AnimatedSwitcher(
       key: ValueKey('${paper.id}-body-animation'),
-      duration: const Duration(milliseconds: 180),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      duration: PaperTodoMotion.fadeOut,
+      switchInCurve: PaperTodoMotion.enterCurve,
+      switchOutCurve: PaperTodoMotion.exitCurve,
       transitionBuilder: (child, animation) {
         return ClipRect(
           child: SizeTransition(
@@ -10747,7 +10747,7 @@ class _TodoEntranceAnimationState extends State<_TodoEntranceAnimation>
         final slideProgress = widget.slideCurve.transform(_controller.value);
         final opacityScale = widget.slideDuration.inMicroseconds /
             widget.opacityDuration.inMicroseconds;
-        final opacityProgress = Curves.easeOutQuad.transform(
+        final opacityProgress = PaperTodoMotion.quickCurve.transform(
           (_controller.value * opacityScale).clamp(0.0, 1.0),
         );
         return Opacity(
@@ -10822,7 +10822,9 @@ class _TodoDepartureAnimationState extends State<_TodoDepartureAnimation>
         child: widget.child,
         builder: (context, child) {
           final fadeProgress = _controller.value;
-          final slideProgress = Curves.easeOutQuad.transform(fadeProgress);
+          final slideProgress = PaperTodoMotion.quickCurve.transform(
+            fadeProgress,
+          );
           return Opacity(
             opacity: 1 - fadeProgress,
             child: Transform.translate(
@@ -11451,7 +11453,9 @@ class _TodoEditorState extends State<_TodoEditor> {
     final stateDuration = widget.enableAnimations
         ? dragging
             ? Duration.zero
-            : Duration(milliseconds: item.done ? 200 : 150)
+            : item.done
+                ? PaperTodoMotion.fadeIn
+                : PaperTodoMotion.quick
         : Duration.zero;
     final paperColors = PaperTodoThemeColors.of(context);
     return Padding(
@@ -11538,7 +11542,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                 originalIndex: itemIndex,
                 groupToken: groupToken,
                 delay: Duration.zero,
-                duration: const Duration(milliseconds: 200),
+                duration: PaperTodoMotion.move,
                 slideDistance: 18,
                 completesGroup: true,
               ),
@@ -11546,9 +11550,9 @@ class _TodoEditorState extends State<_TodoEditor> {
             _queueTodoEntrance(
               _EnteringTodoRow(
                 itemId: item.id,
-                delay: const Duration(milliseconds: 20),
-                opacityDuration: const Duration(milliseconds: 200),
-                slideDuration: const Duration(milliseconds: 200),
+                delay: PaperTodoMotion.todoTransitionDelay,
+                opacityDuration: PaperTodoMotion.fadeIn,
+                slideDuration: PaperTodoMotion.move,
                 slideDistance: 18,
                 slideCurve: PaperTodoMotion.enterCurve,
               ),
@@ -13564,11 +13568,14 @@ class _TodoEditorState extends State<_TodoEditor> {
           _queueTodoEntrance(
             _EnteringTodoRow(
               itemId: newItems[index].id,
-              delay: Duration(milliseconds: index * 40),
-              opacityDuration: const Duration(milliseconds: 200),
-              slideDuration: const Duration(milliseconds: 220),
+              delay: PaperTodoMotion.stagger(
+                PaperTodoMotion.todoPasteDelayUnit,
+                index,
+              ),
+              opacityDuration: PaperTodoMotion.fadeIn,
+              slideDuration: PaperTodoMotion.moveLong,
               slideDistance: 15,
-              slideCurve: Curves.easeOutQuad,
+              slideCurve: PaperTodoMotion.quickCurve,
             ),
           );
         }
@@ -13951,10 +13958,10 @@ class _TodoEditorState extends State<_TodoEditor> {
           _EnteringTodoRow(
             itemId: newItem.id,
             delay: Duration.zero,
-            opacityDuration: const Duration(milliseconds: 250),
-            slideDuration: const Duration(milliseconds: 250),
+            opacityDuration: PaperTodoMotion.rowEntrance,
+            slideDuration: PaperTodoMotion.rowEntrance,
             slideDistance: 20,
-            slideCurve: Curves.easeOutCubic,
+            slideCurve: PaperTodoMotion.enterCurve,
           ),
         );
       }
@@ -14082,8 +14089,11 @@ class _TodoEditorState extends State<_TodoEditor> {
             item: item,
             originalIndex: originalIndexes[item.id] ?? index,
             groupToken: departureGroup,
-            delay: Duration(milliseconds: index * 30),
-            duration: const Duration(milliseconds: 180),
+            delay: PaperTodoMotion.stagger(
+              PaperTodoMotion.todoCompletionDelayUnit,
+              index,
+            ),
+            duration: PaperTodoMotion.fadeOut,
             slideDistance: 20,
             completesGroup: index == animatedCompletedItems.length - 1,
           ),
@@ -14145,7 +14155,7 @@ class _TodoEditorState extends State<_TodoEditor> {
             originalIndex: removedIndex,
             groupToken: departureGroup,
             delay: Duration.zero,
-            duration: const Duration(milliseconds: 200),
+            duration: PaperTodoMotion.move,
             slideDistance: 30,
             completesGroup: true,
           ),
