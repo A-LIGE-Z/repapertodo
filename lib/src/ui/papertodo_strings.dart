@@ -10,6 +10,7 @@ abstract final class PaperTodoStringKeys {
   static const actionBackToBoard = 'actionBackToBoard';
   static const actionBrowse = 'actionBrowse';
   static const actionCancel = 'actionCancel';
+  static const actionConfirm = 'actionConfirm';
   static const actionChangeDueDate = 'actionChangeDueDate';
   static const actionChangeReminder = 'actionChangeReminder';
   static const actionClear = 'actionClear';
@@ -226,6 +227,7 @@ abstract final class PaperTodoStringKeys {
   static const menuTodo = 'menuTodo';
   static const menuTodoItem = 'menuTodoItem';
   static const maxTitleLength = 'maxTitleLength';
+  static const moveCompletedTodosToBottom = 'moveCompletedTodosToBottom';
   static const medium = 'medium';
   static const minute = 'minute';
   static const minutes = 'minutes';
@@ -402,6 +404,7 @@ abstract final class PaperTodoStringKeys {
   static const tipHideScriptRunWindow = 'tipHideScriptRunWindow';
   static const tipMarkdownRender = 'tipMarkdownRender';
   static const tipMaxTitleLength = 'tipMaxTitleLength';
+  static const tipMoveCompletedTodosToBottom = 'tipMoveCompletedTodosToBottom';
   static const tipNewNoteButton = 'tipNewNoteButton';
   static const tipNewTodoButton = 'tipNewTodoButton';
   static const tipNoteLineSpacing = 'tipNoteLineSpacing';
@@ -556,6 +559,7 @@ const _enStrings = {
   PaperTodoStringKeys.actionAddTextBlock: 'Add text block',
   PaperTodoStringKeys.actionBackToBoard: 'Back to board',
   PaperTodoStringKeys.actionCancel: 'Cancel',
+  PaperTodoStringKeys.actionConfirm: 'Confirm',
   PaperTodoStringKeys.actionChangeDueDate: 'Change time',
   PaperTodoStringKeys.actionChangeReminder: 'Change reminder interval',
   PaperTodoStringKeys.actionClear: 'Clear',
@@ -782,6 +786,8 @@ const _enStrings = {
   PaperTodoStringKeys.menuTodo: 'Todo',
   PaperTodoStringKeys.menuTodoItem: 'Item',
   PaperTodoStringKeys.maxTitleLength: 'Title length limit',
+  PaperTodoStringKeys.moveCompletedTodosToBottom:
+      'Move completed todos below unfinished todos',
   PaperTodoStringKeys.medium: 'Medium',
   PaperTodoStringKeys.minute: 'Minute',
   PaperTodoStringKeys.minutes: 'Minutes',
@@ -987,6 +993,8 @@ const _enStrings = {
       'Basic mode applies light highlighting; Enhanced also styles headings, lists, and emphasis.',
   PaperTodoStringKeys.tipMaxTitleLength:
       'Maximum number of characters shown in paper titles and capsules.',
+  PaperTodoStringKeys.tipMoveCompletedTodosToBottom:
+      'When enabled, completing a todo moves it below all unfinished todos with a smooth transition. Reopening a todo restores the unfinished group order.',
   PaperTodoStringKeys.tipNewNoteButton:
       'Show the new note button in the paper top bar.',
   PaperTodoStringKeys.tipNewTodoButton:
@@ -1077,6 +1085,7 @@ const _zhStrings = {
   PaperTodoStringKeys.actionAddTextBlock: '添加文本块',
   PaperTodoStringKeys.actionBackToBoard: '返回面板',
   PaperTodoStringKeys.actionCancel: '取消',
+  PaperTodoStringKeys.actionConfirm: '确认',
   PaperTodoStringKeys.actionChangeDueDate: '修改时间节点',
   PaperTodoStringKeys.actionChangeReminder: '修改提醒间隔',
   PaperTodoStringKeys.actionClear: '清除',
@@ -1291,6 +1300,7 @@ const _zhStrings = {
   PaperTodoStringKeys.menuTodo: '待办',
   PaperTodoStringKeys.menuTodoItem: '事项',
   PaperTodoStringKeys.maxTitleLength: '标题字数上限',
+  PaperTodoStringKeys.moveCompletedTodosToBottom: '完成后将待办移到未完成项下方',
   PaperTodoStringKeys.medium: '中',
   PaperTodoStringKeys.minute: '分钟',
   PaperTodoStringKeys.minutes: '分钟',
@@ -1472,6 +1482,8 @@ const _zhStrings = {
       '隐藏脚本运行窗口。普通 !p / !power 会等待脚本结束并捕获错误；!pf / !powerf 只投递到常驻进程。',
   PaperTodoStringKeys.tipMarkdownRender: '基础模式只做轻量高亮；增强模式进一步美化标题、列表和强调。',
   PaperTodoStringKeys.tipMaxTitleLength: '纸片标题和胶囊显示的最大字数。',
+  PaperTodoStringKeys.tipMoveCompletedTodosToBottom:
+      '开启后，完成待办会平滑地移到所有未完成项之后；重新打开时回到未完成分组。',
   PaperTodoStringKeys.tipNewNoteButton: '在纸片顶栏显示新建笔记按钮。',
   PaperTodoStringKeys.tipNewTodoButton: '在纸片顶栏显示新建待办按钮。',
   PaperTodoStringKeys.tipNoteLineSpacing: '输入笔记正文的行距倍数，默认 1，范围 0.8 到 5。',

@@ -45,6 +45,9 @@ class NativeCapsuleWindow : public Win32Window {
   void SetHovered(bool hovered);
   void StartDockAnimation(int target_visible_width, int duration_ms);
   void UpdateDockAnimation();
+  void StartQueueDragAnimation(int target_top, int duration_ms);
+  void UpdateQueueDragAnimation();
+  void ApplyQueueDragTop(int top);
   void SendClick();
   void SendHide();
   void SendDrop();
@@ -114,6 +117,12 @@ class NativeCapsuleWindow : public Win32Window {
   RECT drag_start_bounds_ = {};
   bool queue_drag_offset_active_ = false;
   int queue_drag_base_top_ = 0;
+  int queue_drag_target_top_ = 0;
+  double queue_drag_animation_start_top_ = 0.0;
+  double queue_drag_animation_target_top_ = 0.0;
+  ULONGLONG queue_drag_animation_started_at_ = 0;
+  int queue_drag_animation_duration_ms_ = 0;
+  bool queue_drag_animation_active_ = false;
   int64_t surface_generation_ = -1;
 };
 

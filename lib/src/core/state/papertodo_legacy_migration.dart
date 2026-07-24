@@ -104,6 +104,7 @@ const _rootKeys = {
   'TodoReminderIntervalUnit': 'todoReminderIntervalUnit',
   'TodoReminderScope': 'todoReminderScope',
   'TodoReminderBubbleDurationSeconds': 'todoReminderBubbleDurationSeconds',
+  'MoveCompletedTodosToBottom': 'moveCompletedTodosToBottom',
   'ShowLinkedNoteName': 'showLinkedNoteName',
   'AllowLongLinkedNoteTitles': 'allowLongLinkedNoteTitles',
   'HideLinkedNotesFromCapsules': 'hideLinkedNotesFromCapsules',

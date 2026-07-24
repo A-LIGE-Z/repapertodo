@@ -322,6 +322,7 @@ class SyncOperationApplier {
       ..todoReminderScope = updated.todoReminderScope
       ..todoReminderBubbleDurationSeconds =
           updated.todoReminderBubbleDurationSeconds
+      ..moveCompletedTodosToBottom = updated.moveCompletedTodosToBottom
       ..showLinkedNoteName = updated.showLinkedNoteName
       ..allowLongLinkedNoteTitles = updated.allowLongLinkedNoteTitles
       ..hideLinkedNotesFromCapsules = updated.hideLinkedNotesFromCapsules

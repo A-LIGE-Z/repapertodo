@@ -1256,6 +1256,7 @@ const _syncOperationAppPreferenceKeys = {
   'todoReminderIntervalUnit',
   'todoReminderScope',
   'todoReminderBubbleDurationSeconds',
+  'moveCompletedTodosToBottom',
   'showLinkedNoteName',
   'allowLongLinkedNoteTitles',
   'hideLinkedNotesFromCapsules',
@@ -1310,6 +1311,7 @@ const _syncOperationBooleanPreferenceKeys = {
   'usePersistentPowerShellProcess',
   'preferPowerShell7',
   'hideScriptRunWindow',
+  'moveCompletedTodosToBottom',
 };
 
 const _syncOperationIntegerPreferenceKeys = {

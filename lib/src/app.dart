@@ -3523,6 +3523,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       initialTodoReminderScope: controller.state.todoReminderScope,
       initialTodoReminderBubbleDurationSeconds:
           controller.state.todoReminderBubbleDurationSeconds,
+      initialMoveCompletedTodosToBottom:
+          controller.state.moveCompletedTodosToBottom,
       initialShowTopBarNewTodoButton: controller.state.showTopBarNewTodoButton,
       initialShowTopBarNewNoteButton: controller.state.showTopBarNewNoteButton,
       initialShowTopBarExternalOpenButton:
@@ -3664,6 +3666,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       controller.state.todoReminderScope = result.todoReminderScope;
       controller.state.todoReminderBubbleDurationSeconds =
           result.todoReminderBubbleDurationSeconds;
+      controller.state.moveCompletedTodosToBottom =
+          result.moveCompletedTodosToBottom;
       controller.state.showTopBarNewTodoButton = result.showTopBarNewTodoButton;
       controller.state.showTopBarNewNoteButton = result.showTopBarNewNoteButton;
       controller.state.showTopBarExternalOpenButton =

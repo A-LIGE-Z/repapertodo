@@ -1084,9 +1084,6 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(
         'enableAnimations': state.enableAnimations,
       });
     }
-    if (collapseAllActive) {
-      continue;
-    }
     for (final paper in queueOccupants[entry.key] ?? const <PaperData>[]) {
       if (paper.isCollapsed) {
         continue;
@@ -1100,10 +1097,13 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(
         if (surfaceGeneration > 0) 'surfaceGeneration': surfaceGeneration,
         'kind': 'proxy',
         'paperId': paper.id,
-        'title': PaperTitles.effectiveTitle(
-          paperType: paper.type,
-          title: paper.title,
-          fallbackNumber: 1,
+        'title': PaperTitles.shorten(
+          PaperTitles.effectiveTitle(
+            paperType: paper.type,
+            title: paper.title,
+            fallbackNumber: 1,
+          ),
+          state.maxTitleLength,
         ),
         'paperType': paper.type,
         'isScriptCapsule':
@@ -1111,7 +1111,10 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(
         'top': top,
         'capsuleSide': paper.capsuleSide,
         'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
-        'isVisible': paper.isVisible,
+        // Keep the proxy HWND alive while the master retracts its queue. A
+        // visibility transition is cheaper and visually stable; removing the
+        // entry destroys/recreates the native capsule on every master click.
+        'isVisible': paper.isVisible && !collapseAllActive,
         // Respect PaperTodo's edge-capsule preference.  A desktop-pinned
         // paper always uses the capsule as its unpin/activate escape route;
         // otherwise only the explicit "click again to retract" setting may
@@ -1139,11 +1142,13 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
   required bool capsuleHiddenByMaster,
   double? capsuleY,
 }) {
-  final title = PaperTitles.effectiveTitle(
-    paperType: paper.type,
-    title: paper.title,
-    fallbackNumber: fallbackNumber,
-  );
+  final title = PaperTitles.shorten(
+      PaperTitles.effectiveTitle(
+        paperType: paper.type,
+        title: paper.title,
+        fallbackNumber: fallbackNumber,
+      ),
+      state.maxTitleLength);
   return <String, Object?>{
     'id': paper.id,
     'title': title,

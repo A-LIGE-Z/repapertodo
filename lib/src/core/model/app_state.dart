@@ -32,6 +32,7 @@ class AppState {
     this.todoReminderIntervalUnit = TodoReminderIntervalUnits.minutes,
     this.todoReminderScope = TodoReminderScopes.all,
     this.todoReminderBubbleDurationSeconds = 5,
+    this.moveCompletedTodosToBottom = false,
     this.showLinkedNoteName = false,
     this.allowLongLinkedNoteTitles = false,
     this.hideLinkedNotesFromCapsules = false,
@@ -59,13 +60,13 @@ class AppState {
     this.deepCapsuleMonitorDeviceName = '',
     SyncSettings? sync,
     JsonMap? extra,
-  }) : papers = papers ?? <PaperData>[],
-       capsuleCollapseAllActiveQueues =
-           capsuleCollapseAllActiveQueues ?? <String, bool>{},
-       deepCapsuleQueueStartTopMargins =
-           deepCapsuleQueueStartTopMargins ?? <String, double>{},
-       sync = sync ?? SyncSettings(),
-       extra = extra ?? <String, Object?>{};
+  })  : papers = papers ?? <PaperData>[],
+        capsuleCollapseAllActiveQueues =
+            capsuleCollapseAllActiveQueues ?? <String, bool>{},
+        deepCapsuleQueueStartTopMargins =
+            deepCapsuleQueueStartTopMargins ?? <String, double>{},
+        sync = sync ?? SyncSettings(),
+        extra = extra ?? <String, Object?>{};
 
   static const _knownKeys = {
     'papers',
@@ -95,6 +96,7 @@ class AppState {
     'todoReminderIntervalUnit',
     'todoReminderScope',
     'todoReminderBubbleDurationSeconds',
+    'moveCompletedTodosToBottom',
     'showLinkedNoteName',
     'allowLongLinkedNoteTitles',
     'hideLinkedNotesFromCapsules',
@@ -149,6 +151,7 @@ class AppState {
   String todoReminderIntervalUnit;
   String todoReminderScope;
   int todoReminderBubbleDurationSeconds;
+  bool moveCompletedTodosToBottom;
   bool showLinkedNoteName;
   bool allowLongLinkedNoteTitles;
   bool hideLinkedNotesFromCapsules;
@@ -257,6 +260,10 @@ class AppState {
       todoReminderBubbleDurationSeconds: intValue(
         json['todoReminderBubbleDurationSeconds'],
         5,
+      ),
+      moveCompletedTodosToBottom: boolValue(
+        json['moveCompletedTodosToBottom'],
+        false,
       ),
       showLinkedNoteName: boolValue(json['showLinkedNoteName'], false),
       allowLongLinkedNoteTitles: boolValue(
@@ -392,9 +399,8 @@ class AppState {
       deepCapsuleStartTopMargin = 48;
       deepCapsuleQueueStartTopMargins = <String, double>{};
     } else {
-      deepCapsuleStartTopMargin = deepCapsuleStartTopMargin
-          .clamp(8, 10000)
-          .toDouble();
+      deepCapsuleStartTopMargin =
+          deepCapsuleStartTopMargin.clamp(8, 10000).toDouble();
       deepCapsuleQueueStartTopMargins = _normalizeQueueStartTopMargins(
         deepCapsuleQueueStartTopMargins,
       );
@@ -428,10 +434,8 @@ class AppState {
         paper.isCollapsed = false;
       }
     }
-    final noteIds = papers
-        .where((paper) => paper.isNote)
-        .map((paper) => paper.id)
-        .toSet();
+    final noteIds =
+        papers.where((paper) => paper.isNote).map((paper) => paper.id).toSet();
     final linkedNoteIds = <String>{};
     for (final paper in papers) {
       if (!paper.isTodo) {
@@ -615,6 +619,7 @@ class AppState {
       'todoReminderIntervalUnit': todoReminderIntervalUnit,
       'todoReminderScope': todoReminderScope,
       'todoReminderBubbleDurationSeconds': todoReminderBubbleDurationSeconds,
+      'moveCompletedTodosToBottom': moveCompletedTodosToBottom,
       'showLinkedNoteName': showLinkedNoteName,
       'allowLongLinkedNoteTitles': allowLongLinkedNoteTitles,
       'hideLinkedNotesFromCapsules': hideLinkedNotesFromCapsules,
@@ -650,9 +655,8 @@ String _normalizeColorHex(String value) {
   if (trimmed.isEmpty) {
     return '';
   }
-  final withoutPrefix = trimmed.startsWith('#')
-      ? trimmed.substring(1)
-      : trimmed;
+  final withoutPrefix =
+      trimmed.startsWith('#') ? trimmed.substring(1) : trimmed;
   if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(withoutPrefix)) {
     return '';
   }

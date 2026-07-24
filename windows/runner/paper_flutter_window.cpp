@@ -149,8 +149,10 @@ constexpr wchar_t kReminderBubbleWindowClass[] =
 constexpr wchar_t kPaperShadowWindowClass[] = L"RePaperTodo.PaperShadow";
 constexpr UINT_PTR kReminderBubbleTimerId = 1;
 constexpr UINT_PTR kCapsuleSlideTimerId = 0xCA52;
+constexpr UINT_PTR kCapsuleQueueFollowTimerId = 0xCA53;
 constexpr int kCapsuleSlideOutMilliseconds = 220;
 constexpr int kCapsuleSlideInMilliseconds = 180;
+constexpr int kCapsuleQueueMoveMilliseconds = 200;
 
 // A deep capsule is deliberately a WS_EX_NOACTIVATE window.  When its click
 // is delivered through the native proxy, Windows does not always grant the
@@ -2349,8 +2351,10 @@ bool PaperFlutterWindow::OnCreate() {
 void PaperFlutterWindow::OnDestroy() {
   if (HWND window = GetHandle()) {
     KillTimer(window, kCapsuleSlideTimerId);
+    KillTimer(window, kCapsuleQueueFollowTimerId);
   }
   capsule_animation_active_ = false;
+  queue_drag_animation_active_ = false;
   DestroyPaperShadowWindow();
   HideReminderBubble();
   channel_.reset();
@@ -2367,6 +2371,10 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
     case WM_TIMER:
       if (wparam == kCapsuleSlideTimerId) {
         UpdateCapsuleDockAnimation();
+        return 0;
+      }
+      if (wparam == kCapsuleQueueFollowTimerId) {
+        UpdateQueueDragAnimation();
         return 0;
       }
       break;
@@ -2389,10 +2397,12 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       if (reminder_bubble_) {
         PlaceReminderBubble();
       }
-      UpdatePaperShadowWindow(false);
+      if (!in_size_move_) {
+        UpdatePaperShadowWindow(false);
+      }
       [[fallthrough]];
     case WM_SIZE:
-      if (message == WM_SIZE && wparam != SIZE_MINIMIZED) {
+      if (message == WM_SIZE && wparam != SIZE_MINIMIZED && !in_size_move_) {
         UpdatePaperShadowWindow(false);
       }
       if (surface_initialized_ && !collapsed_ && !applying_bounds_ &&
@@ -2403,9 +2413,15 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       break;
     case WM_ENTERSIZEMOVE:
       in_size_move_ = true;
+      // The shadow is a separate layered HWND. Rebuilding its DIB for every
+      // interactive resize frame exposes a transient black rectangle on
+      // Windows 10/11. Keep the paper itself live and restore one freshly
+      // rendered shadow after the size/move transaction completes.
+      HidePaperShadowWindow();
       break;
     case WM_EXITSIZEMOVE:
       in_size_move_ = false;
+      UpdatePaperShadowWindow(true);
       if (surface_initialized_) {
         if (collapsed_ && deep_capsule_mode_) {
           SendCapsuleDropped();
@@ -2415,7 +2431,9 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       }
       break;
     case WM_WINDOWPOSCHANGED:
-      UpdatePaperShadowWindow(false);
+      if (!in_size_move_) {
+        UpdatePaperShadowWindow(false);
+      }
       break;
     case WM_GETMINMAXINFO: {
       auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
@@ -2518,7 +2536,6 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
     }
     surface_generation_ = incoming_generation;
   }
-  queue_drag_offset_active_ = false;
   HWND window = GetHandle();
   if (!window) {
     return;
@@ -2645,6 +2662,13 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
                                 current.bottom - current.top != target_height;
     if (!bounds_changed) {
       surface_initialized_ = true;
+    } else if (collapsed_ && queue_drag_animation_active_) {
+      // A committed master drag can reconcile the Dart surface while the
+      // child capsule is still easing toward the same slot. Retarget the
+      // in-flight animation instead of snapping to the final HWND position.
+      queue_drag_base_top_ = target_top;
+      queue_drag_target_top_ = target_top;
+      StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
     } else {
       applying_bounds_ = true;
       SetWindowPos(window, nullptr, target_left, target_top, target_width,
@@ -2695,21 +2719,74 @@ void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
     queue_drag_offset_active_ = true;
     queue_drag_base_top_ = bounds.top;
   }
-  SetWindowPos(window, nullptr, bounds.left, queue_drag_base_top_ + delta_y,
-               bounds.right - bounds.left, bounds.bottom - bounds.top,
-               SWP_NOZORDER | SWP_NOACTIVATE);
+  queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
+  StartQueueDragAnimation(queue_drag_target_top_,
+                          kCapsuleQueueMoveMilliseconds);
 }
 
 void PaperFlutterWindow::FinishQueueDrag(bool commit) {
   if (!queue_drag_offset_active_) return;
+  const int target_top = commit ? queue_drag_target_top_
+                                : queue_drag_base_top_;
+  StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
+  queue_drag_offset_active_ = false;
+}
+
+void PaperFlutterWindow::StartQueueDragAnimation(int target_top,
+                                                 int duration_ms) {
   HWND window = GetHandle();
   RECT bounds = {};
-  if (!commit && window && GetWindowRect(window, &bounds)) {
-    SetWindowPos(window, nullptr, bounds.left, queue_drag_base_top_,
-                 bounds.right - bounds.left, bounds.bottom - bounds.top,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
+  if (!window || !GetWindowRect(window, &bounds)) return;
+  queue_drag_target_top_ = target_top;
+  if (!capsule_animations_enabled_ || duration_ms <= 0 ||
+      std::abs(static_cast<double>(bounds.top - target_top)) < 0.5) {
+    KillTimer(window, kCapsuleQueueFollowTimerId);
+    queue_drag_animation_active_ = false;
+    ApplyQueueDragTop(target_top);
+    return;
   }
-  queue_drag_offset_active_ = false;
+  queue_drag_animation_start_top_ = static_cast<double>(bounds.top);
+  queue_drag_animation_target_top_ = static_cast<double>(target_top);
+  queue_drag_animation_started_at_ = GetTickCount64();
+  queue_drag_animation_duration_ms_ = duration_ms;
+  queue_drag_animation_active_ = true;
+  SetTimer(window, kCapsuleQueueFollowTimerId, 16, nullptr);
+}
+
+void PaperFlutterWindow::UpdateQueueDragAnimation() {
+  if (!queue_drag_animation_active_) return;
+  HWND window = GetHandle();
+  if (!window) return;
+  const ULONGLONG elapsed =
+      GetTickCount64() - queue_drag_animation_started_at_;
+  const double progress = std::clamp(
+      static_cast<double>(elapsed) /
+          static_cast<double>(std::max(1, queue_drag_animation_duration_ms_)),
+      0.0, 1.0);
+  const double inverse = 1.0 - progress;
+  const double eased = 1.0 - inverse * inverse * inverse;
+  const int top = static_cast<int>(std::lround(
+      queue_drag_animation_start_top_ +
+      (queue_drag_animation_target_top_ - queue_drag_animation_start_top_) *
+          eased));
+  ApplyQueueDragTop(top);
+  if (progress >= 1.0) {
+    queue_drag_animation_active_ = false;
+    KillTimer(window, kCapsuleQueueFollowTimerId);
+    ApplyQueueDragTop(
+        static_cast<int>(std::lround(queue_drag_animation_target_top_)));
+  }
+}
+
+void PaperFlutterWindow::ApplyQueueDragTop(int top) {
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!window || !GetWindowRect(window, &bounds) || bounds.top == top) return;
+  applying_bounds_ = true;
+  SetWindowPos(window, nullptr, bounds.left, top, 0, 0,
+               SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_NOOWNERZORDER);
+  applying_bounds_ = false;
 }
 
 void PaperFlutterWindow::SetAlwaysOnTop(bool enabled) {
@@ -3263,6 +3340,10 @@ void PaperFlutterWindow::EnsurePaperShadowWindow() {
 
 void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
   HWND window = GetHandle();
+  if (in_size_move_) {
+    HidePaperShadowWindow();
+    return;
+  }
   if (!window || collapsed_ || !intended_visible_ ||
       !IsWindowVisible(window)) {
     HidePaperShadowWindow();

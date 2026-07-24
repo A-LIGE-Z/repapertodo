@@ -82,6 +82,8 @@ constexpr int kSettingsWindowResizeBorder = 12;
 constexpr int kSettingsWindowTitleTop = 20;
 constexpr int kSettingsWindowTitleBottom = 64;
 constexpr int kSettingsWindowCloseAreaWidth = 64;
+constexpr wchar_t kSettingsPositionedProperty[] =
+    L"RePaperTodo.SettingsPositioned";
 COLORREF g_settings_coordinator_background = RGB(255, 249, 234);
 
 double GetNumberArgument(const flutter::EncodableMap& map,
@@ -1793,10 +1795,57 @@ void ShowSettingsCoordinatorWindow(HWND window) {
         available_height,
         static_cast<LONG>(std::lround(
             logical_height * static_cast<double>(dpi) / 96.0)));
-    const LONG x = info.rcWork.left + (work_width - width) / 2;
-    const LONG y = info.rcWork.top + (work_height - height) / 2;
-    SetWindowPos(window, HWND_TOP, x, y, width, height,
-                 SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    RECT current = {};
+    const bool has_saved_bounds =
+        GetPropW(window, kSettingsPositionedProperty) != nullptr &&
+        GetWindowRect(window, &current) && current.right > current.left &&
+        current.bottom > current.top;
+    if (!has_saved_bounds) {
+      const LONG x = info.rcWork.left + (work_width - width) / 2;
+      const LONG y = info.rcWork.top + (work_height - height) / 2;
+      SetWindowPos(window, HWND_TOP, x, y, width, height,
+                   SWP_NOACTIVATE | SWP_FRAMECHANGED);
+      SetPropW(window, kSettingsPositionedProperty,
+               reinterpret_cast<HANDLE>(static_cast<INT_PTR>(1)));
+    } else {
+      // The settings paper is deliberately movable/resizable. Keep the last
+      // user bounds across hide/show cycles, only nudging them back into the
+      // current monitor work area after a display/DPI change.
+      const LONG saved_width = current.right - current.left;
+      const LONG saved_height = current.bottom - current.top;
+      const LONG usable_width = std::max<LONG>(1, work_width -
+                                                    2 * ScaleSettingsMetric(
+                                                        dpi,
+                                                        kSettingsWindowWorkAreaInset));
+      const LONG usable_height = std::max<LONG>(1, work_height -
+                                                     2 * ScaleSettingsMetric(
+                                                         dpi,
+                                                         kSettingsWindowWorkAreaInset));
+      const LONG clamped_width = std::clamp(saved_width,
+                                            static_cast<LONG>(ScaleSettingsMetric(
+                                                dpi, kSettingsWindowMinWidth)),
+                                            usable_width);
+      const LONG clamped_height = std::clamp(saved_height,
+                                             static_cast<LONG>(ScaleSettingsMetric(
+                                                 dpi, kSettingsWindowMinHeight)),
+                                             usable_height);
+      const LONG min_x = info.rcWork.left +
+                         ScaleSettingsMetric(dpi, kSettingsWindowWorkAreaInset);
+      const LONG min_y = info.rcWork.top +
+                         ScaleSettingsMetric(dpi, kSettingsWindowWorkAreaInset);
+      const LONG max_x = std::max(min_x, info.rcWork.right -
+                                           ScaleSettingsMetric(
+                                               dpi, kSettingsWindowWorkAreaInset) -
+                                           clamped_width);
+      const LONG max_y = std::max(min_y, info.rcWork.bottom -
+                                           ScaleSettingsMetric(
+                                               dpi, kSettingsWindowWorkAreaInset) -
+                                           clamped_height);
+      const LONG x = std::clamp(current.left, min_x, max_x);
+      const LONG y = std::clamp(current.top, min_y, max_y);
+      SetWindowPos(window, HWND_TOP, x, y, clamped_width, clamped_height,
+                   SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
   }
   ShowWindow(window, SW_SHOWNORMAL);
   SetForegroundWindow(window);

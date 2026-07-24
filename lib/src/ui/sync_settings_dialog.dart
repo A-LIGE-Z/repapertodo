@@ -43,6 +43,7 @@ class SyncSettingsDialogResult {
     required this.todoReminderIntervalUnit,
     required this.todoReminderScope,
     required this.todoReminderBubbleDurationSeconds,
+    required this.moveCompletedTodosToBottom,
     required this.showTopBarNewTodoButton,
     required this.showTopBarNewNoteButton,
     required this.showTopBarExternalOpenButton,
@@ -95,6 +96,7 @@ class SyncSettingsDialogResult {
   final String todoReminderIntervalUnit;
   final String todoReminderScope;
   final int todoReminderBubbleDurationSeconds;
+  final bool moveCompletedTodosToBottom;
   final bool showTopBarNewTodoButton;
   final bool showTopBarNewNoteButton;
   final bool showTopBarExternalOpenButton;
@@ -149,6 +151,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
   required String initialTodoReminderIntervalUnit,
   required String initialTodoReminderScope,
   required int initialTodoReminderBubbleDurationSeconds,
+  required bool initialMoveCompletedTodosToBottom,
   required bool initialShowTopBarNewTodoButton,
   required bool initialShowTopBarNewNoteButton,
   required bool initialShowTopBarExternalOpenButton,
@@ -218,6 +221,7 @@ Future<SyncSettingsDialogResult?> showSyncSettingsDialog({
       initialTodoReminderScope: initialTodoReminderScope,
       initialTodoReminderBubbleDurationSeconds:
           initialTodoReminderBubbleDurationSeconds,
+      initialMoveCompletedTodosToBottom: initialMoveCompletedTodosToBottom,
       initialShowTopBarNewTodoButton: initialShowTopBarNewTodoButton,
       initialShowTopBarNewNoteButton: initialShowTopBarNewNoteButton,
       initialShowTopBarExternalOpenButton: initialShowTopBarExternalOpenButton,
@@ -289,6 +293,7 @@ class SyncSettingsDialog extends StatefulWidget {
     required this.initialTodoReminderIntervalUnit,
     required this.initialTodoReminderScope,
     required this.initialTodoReminderBubbleDurationSeconds,
+    required this.initialMoveCompletedTodosToBottom,
     required this.initialShowTopBarNewTodoButton,
     required this.initialShowTopBarNewNoteButton,
     required this.initialShowTopBarExternalOpenButton,
@@ -353,6 +358,7 @@ class SyncSettingsDialog extends StatefulWidget {
   final String initialTodoReminderIntervalUnit;
   final String initialTodoReminderScope;
   final int initialTodoReminderBubbleDurationSeconds;
+  final bool initialMoveCompletedTodosToBottom;
   final bool initialShowTopBarNewTodoButton;
   final bool initialShowTopBarNewNoteButton;
   final bool initialShowTopBarExternalOpenButton;
@@ -417,6 +423,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   late double _todoLineSpacing;
   late double _noteLineSpacing;
   late bool _showTodoDueRelativeTime;
+  late bool _moveCompletedTodosToBottom;
   late String _todoDueYearDisplayMode;
   late bool _useTodoReminderInterval;
   late String _todoReminderIntervalUnit;
@@ -507,6 +514,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _todoLineSpacing = widget.initialTodoLineSpacing.clamp(0.8, 5.0).toDouble();
     _noteLineSpacing = widget.initialNoteLineSpacing.clamp(0.8, 5.0).toDouble();
     _showTodoDueRelativeTime = widget.initialShowTodoDueRelativeTime;
+    _moveCompletedTodosToBottom = widget.initialMoveCompletedTodosToBottom;
     _todoDueYearDisplayMode =
         TodoDueYearDisplayModes.normalize(widget.initialTodoDueYearDisplayMode);
     _useTodoReminderInterval = widget.initialUseTodoReminderInterval;
@@ -1459,6 +1467,21 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                     value: _showTodoDueRelativeTime,
                                     onChanged: (value) => setState(
                                         () => _showTodoDueRelativeTime = value),
+                                  ),
+                                  _SettingsCheckboxTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    secondary: _settingsHelp(
+                                      PaperTodoStringKeys
+                                          .tipMoveCompletedTodosToBottom,
+                                    ),
+                                    title: Text(
+                                      strings.get(PaperTodoStringKeys
+                                          .moveCompletedTodosToBottom),
+                                    ),
+                                    value: _moveCompletedTodosToBottom,
+                                    onChanged: (value) => setState(
+                                      () => _moveCompletedTodosToBottom = value,
+                                    ),
                                   ),
                                   const SizedBox(height: 5),
                                   _adaptiveChoiceSelector(
@@ -3489,6 +3512,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         noteLineSpacing: noteLineSpacing.clamp(0.8, 5.0).toDouble(),
         showTodoDueRelativeTime: _showTodoDueRelativeTime,
         todoDueYearDisplayMode: _todoDueYearDisplayMode,
+        moveCompletedTodosToBottom: _moveCompletedTodosToBottom,
         useTodoReminderInterval: _useTodoReminderInterval,
         todoReminderIntervalValue: reminderInterval.clamp(1, 240).toInt(),
         todoReminderIntervalUnit: _todoReminderIntervalUnit,

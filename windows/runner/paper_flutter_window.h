@@ -67,6 +67,9 @@ class PaperFlutterWindow : public Win32Window {
   void StartCapsuleDockAnimation(double target_visible_width, int duration_ms);
   void UpdateCapsuleDockAnimation();
   void ApplyCapsuleHorizontalPosition();
+  void StartQueueDragAnimation(int target_top, int duration_ms);
+  void UpdateQueueDragAnimation();
+  void ApplyQueueDragTop(int top);
   void SendCapsuleDropped();
   void ShowReminderBubble(const flutter::EncodableMap& reminder);
   void HideReminderBubble();
@@ -119,6 +122,12 @@ class PaperFlutterWindow : public Win32Window {
   bool in_size_move_ = false;
   bool queue_drag_offset_active_ = false;
   int queue_drag_base_top_ = 0;
+  int queue_drag_target_top_ = 0;
+  double queue_drag_animation_start_top_ = 0.0;
+  double queue_drag_animation_target_top_ = 0.0;
+  ULONGLONG queue_drag_animation_started_at_ = 0;
+  int queue_drag_animation_duration_ms_ = 0;
+  bool queue_drag_animation_active_ = false;
   bool z_order_initialized_ = false;
   bool z_order_pinned_ = false;
   bool z_order_topmost_ = false;

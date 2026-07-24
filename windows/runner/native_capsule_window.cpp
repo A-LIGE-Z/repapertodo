@@ -13,6 +13,7 @@
 namespace {
 
 constexpr UINT_PTR kCapsuleSlideTimerId = 0xCA51;
+constexpr UINT_PTR kCapsuleQueueFollowTimerId = 0xCA54;
 constexpr int kCapsuleChromeMargin = 8;
 constexpr int kCapsuleBodyHeight = 30;
 constexpr int kCapsuleCornerRadius = 12;
@@ -20,6 +21,7 @@ constexpr int kCapsuleCloseWidth = 30;
 constexpr int kCapsuleCloseGlyphOffset = 8;
 constexpr int kCapsuleSlideOutMilliseconds = 220;
 constexpr int kCapsuleSlideInMilliseconds = 180;
+constexpr int kCapsuleQueueMoveMilliseconds = 200;
 
 double NumberValue(const flutter::EncodableMap& map, const char* key,
                    double fallback) {
@@ -282,7 +284,9 @@ void NativeCapsuleWindow::ApplySurface(
     }
     surface_generation_ = incoming_generation;
   }
-  queue_drag_offset_active_ = false;
+  const bool previous_intended_visible = intended_visible_;
+  const std::string previous_capsule_side = capsule_side_;
+  const std::string previous_monitor_device_name = monitor_device_name_;
   surface_id_ = StringValue(surface, "surfaceId", surface_id_);
   kind_ = StringValue(surface, "kind", kind_);
   master_ = kind_ == "master";
@@ -317,6 +321,30 @@ void NativeCapsuleWindow::ApplySurface(
   custom_theme_color_hex_ = StringValue(
       surface, "customThemeColorHex", custom_theme_color_hex_);
   font_family_ = StringValue(surface, "fontFamily", font_family_);
+
+  if (previous_capsule_side != capsule_side_ ||
+      previous_monitor_device_name != monitor_device_name_) {
+    queue_drag_offset_active_ = false;
+    queue_drag_animation_active_ = false;
+    if (HWND window = GetHandle()) {
+      KillTimer(window, kCapsuleQueueFollowTimerId);
+    }
+  }
+
+  // A master collapse hides an existing proxy HWND instead of destroying it.
+  // Reset transient hover/slide state while hidden so expansion starts from a
+  // stable resting width and never paints one stale hover frame.
+  if (!intended_visible_ && previous_intended_visible) {
+    hovered_ = false;
+    close_hovered_ = false;
+    close_pressed_ = false;
+    pointer_down_ = false;
+    dock_animation_active_ = false;
+    current_visible_width_ = 0.0;
+    if (HWND window = GetHandle()) {
+      KillTimer(window, kCapsuleSlideTimerId);
+    }
+  }
 
   const UINT previous_dpi = dpi_;
   ResolveWorkArea();
@@ -391,7 +419,9 @@ void NativeCapsuleWindow::ApplySurface(
         current_visible_width_, 1.0, static_cast<double>(full_width_));
   }
   ApplyWindowRegion();
-  ApplyDockedPosition();
+  if (!queue_drag_animation_active_) {
+    ApplyDockedPosition();
+  }
   if (HWND window = GetHandle()) {
     const std::wstring window_title =
         L"RePaperTodo Native Capsule [" + Utf8ToWide(surface_id_) + L"]";
@@ -577,21 +607,71 @@ void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
     queue_drag_offset_active_ = true;
     queue_drag_base_top_ = bounds.top;
   }
-  SetWindowPos(window, nullptr, bounds.left, queue_drag_base_top_ + delta_y,
-               bounds.right - bounds.left, bounds.bottom - bounds.top,
-               SWP_NOZORDER | SWP_NOACTIVATE);
+  queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
+  StartQueueDragAnimation(queue_drag_target_top_,
+                          kCapsuleQueueMoveMilliseconds);
 }
 
 void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
   if (!queue_drag_offset_active_) return;
+  const int target_top = commit ? queue_drag_target_top_ : queue_drag_base_top_;
+  StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
+  queue_drag_offset_active_ = false;
+}
+
+void NativeCapsuleWindow::StartQueueDragAnimation(int target_top,
+                                                  int duration_ms) {
   HWND window = GetHandle();
   RECT bounds = {};
-  if (!commit && window && GetWindowRect(window, &bounds)) {
-    SetWindowPos(window, nullptr, bounds.left, queue_drag_base_top_,
-                 bounds.right - bounds.left, bounds.bottom - bounds.top,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
+  if (!window || !GetWindowRect(window, &bounds)) return;
+  queue_drag_target_top_ = target_top;
+  if (!animations_enabled_ || duration_ms <= 0 ||
+      std::abs(static_cast<double>(bounds.top - target_top)) < 0.5) {
+    KillTimer(window, kCapsuleQueueFollowTimerId);
+    queue_drag_animation_active_ = false;
+    ApplyQueueDragTop(target_top);
+    return;
   }
-  queue_drag_offset_active_ = false;
+  queue_drag_animation_start_top_ = static_cast<double>(bounds.top);
+  queue_drag_animation_target_top_ = static_cast<double>(target_top);
+  queue_drag_animation_started_at_ = GetTickCount64();
+  queue_drag_animation_duration_ms_ = duration_ms;
+  queue_drag_animation_active_ = true;
+  SetTimer(window, kCapsuleQueueFollowTimerId, 16, nullptr);
+}
+
+void NativeCapsuleWindow::UpdateQueueDragAnimation() {
+  if (!queue_drag_animation_active_) return;
+  HWND window = GetHandle();
+  if (!window) return;
+  const ULONGLONG elapsed =
+      GetTickCount64() - queue_drag_animation_started_at_;
+  const double progress = std::clamp(
+      static_cast<double>(elapsed) /
+          static_cast<double>(std::max(1, queue_drag_animation_duration_ms_)),
+      0.0, 1.0);
+  const double inverse = 1.0 - progress;
+  const double eased = 1.0 - inverse * inverse * inverse;
+  const int top = static_cast<int>(std::lround(
+      queue_drag_animation_start_top_ +
+      (queue_drag_animation_target_top_ - queue_drag_animation_start_top_) *
+          eased));
+  ApplyQueueDragTop(top);
+  if (progress >= 1.0) {
+    queue_drag_animation_active_ = false;
+    KillTimer(window, kCapsuleQueueFollowTimerId);
+    ApplyQueueDragTop(
+        static_cast<int>(std::lround(queue_drag_animation_target_top_)));
+  }
+}
+
+void NativeCapsuleWindow::ApplyQueueDragTop(int top) {
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!window || !GetWindowRect(window, &bounds) || bounds.top == top) return;
+  SetWindowPos(window, nullptr, bounds.left, top, 0, 0,
+               SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_NOOWNERZORDER);
 }
 
 bool NativeCapsuleWindow::IsChineseLocale() const {
@@ -1032,6 +1112,10 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
         UpdateDockAnimation();
         return 0;
       }
+      if (wparam == kCapsuleQueueFollowTimerId) {
+        UpdateQueueDragAnimation();
+        return 0;
+      }
       break;
     case WM_NCHITTEST:
       return HTCLIENT;
@@ -1195,7 +1279,9 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       return 0;
     case WM_DESTROY:
       KillTimer(window, kCapsuleSlideTimerId);
+      KillTimer(window, kCapsuleQueueFollowTimerId);
       dock_animation_active_ = false;
+      queue_drag_animation_active_ = false;
       break;
     case WM_CLOSE:
       ShowWindow(window, SW_HIDE);
