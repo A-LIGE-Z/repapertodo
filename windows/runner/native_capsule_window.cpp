@@ -22,6 +22,7 @@ constexpr int kCapsuleCloseWidth = 30;
 constexpr int kCapsuleCloseGlyphOffset = 8;
 constexpr int kCapsuleSlideOutMilliseconds = 220;
 constexpr int kCapsuleSlideInMilliseconds = 180;
+constexpr int kCapsuleQueueFollowMilliseconds = 64;
 constexpr int kCapsuleQueueMoveMilliseconds = 200;
 constexpr int kCapsuleMasterMoveMilliseconds = 200;
 constexpr int kCapsuleMasterFadeMilliseconds = 160;
@@ -801,21 +802,19 @@ void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
     queue_drag_base_top_ = bounds.top;
   }
   queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
-  // PaperTodo drives the queue synchronously while the master is dragged.
-  // Animating every mouse-move toward a 200 ms target makes the child pills
-  // visibly lag behind the pointer and then overshoot when the target changes.
-  // Keep the live drag position exact; the short animation is reserved for a
-  // cancelled drag snapping back to its original slot.
-  KillTimer(window, kCapsuleQueueFollowTimerId);
-  queue_drag_animation_active_ = false;
-  ApplyQueueDragTop(queue_drag_target_top_);
+  // Follow the master with a deliberately short, retargetable ease-out. Each
+  // pointer update starts from the child HWND's current frame, so the queue
+  // reads as one connected strip without either snapping or accumulating the
+  // lag produced by the normal 200 ms move transition.
+  StartQueueDragAnimation(queue_drag_target_top_,
+                          kCapsuleQueueFollowMilliseconds);
 }
 
 void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
   if (!queue_drag_offset_active_) return;
   const int target_top = commit ? queue_drag_target_top_ : queue_drag_base_top_;
   if (commit) {
-    StartQueueDragAnimation(target_top, 0);
+    StartQueueDragAnimation(target_top, kCapsuleQueueFollowMilliseconds);
   } else {
     StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
   }

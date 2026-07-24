@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -75,6 +76,13 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
         if (!state.papers.any((paper) => paper.id == widget.paperId)) {
           return false;
         }
+        if (_receivedInitialState &&
+            _jsonValuesEqual(
+              widget.controller.state.toJson(),
+              state.toJson(),
+            )) {
+          return true;
+        }
         widget.store.replaceState(state);
         if (mounted) {
           setState(() {
@@ -97,6 +105,13 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
         }
         final state = widget.controller.state;
         final index = state.papers.indexWhere((item) => item.id == paper.id);
+        if (index >= 0 &&
+            _jsonValuesEqual(
+              state.papers[index].toJson(),
+              paper.toJson(),
+            )) {
+          return true;
+        }
         if (index < 0) {
           state.papers.add(paper);
         } else {
@@ -227,4 +242,8 @@ Map<String, Object?>? _stringKeyedMap(Object? value) {
     result[entry.key as String] = entry.value;
   }
   return result;
+}
+
+bool _jsonValuesEqual(Object? first, Object? second) {
+  return jsonEncode(first) == jsonEncode(second);
 }

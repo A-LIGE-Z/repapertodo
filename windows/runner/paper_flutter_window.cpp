@@ -153,6 +153,7 @@ constexpr UINT_PTR kCapsuleQueueFollowTimerId = 0xCA53;
 constexpr UINT_PTR kCapsuleMasterTransitionTimerId = 0xCA56;
 constexpr int kCapsuleSlideOutMilliseconds = 220;
 constexpr int kCapsuleSlideInMilliseconds = 180;
+constexpr int kCapsuleQueueFollowMilliseconds = 64;
 constexpr int kCapsuleQueueMoveMilliseconds = 200;
 constexpr int kCapsuleMasterMoveMilliseconds = 200;
 constexpr int kCapsuleMasterFadeMilliseconds = 160;
@@ -2788,7 +2789,9 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       // in-flight animation instead of snapping to the final HWND position.
       queue_drag_base_top_ = target_top;
       queue_drag_target_top_ = target_top;
-      StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
+      StartQueueDragAnimation(
+          target_top,
+          std::max(1, queue_drag_animation_duration_ms_));
     } else {
       applying_bounds_ = true;
       SetWindowPos(window, nullptr, target_left, target_top, target_width,
@@ -2840,13 +2843,11 @@ void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
     queue_drag_base_top_ = bounds.top;
   }
   queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
-  // Keep the real collapsed paper in lockstep with the master during the
-  // pointer drag. Retargeting a 200 ms easing animation on every mouse move
-  // causes visible lag and a counter-intuitive trailing stack; only a
-  // cancelled drag should animate back to its original slot.
-  KillTimer(window, kCapsuleQueueFollowTimerId);
-  queue_drag_animation_active_ = false;
-  ApplyQueueDragTop(queue_drag_target_top_);
+  // The collapsed Flutter HWND follows the same short, retargetable curve as
+  // native proxy capsules. Starting from the current frame on every pointer
+  // update keeps the queue connected to the master without an abrupt snap.
+  StartQueueDragAnimation(queue_drag_target_top_,
+                          kCapsuleQueueFollowMilliseconds);
 }
 
 void PaperFlutterWindow::FinishQueueDrag(bool commit) {
@@ -2854,7 +2855,7 @@ void PaperFlutterWindow::FinishQueueDrag(bool commit) {
   const int target_top = commit ? queue_drag_target_top_
                                 : queue_drag_base_top_;
   if (commit) {
-    StartQueueDragAnimation(target_top, 0);
+    StartQueueDragAnimation(target_top, kCapsuleQueueFollowMilliseconds);
   } else {
     StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
   }
@@ -3589,6 +3590,14 @@ void PaperFlutterWindow::EnsurePaperShadowWindow() {
 }
 
 void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
+  // WM_MOVE, WM_SIZE, WM_WINDOWPOSCHANGED and z-order refreshes can all arrive
+  // after WM_EXITSIZEMOVE but before Flutter presents its final resized frame.
+  // Keep the layered shadow suppressed until that frame posts the deferred
+  // refresh message; otherwise the stale DIB appears as a one-frame black rim.
+  if (paper_shadow_refresh_pending_) {
+    HidePaperShadowWindow();
+    return;
+  }
   HWND window = GetHandle();
   if (in_size_move_) {
     HidePaperShadowWindow();

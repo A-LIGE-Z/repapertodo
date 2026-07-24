@@ -11530,11 +11530,47 @@ class _TodoEditorState extends State<_TodoEditor> {
       visualSpec: visualSpec,
       compact: compactActions,
     );
+    final dueTransitionDuration =
+        widget.enableAnimations ? PaperTodoMotion.quick : Duration.zero;
+    final dueSlot = AnimatedSwitcher(
+      key: ValueKey('${widget.paper.id}-${item.id}-due-transition'),
+      duration: dueTransitionDuration,
+      reverseDuration:
+          widget.enableAnimations ? PaperTodoMotion.fadeOut : Duration.zero,
+      switchInCurve: PaperTodoMotion.enterCurve,
+      switchOutCurve: PaperTodoMotion.exitCurve,
+      layoutBuilder: (currentChild, previousChildren) => Stack(
+        alignment: Alignment.centerRight,
+        clipBehavior: Clip.none,
+        children: [
+          ...previousChildren,
+          if (currentChild != null) currentChild,
+        ],
+      ),
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SizeTransition(
+          axis: Axis.horizontal,
+          alignment: AlignmentDirectional.centerEnd,
+          sizeFactor: animation,
+          child: child,
+        ),
+      ),
+      child: dueIndicator == null
+          ? SizedBox.shrink(
+              key: ValueKey('${widget.paper.id}-${item.id}-due-empty'),
+            )
+          : Padding(
+              key: ValueKey('${widget.paper.id}-${item.id}-due-present'),
+              padding: const EdgeInsets.only(left: 4),
+              child: dueIndicator,
+            ),
+    );
     final trailingRow = Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (dueIndicator != null) ...[const SizedBox(width: 4), dueIndicator],
+        dueSlot,
         if (linkedNote != null) ...[
           const SizedBox(width: 1),
           _linkedNoteButton(linkedNote, item, visualSpec),

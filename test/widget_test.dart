@@ -5799,6 +5799,34 @@ void main() {
     expect(
         find.descendant(of: stepper, matching: find.text('7')), findsOneWidget);
 
+    await tester.tap(
+      find.byKey(const ValueKey('settings-cancel-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      controller.state.maxTitleLength,
+      6,
+      reason: 'draft settings must not change the live state before confirm',
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'capsules');
+    final confirmedStepper = find.byKey(
+      const ValueKey('settings-max-title-length'),
+    );
+    await tester.scrollUntilVisible(
+      confirmedStepper,
+      320,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(
+      find.descendant(
+        of: confirmedStepper,
+        matching: find.text('\uFF0B'),
+      ),
+    );
+    await tester.pump();
     await _commitVisibleDialog(tester);
     await tester.pumpAndSettle();
     expect(controller.state.maxTitleLength, 7);
@@ -19106,6 +19134,93 @@ void main() {
     expect(tester.getCenter(delete).dx, lessThan(tester.getCenter(moveUp).dx));
     expect(
         tester.getCenter(moveUp).dx, lessThan(tester.getCenter(moveDown).dx));
+  });
+
+  testWidgets(
+      'adding a todo due time grows its trailing slot without a row flash',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        enableAnimations: true,
+        papers: [
+          PaperData(
+            id: 'due-transition-paper',
+            type: PaperTypes.todo,
+            title: 'Due transition',
+            items: [
+              PaperItem(id: 'due-transition-item', text: 'Add a time'),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final row = find.byKey(
+      const ValueKey('due-transition-paper-due-transition-item-row'),
+    );
+    final rowElement = tester.element(row);
+    final dueSlot = find.byKey(
+      const ValueKey(
+        'due-transition-paper-due-transition-item-due-transition',
+      ),
+    );
+    expect(
+      find.byKey(
+        const ValueKey(
+          'due-transition-paper-due-transition-item-due-absolute',
+        ),
+      ),
+      findsNothing,
+    );
+
+    await tester.tap(find.byTooltip('Set time'));
+    await tester.pumpAndSettle();
+    await _commitVisibleDialog(tester);
+    // Complete only the dialog route's exit. The due selection is applied by
+    // the awaiting caller after that route future resolves, so the next zero
+    // duration pump creates the trailing-slot animation at progress zero.
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(controller.state.papers.single.items.single.dueAtLocal, isNotNull);
+    await tester.pump(const Duration(milliseconds: 75));
+
+    expect(tester.element(row), same(rowElement));
+    final sizeTransitions = tester.widgetList<SizeTransition>(
+      find.descendant(of: dueSlot, matching: find.byType(SizeTransition)),
+    );
+    expect(
+      sizeTransitions.any(
+        (transition) =>
+            transition.axis == Axis.horizontal &&
+            transition.sizeFactor.value > 0 &&
+            transition.sizeFactor.value < 1,
+      ),
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpAndSettle();
+    expect(controller.state.papers.single.items.single.dueAtLocal, isNotNull);
+    expect(
+      find.byKey(
+        const ValueKey(
+          'due-transition-paper-due-transition-item-due-absolute',
+        ),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('todo rows use immediate hover and source completion transitions',

@@ -3922,6 +3922,20 @@ void main() {
     expect(nativeCapsule, contains('kCapsuleCornerRadius = 12'));
     expect(nativeCapsule, contains('kCapsuleSlideOutMilliseconds = 220'));
     expect(nativeCapsule, contains('kCapsuleSlideInMilliseconds = 180'));
+    expect(nativeCapsule, contains('kCapsuleQueueFollowMilliseconds = 64'));
+    expect(
+      nativeCapsule,
+      contains(
+        'StartQueueDragAnimation(queue_drag_target_top_,\n'
+        '                          kCapsuleQueueFollowMilliseconds)',
+      ),
+    );
+    expect(nativeCapsule, contains('capsule_hidden_by_master_ ='));
+    expect(nativeCapsule, contains('capsule_master_top_ ='));
+    expect(nativeCapsule, contains('StartMasterTransition('));
+    expect(nativeCapsule, contains('UpdateMasterTransition'));
+    expect(nativeCapsule, contains('kCapsuleMasterTransitionTimerId'));
+    expect(nativeCapsule, contains('return HTTRANSPARENT;'));
     expect(nativeCapsule, contains('UpdateDockAnimation'));
     expect(
       windowsPlatform,
@@ -4022,6 +4036,20 @@ void main() {
     expect(paperWindow, contains('UpdateCapsuleDockAnimation'));
     expect(paperWindow, contains('kCapsuleSlideOutMilliseconds = 220'));
     expect(paperWindow, contains('kCapsuleSlideInMilliseconds = 180'));
+    expect(paperWindow, contains('kCapsuleQueueFollowMilliseconds = 64'));
+    expect(
+      paperWindow,
+      contains(
+        'StartQueueDragAnimation(queue_drag_target_top_,\n'
+        '                          kCapsuleQueueFollowMilliseconds)',
+      ),
+    );
+    expect(paperWindow, contains('capsule_hidden_by_master_ ='));
+    expect(paperWindow, contains('capsule_master_top_ ='));
+    expect(paperWindow, contains('StartMasterCapsuleTransition('));
+    expect(paperWindow, contains('UpdateMasterCapsuleTransition'));
+    expect(paperWindow, contains('kCapsuleMasterTransitionTimerId'));
+    expect(paperWindow, contains('return HTTRANSPARENT;'));
     expect(paperWindow, contains('capsule_animation_active_'));
     expect(paperWindowHeader,
         contains('bool capsule_animations_enabled_ = true;'));
@@ -4056,6 +4084,14 @@ void main() {
     expect(paperWindow, contains('SetNextFrameCallback('));
     expect(
       paperWindow,
+      contains(
+        'if (paper_shadow_refresh_pending_) {\n'
+        '    HidePaperShadowWindow();\n'
+        '    return;',
+      ),
+    );
+    expect(
+      paperWindow,
       contains('(visible ? 0 : SWP_SHOWWINDOW)'),
     );
     expect(runner, contains('kFullscreenTopmostRefreshIntervalMs = 250'));
@@ -4065,7 +4101,69 @@ void main() {
     expect(cmake, contains('"native_capsule_window.cpp"'));
     expect(mainDart, contains('PaperWindowArguments.tryParse(args)'));
     expect(paperWindowApp, contains("'paperChanged'"));
+    expect(paperWindowApp, contains("import 'dart:convert';"));
+    expect(paperWindowApp, contains('_jsonValuesEqual('));
+    expect(paperWindowApp, contains('if (_receivedInitialState &&'));
+    expect(paperWindowApp, contains('if (index >= 0 &&'));
     expect(paperWindowApp, contains('paperWindowMode: true'));
+    final nativeReconcileStart =
+        runner.indexOf('void FlutterWindow::ReconcileNativeCapsuleWindows(');
+    final nativeReconcileEnd = runner.indexOf(
+        'PaperFlutterWindow* FlutterWindow::EnsurePaperWindow(',
+        nativeReconcileStart);
+    expect(nativeReconcileStart, isNonNegative);
+    expect(nativeReconcileEnd, greaterThan(nativeReconcileStart));
+    final nativeReconcileBlock =
+        runner.substring(nativeReconcileStart, nativeReconcileEnd);
+    expect(nativeReconcileBlock, contains('if (entry.second->is_master())'));
+    expect(
+        nativeReconcileBlock, contains('entry.second->RefreshVisibility();'));
+
+    final nativeRefreshStart =
+        nativeCapsule.indexOf('void NativeCapsuleWindow::RefreshVisibility()');
+    final nativeRefreshEnd = nativeCapsule.indexOf(
+        'void NativeCapsuleWindow::Paint(', nativeRefreshStart);
+    expect(nativeRefreshStart, isNonNegative);
+    expect(nativeRefreshEnd, greaterThan(nativeRefreshStart));
+    final nativeRefreshBlock =
+        nativeCapsule.substring(nativeRefreshStart, nativeRefreshEnd);
+    final nativeRetractedStart =
+        nativeRefreshBlock.indexOf('const bool retracted_by_master');
+    final nativeRetractedEnd = nativeRefreshBlock.indexOf(
+      'if (!master_transition_active_ && current_alpha_ != 255)',
+      nativeRetractedStart,
+    );
+    expect(nativeRetractedStart, isNonNegative);
+    expect(nativeRetractedEnd, greaterThan(nativeRetractedStart));
+    final nativeRetractedBlock =
+        nativeRefreshBlock.substring(nativeRetractedStart, nativeRetractedEnd);
+    expect(nativeRetractedBlock, contains('SetWindowPos(window, HWND_TOPMOST'));
+    expect(nativeRetractedBlock, isNot(contains('SWP_HIDEWINDOW')));
+
+    final paperRefreshStart =
+        paperWindow.indexOf('void PaperFlutterWindow::RefreshZOrder()');
+    final paperRefreshEnd = paperWindow.indexOf(
+        'void PaperFlutterWindow::SendBoundsChanged(', paperRefreshStart);
+    expect(paperRefreshStart, isNonNegative);
+    expect(paperRefreshEnd, greaterThan(paperRefreshStart));
+    final paperRefreshBlock =
+        paperWindow.substring(paperRefreshStart, paperRefreshEnd);
+    final paperRetractedStart =
+        paperRefreshBlock.indexOf('const bool retracted_by_master');
+    final paperRetractedEnd = paperRefreshBlock.indexOf(
+      'if (!master_capsule_transition_active_ && capsule_alpha_ != 255)',
+      paperRetractedStart,
+    );
+    expect(paperRetractedStart, isNonNegative);
+    expect(paperRetractedEnd, greaterThan(paperRetractedStart));
+    final paperRetractedBlock =
+        paperRefreshBlock.substring(paperRetractedStart, paperRetractedEnd);
+    expect(
+      paperRetractedBlock,
+      contains('SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE'),
+    );
+    expect(paperRetractedBlock, contains('SWP_SHOWWINDOW'));
+    expect(paperRetractedBlock, isNot(contains('SWP_HIDEWINDOW')));
     expect(windowsSmoke, contains('CountVisibleTopLevelWindows'));
     expect(windowsSmoke, contains('CountVisiblePaperWindows'));
     expect(windowsSmoke, contains('CountVisibleNativeCapsuleWindows'));
