@@ -506,9 +506,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     _markdownRenderMode =
         MarkdownRenderModes.normalize(widget.initialMarkdownRenderMode);
     _todoVisualSize = TodoVisualSizes.normalize(widget.initialTodoVisualSize);
-    // PaperTodo keeps the legacy preset value only for data compatibility.
-    // The current settings UI exposes one installed-system-font selector.
-    _uiFontPreset = UiFontPresets.defaultPreset;
+    // Keep the persisted preset when the settings page is opened.  The
+    // selector is intentionally system-font based, but the built-in preset is
+    // still part of the shared state contract and must not be silently
+    // replaced merely by opening and confirming settings.
+    _uiFontPreset = UiFontPresets.normalize(widget.initialUiFontPreset);
     _zoom = widget.initialZoom.clamp(0.5, 1.5).toDouble();
     _maxTitleLength = widget.initialMaxTitleLength.clamp(2, 20).toDouble();
     _enableToolTips = widget.initialEnableToolTips;

@@ -2164,6 +2164,33 @@ void main() {
     expect(controller.state.systemFontFamilyName, 'Paper Sans');
   });
 
+  testWidgets('confirming settings preserves an existing built-in font preset',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        theme: 'light',
+        uiFontPreset: UiFontPresets.dengXian,
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('settings-confirm-button')));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.uiFontPreset, UiFontPresets.dengXian);
+  });
+
   testWidgets('settings toggles and close button match PaperTodo chrome',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));

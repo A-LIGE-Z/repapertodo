@@ -156,7 +156,10 @@ Deep-capsule collapse-all follows PaperTodo's queue model: the master capsule
 acts on one `(monitor, side)` queue, while the board-level fallback may still
 toggle all papers for compatibility with the current Flutter surface.
 Dragging that master vertically moves every visible capsule in its queue as one
-stack. Dragging an individual capsule may reorder it inside the queue or move it
+stack. Child HWNDs track the master's exact pointer frame while dragging;
+separate per-capsule easing is reserved for a cancelled drop returning to its
+saved slot so direction changes never create elastic lag. Dragging an
+individual capsule may reorder it inside the queue or move it
 to another monitor edge, but neither operation writes capsule coordinates into
 the paper's saved `X/Y/Width/Height`. Clicking the master retracts or restores
 only the queue's capsules; expanded paper HWND visibility and geometry remain
@@ -169,7 +172,9 @@ capsules measure `93/97/91x46`; deep native proxy windows measure
 Collapsed Flutter capsules and lightweight native proxies must both reveal the
 same 20px on hover, using the source 220ms slide-out and 180ms slide-in cubic
 ease-out. Disabling UI animations makes that position change immediate without
-changing the resting or hover endpoints.
+changing the resting or hover endpoints. The master capsule reserves the wider
+of its collapsed and expanded labels plus both chevron advances, so toggling a
+queue never changes the master HWND width or produces a one-frame edge jump.
 Imported or restored collapse-all queue maps should normalize queue aliases
 with exact canonical `(monitor|side)` entries taking precedence over legacy
 aliases, including canonical `false` values that remove an older alias.
@@ -354,12 +359,17 @@ then `Segoe UI Emoji`. Explicit installed-system and runtime custom fonts take
 precedence for both UI and content; code stays on the dedicated Cascadia Mono
 chain.
 The custom font family setting should refresh the installed Windows font list
-each time settings opens, combining GDI-discovered families with both
+each time settings opens. DirectWrite is the authoritative source and returns
+one localized display name for every installed family, preferring a Chinese
+name when one exists, then the current user locale and English; this avoids
+showing Chinese and English aliases as duplicate families. GDI plus both
 `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts` and
-`HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts` registry entries so
-system fonts and per-user "installed for me" fonts are selectable. The setting
-must still allow manual font-family entry when a family is unavailable from the
-platform list.
+`HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts` remain the fallback
+when DirectWrite cannot open the system collection, so system fonts and
+per-user "installed for me" fonts remain selectable. The Dart list removes
+case-only duplicates, sorts CJK display names before Latin names, exposes a
+permanently visible interactive scrollbar, and still allows manual family entry
+when a font is unavailable from the platform list.
 Paper title editing should preserve PaperTodo's hard title rules: the editor
 accepts no more than 40 text elements, control characters are removed before
 the title is stored, blank titles display the default paper title, and Windows
@@ -612,6 +622,10 @@ normal text on hover, click cursor, 300ms URL hint delay and 12-second hint
 duration, routed through the platform URI opener.
 The settings close action is a 28x24 `×` symbol button; hover uses Hover/text
 and press uses Active/paper colors immediately, without ripple or animation.
+All settings controls edit a dialog-local draft. Closing or cancelling discards
+that draft; only the explicit Confirm action validates it, applies platform
+changes, persists the resulting state, and keeps an existing built-in font
+preset when the user did not select a replacement system family.
 Long settings rows that pair two input controls should stack vertically on
 Android narrow screens, while desktop can keep paired fields side by side.
 Settings validation should place recoverable errors on the relevant input field

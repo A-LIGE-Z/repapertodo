@@ -8,6 +8,23 @@ import 'package:repapertodo/repapertodo.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('installed font normalization groups Chinese names before Latin names',
+      () {
+    expect(
+      normalizeInstalledFontFamilies(<Object?>[
+        'Arial',
+        ' 微软雅黑 ',
+        'DengXian',
+        '微软雅黑',
+        'arial',
+        '宋体',
+        null,
+        42,
+      ]),
+      ['宋体', '微软雅黑', 'Arial', 'DengXian'],
+    );
+  });
+
   test('paper host sends window method channel calls', () async {
     const channel = MethodChannel('repapertodo/window_test');
     final calls = <MethodCall>[];
@@ -1665,6 +1682,30 @@ void main() {
               .arguments as List)
           .cast<Map>();
       expect(nativeSurfaces.single, containsPair('fontFamily', 'Consolas'));
+
+      for (final fontCase in const <(String, String)>[
+        (UiFontPresets.yaHei, 'Microsoft YaHei UI'),
+        (UiFontPresets.dengXian, 'DengXian'),
+        (UiFontPresets.serif, 'Georgia'),
+      ]) {
+        calls.clear();
+        state.uiFontPreset = fontCase.$1;
+        await services.paperWindows.refreshSurfaceRegistry(state);
+        final paperSurface = (calls
+                .singleWhere((call) => call.method == 'setPaperSurfaces')
+                .arguments as List)
+            .cast<Map>()
+            .single;
+        final nativeSurface = (calls
+                .singleWhere(
+                  (call) => call.method == 'setNativeCapsuleSurfaces',
+                )
+                .arguments as List)
+            .cast<Map>()
+            .single;
+        expect(paperSurface, containsPair('fontFamily', fontCase.$2));
+        expect(nativeSurface, containsPair('fontFamily', fontCase.$2));
+      }
     },
   );
 
@@ -1935,6 +1976,67 @@ void main() {
     expect(request.value, 'https://example.com/from-child');
     expect(request.nativeActivated, true);
   });
+
+  test(
+    'stale master capsule clicks remain ordered while stale proxy clicks are ignored',
+    () async {
+      const channel =
+          MethodChannel('repapertodo/window_capsule_generation_test');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (_) async => null);
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
+      final services = WindowsPlatformServices(channel: channel);
+      final state = AppState(
+        useCapsuleCollapseAll: true,
+        showDeepCapsuleWhileExpanded: true,
+        papers: [PaperData(id: 'generation-paper', title: 'Generation')],
+      )..normalize();
+      await services.paperWindows.refreshSurfaceRegistry(state);
+      await services.paperWindows.refreshSurfaceRegistry(state);
+
+      final masterAction = services.paperWindows.actionRequests.first;
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('paperActionRequested', {
+            'paperId': 'generation-paper',
+            'kind': PaperWindowActionKinds.toggleCollapseAll,
+            'value': '|right',
+            'surfaceGeneration': 1,
+          }),
+        ),
+        (_) {},
+      );
+      final acceptedMaster = await masterAction;
+      expect(acceptedMaster.kind, PaperWindowActionKinds.toggleCollapseAll);
+
+      var proxyDelivered = false;
+      final proxySubscription = services.paperWindows.actionRequests.listen(
+        (_) => proxyDelivered = true,
+      );
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('paperActionRequested', {
+            'paperId': 'generation-paper',
+            'kind': PaperWindowActionKinds.openPaper,
+            'value': 'generation-paper',
+            'surfaceGeneration': 1,
+          }),
+        ),
+        (_) {},
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(proxyDelivered, isFalse);
+      await proxySubscription.cancel();
+    },
+  );
 
   test(
     'paper host routes native capsule drops without rewriting geometry',

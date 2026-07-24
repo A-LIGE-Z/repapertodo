@@ -153,7 +153,6 @@ constexpr UINT_PTR kCapsuleQueueFollowTimerId = 0xCA53;
 constexpr UINT_PTR kCapsuleMasterTransitionTimerId = 0xCA56;
 constexpr int kCapsuleSlideOutMilliseconds = 220;
 constexpr int kCapsuleSlideInMilliseconds = 180;
-constexpr int kCapsuleQueueFollowMilliseconds = 64;
 constexpr int kCapsuleQueueMoveMilliseconds = 200;
 constexpr int kCapsuleMasterMoveMilliseconds = 200;
 constexpr int kCapsuleMasterFadeMilliseconds = 160;
@@ -2421,6 +2420,11 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
         return 0;
       }
       if (paper_shadow_refresh_pending_ && !in_size_move_) {
+        // The Flutter next-frame callback fires when the engine submits the
+        // frame, which can still precede DWM presenting it. Waiting for that
+        // composition boundary prevents the layered shadow from surrounding
+        // one stretched/black swap-chain frame at resize release.
+        DwmFlush();
         paper_shadow_refresh_pending_ = false;
         UpdatePaperShadowWindow(true);
       }
@@ -2856,11 +2860,12 @@ void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
     queue_drag_base_top_ = bounds.top;
   }
   queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
-  // The collapsed Flutter HWND follows the same short, retargetable curve as
-  // native proxy capsules. Starting from the current frame on every pointer
-  // update keeps the queue connected to the master without an abrupt snap.
-  StartQueueDragAnimation(queue_drag_target_top_,
-                          kCapsuleQueueFollowMilliseconds);
+  // Keep the collapsed Flutter HWND on the exact same frame as the native
+  // master. Starting a fresh easing curve for every pointer event introduces
+  // visible lag and a rubber-band reversal when drag direction changes.
+  KillTimer(window, kCapsuleQueueFollowTimerId);
+  queue_drag_animation_active_ = false;
+  ApplyQueueDragTop(queue_drag_target_top_);
 }
 
 void PaperFlutterWindow::FinishQueueDrag(bool commit) {
@@ -2868,7 +2873,11 @@ void PaperFlutterWindow::FinishQueueDrag(bool commit) {
   const int target_top = commit ? queue_drag_target_top_
                                 : queue_drag_base_top_;
   if (commit) {
-    StartQueueDragAnimation(target_top, kCapsuleQueueFollowMilliseconds);
+    if (HWND window = GetHandle()) {
+      KillTimer(window, kCapsuleQueueFollowTimerId);
+    }
+    queue_drag_animation_active_ = false;
+    ApplyQueueDragTop(target_top);
   } else {
     StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
   }
@@ -3094,11 +3103,10 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
     master_capsule_retracted_ = false;
   } else {
     master_capsule_retracted_ = true;
-    if (!IsWindowVisible(window) || !z_order_initialized_ ||
-        z_order_pinned_ != pinned_to_desktop_ ||
-        z_order_topmost_ == pinned_to_desktop_) {
-      ShowWindow(window, SW_SHOWNOACTIVATE);
-    }
+    // ApplySurface performs one RefreshZOrder pass after the transition is
+    // armed. Let that pass reveal and stack the retained HWND atomically;
+    // an early ShowWindow here can expose a transparent/stale swap-chain frame
+    // before the correct capsule z-order is established.
   }
 
   if (!capsule_animations_enabled_ || duration_ms <= 0 ||

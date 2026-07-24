@@ -237,9 +237,15 @@ class WindowsPaperWindowHost implements PaperWindowHost {
           return;
         }
         if (surfaceGeneration != null &&
-            surfaceGeneration < _surfaceGeneration) {
-          // Ignore a click emitted by an HWND that has already been replaced
-          // by a newer native surface registry.
+            surfaceGeneration < _surfaceGeneration &&
+            kind != PaperWindowActionKinds.toggleCollapseAll) {
+          // A proxy click emitted by an HWND that has already been replaced
+          // must not act on a newer paper state.  Master capsules are
+          // different: a quick second click can still be sitting in the
+          // Windows input queue while the first toggle publishes the next
+          // registry generation.  The Dart master-toggle path validates that
+          // the queue is still live, so accepting that action preserves click
+          // order without reviving removed proxy capsules.
           return;
         }
         _actionRequests.add(
@@ -1203,6 +1209,8 @@ String _windowsUiFontFamily(AppState state) {
     return systemFamily;
   }
   return switch (UiFontPresets.normalize(state.uiFontPreset)) {
+    UiFontPresets.yaHei => 'Microsoft YaHei UI',
+    UiFontPresets.dengXian => 'DengXian',
     UiFontPresets.serif => 'Georgia',
     UiFontPresets.mono => 'Consolas',
     _ => 'Segoe UI',

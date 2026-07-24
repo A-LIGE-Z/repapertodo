@@ -2227,8 +2227,17 @@ void main() {
     expect(windowsPlatform, contains('listInstalledFontFamilies'));
     expect(settingsDialog, isNot(contains('value: UiFontPresets.yaHei')));
     expect(settingsDialog, isNot(contains('value: UiFontPresets.dengXian')));
-    expect(settingsDialog,
-        contains('_uiFontPreset = UiFontPresets.defaultPreset'));
+    expect(
+      settingsDialog,
+      contains(
+        '_uiFontPreset = UiFontPresets.normalize(widget.initialUiFontPreset)',
+      ),
+    );
+    expect(
+      settingsDialog,
+      contains('_uiFontPreset = UiFontPresets.defaultPreset'),
+      reason: 'Selecting an explicit installed font still clears the preset.',
+    );
     expect(settingsDialog, contains('RawAutocomplete<String>'));
     expect(settingsDialog, contains('loadInstalledFontFamilies'));
     expect(windowsRunner, contains('InstalledFontFamilies'));
@@ -3922,13 +3931,14 @@ void main() {
     expect(nativeCapsule, contains('kCapsuleCornerRadius = 12'));
     expect(nativeCapsule, contains('kCapsuleSlideOutMilliseconds = 220'));
     expect(nativeCapsule, contains('kCapsuleSlideInMilliseconds = 180'));
-    expect(nativeCapsule, contains('kCapsuleQueueFollowMilliseconds = 64'));
     expect(
       nativeCapsule,
-      contains(
-        'StartQueueDragAnimation(queue_drag_target_top_,\n'
-        '                          kCapsuleQueueFollowMilliseconds)',
-      ),
+      contains('ApplyQueueDragTop(queue_drag_target_top_)'),
+    );
+    expect(nativeCapsule, contains('queue_drag_animation_active_ = false'));
+    expect(
+      nativeCapsule,
+      isNot(contains('kCapsuleQueueFollowMilliseconds')),
     );
     expect(nativeCapsule, contains('capsule_hidden_by_master_ ='));
     expect(nativeCapsule, contains('capsule_master_top_ ='));
@@ -4042,13 +4052,14 @@ void main() {
     expect(paperWindow, contains('UpdateCapsuleDockAnimation'));
     expect(paperWindow, contains('kCapsuleSlideOutMilliseconds = 220'));
     expect(paperWindow, contains('kCapsuleSlideInMilliseconds = 180'));
-    expect(paperWindow, contains('kCapsuleQueueFollowMilliseconds = 64'));
     expect(
       paperWindow,
-      contains(
-        'StartQueueDragAnimation(queue_drag_target_top_,\n'
-        '                          kCapsuleQueueFollowMilliseconds)',
-      ),
+      contains('ApplyQueueDragTop(queue_drag_target_top_)'),
+    );
+    expect(paperWindow, contains('queue_drag_animation_active_ = false'));
+    expect(
+      paperWindow,
+      isNot(contains('kCapsuleQueueFollowMilliseconds')),
     );
     expect(paperWindow, contains('capsule_hidden_by_master_ ='));
     expect(paperWindow, contains('capsule_master_top_ ='));

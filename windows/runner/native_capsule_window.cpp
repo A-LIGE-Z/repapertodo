@@ -22,7 +22,6 @@ constexpr int kCapsuleCloseWidth = 30;
 constexpr int kCapsuleCloseGlyphOffset = 8;
 constexpr int kCapsuleSlideOutMilliseconds = 220;
 constexpr int kCapsuleSlideInMilliseconds = 180;
-constexpr int kCapsuleQueueFollowMilliseconds = 64;
 constexpr int kCapsuleQueueMoveMilliseconds = 200;
 constexpr int kCapsuleMasterMoveMilliseconds = 200;
 constexpr int kCapsuleMasterFadeMilliseconds = 160;
@@ -344,6 +343,24 @@ void NativeCapsuleWindow::ApplySurface(
     }
   }
 
+  if (!master_ && capsule_hidden_by_master_ && !previous_master_hidden) {
+    // The pointer may still be logically hovering when the master starts to
+    // retract this no-activate HWND. Clear the transient width/close state now
+    // so the next expansion begins from one stable resting frame.
+    hovered_ = false;
+    close_hovered_ = false;
+    close_pressed_ = false;
+    pointer_down_ = false;
+    dock_animation_active_ = false;
+    current_visible_width_ = 0.0;
+    if (HWND window = GetHandle()) {
+      if (GetCapture() == window) {
+        ReleaseCapture();
+      }
+      KillTimer(window, kCapsuleSlideTimerId);
+    }
+  }
+
   // A master collapse hides an existing proxy HWND instead of destroying it.
   // Reset transient hover/slide state while hidden so expansion starts from a
   // stable resting width and never paints one stale hover frame.
@@ -367,7 +384,17 @@ void NativeCapsuleWindow::ApplySurface(
   const UINT previous_dpi = dpi_;
   ResolveWorkArea();
   const std::wstring label = EffectiveLabel();
-  const int label_width = MeasureLabelWidth(label);
+  const bool chinese_locale = IsChineseLocale();
+  const std::wstring master_idle_label =
+      master_ ? Utf8ToWide(chinese_locale ? label_zh_ : label_en_)
+              : std::wstring();
+  const std::wstring master_active_label =
+      master_ ? Utf8ToWide(chinese_locale ? count_label_zh_ : count_label_en_)
+              : std::wstring();
+  const int label_width =
+      master_ ? std::max(MeasureLabelWidth(master_idle_label),
+                         MeasureLabelWidth(master_active_label))
+              : MeasureLabelWidth(label);
   const std::wstring glyph = master_
                                  ? (active_ ? L"\u25B8" : L"\u25BE")
                                  : (script_capsule_
@@ -377,22 +404,6 @@ void NativeCapsuleWindow::ApplySurface(
   const int glyph_font_size = master_ ? 12 : (script_capsule_ ? 15 : 13);
   const int glyph_width = MeasureTextWidth(
       glyph, glyph_font_size, FW_SEMIBOLD, L"Segoe UI Symbol");
-  // WPF's FormattedText advance is a few pixels tighter than GDI for the
-  // compact capsule label. Keep the full viewport and the hidden edge reveal
-  // on the same source metrics as the Flutter paper window.
-  const int wpf_metric_correction =
-      (!master_ && (paper_type_ == "note" || script_capsule_)) ? -2 : -3;
-  const int logical_full_width = master_
-                                     ? std::max(
-                                           1, 35 + glyph_width + label_width)
-                                     : std::max(
-                                           92, 62 + glyph_width + label_width +
-                                                   wpf_metric_correction);
-  const int first_label_width =
-      label.empty()
-          ? 0
-          : MeasureTextWidth(label.substr(0, 1), 11, FW_NORMAL,
-                             EffectiveFontFamily());
   const int master_peek_glyph_width =
       master_
           ? std::max(MeasureTextWidth(L"\u25BE", 12, FW_SEMIBOLD,
@@ -400,11 +411,33 @@ void NativeCapsuleWindow::ApplySurface(
                      MeasureTextWidth(L"\u25B8", 12, FW_SEMIBOLD,
                                       L"Segoe UI Symbol"))
           : 0;
+  // WPF's FormattedText advance is a few pixels tighter than GDI for the
+  // compact capsule label. Keep the full viewport and the hidden edge reveal
+  // on the same source metrics as the Flutter paper window.
+  const int wpf_metric_correction =
+      (!master_ && (paper_type_ == "note" || script_capsule_)) ? -2 : -3;
+  const int logical_full_width = master_
+                                     ? std::max(
+                                           1, 35 + master_peek_glyph_width +
+                                                  label_width)
+                                     : std::max(
+                                           92, 62 + glyph_width + label_width +
+                                                   wpf_metric_correction);
+  const auto first_label_width = [this](const std::wstring& value) {
+    return value.empty()
+               ? 0
+               : MeasureTextWidth(value.substr(0, 1), 11, FW_NORMAL,
+                                  EffectiveFontFamily());
+  };
+  const int leading_label_width =
+      master_ ? std::max(first_label_width(master_idle_label),
+                         first_label_width(master_active_label))
+              : first_label_width(label);
   const int logical_resting_visible_width = master_
                                                 ? std::clamp(
                                                       29 +
                                                           master_peek_glyph_width +
-                                                          first_label_width,
+                                                          leading_label_width,
                                                       1, logical_full_width)
                                                 : std::clamp(
                                                       22 + glyph_width +
@@ -654,9 +687,11 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
     master_retracted_ = false;
   } else {
     master_retracted_ = true;
-    if (!IsWindowVisible(window)) {
-      ShowWindow(window, SW_SHOWNOACTIVATE);
-    }
+    // Paint the destination state while the retained HWND is still fully
+    // transparent. RefreshVisibility will reveal it with the correct z-order
+    // in one transaction after this method returns.
+    RedrawWindow(window, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
   }
 
   if (!animations_enabled_ || duration_ms <= 0 ||
@@ -805,19 +840,24 @@ void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
     queue_drag_base_top_ = bounds.top;
   }
   queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
-  // Follow the master with a deliberately short, retargetable ease-out. Each
-  // pointer update starts from the child HWND's current frame, so the queue
-  // reads as one connected strip without either snapping or accumulating the
-  // lag produced by the normal 200 ms move transition.
-  StartQueueDragAnimation(queue_drag_target_top_,
-                          kCapsuleQueueFollowMilliseconds);
+  // A master drag is one physical gesture, so every child must share the
+  // master's exact frame instead of starting a separate easing curve on each
+  // WM_MOUSEMOVE.  Independent 64 ms curves accumulated visible lag and made
+  // the queue appear elastic or backwards when the pointer changed direction.
+  KillTimer(window, kCapsuleQueueFollowTimerId);
+  queue_drag_animation_active_ = false;
+  ApplyQueueDragTop(queue_drag_target_top_);
 }
 
 void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
   if (!queue_drag_offset_active_) return;
   const int target_top = commit ? queue_drag_target_top_ : queue_drag_base_top_;
   if (commit) {
-    StartQueueDragAnimation(target_top, kCapsuleQueueFollowMilliseconds);
+    if (HWND window = GetHandle()) {
+      KillTimer(window, kCapsuleQueueFollowTimerId);
+    }
+    queue_drag_animation_active_ = false;
+    ApplyQueueDragTop(target_top);
   } else {
     StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
   }

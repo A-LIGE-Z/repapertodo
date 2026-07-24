@@ -16,8 +16,10 @@
 #include <cmath>
 #include <cctype>
 #include <cstdio>
+#include <cwctype>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -831,6 +833,44 @@ int CompareFontFamilyName(const std::wstring& left,
                               ignore_case ? TRUE : FALSE);
 }
 
+bool FontLocaleStartsWith(const std::wstring& locale,
+                          const wchar_t first,
+                          const wchar_t second) {
+  return locale.size() >= 2 && std::towlower(locale[0]) == first &&
+         std::towlower(locale[1]) == second;
+}
+
+bool FontLocaleEquals(const std::wstring& left, const std::wstring& right) {
+  return !left.empty() && !right.empty() &&
+         CompareStringOrdinal(left.c_str(), static_cast<int>(left.size()),
+                              right.c_str(), static_cast<int>(right.size()),
+                              TRUE) == CSTR_EQUAL;
+}
+
+std::wstring UserFontLocaleName() {
+  wchar_t locale_name[LOCALE_NAME_MAX_LENGTH] = {};
+  const int length = GetUserDefaultLocaleName(
+      locale_name, static_cast<int>(std::size(locale_name)));
+  return length > 0 ? std::wstring(locale_name, length - 1) : std::wstring();
+}
+
+int FontLocalePriority(const std::wstring& locale,
+                       const std::wstring& preferred_locale) {
+  // PaperTodo presents Chinese family names before Latin names when a
+  // localized alias is available.  Prefer the user's exact locale within
+  // each group, then English, and finally any remaining localized alias.
+  if (FontLocaleStartsWith(locale, L'z', L'h')) {
+    return FontLocaleEquals(locale, preferred_locale) ? 0 : 1;
+  }
+  if (FontLocaleEquals(locale, preferred_locale)) {
+    return 2;
+  }
+  if (FontLocaleStartsWith(locale, L'e', L'n')) {
+    return 3;
+  }
+  return 4;
+}
+
 bool EqualFontFamilyName(const std::wstring& left,
                          const std::wstring& right) {
   return CompareFontFamilyName(left, right, true) == CSTR_EQUAL;
@@ -908,23 +948,24 @@ void AddGdiFontFamilies(std::vector<std::wstring>* families) {
   ReleaseDC(nullptr, screen);
 }
 
-void AddDirectWriteFontFamilies(std::vector<std::wstring>* families) {
+bool AddDirectWriteFontFamilies(std::vector<std::wstring>* families) {
   if (!families) {
-    return;
+    return false;
   }
   Microsoft::WRL::ComPtr<IDWriteFactory> factory;
   const HRESULT factory_status = DWriteCreateFactory(
       DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
       reinterpret_cast<IUnknown**>(factory.GetAddressOf()));
   if (FAILED(factory_status) || !factory) {
-    return;
+    return false;
   }
 
   Microsoft::WRL::ComPtr<IDWriteFontCollection> collection;
   if (FAILED(factory->GetSystemFontCollection(&collection, FALSE)) ||
       !collection) {
-    return;
+    return false;
   }
+  const std::wstring preferred_locale = UserFontLocaleName();
   const UINT32 family_count = collection->GetFontFamilyCount();
   for (UINT32 index = 0; index < family_count; ++index) {
     Microsoft::WRL::ComPtr<IDWriteFontFamily> family;
@@ -936,7 +977,19 @@ void AddDirectWriteFontFamilies(std::vector<std::wstring>* families) {
       continue;
     }
     const UINT32 name_count = names->GetCount();
+    std::wstring selected_name;
+    int selected_priority = std::numeric_limits<int>::max();
     for (UINT32 name_index = 0; name_index < name_count; ++name_index) {
+      UINT32 locale_length = 0;
+      if (FAILED(names->GetLocaleNameLength(name_index, &locale_length))) {
+        continue;
+      }
+      std::vector<wchar_t> locale_buffer(
+          static_cast<size_t>(locale_length) + 1, L'\0');
+      if (FAILED(names->GetLocaleName(name_index, locale_buffer.data(),
+                                      locale_length + 1))) {
+        continue;
+      }
       UINT32 length = 0;
       if (FAILED(names->GetStringLength(name_index, &length))) {
         continue;
@@ -945,20 +998,44 @@ void AddDirectWriteFontFamilies(std::vector<std::wstring>* families) {
       if (FAILED(names->GetString(name_index, buffer.data(), length + 1))) {
         continue;
       }
-      AddFontFamily(families,
-                    SanitizeFontFamilyName(std::wstring(buffer.data()), false));
+      const std::wstring candidate =
+          SanitizeFontFamilyName(std::wstring(buffer.data()), false);
+      if (candidate.empty()) {
+        continue;
+      }
+      const std::wstring locale(locale_buffer.data());
+      const int priority = FontLocalePriority(locale, preferred_locale);
+      if (priority < selected_priority ||
+          (priority == selected_priority &&
+           (selected_name.empty() ||
+            CompareFontFamilyName(candidate, selected_name, true) ==
+                CSTR_LESS_THAN))) {
+        selected_name = candidate;
+        selected_priority = priority;
+      }
+    }
+    if (!selected_name.empty()) {
+      AddFontFamily(families, selected_name);
     }
   }
+  return true;
 }
 
 flutter::EncodableList InstalledFontFamilies() {
   constexpr wchar_t kFontsRegistryPath[] =
       L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts";
   std::vector<std::wstring> families;
-  AddGdiFontFamilies(&families);
-  AddDirectWriteFontFamilies(&families);
-  AddRegistryFontFamilies(HKEY_LOCAL_MACHINE, kFontsRegistryPath, &families);
-  AddRegistryFontFamilies(HKEY_CURRENT_USER, kFontsRegistryPath, &families);
+  // DirectWrite exposes one canonical localized family name per font family,
+  // which avoids returning both Chinese and English aliases for the same
+  // typeface.  GDI/registry enumeration remains a fallback for older Windows
+  // installations where the DirectWrite collection cannot be opened.
+  const bool direct_write_available = AddDirectWriteFontFamilies(&families);
+  if (!direct_write_available || families.empty()) {
+    AddGdiFontFamilies(&families);
+    AddRegistryFontFamilies(HKEY_LOCAL_MACHINE, kFontsRegistryPath,
+                            &families);
+    AddRegistryFontFamilies(HKEY_CURRENT_USER, kFontsRegistryPath, &families);
+  }
   std::sort(families.begin(), families.end(),
             [](const std::wstring& left, const std::wstring& right) {
               const int comparison = CompareFontFamilyName(left, right, true);
