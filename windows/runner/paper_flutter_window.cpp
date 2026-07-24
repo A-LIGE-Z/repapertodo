@@ -3818,7 +3818,14 @@ void PaperFlutterWindow::SetHideFromWindowSwitcher(bool hidden) {
     return;
   }
   LONG_PTR extended_style = GetWindowLongPtrW(window, GWL_EXSTYLE);
-  if (pinned_to_desktop_) {
+  // A collapsed paper is itself the capsule when the deep-capsule surface is
+  // used.  It must not become the foreground window on mouse-down: the
+  // capsule click first changes the model to expanded and then explicitly
+  // activates the paper.  Letting USER32 activate this HWND before that
+  // transaction completes causes the old capsule frame to flash.  Pinned
+  // papers use the same no-activate policy for their desktop-layer behavior.
+  const bool no_activate_capsule = collapsed_ && deep_capsule_mode_;
+  if (pinned_to_desktop_ || no_activate_capsule) {
     extended_style = (extended_style | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) &
                      ~WS_EX_APPWINDOW;
   } else if (hidden) {

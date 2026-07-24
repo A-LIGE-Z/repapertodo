@@ -2241,6 +2241,25 @@ void main() {
     expect(settingsDialog, contains('RawAutocomplete<String>'));
     expect(settingsDialog, contains('loadInstalledFontFamilies'));
     expect(windowsRunner, contains('InstalledFontFamilies'));
+    expect(windowsRunner, contains('AddDirectWriteFontFamilies(&families);'));
+    expect(windowsRunner, contains('AddGdiFontFamilies(&families);'));
+    expect(
+      windowsRunner,
+      contains(
+        'AddRegistryFontFamilies(HKEY_LOCAL_MACHINE, kFontsRegistryPath, &families);',
+      ),
+    );
+    expect(
+      windowsRunner,
+      contains(
+        'AddRegistryFontFamilies(HKEY_CURRENT_USER, kFontsRegistryPath, &families);',
+      ),
+    );
+    expect(
+      windowsRunner,
+      isNot(contains('if (!direct_write_available || families.empty())')),
+      reason: 'Successful DirectWrite enumeration must not hide legacy fonts.',
+    );
     expect(windowsRunner, contains('AddRegistryFontFamilies'));
     expect(windowsRunner, contains('HKEY_CURRENT_USER'));
     expect(runtimeFont, contains('paperTodoRuntimeCustomFontCandidates'));
@@ -3978,6 +3997,12 @@ void main() {
     expect(paperWindow, contains('return MA_NOACTIVATE;'));
     expect(paperWindow, isNot(contains('case WM_WINDOWPOSCHANGING:')));
     expect(paperWindow, contains('SetHideFromWindowSwitcher'));
+    expect(
+      paperWindow,
+      contains(
+        'const bool no_activate_capsule = collapsed_ && deep_capsule_mode_;',
+      ),
+    );
     expect(paperWindow, contains('IsExternalFullscreenWindow'));
     expect(paperWindow, contains('DWMWA_EXTENDED_FRAME_BOUNDS'));
     expect(paperWindow,
@@ -3988,6 +4013,11 @@ void main() {
         contains('wcscmp(class_name, kPaperShadowWindowClass) == 0'));
     expect(paperWindow, contains('case WM_ENTERSIZEMOVE:'));
     expect(paperWindow, contains('case WM_EXITSIZEMOVE:'));
+    expect(paperWindow, contains('ResizeChildContent(!in_size_move_)'));
+    expect(
+      paperWindow,
+      contains('SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW'),
+    );
     expect(paperWindow, contains('case WM_GETMINMAXINFO:'));
     expect(paperWindow, contains('GetDpiForWindow(window)'));
     expect(paperWindow, contains('WS_EX_LAYERED'));
@@ -4137,6 +4167,20 @@ void main() {
     expect(paperWindowApp, contains('if (_receivedInitialState &&'));
     expect(paperWindowApp, contains('if (index >= 0 &&'));
     expect(paperWindowApp, contains('paperWindowMode: true'));
+    final paperReconcileBlock = _sliceBetween(
+      runner,
+      'void FlutterWindow::ReconcilePaperWindows(',
+      'PaperFlutterWindow* FlutterWindow::EnsurePaperWindow(',
+    );
+    expect(paperReconcileBlock, contains('EnsurePaperWindow(*paper_id);'));
+    expect(
+      paperReconcileBlock,
+      isNot(contains('EnsurePaperWindow(*paper_id, &resolved_surface)')),
+    );
+    expect(
+      paperReconcileBlock,
+      contains('paper_window->ApplySurface(resolved_surface);'),
+    );
     final nativeReconcileStart =
         runner.indexOf('void FlutterWindow::ReconcileNativeCapsuleWindows(');
     final nativeReconcileEnd = runner.indexOf(

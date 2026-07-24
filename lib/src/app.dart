@@ -10843,11 +10843,23 @@ class _TodoDepartureAnimationState extends State<_TodoDepartureAnimation>
           final slideProgress = PaperTodoMotion.quickCurve.transform(
             fadeProgress,
           );
+          final sizeProgress = PaperTodoMotion.enterCurve.transform(
+            fadeProgress,
+          );
           return Opacity(
             opacity: 1 - fadeProgress,
-            child: Transform.translate(
-              offset: Offset(widget.slideDistance * slideProgress, 0),
-              child: child,
+            child: ClipRect(
+              child: Align(
+                alignment: Alignment.topCenter,
+                // Collapse the old slot as it fades.  Rows below it then move
+                // into place continuously instead of jumping when the
+                // snapshot is finally removed.
+                heightFactor: 1 - sizeProgress,
+                child: Transform.translate(
+                  offset: Offset(widget.slideDistance * slideProgress, 0),
+                  child: child,
+                ),
+              ),
             ),
           );
         },
@@ -10971,7 +10983,17 @@ class _TodoEditorState extends State<_TodoEditor> {
     required bool compactActions,
   }) {
     final rows = <Widget>[];
+    // A completed row is moved in the model immediately so persistence and
+    // undo observe the final order at once.  During the visual hand-off keep
+    // only its departure snapshot at the old slot; rendering the live target
+    // row as well creates two editable copies and makes the row appear to
+    // flash between positions.
+    final departingItemIds =
+        _departingTodoRows.map((departure) => departure.item.id).toSet();
     for (final item in widget.paper.items) {
+      if (departingItemIds.contains(item.id)) {
+        continue;
+      }
       Widget row = _todoReorderDropTarget(
         item: item,
         child: _todoRow(
@@ -11151,11 +11173,16 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (!departure.completesGroup || !mounted) {
       return;
     }
+    final focusItemId =
+        _todoItemById(departure.item.id) == null ? null : departure.item.id;
     setState(
       () => _departingTodoRows.removeWhere(
         (candidate) => identical(candidate.groupToken, departure.groupToken),
       ),
     );
+    if (focusItemId != null) {
+      _requestTodoItemFocus(focusItemId);
+    }
   }
 
   void _clearDepartingTodoRows() {
@@ -11546,35 +11573,47 @@ class _TodoEditorState extends State<_TodoEditor> {
       visualSpec: visualSpec,
       compact: compactActions,
     );
-    final dueTransitionDuration =
-        widget.enableAnimations ? PaperTodoMotion.quick : Duration.zero;
-    final dueSlot = AnimatedSize(
-      key: ValueKey('${widget.paper.id}-${item.id}-due-transition'),
-      duration: dueTransitionDuration,
-      reverseDuration:
-          widget.enableAnimations ? PaperTodoMotion.fadeOut : Duration.zero,
-      curve: PaperTodoMotion.enterCurve,
-      alignment: AlignmentDirectional.centerEnd,
-      clipBehavior: Clip.hardEdge,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween<double>(begin: 0, end: dueIndicator == null ? 0 : 1),
-        duration: dueTransitionDuration,
-        curve: PaperTodoMotion.quickCurve,
-        builder: (context, opacity, child) => FadeTransition(
-          opacity: AlwaysStoppedAnimation<double>(opacity),
-          child: child,
+    final dueSlotContent = dueIndicator == null
+        ? SizedBox.shrink(
+            key: ValueKey('${widget.paper.id}-${item.id}-due-empty'),
+          )
+        : Padding(
+            key: ValueKey('${widget.paper.id}-${item.id}-due-present'),
+            padding: const EdgeInsets.only(left: 4),
+            child: dueIndicator,
+          );
+    // A standalone Windows paper is hosted by its own native HWND. A trailing
+    // due slot that changes width over several layout frames can make the
+    // compositor repaint the whole paper while the row is being edited. Do
+    // not create a zero-duration AnimatedSize there: Flutter can restart its
+    // controller from performLayout when a completed row is reinserted. The
+    // board keeps PaperTodo's compact grow/fade motion.
+    final Widget dueSlot;
+    if (widget.standaloneSurface || !widget.enableAnimations) {
+      dueSlot = KeyedSubtree(
+        key: ValueKey('${widget.paper.id}-${item.id}-due-transition'),
+        child: dueSlotContent,
+      );
+    } else {
+      dueSlot = AnimatedSize(
+        key: ValueKey('${widget.paper.id}-${item.id}-due-transition'),
+        duration: PaperTodoMotion.quick,
+        reverseDuration: PaperTodoMotion.fadeOut,
+        curve: PaperTodoMotion.enterCurve,
+        alignment: AlignmentDirectional.centerEnd,
+        clipBehavior: Clip.hardEdge,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0, end: dueIndicator == null ? 0 : 1),
+          duration: PaperTodoMotion.quick,
+          curve: PaperTodoMotion.quickCurve,
+          builder: (context, opacity, child) => FadeTransition(
+            opacity: AlwaysStoppedAnimation<double>(opacity),
+            child: child,
+          ),
+          child: dueSlotContent,
         ),
-        child: dueIndicator == null
-            ? SizedBox.shrink(
-                key: ValueKey('${widget.paper.id}-${item.id}-due-empty'),
-              )
-            : Padding(
-                key: ValueKey('${widget.paper.id}-${item.id}-due-present'),
-                padding: const EdgeInsets.only(left: 4),
-                child: dueIndicator,
-              ),
-      ),
-    );
+      );
+    }
     final trailingRow = Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -11751,7 +11790,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       widget.paper.normalize();
     });
     widget.onReminderReset(item);
-    if (moved) {
+    if (moved && !widget.enableAnimations) {
       _requestTodoItemFocus(item.id);
     }
     unawaited(widget.onChanged());
@@ -13661,7 +13700,11 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _queuedTodoLineMeasurements.remove(item.id);
-      if (!mounted || _todoItemById(item.id) == null) {
+      if (!mounted ||
+          _todoItemById(item.id) == null ||
+          _departingTodoRows.any(
+            (departure) => departure.item.id == item.id,
+          )) {
         return;
       }
       final editableState = _editableTextStateFor(

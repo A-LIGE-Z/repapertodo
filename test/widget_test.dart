@@ -16432,6 +16432,13 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      find.byKey(
+        const ValueKey('completion-sort-paper-completion-middle-row'),
+      ),
+      findsNothing,
+      reason: 'the moving item must not render a second live target row',
+    );
     expect(tester.takeException(), isNull);
 
     await tester.pumpAndSettle();
@@ -16455,6 +16462,53 @@ void main() {
     );
     expect(controller.state.papers.single.items[1].done, false);
     expect(controller.state.papers.single.items[1].dueAtLocal, due);
+  });
+
+  testWidgets(
+      'standalone Windows todo due slots apply without a layout animation',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(620, 520));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const paperId = 'standalone-due-slot-paper';
+    const itemId = 'standalone-due-slot-item';
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        enableAnimations: true,
+        papers: [
+          PaperData(
+            id: paperId,
+            type: PaperTypes.todo,
+            title: 'Standalone due slot',
+            width: 560,
+            height: 440,
+            items: [
+              PaperItem(
+                id: itemId,
+                text: 'No compositor flash',
+                dueAtLocal: '2099-07-18T18:30:00',
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paperId,
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final dueSlot = find.byKey(
+      const ValueKey('$paperId-$itemId-due-transition'),
+    );
+    expect(tester.widget(dueSlot), isNot(isA<AnimatedSize>()));
   });
 
   testWidgets('splits pasted todo lists from extra columns like PaperTodo',

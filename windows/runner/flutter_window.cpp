@@ -1025,17 +1025,16 @@ flutter::EncodableList InstalledFontFamilies() {
   constexpr wchar_t kFontsRegistryPath[] =
       L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts";
   std::vector<std::wstring> families;
-  // DirectWrite exposes one canonical localized family name per font family,
-  // which avoids returning both Chinese and English aliases for the same
-  // typeface.  GDI/registry enumeration remains a fallback for older Windows
-  // installations where the DirectWrite collection cannot be opened.
-  const bool direct_write_available = AddDirectWriteFontFamilies(&families);
-  if (!direct_write_available || families.empty()) {
-    AddGdiFontFamilies(&families);
-    AddRegistryFontFamilies(HKEY_LOCAL_MACHINE, kFontsRegistryPath,
-                            &families);
-    AddRegistryFontFamilies(HKEY_CURRENT_USER, kFontsRegistryPath, &families);
-  }
+  // DirectWrite is the preferred source because it gives us a localized
+  // family name, but it is not guaranteed to expose every legacy, per-user,
+  // or newly-installed face immediately.  Merge all three Windows sources and
+  // de-duplicate below instead of treating GDI/registry as an all-or-nothing
+  // fallback; otherwise a successful DirectWrite call silently hides fonts
+  // that the Settings picker can still use.
+  AddDirectWriteFontFamilies(&families);
+  AddGdiFontFamilies(&families);
+  AddRegistryFontFamilies(HKEY_LOCAL_MACHINE, kFontsRegistryPath, &families);
+  AddRegistryFontFamilies(HKEY_CURRENT_USER, kFontsRegistryPath, &families);
   std::sort(families.begin(), families.end(),
             [](const std::wstring& left, const std::wstring& right) {
               const int comparison = CompareFontFamilyName(left, right, true);
