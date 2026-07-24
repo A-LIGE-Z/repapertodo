@@ -41,6 +41,7 @@ import 'sync/webdav/webdav_state_sync_service.dart';
 import 'ui/papertodo_strings.dart';
 import 'ui/papertodo_markdown_source.dart';
 import 'ui/papertodo_theme.dart';
+import 'ui/papertodo_motion.dart';
 import 'ui/runtime_custom_font.dart';
 import 'ui/sync_settings_dialog.dart';
 
@@ -651,10 +652,6 @@ List<String>? resolveAppContentFontFamilyFallback(
     UiFontPresets.serif || UiFontPresets.mono => null,
     _ => _defaultContentFontFamilyFallback,
   };
-}
-
-String _shortenTitle(String title, int maxLength) {
-  return PaperTitles.shorten(title, maxLength);
 }
 
 bool _sameStringSet(Set<String> left, Set<String> right) {
@@ -1962,6 +1959,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       runLinkedScriptCapsulesOnClick:
           controller.state.runLinkedScriptCapsulesOnClick,
       maxTitleLength: controller.state.maxTitleLength,
+      moveCompletedTodosToBottom:
+          controller.state.moveCompletedTodosToBottom,
       showTopBarNewTodoButton: controller.state.showTopBarNewTodoButton,
       showTopBarNewNoteButton: controller.state.showTopBarNewNoteButton,
       showTopBarExternalOpenButton:
@@ -1994,6 +1993,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           ? () => _syncNow()
           : () => actionSender(PaperWindowActionKinds.syncNow),
       onChanged: _refreshAndSaveState,
+      onPersist: _saveState,
       onTitleChanged: _updatePaperTitle,
       onCreatePaper: actionSender == null
           ? _createPaper
@@ -2113,67 +2113,69 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   Future<void> _toggleCollapseAll([PaperData? paper, String queueKey = '']) {
     final normalizedQueueKey = queueKey.trim();
     final requestedPaperId = paper?.id ?? '';
+    if (!mounted) {
+      return Future<void>.value();
+    }
+
+    // Commit the logical state at pointer-up time.  Only native reconciliation
+    // is serialized; waiting for a prior HWND refresh before changing the
+    // model makes a quick collapse/expand pair appear to lose the second
+    // click.
+    final targetPaper = requestedPaperId.isEmpty
+        ? paper
+        : controller.state.papers
+            .where((candidate) => candidate.id == requestedPaperId)
+            .firstOrNull;
+    final beforeActive = targetPaper == null
+        ? controller.state.capsuleCollapseAllActive
+        : controller.state.isCapsuleCollapseAllActiveFor(targetPaper);
+    var changed = false;
+    setState(() {
+      if (normalizedQueueKey.isNotEmpty) {
+        changed = controller.state.toggleCapsuleCollapseAllQueue(
+          normalizedQueueKey,
+        );
+      } else if (targetPaper != null || requestedPaperId.isEmpty) {
+        final before = targetPaper == null
+            ? controller.state.capsuleCollapseAllActive
+            : controller.state.isCapsuleCollapseAllActiveFor(targetPaper);
+        controller.state.toggleCapsuleCollapseAllFor(targetPaper);
+        final after = targetPaper == null
+            ? controller.state.capsuleCollapseAllActive
+            : controller.state.isCapsuleCollapseAllActiveFor(targetPaper);
+        changed = before != after;
+      }
+    });
+    if (!changed) {
+      return UsageLog.instance.record(
+        'capsule',
+        'master-toggle-ignored',
+        details: {
+          'queueKey': normalizedQueueKey,
+          'paperId': requestedPaperId,
+          'activeBefore': beforeActive,
+          'reason': 'queue-not-live',
+        },
+      );
+    }
+
+    final activeAfter = targetPaper == null
+        ? controller.state.capsuleCollapseAllActive
+        : controller.state.isCapsuleCollapseAllActiveFor(targetPaper);
+    final generation = ++_capsuleToggleGeneration;
+    final snapshot = _stateSnapshot(controller.state);
+    final queuePaperCount = normalizedQueueKey.isEmpty
+        ? controller.state.papers.length
+        : controller.state.papers
+            .where(
+              (candidate) =>
+                  candidate.isVisible &&
+                  controller.state.capsuleQueueKeyFor(candidate) ==
+                      normalizedQueueKey,
+            )
+            .length;
     final operation = _capsuleToggleQueue.catchError((_) {}).then((_) async {
       if (!mounted) return;
-
-      // Resolve the paper only when this click reaches the serialized queue.
-      // Native HWND reconciliation can take several frames; resolving it at
-      // event-delivery time lets a stale object/queue key overwrite a newer
-      // state transition.
-      final targetPaper = requestedPaperId.isEmpty
-          ? paper
-          : controller.state.papers
-              .where((candidate) => candidate.id == requestedPaperId)
-              .firstOrNull;
-      final beforeActive = targetPaper == null
-          ? controller.state.capsuleCollapseAllActive
-          : controller.state.isCapsuleCollapseAllActiveFor(targetPaper);
-      var changed = false;
-      setState(() {
-        if (normalizedQueueKey.isNotEmpty) {
-          changed = controller.state.toggleCapsuleCollapseAllQueue(
-            normalizedQueueKey,
-          );
-        } else {
-          final before = targetPaper == null
-              ? controller.state.capsuleCollapseAllActive
-              : controller.state.isCapsuleCollapseAllActiveFor(targetPaper);
-          controller.state.toggleCapsuleCollapseAllFor(targetPaper);
-          final after = targetPaper == null
-              ? controller.state.capsuleCollapseAllActive
-              : controller.state.isCapsuleCollapseAllActiveFor(targetPaper);
-          changed = before != after;
-        }
-      });
-      if (!changed) {
-        await UsageLog.instance.record(
-          'capsule',
-          'master-toggle-ignored',
-          details: {
-            'queueKey': normalizedQueueKey,
-            'paperId': requestedPaperId,
-            'activeBefore': beforeActive,
-            'reason': 'queue-not-live',
-          },
-        );
-        return;
-      }
-
-      final activeAfter = targetPaper == null
-          ? controller.state.capsuleCollapseAllActive
-          : controller.state.isCapsuleCollapseAllActiveFor(targetPaper);
-      final generation = ++_capsuleToggleGeneration;
-      final snapshot = _stateSnapshot(controller.state);
-      final queuePaperCount = normalizedQueueKey.isEmpty
-          ? controller.state.papers.length
-          : controller.state.papers
-              .where(
-                (candidate) =>
-                    candidate.isVisible &&
-                    controller.state.capsuleQueueKeyFor(candidate) ==
-                        normalizedQueueKey,
-              )
-              .length;
       await UsageLog.instance.record(
         'capsule',
         'master-toggle',
@@ -2186,8 +2188,6 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           'queuePaperCount': queuePaperCount,
         },
       );
-      // Pass the immutable snapshot through the controller and wait for the
-      // complete native reconciliation before accepting the next click.
       await controller.refreshPaperSurfaces(snapshot: snapshot);
       await _saveState();
       await UsageLog.instance.record(
@@ -4325,8 +4325,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   }
 
   String _displayTitle(PaperData paper) {
-    final title = controller.paperTitleText(paper);
-    return _shortenTitle(title, controller.state.maxTitleLength);
+    return PaperTitles.shorten(
+      controller.paperTitleText(paper),
+      controller.state.maxTitleLength,
+    );
   }
 
   void _restoreLinkedNote(_LinkedNoteRestore link) {
@@ -5805,6 +5807,7 @@ class PaperPreview extends StatelessWidget {
     required this.allowLongLinkedNoteTitles,
     required this.runLinkedScriptCapsulesOnClick,
     required this.maxTitleLength,
+    required this.moveCompletedTodosToBottom,
     required this.showTopBarNewTodoButton,
     required this.showTopBarNewNoteButton,
     required this.showTopBarExternalOpenButton,
@@ -5826,6 +5829,7 @@ class PaperPreview extends StatelessWidget {
     required this.syncing,
     required this.onSync,
     required this.onChanged,
+    required this.onPersist,
     required this.onTitleChanged,
     required this.onCreatePaper,
     required this.onOpen,
@@ -5868,6 +5872,7 @@ class PaperPreview extends StatelessWidget {
   final bool allowLongLinkedNoteTitles;
   final bool runLinkedScriptCapsulesOnClick;
   final int maxTitleLength;
+  final bool moveCompletedTodosToBottom;
   final bool showTopBarNewTodoButton;
   final bool showTopBarNewNoteButton;
   final bool showTopBarExternalOpenButton;
@@ -5889,6 +5894,7 @@ class PaperPreview extends StatelessWidget {
   final bool syncing;
   final Future<void> Function() onSync;
   final Future<void> Function() onChanged;
+  final Future<void> Function() onPersist;
   final Future<void> Function(PaperData paper) onTitleChanged;
   final Future<void> Function(String type, {PaperData? sourcePaper})
       onCreatePaper;
@@ -6081,6 +6087,7 @@ class PaperPreview extends StatelessWidget {
                                         child: _PaperTitleEditor(
                                           paper: paper,
                                           titleText: titleText,
+                                          maxTitleLength: maxTitleLength,
                                           textZoom: textZoom,
                                           enabled: !desktopInteractionLocked &&
                                               !isCollapsed,
@@ -6310,6 +6317,7 @@ class PaperPreview extends StatelessWidget {
                   runLinkedScriptCapsulesOnClick:
                       runLinkedScriptCapsulesOnClick,
                   maxTitleLength: maxTitleLength,
+                  moveCompletedTodosToBottom: moveCompletedTodosToBottom,
                   enableToolTips: enableToolTips,
                   enableAnimations: enableAnimations,
                   visualSize: todoVisualSize,
@@ -6324,6 +6332,7 @@ class PaperPreview extends StatelessWidget {
                   onOpenLinkedNote: onOpenLinkedNote,
                   onRunScriptCapsule: onRunScriptCapsule,
                   onChanged: onChanged,
+                  onPersist: onPersist,
                   onItemDeleted: onTodoItemDeleted,
                   onItemRestored: onTodoItemRestored,
                   onReminderReset: onTodoReminderReset,
@@ -7719,6 +7728,7 @@ class _PaperTitleEditor extends StatefulWidget {
   const _PaperTitleEditor({
     required this.paper,
     required this.titleText,
+    required this.maxTitleLength,
     required this.textZoom,
     required this.enabled,
     required this.fieldEnabled,
@@ -7729,6 +7739,7 @@ class _PaperTitleEditor extends StatefulWidget {
 
   final PaperData paper;
   final String titleText;
+  final int maxTitleLength;
   final double textZoom;
   final bool enabled;
   final bool fieldEnabled;
@@ -7750,7 +7761,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: _displayTitle);
+    _controller = TextEditingController(text: _editableTitle);
     _focusNode = FocusNode();
     _focusNode.addListener(_handleFocusChanged);
   }
@@ -7968,7 +7979,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
       return;
     }
     _titleBeforeEdit = widget.paper.title;
-    final title = _displayTitle;
+    final title = _editableTitle;
     setState(() {
       _isEditingTitle = true;
       _controller.value = TextEditingValue(
@@ -8023,7 +8034,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
   }
 
   void _syncControllerToDisplayTitle() {
-    final title = _displayTitle;
+    final title = _editableTitle;
     if (_controller.text == title) {
       return;
     }
@@ -8034,6 +8045,19 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
   }
 
   String get _displayTitle {
+    // Keep board paper titles editable/readable in full.  Standalone paper
+    // windows use the configurable compact caption limit, matching the native
+    // PaperTodo capsule/title surface without truncating the stored value.
+    if (!widget.compact) {
+      return _editableTitle;
+    }
+    return PaperTitles.shorten(
+      _editableTitle,
+      PaperTitles.normalizeMaxTitleLength(widget.maxTitleLength),
+    );
+  }
+
+  String get _editableTitle {
     final customTitle = PaperTitles.cleanCustomTitle(widget.paper.title);
     return customTitle.isEmpty ? widget.titleText : customTitle;
   }
@@ -10564,6 +10588,7 @@ class _TodoEditor extends StatefulWidget {
     required this.allowLongLinkedNoteTitles,
     required this.runLinkedScriptCapsulesOnClick,
     required this.maxTitleLength,
+    required this.moveCompletedTodosToBottom,
     required this.enableToolTips,
     required this.enableAnimations,
     required this.visualSize,
@@ -10577,6 +10602,7 @@ class _TodoEditor extends StatefulWidget {
     required this.onOpenLinkedNote,
     required this.onRunScriptCapsule,
     required this.onChanged,
+    required this.onPersist,
     required this.onItemDeleted,
     required this.onItemRestored,
     required this.onReminderReset,
@@ -10590,6 +10616,7 @@ class _TodoEditor extends StatefulWidget {
   final bool allowLongLinkedNoteTitles;
   final bool runLinkedScriptCapsulesOnClick;
   final int maxTitleLength;
+  final bool moveCompletedTodosToBottom;
   final bool enableToolTips;
   final bool enableAnimations;
   final String visualSize;
@@ -10604,6 +10631,7 @@ class _TodoEditor extends StatefulWidget {
       onOpenLinkedNote;
   final Future<void> Function(ScriptCapsuleSpec spec) onRunScriptCapsule;
   final Future<void> Function() onChanged;
+  final Future<void> Function() onPersist;
   final void Function(PaperData paper, PaperItem item) onItemDeleted;
   final void Function(PaperData paper, PaperItem item) onItemRestored;
   final void Function(PaperItem item) onReminderReset;
@@ -11396,21 +11424,14 @@ class _TodoEditorState extends State<_TodoEditor> {
                 ? _PaperTodoTodoCheckBox(
                     key: ValueKey('${widget.paper.id}-${item.id}-checkbox'),
                     value: item.done,
-                    onChanged: (value) {
-                      _pushTodoUndoSnapshot();
-                      setState(() => item.done = value);
-                      unawaited(widget.onChanged());
-                    },
+                    onChanged: (value) => _setTodoItemDone(item, value),
                   )
                 : Transform.scale(
                     scale: 16 / 18,
                     child: Checkbox(
                       value: item.done,
-                      onChanged: (value) {
-                        _pushTodoUndoSnapshot();
-                        setState(() => item.done = value ?? false);
-                        unawaited(widget.onChanged());
-                      },
+                      onChanged: (value) =>
+                          _setTodoItemDone(item, value ?? false),
                     ),
                   ),
           ),
@@ -11450,7 +11471,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         },
         child: AnimatedContainer(
           duration: hoverDuration,
-          curve: Curves.easeOutCubic,
+          curve: PaperTodoMotion.enterCurve,
           padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
           decoration: BoxDecoration(
             color: hovered
@@ -11471,7 +11492,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           ),
           child: AnimatedOpacity(
             duration: stateDuration,
-            curve: Curves.easeOutCubic,
+            curve: PaperTodoMotion.enterCurve,
             opacity: dragging ? 0.25 : (item.done ? 0.75 : 1),
             child: Listener(
               behavior: HitTestBehavior.translucent,
@@ -11483,6 +11504,67 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
       ),
     );
+  }
+
+  void _setTodoItemDone(PaperItem item, bool value) {
+    final itemIndex = _todoItemIndex(item);
+    if (itemIndex < 0 || item.done == value) {
+      return;
+    }
+    final previousItem = PaperItem.fromJson(item.toJson());
+    _pushTodoUndoSnapshot();
+    var moved = false;
+    setState(() {
+      _clearEnteringTodoRows();
+      _clearDepartingTodoRows();
+      item.done = value;
+      if (value) {
+        item.dueAtLocal = null;
+      }
+      if (widget.moveCompletedTodosToBottom) {
+        final ordered = <PaperItem>[
+          ...widget.paper.items.where((candidate) => !candidate.done),
+          ...widget.paper.items.where((candidate) => candidate.done),
+        ];
+        final targetIndex = ordered.indexWhere(
+          (candidate) => candidate.id == item.id,
+        );
+        moved = targetIndex >= 0 && targetIndex != itemIndex;
+        if (moved) {
+          final groupToken = Object();
+          if (widget.enableAnimations) {
+            _departingTodoRows.add(
+              _DepartingTodoRow(
+                item: previousItem,
+                originalIndex: itemIndex,
+                groupToken: groupToken,
+                delay: Duration.zero,
+                duration: const Duration(milliseconds: 200),
+                slideDistance: 18,
+                completesGroup: true,
+              ),
+            );
+            _queueTodoEntrance(
+              _EnteringTodoRow(
+                itemId: item.id,
+                delay: const Duration(milliseconds: 20),
+                opacityDuration: const Duration(milliseconds: 200),
+                slideDuration: const Duration(milliseconds: 200),
+                slideDistance: 18,
+                slideCurve: PaperTodoMotion.enterCurve,
+              ),
+            );
+          }
+          widget.paper.items = ordered;
+        }
+      }
+      widget.paper.normalize();
+    });
+    widget.onReminderReset(item);
+    if (moved) {
+      _requestTodoItemFocus(item.id);
+    }
+    unawaited(widget.onChanged());
   }
 
   void _handleTodoContextMenuPointerDown(
@@ -12658,8 +12740,24 @@ class _TodoEditorState extends State<_TodoEditor> {
     });
     _clearActiveTodoTextTracking();
     _reconcileTodoItemTombstones(beforeItems, afterItems);
+    final beforeById = {
+      for (final item in beforeItems)
+        if (item.id.trim().isNotEmpty) item.id: item,
+    };
+    for (final item in afterItems) {
+      final previous = beforeById[item.id];
+      if (previous == null || _todoReminderFieldsChanged(previous, item)) {
+        widget.onReminderReset(item);
+      }
+    }
     _requestTodoFocus();
     unawaited(widget.onChanged());
+  }
+
+  bool _todoReminderFieldsChanged(PaperItem before, PaperItem after) {
+    return before.dueAtLocal != after.dueAtLocal ||
+        before.reminderIntervalValue != after.reminderIntervalValue ||
+        before.reminderIntervalUnit != after.reminderIntervalUnit;
   }
 
   void _clearActiveTodoTextTracking() {
@@ -14126,7 +14224,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           : _formatDueAtLocalValue(selection.dueAt ?? initialDate);
     });
     widget.onReminderReset(item);
-    unawaited(widget.onChanged());
+    unawaited(widget.onPersist());
   }
 
   Future<_TodoDueSelection?> _pickNativeWindowsDueDate(
@@ -14200,7 +14298,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     _pushTodoUndoSnapshot();
     setState(() => item.dueAtLocal = null);
     widget.onReminderReset(item);
-    unawaited(widget.onChanged());
+    unawaited(widget.onPersist());
   }
 
   Future<void> _pickReminderInterval(
@@ -14241,7 +14339,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       }
     });
     widget.onReminderReset(item);
-    unawaited(widget.onChanged());
+    unawaited(widget.onPersist());
   }
 
   Future<_ReminderIntervalSelection?> _pickNativeWindowsReminderInterval(
@@ -14313,7 +14411,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       item.reminderIntervalUnit = null;
     });
     widget.onReminderReset(item);
-    unawaited(widget.onChanged());
+    unawaited(widget.onPersist());
   }
 
   void _openLinkedNote(PaperItem item) {

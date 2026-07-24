@@ -51,7 +51,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
-target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "comctl32.lib" "comdlg32.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "dwrite.lib" "comctl32.lib" "comdlg32.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "ole32.lib" "shell32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 target_include_directories(repapertodo_launcher PRIVATE "${CMAKE_SOURCE_DIR}")

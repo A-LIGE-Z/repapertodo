@@ -1,5 +1,6 @@
 #include "flutter_window.h"
 
+#include <dwrite.h>
 #include <dwmapi.h>
 #include <commdlg.h>
 #include <shlobj.h>
@@ -24,6 +25,8 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+#include <wrl/client.h>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "native_capsule_window.h"
@@ -905,11 +908,55 @@ void AddGdiFontFamilies(std::vector<std::wstring>* families) {
   ReleaseDC(nullptr, screen);
 }
 
+void AddDirectWriteFontFamilies(std::vector<std::wstring>* families) {
+  if (!families) {
+    return;
+  }
+  Microsoft::WRL::ComPtr<IDWriteFactory> factory;
+  const HRESULT factory_status = DWriteCreateFactory(
+      DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+      reinterpret_cast<IUnknown**>(factory.GetAddressOf()));
+  if (FAILED(factory_status) || !factory) {
+    return;
+  }
+
+  Microsoft::WRL::ComPtr<IDWriteFontCollection> collection;
+  if (FAILED(factory->GetSystemFontCollection(&collection, FALSE)) ||
+      !collection) {
+    return;
+  }
+  const UINT32 family_count = collection->GetFontFamilyCount();
+  for (UINT32 index = 0; index < family_count; ++index) {
+    Microsoft::WRL::ComPtr<IDWriteFontFamily> family;
+    if (FAILED(collection->GetFontFamily(index, &family)) || !family) {
+      continue;
+    }
+    Microsoft::WRL::ComPtr<IDWriteLocalizedStrings> names;
+    if (FAILED(family->GetFamilyNames(&names)) || !names) {
+      continue;
+    }
+    const UINT32 name_count = names->GetCount();
+    for (UINT32 name_index = 0; name_index < name_count; ++name_index) {
+      UINT32 length = 0;
+      if (FAILED(names->GetStringLength(name_index, &length))) {
+        continue;
+      }
+      std::vector<wchar_t> buffer(static_cast<size_t>(length) + 1, L'\0');
+      if (FAILED(names->GetString(name_index, buffer.data(), length + 1))) {
+        continue;
+      }
+      AddFontFamily(families,
+                    SanitizeFontFamilyName(std::wstring(buffer.data()), false));
+    }
+  }
+}
+
 flutter::EncodableList InstalledFontFamilies() {
   constexpr wchar_t kFontsRegistryPath[] =
       L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts";
   std::vector<std::wstring> families;
   AddGdiFontFamilies(&families);
+  AddDirectWriteFontFamilies(&families);
   AddRegistryFontFamilies(HKEY_LOCAL_MACHINE, kFontsRegistryPath, &families);
   AddRegistryFontFamilies(HKEY_CURRENT_USER, kFontsRegistryPath, &families);
   std::sort(families.begin(), families.end(),

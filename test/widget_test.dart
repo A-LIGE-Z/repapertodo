@@ -51,7 +51,7 @@ bool _primaryFocusIsWithin(Finder finder) {
 }
 
 Future<void> _commitVisibleDialog(WidgetTester tester) async {
-  for (final label in const ['Save', 'OK']) {
+  for (final label in const ['Confirm', 'Save', 'OK']) {
     final primaryButton = find.widgetWithText(FilledButton, label);
     if (primaryButton.evaluate().isNotEmpty) {
       await tester.tap(primaryButton.last);

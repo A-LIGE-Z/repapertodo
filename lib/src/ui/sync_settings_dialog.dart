@@ -10,6 +10,7 @@ import '../core/model/sync_settings.dart';
 import '../core/model/webdav_presets.dart';
 import '../platform/platform_services.dart';
 import 'papertodo_strings.dart';
+import 'papertodo_motion.dart';
 import 'papertodo_theme.dart';
 
 typedef InstalledFontFamilyLoader = Future<List<String>> Function();
@@ -406,6 +407,7 @@ class SyncSettingsDialog extends StatefulWidget {
 class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   _SettingsSection _selectedSettingsSection = _SettingsSection.display;
   final ScrollController _settingsContentScrollController = ScrollController();
+  final ScrollController _fontOptionsScrollController = ScrollController();
   final Map<_SettingsSection, GlobalKey> _settingsSectionKeys = {
     for (final section in _SettingsSection.values) section: GlobalKey(),
   };
@@ -608,6 +610,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   @override
   void dispose() {
     _settingsContentScrollController.dispose();
+    _fontOptionsScrollController.dispose();
     _endpointController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
@@ -783,7 +786,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
             ),
             _SettingsCloseButton(
               tooltip: strings.get(PaperTodoStringKeys.actionClose),
-              onPressed: _save,
+              onPressed: _cancel,
             ),
           ],
         ),
@@ -1863,14 +1866,33 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 ),
               ),
               const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 2),
-                  child: _SettingsAuthorLink(
-                    onPressed: widget.openAuthorLink,
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _SettingsAuthorLink(
+                        onPressed: widget.openAuthorLink,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  TextButton(
+                    key: const ValueKey('settings-cancel-button'),
+                    onPressed: _cancel,
+                    child: Text(
+                      strings.get(PaperTodoStringKeys.actionCancel),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    key: const ValueKey('settings-confirm-button'),
+                    onPressed: _save,
+                    child: Text(
+                      strings.get(PaperTodoStringKeys.actionConfirm),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -2566,8 +2588,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
       }
       Scrollable.ensureVisible(
         target,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
+        duration: PaperTodoMotion.moveLong,
+        curve: PaperTodoMotion.enterCurve,
         alignment: 0,
       );
     });
@@ -2633,11 +2655,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   textEditingValue.text,
                 ).toLowerCase();
                 if (query.isEmpty) {
-                  return <String>['', ..._installedFontFamilies].take(40);
+                  return <String>['', ..._installedFontFamilies];
                 }
                 return _installedFontFamilies
-                    .where((family) => family.toLowerCase().contains(query))
-                    .take(40);
+                    .where((family) => family.toLowerCase().contains(query));
               },
               onSelected: (fontFamily) {
                 setState(() {
@@ -2694,24 +2715,35 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                       width: optionsWidth,
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxHeight: 240),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          itemCount: fontOptions.length,
-                          itemBuilder: (context, index) {
-                            final fontFamily = fontOptions[index];
-                            return ListTile(
-                              dense: true,
-                              title: Text(
-                                fontFamily.isEmpty
-                                    ? strings
-                                        .get(PaperTodoStringKeys.uiFontDefault)
-                                    : fontFamily,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              onTap: () => onSelected(fontFamily),
-                            );
-                          },
+                        child: Scrollbar(
+                          key: const ValueKey(
+                            'settings-font-options-scrollbar',
+                          ),
+                          controller: _fontOptionsScrollController,
+                          thumbVisibility: true,
+                          interactive: true,
+                          child: ListView.builder(
+                            key: const ValueKey('settings-font-options-list'),
+                            controller: _fontOptionsScrollController,
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: fontOptions.length,
+                            itemBuilder: (context, index) {
+                              final fontFamily = fontOptions[index];
+                              return ListTile(
+                                dense: true,
+                                title: Text(
+                                  fontFamily.isEmpty
+                                      ? strings.get(
+                                          PaperTodoStringKeys.uiFontDefault,
+                                        )
+                                      : fontFamily,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap: () => onSelected(fontFamily),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
@@ -3562,6 +3594,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         hideLinkedNotesFromCapsules: _hideLinkedNotesFromCapsules,
       ),
     );
+  }
+
+  void _cancel() {
+    Navigator.of(context).pop();
   }
 
   String _normalizeTheme(String theme) {

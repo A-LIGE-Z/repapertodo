@@ -2720,15 +2720,24 @@ void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
     queue_drag_base_top_ = bounds.top;
   }
   queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
-  StartQueueDragAnimation(queue_drag_target_top_,
-                          kCapsuleQueueMoveMilliseconds);
+  // Keep the real collapsed paper in lockstep with the master during the
+  // pointer drag. Retargeting a 200 ms easing animation on every mouse move
+  // causes visible lag and a counter-intuitive trailing stack; only a
+  // cancelled drag should animate back to its original slot.
+  KillTimer(window, kCapsuleQueueFollowTimerId);
+  queue_drag_animation_active_ = false;
+  ApplyQueueDragTop(queue_drag_target_top_);
 }
 
 void PaperFlutterWindow::FinishQueueDrag(bool commit) {
   if (!queue_drag_offset_active_) return;
   const int target_top = commit ? queue_drag_target_top_
                                 : queue_drag_base_top_;
-  StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
+  if (commit) {
+    StartQueueDragAnimation(target_top, 0);
+  } else {
+    StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
+  }
   queue_drag_offset_active_ = false;
 }
 

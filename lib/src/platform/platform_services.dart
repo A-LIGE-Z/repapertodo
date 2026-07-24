@@ -273,8 +273,31 @@ List<String> normalizeInstalledFontFamilies(Iterable<Object?> values) {
   }
   final families = unique.values.toList();
   families.sort((left, right) {
+    final leftHasCjkName = _containsCjkFontFamilyCharacter(left);
+    final rightHasCjkName = _containsCjkFontFamilyCharacter(right);
+    if (leftHasCjkName != rightHasCjkName) {
+      return leftHasCjkName ? -1 : 1;
+    }
     final comparison = left.toLowerCase().compareTo(right.toLowerCase());
     return comparison == 0 ? left.compareTo(right) : comparison;
   });
   return families;
+}
+
+bool _containsCjkFontFamilyCharacter(String value) {
+  for (final rune in value.runes) {
+    if ((rune >= 0x2E80 && rune <= 0x303F) ||
+        (rune >= 0x3040 && rune <= 0x30FF) ||
+        (rune >= 0x3100 && rune <= 0x312F) ||
+        (rune >= 0x31A0 && rune <= 0x31BF) ||
+        (rune >= 0x3400 && rune <= 0x4DBF) ||
+        (rune >= 0x4E00 && rune <= 0x9FFF) ||
+        (rune >= 0xAC00 && rune <= 0xD7AF) ||
+        (rune >= 0xF900 && rune <= 0xFAFF) ||
+        (rune >= 0xFF00 && rune <= 0xFFEF) ||
+        (rune >= 0x20000 && rune <= 0x3134F)) {
+      return true;
+    }
+  }
+  return false;
 }

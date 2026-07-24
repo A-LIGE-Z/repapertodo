@@ -608,14 +608,24 @@ void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
     queue_drag_base_top_ = bounds.top;
   }
   queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
-  StartQueueDragAnimation(queue_drag_target_top_,
-                          kCapsuleQueueMoveMilliseconds);
+  // PaperTodo drives the queue synchronously while the master is dragged.
+  // Animating every mouse-move toward a 200 ms target makes the child pills
+  // visibly lag behind the pointer and then overshoot when the target changes.
+  // Keep the live drag position exact; the short animation is reserved for a
+  // cancelled drag snapping back to its original slot.
+  KillTimer(window, kCapsuleQueueFollowTimerId);
+  queue_drag_animation_active_ = false;
+  ApplyQueueDragTop(queue_drag_target_top_);
 }
 
 void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
   if (!queue_drag_offset_active_) return;
   const int target_top = commit ? queue_drag_target_top_ : queue_drag_base_top_;
-  StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
+  if (commit) {
+    StartQueueDragAnimation(target_top, 0);
+  } else {
+    StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
+  }
   queue_drag_offset_active_ = false;
 }
 
