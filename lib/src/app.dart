@@ -2227,7 +2227,6 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         'wasCollapsed': wasCollapsed,
       },
     );
-    await controller.refreshPaperSurfaces();
     await controller.showPaper(paper);
     await _saveState();
   }

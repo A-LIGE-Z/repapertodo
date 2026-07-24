@@ -4770,6 +4770,16 @@ void FlutterWindow::ReconcileNativeCapsuleWindows(
     existing->second->ApplySurface(*surface);
   }
 
+  // Re-assert the master HWND after all proxy HWNDs have been reconciled.
+  // Each capsule is topmost within its queue, so a proxy created later in the
+  // batch could otherwise sit above the master for one or more frames and
+  // make the collapse/expand button appear to flicker or miss clicks.
+  for (auto& entry : native_capsule_windows_) {
+    if (entry.second->is_master()) {
+      entry.second->RefreshVisibility();
+    }
+  }
+
   for (auto iterator = native_capsule_windows_.begin();
        iterator != native_capsule_windows_.end();) {
     if (next_surfaces.find(iterator->first) != next_surfaces.end()) {

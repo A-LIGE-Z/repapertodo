@@ -67,6 +67,12 @@ class PaperFlutterWindow : public Win32Window {
   void StartCapsuleDockAnimation(double target_visible_width, int duration_ms);
   void UpdateCapsuleDockAnimation();
   void ApplyCapsuleHorizontalPosition();
+  void StartMasterCapsuleTransition(int target_top, bool target_hidden,
+                                    int duration_ms);
+  void UpdateMasterCapsuleTransition();
+  void ApplyMasterCapsuleAlpha(int alpha);
+  int MasterCapsuleTopPhysical() const;
+  int DockedCapsuleTopPhysical() const;
   void StartQueueDragAnimation(int target_top, int duration_ms);
   void UpdateQueueDragAnimation();
   void ApplyQueueDragTop(int top);
@@ -97,6 +103,19 @@ class PaperFlutterWindow : public Win32Window {
   bool fullscreen_blocked_ = false;
   bool intended_visible_ = false;
   bool capsule_hidden_by_master_ = false;
+  bool capsule_master_top_is_work_area_relative_ = true;
+  double capsule_master_top_ = 48.0;
+  bool master_capsule_transition_initialized_ = false;
+  bool master_capsule_transition_active_ = false;
+  bool master_capsule_transition_target_hidden_ = false;
+  bool master_capsule_retracted_ = false;
+  double master_capsule_transition_start_top_ = 0.0;
+  double master_capsule_transition_target_top_ = 0.0;
+  int master_capsule_transition_start_alpha_ = 255;
+  int master_capsule_transition_target_alpha_ = 255;
+  ULONGLONG master_capsule_transition_started_at_ = 0;
+  int master_capsule_transition_duration_ms_ = 0;
+  int capsule_alpha_ = 255;
   int64_t surface_generation_ = -1;
   bool collapsed_ = false;
   bool deep_capsule_mode_ = false;
@@ -108,6 +127,7 @@ class PaperFlutterWindow : public Win32Window {
   std::string capsule_side_ = "right";
   std::string capsule_monitor_device_name_;
   RECT capsule_work_area_ = {};
+  int capsule_docked_top_ = 0;
   double capsule_width_ = 92.0;
   double capsule_resting_visible_width_ = 54.0;
   double capsule_hover_visible_width_ = 73.0;

@@ -14,6 +14,7 @@ namespace {
 
 constexpr UINT_PTR kCapsuleSlideTimerId = 0xCA51;
 constexpr UINT_PTR kCapsuleQueueFollowTimerId = 0xCA54;
+constexpr UINT_PTR kCapsuleMasterTransitionTimerId = 0xCA55;
 constexpr int kCapsuleChromeMargin = 8;
 constexpr int kCapsuleBodyHeight = 30;
 constexpr int kCapsuleCornerRadius = 12;
@@ -22,6 +23,8 @@ constexpr int kCapsuleCloseGlyphOffset = 8;
 constexpr int kCapsuleSlideOutMilliseconds = 220;
 constexpr int kCapsuleSlideInMilliseconds = 180;
 constexpr int kCapsuleQueueMoveMilliseconds = 200;
+constexpr int kCapsuleMasterMoveMilliseconds = 200;
+constexpr int kCapsuleMasterFadeMilliseconds = 160;
 
 double NumberValue(const flutter::EncodableMap& map, const char* key,
                    double fallback) {
@@ -265,7 +268,8 @@ void NativeCapsuleWindow::ApplyNativeStyle() {
   if (!window) return;
   SetWindowLongPtrW(window, GWL_STYLE, WS_POPUP | WS_CLIPCHILDREN);
   SetWindowLongPtrW(window, GWL_EXSTYLE,
-                    WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+                    WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED);
+  SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA);
   SetWindowPos(window, nullptr, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                    SWP_FRAMECHANGED);
@@ -285,6 +289,7 @@ void NativeCapsuleWindow::ApplySurface(
     surface_generation_ = incoming_generation;
   }
   const bool previous_intended_visible = intended_visible_;
+  const bool previous_master_hidden = capsule_hidden_by_master_;
   const std::string previous_capsule_side = capsule_side_;
   const std::string previous_monitor_device_name = monitor_device_name_;
   surface_id_ = StringValue(surface, "surfaceId", surface_id_);
@@ -310,6 +315,13 @@ void NativeCapsuleWindow::ApplySurface(
   collapse_on_click_ =
       BoolValue(surface, "collapseOnClick", collapse_on_click_);
   intended_visible_ = BoolValue(surface, "isVisible", intended_visible_);
+  capsule_hidden_by_master_ =
+      BoolValue(surface, "capsuleHiddenByMaster", capsule_hidden_by_master_);
+  capsule_master_top_ =
+      NumberValue(surface, "capsuleMasterTop", capsule_master_top_);
+  capsule_master_top_is_work_area_relative_ = BoolValue(
+      surface, "capsuleMasterTopIsWorkAreaRelative",
+      capsule_master_top_is_work_area_relative_);
   hide_when_covered_ =
       BoolValue(surface, "hideWhenCovered", hide_when_covered_);
   hide_when_fullscreen_ =
@@ -341,8 +353,13 @@ void NativeCapsuleWindow::ApplySurface(
     pointer_down_ = false;
     dock_animation_active_ = false;
     current_visible_width_ = 0.0;
+    master_transition_active_ = false;
+    master_transition_initialized_ = false;
+    master_retracted_ = false;
+    ApplyMasterTransitionAlpha(255);
     if (HWND window = GetHandle()) {
       KillTimer(window, kCapsuleSlideTimerId);
+      KillTimer(window, kCapsuleMasterTransitionTimerId);
     }
   }
 
@@ -419,10 +436,70 @@ void NativeCapsuleWindow::ApplySurface(
         current_visible_width_, 1.0, static_cast<double>(full_width_));
   }
   ApplyWindowRegion();
+  // The master capsule owns only the visibility of this queue item. Keep the
+  // child HWND alive and move/fade it through the master slot instead of
+  // destroying or hiding it synchronously; this avoids a stale cached frame
+  // when the queue is released again.
+  const bool master_transition_supported = !master_ && intended_visible_;
+  if (master_transition_supported) {
+    if (!master_transition_initialized_) {
+      master_transition_initialized_ = true;
+      master_retracted_ = capsule_hidden_by_master_;
+      master_transition_active_ = false;
+      ApplyMasterTransitionAlpha(master_retracted_ ? 0 : 255);
+      if (master_retracted_) {
+        if (HWND window = GetHandle()) {
+          RECT bounds = {};
+          if (GetWindowRect(window, &bounds)) {
+            SetWindowPos(window, nullptr, bounds.left, MasterTopPhysical(), 0,
+                         0,
+                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                             SWP_NOOWNERZORDER);
+          }
+        }
+      }
+    } else if (previous_master_hidden != capsule_hidden_by_master_) {
+      StartMasterTransition(
+          capsule_hidden_by_master_ ? MasterTopPhysical()
+                                     : DockedTopPhysical(),
+          capsule_hidden_by_master_,
+          animations_enabled_ ? kCapsuleMasterMoveMilliseconds : 0);
+    } else if (master_transition_active_) {
+      // Retarget a transition when the master is dragged or the queue is
+      // reordered while the fade is still running. Keep the current frame and
+      // only change its destination; restarting from the old slot causes a
+      // visible backwards hop.
+      master_transition_target_top_ = capsule_hidden_by_master_
+                                          ? static_cast<double>(
+                                                MasterTopPhysical())
+                                          : static_cast<double>(
+                                                DockedTopPhysical());
+    } else if (master_retracted_) {
+      if (HWND window = GetHandle()) {
+        RECT bounds = {};
+        if (GetWindowRect(window, &bounds) &&
+            bounds.top != MasterTopPhysical()) {
+          SetWindowPos(window, nullptr, bounds.left, MasterTopPhysical(), 0,
+                       0,
+                       SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                           SWP_NOOWNERZORDER);
+        }
+      }
+    }
+  } else if (!master_) {
+    master_transition_initialized_ = true;
+    master_retracted_ = false;
+    master_transition_active_ = false;
+    ApplyMasterTransitionAlpha(255);
+    if (HWND window = GetHandle()) {
+      KillTimer(window, kCapsuleMasterTransitionTimerId);
+    }
+  }
   // A master drag owns the live position of every child capsule. A model
   // refresh can arrive between mouse-move messages, so never replay the saved
   // queue slot while that live offset is active.
-  if (!queue_drag_offset_active_ && !queue_drag_animation_active_) {
+  if (!queue_drag_offset_active_ && !queue_drag_animation_active_ &&
+      !master_transition_active_ && !master_retracted_) {
     ApplyDockedPosition();
   }
   if (HWND window = GetHandle()) {
@@ -495,21 +572,15 @@ void NativeCapsuleWindow::ApplyWindowRegion() {
 
 void NativeCapsuleWindow::ApplyDockedPosition() {
   HWND window = GetHandle();
-  if (!window || dragging_) return;
+  if (!window || dragging_ || master_transition_active_ || master_retracted_) {
+    return;
+  }
   const int visible_width = std::clamp(
       static_cast<int>(std::lround(current_visible_width_)), 1, full_width_);
   const int x = capsule_side_ == "left"
                     ? work_area_.left - (full_width_ - visible_width)
                     : work_area_.right - visible_width;
-  const int work_area_top = static_cast<int>(work_area_.top);
-  const int work_area_bottom = static_cast<int>(work_area_.bottom);
-  const int edge_margin = ScaleMetric(8);
-  const int minimum_top = work_area_top + edge_margin;
-  const int maximum_top =
-      std::max(minimum_top, work_area_bottom - height_ - edge_margin);
-  const int y = std::clamp(
-      work_area_top + ScaleMetric(static_cast<int>(std::lround(top_margin_))),
-      minimum_top, maximum_top);
+  const int y = DockedTopPhysical();
   RECT current = {};
   if (GetWindowRect(window, &current) && current.left == x &&
       current.top == y && current.right - current.left == full_width_ &&
@@ -518,6 +589,125 @@ void NativeCapsuleWindow::ApplyDockedPosition() {
   }
   SetWindowPos(window, nullptr, x, y, full_width_, height_,
                SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+int NativeCapsuleWindow::DockedTopPhysical() const {
+  const int work_area_top = static_cast<int>(work_area_.top);
+  const int work_area_bottom = static_cast<int>(work_area_.bottom);
+  const int edge_margin = ScaleMetric(8);
+  const int minimum_top = work_area_top + edge_margin;
+  const int maximum_top =
+      std::max(minimum_top, work_area_bottom - height_ - edge_margin);
+  return std::clamp(
+      work_area_top + ScaleMetric(static_cast<int>(std::lround(top_margin_))),
+      minimum_top, maximum_top);
+}
+
+int NativeCapsuleWindow::MasterTopPhysical() const {
+  const int work_area_top = static_cast<int>(work_area_.top);
+  const int work_area_bottom = static_cast<int>(work_area_.bottom);
+  const int edge_margin = ScaleMetric(8);
+  const int minimum_top = work_area_top + edge_margin;
+  const int maximum_top =
+      std::max(minimum_top, work_area_bottom - height_ - edge_margin);
+  const int requested = capsule_master_top_is_work_area_relative_
+                            ? work_area_top + ScaleMetric(static_cast<int>(
+                                                               std::lround(
+                                                                   capsule_master_top_)))
+                            : ScaleMetric(static_cast<int>(std::lround(
+                                  capsule_master_top_)));
+  return std::clamp(requested, minimum_top, maximum_top);
+}
+
+void NativeCapsuleWindow::ApplyMasterTransitionAlpha(int alpha) {
+  current_alpha_ = std::clamp(alpha, 0, 255);
+  if (HWND window = GetHandle()) {
+    SetLayeredWindowAttributes(window, 0,
+                               static_cast<BYTE>(current_alpha_), LWA_ALPHA);
+    InvalidateRect(window, nullptr, FALSE);
+  }
+}
+
+void NativeCapsuleWindow::StartMasterTransition(int target_top,
+                                                bool target_hidden,
+                                                int duration_ms) {
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!window || !GetWindowRect(window, &bounds)) return;
+
+  master_transition_target_hidden_ = target_hidden;
+  master_transition_start_top_ = static_cast<double>(bounds.top);
+  master_transition_target_top_ = static_cast<double>(target_top);
+  master_transition_start_alpha_ = current_alpha_;
+  master_transition_target_alpha_ = target_hidden ? 0 : 255;
+  master_transition_started_at_ = GetTickCount64();
+  master_transition_duration_ms_ = std::max(0, duration_ms);
+  master_transition_active_ = false;
+
+  if (target_hidden) {
+    // Keep the HWND visible while it travels to the master slot. It becomes
+    // hit-test transparent as soon as the target is a retracted state.
+    master_retracted_ = false;
+  } else {
+    master_retracted_ = true;
+    if (!IsWindowVisible(window)) {
+      ShowWindow(window, SW_SHOWNOACTIVATE);
+    }
+  }
+
+  if (!animations_enabled_ || duration_ms <= 0 ||
+      (std::abs(master_transition_start_top_ -
+                master_transition_target_top_) < 0.5 &&
+       master_transition_start_alpha_ == master_transition_target_alpha_)) {
+    master_transition_active_ = false;
+    master_retracted_ = target_hidden;
+    ApplyMasterTransitionAlpha(master_transition_target_alpha_);
+    SetWindowPos(window, nullptr, bounds.left,
+                 static_cast<int>(std::lround(master_transition_target_top_)),
+                 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                     SWP_NOOWNERZORDER);
+    KillTimer(window, kCapsuleMasterTransitionTimerId);
+    RefreshVisibility();
+    return;
+  }
+
+  master_transition_active_ = true;
+  SetTimer(window, kCapsuleMasterTransitionTimerId, 16, nullptr);
+}
+
+void NativeCapsuleWindow::UpdateMasterTransition() {
+  if (!master_transition_active_) return;
+  HWND window = GetHandle();
+  if (!window) return;
+  const ULONGLONG elapsed = GetTickCount64() - master_transition_started_at_;
+  const double progress = std::clamp(
+      static_cast<double>(elapsed) /
+          static_cast<double>(std::max(1, master_transition_duration_ms_)),
+      0.0, 1.0);
+  const double inverse = 1.0 - progress;
+  const double eased = 1.0 - inverse * inverse * inverse;
+  RECT bounds = {};
+  if (!GetWindowRect(window, &bounds)) return;
+  const int top = static_cast<int>(std::lround(
+      master_transition_start_top_ +
+      (master_transition_target_top_ - master_transition_start_top_) *
+          eased));
+  const int alpha = static_cast<int>(std::lround(
+      master_transition_start_alpha_ +
+      (master_transition_target_alpha_ - master_transition_start_alpha_) *
+          eased));
+  SetWindowPos(window, nullptr, bounds.left, top, 0, 0,
+               SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_NOOWNERZORDER);
+  ApplyMasterTransitionAlpha(alpha);
+  if (progress >= 1.0) {
+    master_transition_active_ = false;
+    master_retracted_ = master_transition_target_hidden_;
+    KillTimer(window, kCapsuleMasterTransitionTimerId);
+    ApplyMasterTransitionAlpha(master_transition_target_alpha_);
+    RefreshVisibility();
+  }
 }
 
 void NativeCapsuleWindow::SetHovered(bool hovered) {
@@ -931,11 +1121,29 @@ void NativeCapsuleWindow::RefreshVisibility() {
     z_order_initialized_ = false;
     return;
   }
+  const bool retracted_by_master = !master_ && capsule_hidden_by_master_ &&
+                                   master_retracted_ &&
+                                   !master_transition_active_;
+  if (retracted_by_master) {
+    ApplyMasterTransitionAlpha(0);
+    if (!IsWindowVisible(window)) {
+      SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                       SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+    }
+    z_order_initialized_ = true;
+    z_order_topmost_ = true;
+    return;
+  }
+  if (!master_transition_active_ && current_alpha_ != 255) {
+    ApplyMasterTransitionAlpha(255);
+  }
   const HWND z_order =
       avoid_fullscreen_topmost_ && fullscreen ? HWND_NOTOPMOST : HWND_TOPMOST;
   const bool topmost = z_order == HWND_TOPMOST;
   const bool visible = IsWindowVisible(window) != FALSE;
-  if (!visible || !z_order_initialized_ || z_order_topmost_ != topmost) {
+  if (!visible || !z_order_initialized_ || z_order_topmost_ != topmost ||
+      master_) {
     if (!visible) {
       // Paint the final label, hover state and theme into the hidden HWND
       // before revealing it. Otherwise Windows can briefly present the last
@@ -1157,8 +1365,16 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
         UpdateQueueDragAnimation();
         return 0;
       }
+      if (wparam == kCapsuleMasterTransitionTimerId) {
+        UpdateMasterTransition();
+        return 0;
+      }
       break;
     case WM_NCHITTEST:
+      if (master_retracted_ ||
+          (master_transition_active_ && master_transition_target_hidden_)) {
+        return HTTRANSPARENT;
+      }
       return HTCLIENT;
     case WM_SETCURSOR:
       SetCursor(LoadCursor(
@@ -1322,8 +1538,10 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
     case WM_DESTROY:
       KillTimer(window, kCapsuleSlideTimerId);
       KillTimer(window, kCapsuleQueueFollowTimerId);
+      KillTimer(window, kCapsuleMasterTransitionTimerId);
       dock_animation_active_ = false;
       queue_drag_animation_active_ = false;
+      master_transition_active_ = false;
       break;
     case WM_CLOSE:
       z_order_initialized_ = false;

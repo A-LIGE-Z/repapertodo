@@ -45,6 +45,12 @@ class NativeCapsuleWindow : public Win32Window {
   void SetHovered(bool hovered);
   void StartDockAnimation(int target_visible_width, int duration_ms);
   void UpdateDockAnimation();
+  void StartMasterTransition(int target_top, bool target_hidden,
+                             int duration_ms);
+  void UpdateMasterTransition();
+  void ApplyMasterTransitionAlpha(int alpha);
+  int MasterTopPhysical() const;
+  int DockedTopPhysical() const;
   void StartQueueDragAnimation(int target_top, int duration_ms);
   void UpdateQueueDragAnimation();
   void ApplyQueueDragTop(int top);
@@ -104,6 +110,20 @@ class NativeCapsuleWindow : public Win32Window {
   bool active_ = false;
   bool collapse_on_click_ = false;
   bool intended_visible_ = false;
+  bool capsule_hidden_by_master_ = false;
+  bool capsule_master_top_is_work_area_relative_ = true;
+  double capsule_master_top_ = 48.0;
+  bool master_transition_initialized_ = false;
+  bool master_transition_active_ = false;
+  bool master_transition_target_hidden_ = false;
+  bool master_retracted_ = false;
+  double master_transition_start_top_ = 0.0;
+  double master_transition_target_top_ = 0.0;
+  int master_transition_start_alpha_ = 255;
+  int master_transition_target_alpha_ = 255;
+  ULONGLONG master_transition_started_at_ = 0;
+  int master_transition_duration_ms_ = 0;
+  int current_alpha_ = 255;
   bool hide_when_covered_ = false;
   bool hide_when_fullscreen_ = false;
   bool animations_enabled_ = true;
