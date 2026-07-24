@@ -14,8 +14,8 @@ class RePaperTodoController {
   RePaperTodoController({
     required AppState initialState,
     required PlatformServices platform,
-  })  : state = initialState,
-        _platform = platform {
+  }) : state = initialState,
+       _platform = platform {
     state.normalize();
   }
 
@@ -80,9 +80,11 @@ class RePaperTodoController {
 
   bool get canCreatePaper => state.papers.length < PaperLimits.maxPapers;
 
-  Future<void> start(
-      {StartupCommand startupCommand =
-          const StartupCommand(StartupCommandKind.none)}) async {
+  Future<void> start({
+    StartupCommand startupCommand = const StartupCommand(
+      StartupCommandKind.none,
+    ),
+  }) async {
     if (startupCommand.kind == StartupCommandKind.exit) {
       await _executeStartupCommand(startupCommand, rebuildTrayMenu: false);
       return;
@@ -133,7 +135,8 @@ class RePaperTodoController {
       items: normalizedType == PaperTypes.todo
           ? [
               PaperItem(
-                  id: DateTime.now().microsecondsSinceEpoch.toRadixString(16))
+                id: DateTime.now().microsecondsSinceEpoch.toRadixString(16),
+              ),
             ]
           : const [],
       alwaysOnTop: sourcePaper?.alwaysOnTop ?? false,
@@ -234,9 +237,16 @@ class RePaperTodoController {
     await _platform.paperWindows.updatePaperSurface(paper);
   }
 
-  Future<void> refreshPaperSurfaces() async {
-    state.normalize();
-    await _platform.paperWindows.restoreAll(state);
+  Future<void> refreshPaperSurfaces({AppState? snapshot}) async {
+    // Surface reconciliation is asynchronous and may be queued behind another
+    // Win32 operation.  Never hand the host the live mutable controller state:
+    // a second capsule click (or a content edit) can otherwise change the
+    // object while the first native refresh is still waiting on a platform
+    // channel reply.  Each reconciliation gets an immutable-at-call-time
+    // model snapshot instead.
+    final surfaceState = AppState.fromJson((snapshot ?? state).toJson())
+      ..normalize();
+    await _platform.paperWindows.restoreAll(surfaceState);
   }
 
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {
@@ -320,8 +330,9 @@ class RePaperTodoController {
     if (!_platform.systemIntegration.supportsFullscreenTopmostMode) {
       return;
     }
-    await _platform.systemIntegration
-        .setFullscreenTopmostMode(state.fullscreenTopmostMode);
+    await _platform.systemIntegration.setFullscreenTopmostMode(
+      state.fullscreenTopmostMode,
+    );
   }
 
   Future<void> registerGlobalHotkeys() async {
@@ -502,7 +513,8 @@ class RePaperTodoController {
         final shouldHide = await _hasVisibleSurfacesForToggle();
         await _executeStartupCommand(
           StartupCommand(
-              shouldHide ? StartupCommandKind.hide : StartupCommandKind.show),
+            shouldHide ? StartupCommandKind.hide : StartupCommandKind.show,
+          ),
           rebuildTrayMenu: rebuildTrayMenu,
         );
       case StartupCommandKind.newTodo:
@@ -732,7 +744,7 @@ class RePaperTodoController {
         _paperIdsPendingWorkAreaRescue.remove(paper.id) && paper.isVisible;
     final clampAwayFromDeepCapsuleStrip =
         _paperIdsPendingDeepCapsuleStripClamp.remove(paper.id) &&
-            _canClampNewPaperAwayFromDeepCapsuleStrip(paper);
+        _canClampNewPaperAwayFromDeepCapsuleStrip(paper);
     if (!rescueIntoWorkArea && !clampAwayFromDeepCapsuleStrip) {
       return;
     }
@@ -835,10 +847,7 @@ class RePaperTodoController {
     if (paper.capsuleSide == DeepCapsuleSides.left) {
       minX = math.min(maxX, math.max(minX, area.x + edgeInset));
     } else {
-      maxX = math.max(
-        minX,
-        math.min(maxX, area.right - width - edgeInset),
-      );
+      maxX = math.max(minX, math.min(maxX, area.right - width - edgeInset));
     }
 
     final minY = area.y + margin;
@@ -890,8 +899,8 @@ class RePaperTodoController {
     final targetX = rightX <= maxX
         ? rightX
         : leftX >= minX
-            ? leftX
-            : rightX.clamp(minX, maxX).toDouble();
+        ? leftX
+        : rightX.clamp(minX, maxX).toDouble();
 
     final minY = area.y + margin;
     final maxY = math.max(minY, area.bottom - noteHeight - margin);
@@ -950,14 +959,16 @@ class RePaperTodoController {
     }
     if (_platform.systemIntegration.supportsWindowSwitcherVisibility) {
       await ignorePlatformFailure(
-        () => _platform.systemIntegration
-            .setHideFromWindowSwitcher(state.hidePapersFromWindowSwitcher),
+        () => _platform.systemIntegration.setHideFromWindowSwitcher(
+          state.hidePapersFromWindowSwitcher,
+        ),
       );
     }
     if (_platform.systemIntegration.supportsFullscreenTopmostMode) {
       await ignorePlatformFailure(
-        () => _platform.systemIntegration
-            .setFullscreenTopmostMode(state.fullscreenTopmostMode),
+        () => _platform.systemIntegration.setFullscreenTopmostMode(
+          state.fullscreenTopmostMode,
+        ),
       );
     }
     if (state.usePersistentPowerShellProcess &&

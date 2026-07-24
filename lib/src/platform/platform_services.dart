@@ -63,11 +63,16 @@ class PaperWindowActionRequest {
     required this.kind,
     required this.paperId,
     this.value = '',
+    this.surfaceGeneration,
   });
 
   final String kind;
   final String paperId;
   final String value;
+  // Native capsule clicks carry the registry generation that was painted on
+  // the HWND. It is optional so Android, test hosts and older runners remain
+  // wire-compatible.
+  final int? surfaceGeneration;
 }
 
 abstract final class PaperWindowActionKinds {

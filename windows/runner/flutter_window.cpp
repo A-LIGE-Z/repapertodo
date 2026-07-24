@@ -37,6 +37,7 @@ struct PersistentScriptProcess {
   std::wstring key;
   HANDLE process = nullptr;
   HANDLE input = nullptr;
+  HANDLE job = nullptr;
 };
 
 class ScopedWinHandle {
@@ -606,6 +607,30 @@ std::filesystem::path DataDirectoryConfigPath() {
   return *local_app_data / L"RePaperTodo" / L"storage-path.txt";
 }
 
+std::optional<std::filesystem::path> ReadProcessDataDirectoryOverride() {
+  std::array<wchar_t, 32768> raw_directory = {};
+  const DWORD directory_length = GetEnvironmentVariableW(
+      L"REPAPERTODO_DATA_DIRECTORY", raw_directory.data(),
+      static_cast<DWORD>(raw_directory.size()));
+  if (directory_length == 0 || directory_length >= raw_directory.size()) {
+    return std::nullopt;
+  }
+  const std::wstring directory_value(raw_directory.data(), directory_length);
+  if (directory_value.empty() ||
+      std::any_of(directory_value.begin(), directory_value.end(),
+                  [](wchar_t character) { return character < L' '; })) {
+    return std::nullopt;
+  }
+  std::filesystem::path directory(directory_value);
+  if (!directory.is_absolute()) {
+    return std::nullopt;
+  }
+  std::error_code error;
+  std::filesystem::create_directories(directory, error);
+  return error ? std::nullopt
+               : std::optional<std::filesystem::path>(directory);
+}
+
 std::optional<std::filesystem::path> ReadConfiguredDataDirectory() {
   const std::filesystem::path config_path = DataDirectoryConfigPath();
   if (config_path.empty()) {
@@ -712,6 +737,12 @@ std::filesystem::path EnsureLogDirectory(std::filesystem::path directory) {
 }
 
 std::filesystem::path ResolveDataDirectory(HWND owner) {
+  // Automated validation and managed deployments may isolate one process from
+  // the user's persisted storage-path selection.  The override is inherited
+  // only by that process and is never written back to storage-path.txt.
+  if (const auto process_override = ReadProcessDataDirectoryOverride()) {
+    return EnsureLogDirectory(*process_override);
+  }
   if (const auto configured = ReadConfiguredDataDirectory()) {
     return EnsureLogDirectory(*configured);
   }
@@ -1300,6 +1331,14 @@ void ClosePersistentScriptProcess(PersistentScriptProcess& entry) {
     CloseHandle(entry.input);
     entry.input = nullptr;
   }
+  // Closing a kill-on-close job terminates the persistent host and every
+  // PowerShell process it spawned, including a script that is still running.
+  // This also protects abnormal application exits because Windows closes the
+  // coordinator process's job handle automatically.
+  if (entry.job) {
+    CloseHandle(entry.job);
+    entry.job = nullptr;
+  }
   if (entry.process) {
     if (WaitForSingleObject(entry.process, 0) == WAIT_TIMEOUT) {
       TerminateProcess(entry.process, 0);
@@ -1308,6 +1347,23 @@ void ClosePersistentScriptProcess(PersistentScriptProcess& entry) {
     CloseHandle(entry.process);
     entry.process = nullptr;
   }
+}
+
+HANDLE CreateKillOnCloseJob() {
+  HANDLE job = CreateJobObjectW(nullptr, nullptr);
+  if (!job) {
+    return nullptr;
+  }
+  JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_information = {};
+  job_information.BasicLimitInformation.LimitFlags =
+      JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+  if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                               &job_information,
+                               sizeof(job_information))) {
+    CloseHandle(job);
+    return nullptr;
+  }
+  return job;
 }
 
 PersistentScriptProcess* EnsurePersistentScriptProcess(
@@ -1361,7 +1417,9 @@ PersistentScriptProcess* EnsurePersistentScriptProcess(
     startup_info.wShowWindow = SW_HIDE;
   }
   PROCESS_INFORMATION process_information = {};
-  const DWORD creation_flags = hide_window ? CREATE_NO_WINDOW : 0;
+  HANDLE process_job = CreateKillOnCloseJob();
+  const DWORD creation_flags =
+      (hide_window ? CREATE_NO_WINDOW : 0) | CREATE_SUSPENDED;
   const BOOL created = CreateProcessW(
       nullptr, command_line.data(), nullptr, nullptr, TRUE, creation_flags,
       nullptr, nullptr, &startup_info, &process_information);
@@ -1370,12 +1428,31 @@ PersistentScriptProcess* EnsurePersistentScriptProcess(
     CloseHandle(null_output);
   }
   if (!created) {
+    if (process_job) {
+      CloseHandle(process_job);
+    }
     CloseHandle(input_write);
     return nullptr;
   }
+  if (process_job &&
+      !AssignProcessToJobObject(process_job, process_information.hProcess)) {
+    CloseHandle(process_job);
+    process_job = nullptr;
+  }
+  if (ResumeThread(process_information.hThread) == static_cast<DWORD>(-1)) {
+    CloseHandle(input_write);
+    if (process_job) {
+      CloseHandle(process_job);
+    }
+    TerminateProcess(process_information.hProcess, 0);
+    WaitForSingleObject(process_information.hProcess, 1000);
+    CloseHandle(process_information.hThread);
+    CloseHandle(process_information.hProcess);
+    return nullptr;
+  }
   CloseHandle(process_information.hThread);
-  g_persistent_script_processes.push_back(
-      PersistentScriptProcess{key, process_information.hProcess, input_write});
+  g_persistent_script_processes.push_back(PersistentScriptProcess{
+      key, process_information.hProcess, input_write, process_job});
   return &g_persistent_script_processes.back();
 }
 

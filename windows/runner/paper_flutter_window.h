@@ -7,6 +7,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include <functional>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -92,6 +93,8 @@ class PaperFlutterWindow : public Win32Window {
   bool avoid_fullscreen_topmost_ = true;
   bool fullscreen_blocked_ = false;
   bool intended_visible_ = false;
+  bool capsule_hidden_by_master_ = false;
+  int64_t surface_generation_ = -1;
   bool collapsed_ = false;
   bool deep_capsule_mode_ = false;
   std::string paper_type_ = "todo";

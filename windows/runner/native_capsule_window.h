@@ -4,6 +4,7 @@
 #include <flutter/encodable_value.h>
 
 #include <functional>
+#include <cstdint>
 #include <string>
 
 #include "win32_window.h"
@@ -113,6 +114,7 @@ class NativeCapsuleWindow : public Win32Window {
   RECT drag_start_bounds_ = {};
   bool queue_drag_offset_active_ = false;
   int queue_drag_base_top_ = 0;
+  int64_t surface_generation_ = -1;
 };
 
 #endif  // RUNNER_NATIVE_CAPSULE_WINDOW_H_

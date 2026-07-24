@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Hardened the Windows pinned-paper capsule escape path: clicking a pinned
+  paper's proxy now clears desktop pinning and explicitly activates the paper
+  through the foreground input queue, so synthetic/native clicks cannot leave
+  another window in front.
+- Fixed capsule interaction state isolation: the master capsule now changes
+  only the capsule queue without hiding collapsed paper HWNDs, queue drag
+  ordering ignores expanded papers that have no deep-capsule proxy, and the
+  expanded-proxy click action respects the configured click-to-retract option.
+- Fixed paper-header collapse synchronization: collapsing or expanding a real
+  paper now reconciles its Flutter HWND and edge-capsule registry as one
+  serialized operation, so repeated paper/master capsule toggles cannot leave
+  a stale or missing capsule.
+- Isolated Windows policy-smoke data from the user's configured storage path
+  and made persistent PowerShell capsule process trees terminate immediately
+  when RePaperTodo exits.
 - Compressed only the settings author signature's paint layer horizontally by
   99/103 with a right anchor, preserving its hit target, right edge and source
   Segoe UI style. Its visible bounds now match `x=675..773`; the footer crop

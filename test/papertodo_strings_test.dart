@@ -164,8 +164,8 @@ void main() {
       zh.get(PaperTodoStringKeys.topBarNewNote),
       '\u663e\u793a\u65b0\u5efa\u7b14\u8bb0\u6309\u94ae',
     );
-    expect(en.get(PaperTodoStringKeys.topBarNewTodo), 'Show new todo button');
-    expect(en.get(PaperTodoStringKeys.topBarNewNote), 'Show new note button');
+    expect(en.get(PaperTodoStringKeys.topBarNewTodo), 'Top bar new todo');
+    expect(en.get(PaperTodoStringKeys.topBarNewNote), 'Top bar new note');
   });
 
   test('matches PaperTodo relative due-time resources', () {

@@ -3382,6 +3382,18 @@ void main() {
     expect(app, contains('paper.isNote ? -1 : -1.25'));
   });
 
+  test('pinned capsule activation clears pin and restores foreground focus', () {
+    final paperWindow =
+        _readProjectText('windows/runner/paper_flutter_window.cpp');
+    final coordinator = _readProjectText('windows/runner/flutter_window.cpp');
+
+    expect(paperWindow, contains('void ActivatePaperWindow(HWND window'));
+    expect(paperWindow, contains('AttachThreadInput'));
+    expect(paperWindow, contains('SetForegroundWindow(window)'));
+    expect(coordinator, contains('paper_window->SetPinnedToDesktop(false)'));
+    expect(coordinator, contains('paper_window->ShowPaper(true)'));
+  });
+
   test('Windows paper HWND geometry stays logical across monitor DPI', () {
     final paperWindow =
         _readProjectText('windows/runner/paper_flutter_window.cpp');
@@ -3961,7 +3973,7 @@ void main() {
     expect(paperWindow, contains('kPaperShadowWindowClass'));
     expect(paperWindow, contains('RoundedRectSignedDistance'));
     expect(paperWindow,
-        contains('edge_opacity = paper_shadow_dark_ ? 0.17 : 0.09'));
+        contains('edge_opacity = paper_shadow_dark_ ? 0.34 : 0.18'));
     expect(paperWindow,
         contains('UpdateLayeredWindow(paper_shadow_window_, screen'));
     expect(paperWindow, contains('SetWindowPos(paper_shadow_window_, window'));
@@ -4110,12 +4122,24 @@ void main() {
 
     expect(runner, contains('FOS_PICKFOLDERS'));
     expect(runner, contains('storage-path.txt'));
+    expect(runner, contains('REPAPERTODO_DATA_DIRECTORY'));
+    expect(runner, contains('ReadProcessDataDirectoryOverride'));
     expect(runner, contains('EnsureLogDirectory'));
     expect(runner, contains('directory / L"LOG"'));
     expect(runner, contains('method == "getDataDirectory"'));
     expect(runner, contains('method == "commitDataDirectory"'));
     expect(storage, contains('Future<void> relocate('));
     expect(settings, contains("'settings-data-directory'"));
+    final policySmoke =
+        _readProjectText('scripts/windows_policy_smoke.ps1');
+    expect(policySmoke, contains('REPAPERTODO_DATA_DIRECTORY'));
+    expect(policySmoke, contains('previousDataDirectoryOverride'));
+    expect(policySmoke, contains('masterTogglePreservesExpandedPaper'));
+    expect(policySmoke, contains('masterCapsuleRepeatedToggle'));
+    expect(policySmoke, contains('pinnedCapsuleUnpinsAndForegrounds'));
+    expect(policySmoke, contains('collapsedPaperCapsuleClickExpands'));
+    expect(policySmoke, contains('paperCollapseThenCapsuleExpands'));
+    expect(policySmoke, contains('paperCapsuleRepeatedCycles'));
   });
 
   test('Windows release deploys app-local runtime dependencies', () {
@@ -4294,6 +4318,9 @@ void main() {
     expect(runner, contains('MoveFileExW'));
     expect(runner, contains('DeleteFileW(script_path.c_str())'));
     expect(runner, contains('-NonInteractive'));
+    expect(runner, contains('JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE'));
+    expect(runner, contains('AssignProcessToJobObject'));
+    expect(runner, contains('CREATE_SUSPENDED'));
   });
 
   test('PaperTodo paper title editing rules are preserved', () {

@@ -271,6 +271,17 @@ void NativeCapsuleWindow::ApplyNativeStyle() {
 
 void NativeCapsuleWindow::ApplySurface(
     const flutter::EncodableMap& surface) {
+  const double generation_value =
+      NumberValue(surface, "surfaceGeneration", -1.0);
+  if (std::isfinite(generation_value) && generation_value >= 0.0) {
+    const int64_t incoming_generation =
+        static_cast<int64_t>(std::llround(generation_value));
+    if (surface_generation_ >= 0 &&
+        incoming_generation < surface_generation_) {
+      return;
+    }
+    surface_generation_ = incoming_generation;
+  }
   queue_drag_offset_active_ = false;
   surface_id_ = StringValue(surface, "surfaceId", surface_id_);
   kind_ = StringValue(surface, "kind", kind_);
@@ -648,18 +659,20 @@ void NativeCapsuleWindow::SendClick() {
                                ? "toggleCollapseAll"
                                : (collapse_on_click_ ? "collapsePaper"
                                                      : "openPaper");
-  event_callback_(
-      "paperActionRequested",
-      flutter::EncodableMap{
-          {flutter::EncodableValue("paperId"),
-           flutter::EncodableValue(paper_id_)},
-          {flutter::EncodableValue("kind"), flutter::EncodableValue(kind)},
-          {flutter::EncodableValue("value"),
-           flutter::EncodableValue(
-               master_ && surface_id_.rfind("master:", 0) == 0
-                   ? surface_id_.substr(7)
-                   : paper_id_)},
-      });
+  flutter::EncodableMap arguments{
+      {flutter::EncodableValue("paperId"), flutter::EncodableValue(paper_id_)},
+      {flutter::EncodableValue("kind"), flutter::EncodableValue(kind)},
+      {flutter::EncodableValue("value"),
+       flutter::EncodableValue(
+           master_ && surface_id_.rfind("master:", 0) == 0
+               ? surface_id_.substr(7)
+               : paper_id_)},
+  };
+  if (surface_generation_ >= 0) {
+    arguments.emplace(flutter::EncodableValue("surfaceGeneration"),
+                      flutter::EncodableValue(surface_generation_));
+  }
+  event_callback_("paperActionRequested", flutter::EncodableValue(arguments));
 }
 
 void NativeCapsuleWindow::SendHide() {
@@ -1097,6 +1110,7 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       tracking_mouse_leave_ = false;
       close_hovered_ = false;
       if (!pointer_down_) SetHovered(false);
+      RefreshVisibility();
       InvalidateRect(window, nullptr, FALSE);
       return 0;
     case WM_LBUTTONDOWN: {
@@ -1111,6 +1125,7 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       GetCursorPos(&drag_start_cursor_);
       GetWindowRect(window, &drag_start_bounds_);
       SetCapture(window);
+      SetHovered(true);
       InvalidateRect(window, nullptr, FALSE);
       return 0;
     }
@@ -1146,7 +1161,17 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       } else {
         SendClick();
       }
-      SetHovered(false);
+      // Releasing capture does not guarantee a WM_MOUSEMOVE before the next
+      // paint.  Derive the hover state from the actual cursor location so a
+      // click that ends inside the pill does not start a needless slide-out
+      // (or allow the covered/fullscreen policy to hide it for one frame).
+      bool cursor_inside = false;
+      POINT cursor = {};
+      RECT bounds = {};
+      if (GetCursorPos(&cursor) && GetWindowRect(window, &bounds)) {
+        cursor_inside = PtInRect(&bounds, cursor) == TRUE;
+      }
+      SetHovered(cursor_inside);
       InvalidateRect(window, nullptr, FALSE);
       return 0;
     }

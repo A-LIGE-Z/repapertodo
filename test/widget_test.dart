@@ -21206,6 +21206,8 @@ void main() {
     expect(store.savedState.papers.single.title, 'After');
     expect(store.savedState.papers.single.content, 'Edited in child engine');
     expect(platform.paperWindows.updatedTitles, contains('After'));
+    expect(platform.paperWindows.restoredTitleSnapshots, isNotEmpty,
+        reason: 'collapse edits must reconcile the native capsule registry');
   });
 
   testWidgets('routes independent paper actions through primary services',
@@ -21463,6 +21465,72 @@ void main() {
     expect(platform.paperWindows.shownTitles, contains('Peer'));
   });
 
+  testWidgets(
+      'rapid master clicks are applied in order instead of coalescing the final state',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      capsuleCollapseAllActive: true,
+      papers: [
+        PaperData(
+          id: 'rapid-master',
+          title: 'Rapid master',
+          capsuleSide: DeepCapsuleSides.right,
+        ),
+        PaperData(
+          id: 'rapid-peer',
+          title: 'Rapid peer',
+          capsuleSide: DeepCapsuleSides.right,
+        ),
+      ],
+    );
+    await store.save(state);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: platform,
+    );
+    final queueKey = controller.state.capsuleQueueKeyFor(
+      controller.state.papers.first,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    await tester.pumpAndSettle();
+    final before = platform.paperWindows.restoredCollapseAllSnapshots.length;
+
+    // This is the sequence produced by a fast real double click.  The first
+    // click must be rendered as a collapse before the second expands it again;
+    // reading the live mutable state from both queued refreshes would make
+    // both native refreshes see only the final value.
+    platform.paperWindows.emitAction(
+      PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.toggleCollapseAll,
+        paperId: 'rapid-master',
+        value: queueKey,
+      ),
+    );
+    platform.paperWindows.emitAction(
+      PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.toggleCollapseAll,
+        paperId: 'rapid-master',
+        value: queueKey,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    expect(controller.state.capsuleCollapseAllActive, true);
+    expect(
+      platform.paperWindows.restoredCollapseAllSnapshots.sublist(before),
+      [false, true],
+    );
+    expect(store.savedState.capsuleCollapseAllActive, true);
+  });
+
   testWidgets('dragging a master capsule changes its queue start height',
       (tester) async {
     final platform = _RecordingPlatformServices();
@@ -21543,6 +21611,46 @@ void main() {
     expect(
       store.savedState.papers.map((paper) => paper.id),
       ['queue-third', 'queue-first', 'queue-second'],
+    );
+  });
+
+  testWidgets(
+      'capsule reordering ignores expanded papers outside the deep queue',
+      (tester) async {
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleCollapseAll: true,
+        showDeepCapsuleWhileExpanded: false,
+        papers: [
+          PaperData(id: 'queue-first', title: 'First', isCollapsed: true),
+          PaperData(id: 'expanded-middle', title: 'Middle'),
+          PaperData(id: 'queue-second', title: 'Second', isCollapsed: true),
+        ],
+      ),
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+
+    platform.paperWindows.emitCapsuleDrop(
+      const CapsuleDropRequest(
+        paperId: 'queue-second',
+        monitorDeviceName: '',
+        side: DeepCapsuleSides.right,
+        dropTop: 198,
+        workAreaTop: 0,
+        isMasterCapsule: false,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(
+      controller.state.papers.map((paper) => paper.id),
+      ['queue-first', 'queue-second', 'expanded-middle'],
     );
   });
 
@@ -21713,6 +21821,42 @@ void main() {
     expect(store.savedState.papers.single.isVisible, false);
     expect(platform.paperWindows.hiddenTitles, contains('Tray hidden'));
     expect(find.text('Tray hidden'), findsNothing);
+  });
+
+  testWidgets(
+      'opening a master-hidden collapsed paper expands its real surface',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final paper = PaperData(
+      id: 'master-hidden-open-paper',
+      title: 'Master hidden',
+      isCollapsed: true,
+      items: [PaperItem(id: 'master-hidden-item', text: 'Open me')],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        useCapsuleMode: true,
+        useDeepCapsuleMode: true,
+        useCapsuleCollapseAll: true,
+        capsuleCollapseAllActive: true,
+        papers: [paper],
+      ),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    platform.paperWindows.emitPaperOpenRequest(paper.id);
+    await tester.pumpAndSettle();
+
+    expect(paper.isVisible, true);
+    expect(paper.isCollapsed, false);
+    expect(platform.paperWindows.shownTitles, contains('Master hidden'));
   });
 
   testWidgets('ignores stale paper open and delete requests', (tester) async {
@@ -23403,6 +23547,7 @@ class _RecordingTrayHost extends NoopTrayHost {
 
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final restoredTitleSnapshots = <List<String>>[];
+  final restoredCollapseAllSnapshots = <bool>[];
   final updatedTitles = <String>[];
   final shownTitles = <String>[];
   final hiddenTitles = <String>[];
@@ -23463,6 +23608,7 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
     restoredTitleSnapshots.add(
       state.papers.map((paper) => paper.title).toList(),
     );
+    restoredCollapseAllSnapshots.add(state.capsuleCollapseAllActive);
   }
 
   @override

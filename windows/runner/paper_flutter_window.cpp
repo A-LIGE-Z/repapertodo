@@ -151,6 +151,44 @@ constexpr UINT_PTR kReminderBubbleTimerId = 1;
 constexpr UINT_PTR kCapsuleSlideTimerId = 0xCA52;
 constexpr int kCapsuleSlideOutMilliseconds = 220;
 constexpr int kCapsuleSlideInMilliseconds = 180;
+
+// A deep capsule is deliberately a WS_EX_NOACTIVATE window.  When its click
+// is delivered through the native proxy, Windows does not always grant the
+// RePaperTodo process the foreground permission that a real mouse click would
+// grant.  Activating the paper through SetForegroundWindow alone therefore
+// occasionally leaves another application in front even though the paper was
+// successfully unpinned.  Temporarily joining the foreground input queue
+// makes the activation deterministic without changing the paper's normal
+// task-switcher or z-order policy.
+void ActivatePaperWindow(HWND window, bool always_on_top) {
+  if (!window || !IsWindow(window)) return;
+
+  HWND foreground = GetForegroundWindow();
+  DWORD foreground_thread = 0;
+  if (foreground) {
+    foreground_thread = GetWindowThreadProcessId(foreground, nullptr);
+  }
+  const DWORD current_thread = GetCurrentThreadId();
+  const bool attached = foreground_thread != 0 &&
+                        foreground_thread != current_thread &&
+                        AttachThreadInput(foreground_thread, current_thread,
+                                          TRUE) == TRUE;
+
+  // The call is harmless when the process already owns the foreground lock,
+  // and permits the activation path when the click came from a synthetic
+  // WM_LBUTTON sequence (as used by the Windows policy smoke test).
+  AllowSetForegroundWindow(ASFW_ANY);
+  SetWindowPos(window, always_on_top ? HWND_TOPMOST : HWND_TOP, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+  BringWindowToTop(window);
+  SetActiveWindow(window);
+  SetForegroundWindow(window);
+  SetFocus(window);
+
+  if (attached) {
+    AttachThreadInput(foreground_thread, current_thread, FALSE);
+  }
+}
 constexpr UINT kDeferredPaperActionMessage = WM_APP + 0x351;
 
 bool IsSystemPaperThemeDark() {
@@ -2471,6 +2509,15 @@ void PaperFlutterWindow::FlushInitialState() {
 }
 
 void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
+  const int64_t incoming_generation = IntegerValue(
+      surface, "surfaceGeneration", static_cast<int64_t>(-1));
+  if (incoming_generation >= 0) {
+    if (surface_generation_ >= 0 &&
+        incoming_generation < surface_generation_) {
+      return;
+    }
+    surface_generation_ = incoming_generation;
+  }
   queue_drag_offset_active_ = false;
   HWND window = GetHandle();
   if (!window) {
@@ -2494,6 +2541,18 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
   capsule_font_family_ =
       StringValue(surface, "fontFamily", capsule_font_family_);
   collapsed_ = BoolValue(surface, "isCollapsed", collapsed_);
+  const bool was_capsule_hidden_by_master = capsule_hidden_by_master_;
+  capsule_hidden_by_master_ =
+      BoolValue(surface, "capsuleHiddenByMaster", capsule_hidden_by_master_);
+  if (capsule_hidden_by_master_ && !was_capsule_hidden_by_master) {
+    // A master toggle can arrive while the pointer is over a child capsule.
+    // Clear the transient hover/animation state so revealing the queue starts
+    // from the compact resting width instead of flashing its old hover width.
+    capsule_hovered_ = false;
+    capsule_animation_active_ = false;
+    capsule_current_visible_width_ = 0.0;
+    KillTimer(window, kCapsuleSlideTimerId);
+  }
   deep_capsule_mode_ =
       BoolValue(surface, "useDeepCapsuleMode", deep_capsule_mode_);
   capsule_animations_enabled_ = BoolValue(
@@ -2603,19 +2662,21 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       window_title != std::wstring(existing_title, title_length)) {
     SetWindowTextW(window, window_title.c_str());
   }
+  // Resolve visibility before the single z-order pass below.  The previous
+  // implementation called RefreshZOrder once with the old visibility and
+  // once with the new one; a master reveal/pin click could therefore briefly
+  // show, hide, and show the same HWND again.
+  const auto visibility = surface.find(flutter::EncodableValue("isVisible"));
+  if (visibility != surface.end()) {
+    if (const auto* visible = std::get_if<bool>(&visibility->second)) {
+      intended_visible_ = *visible;
+    }
+  }
   always_on_top_ = BoolValue(surface, "alwaysOnTop", always_on_top_);
   pinned_to_desktop_ =
       BoolValue(surface, "isPinnedToDesktop", pinned_to_desktop_);
   SetHideFromWindowSwitcher(hide_from_window_switcher_);
   RefreshZOrder();
-  const auto visibility =
-      surface.find(flutter::EncodableValue("isVisible"));
-  if (visibility != surface.end()) {
-    if (const auto* visible = std::get_if<bool>(&visibility->second)) {
-      intended_visible_ = *visible;
-      RefreshZOrder();
-    }
-  }
 }
 
 bool PaperFlutterWindow::IsInCapsuleQueue(
@@ -3255,8 +3316,10 @@ void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
         96.0;
     const double inset = 8.0 * dpi_scale;
     const double radius = 18.0 * dpi_scale;
-    const double sigma = 4.2 * dpi_scale;
-    const double edge_opacity = paper_shadow_dark_ ? 0.17 : 0.09;
+    // Match PaperTodo's broad, low-contrast paper shadow instead of the
+    // narrow shadow that made the sheet look like a flat child window.
+    const double sigma = 5.5 * dpi_scale;
+    const double edge_opacity = paper_shadow_dark_ ? 0.34 : 0.18;
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         const double distance = RoundedRectSignedDistance(
@@ -3345,10 +3408,7 @@ void PaperFlutterWindow::ShowPaper(bool activate) {
   RefreshZOrder();
   if (activate && IsWindowVisible(window)) {
     ShowWindow(window, SW_RESTORE);
-    SetWindowPos(window, always_on_top_ ? HWND_TOPMOST : HWND_TOP, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-    BringWindowToTop(window);
-    SetForegroundWindow(window);
+    ActivatePaperWindow(window, always_on_top_);
   }
   UpdatePaperShadowWindow(false);
 }
@@ -3404,7 +3464,8 @@ void PaperFlutterWindow::RefreshZOrder() {
                              (IsExternalFullscreenWindow(window) ||
                               (hide_when_covered_ &&
                                IsCoveredByAnotherWindow(window)));
-  if (!intended_visible_ || policy_hidden) {
+  if (!intended_visible_ ||
+      (collapsed_ && capsule_hidden_by_master_) || policy_hidden) {
     if (!pinned_to_desktop_) {
       SetWindowPos(window, HWND_NOTOPMOST, 0, 0, 0, 0,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
@@ -3416,8 +3477,10 @@ void PaperFlutterWindow::RefreshZOrder() {
     return;
   }
   if (!IsWindowVisible(window)) {
-    ShowWindow(window,
-               pinned_to_desktop_ ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL);
+    // Revealing a capsule (including a master-toggle reveal) must not activate
+    // the child HWND or steal the foreground window. SW_SHOWNORMAL caused a
+    // visible flash and a z-order jump on fast master clicks.
+    ShowWindow(window, SW_SHOWNOACTIVATE);
   }
   RemoveTaskbarButton(window);
   if (pinned_to_desktop_) {

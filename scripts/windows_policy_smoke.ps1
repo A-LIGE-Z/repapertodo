@@ -556,6 +556,11 @@ $tempRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot ".tmp"))
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 $smokeRoot = Join-Path $tempRoot "repapertodo-policy-smoke-$([Guid]::NewGuid().ToString('N'))"
 Assert-PathInside $smokeRoot $tempRoot
+$dataDirectoryOverrideName = "REPAPERTODO_DATA_DIRECTORY"
+$previousDataDirectoryOverride = [Environment]::GetEnvironmentVariable(
+  $dataDirectoryOverrideName, "Process")
+[Environment]::SetEnvironmentVariable(
+  $dataDirectoryOverrideName, (Join-Path $smokeRoot "Release"), "Process")
 $smokeExe = Join-Path $smokeRoot "Release\repapertodo.exe"
 $stateFile = Join-Path $smokeRoot "Release\data.json"
 $primary = $null
@@ -574,6 +579,11 @@ $capsuleHoverVisibleWidth = 0
 $collapseAllMasterCapsule = $false
 $nativeMasterPersists = $false
 $expandedPaperProxy = $false
+$collapsedPaperCapsuleClickExpands = $false
+$paperCollapseThenCapsuleExpands = $false
+$paperCapsuleRepeatedCycles = $false
+$masterTogglePreservesExpandedPaper = $false
+$masterCapsuleRepeatedToggle = $false
 $masterCapsuleDragPersistence = $false
 $expandedProxyClickActivates = $false
 $expandedProxyDropRouting = $false
@@ -584,6 +594,7 @@ $capsuleDropRouting = $false
 $contentEditGeometryStable = $false
 $desktopPinnedPaperVisible = $false
 $desktopPinnedPaperInteractive = $false
+$pinnedCapsuleUnpinsAndForegrounds = $false
 $scriptStartedPath = Join-Path $smokeRoot "script-started.txt"
 $scriptCompletedPath = Join-Path $smokeRoot "script-completed.txt"
 
@@ -615,6 +626,37 @@ try {
   if (-not $desktopPinnedPaperInteractive) {
     throw "Policy smoke desktop-pinned paper was reparented or made click-through."
   }
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke desktop-pinned paper did not expose its edge capsule." -Condition {
+    [RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id,
+      "RePaperTodo Native Capsule [proxy:pinned-policy-paper]") -ne [IntPtr]::Zero
+  }
+  # The first registry frame can be followed immediately by the initial tray
+  # and paper-engine reconciliation. Reacquire the stable HWND rather than
+  # sending input to a startup-frame handle that may just have been replaced.
+  Start-Sleep -Milliseconds 1000
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke desktop-pinned edge capsule did not stabilize." -Condition {
+    [RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id,
+      "RePaperTodo Native Capsule [proxy:pinned-policy-paper]") -ne [IntPtr]::Zero
+  }
+  $desktopPinnedProxy = [RePaperTodoPolicyNative]::FindWindowByTitle(
+    [uint32]$primary.Id,
+    "RePaperTodo Native Capsule [proxy:pinned-policy-paper]")
+  [RePaperTodoPolicyNative]::ClickNativeCapsule($desktopPinnedProxy)
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke pinned capsule did not unpin and foreground its paper." -Condition {
+    if (-not [RePaperTodoPolicyNative]::IsVisible($pinnedPaper) -or
+        -not [RePaperTodoPolicyNative]::IsForeground($pinnedPaper)) {
+      return $false
+    }
+    try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
+    $savedPaper = @($saved.papers | Where-Object { $_.id -eq "pinned-policy-paper" })[0]
+    $null -ne $savedPaper -and -not [bool]$savedPaper.isPinnedToDesktop
+  }
+  if (-not [RePaperTodoPolicyNative]::IsVisibleInteractiveDesktopPaper($pinnedPaper)) {
+    throw "Policy smoke unpinned paper lost its top-level interactive window style."
+  }
+  $pinnedCapsuleUnpinsAndForegrounds = $true
   $desktopPinExit = Start-Process -FilePath $smokeExe -ArgumentList "--exit" -WorkingDirectory (Split-Path $smokeExe) -WindowStyle Hidden -PassThru
   if (-not $desktopPinExit.WaitForExit($ExitTimeoutSeconds * 1000)) {
     throw "Policy smoke desktop-pin preflight exit command did not return."
@@ -646,6 +688,12 @@ try {
           id = "reminder-policy-item"; text = "Open from adjacent bubble"; done = $false; order = 0
           dueAtLocal = (Get-Date).AddMinutes(-5).ToString("o")
         })
+      },
+      [ordered]@{
+        id = "collapsed-policy-paper"; type = "note"; title = "Collapsed QA"; x = 680.0; y = 220.0
+        width = 360.0; height = 280.0; isVisible = $true; alwaysOnTop = $false
+        isCollapsed = $true; isPinnedToDesktop = $false; items = @()
+        content = "A normal collapsed paper must expand from its own capsule."
       }
     )
     fullscreenTopmostMode = "avoid"; theme = "light"; colorScheme = "warm"
@@ -664,6 +712,18 @@ try {
   }
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke collapse-all did not expose exactly one master capsule for the queue." -Condition {
     [RePaperTodoPolicyNative]::CountCapsules([uint32]$primary.Id) -eq 1
+  }
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke expanded paper did not finish its initial window reconciliation." -Condition {
+    $candidate = [RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id, "Policy")
+    $candidate -ne [IntPtr]::Zero -and
+      [RePaperTodoPolicyNative]::CapsuleWindowWidth($candidate) -eq 360
+  }
+  $paper = [RePaperTodoPolicyNative]::FindWindowByTitle(
+    [uint32]$primary.Id, "Policy")
+  if ($paper -eq [IntPtr]::Zero -or
+      [RePaperTodoPolicyNative]::CapsuleWindowWidth($paper) -ne 360) {
+    throw "Policy smoke master collapse hid or resized an expanded paper."
   }
   Start-Sleep -Milliseconds 3000
   $masterCapsule = [RePaperTodoPolicyNative]::FindCapsule([uint32]$primary.Id)
@@ -698,6 +758,117 @@ try {
   }
   $nativeMasterPersists = $true
   $expandedPaperProxy = $true
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke could not identify the normal collapsed paper capsule." -Condition {
+    [RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id, "Collap") -ne [IntPtr]::Zero
+  }
+  $collapsedPaperCapsule = [RePaperTodoPolicyNative]::FindWindowByTitle(
+    [uint32]$primary.Id, "Collap")
+  [RePaperTodoPolicyNative]::ClickCapsule($collapsedPaperCapsule)
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke normal collapsed paper capsule did not expand its paper." -Condition {
+    $expandedCollapsedPaper = [RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id, "Collap")
+    $expandedCollapsedPaper -ne [IntPtr]::Zero -and
+      [RePaperTodoPolicyNative]::CapsuleWindowWidth($expandedCollapsedPaper) -eq 360
+  }
+  $collapsedPaperCapsuleClickExpands = $true
+  [RePaperTodoPolicyNative]::ClickNativeCapsule($nativeMaster)
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke master capsule did not collapse its child capsule queue on the second toggle." -Condition {
+    [RePaperTodoPolicyNative]::CountCapsules([uint32]$primary.Id) -eq 1
+  }
+  if (-not [RePaperTodoPolicyNative]::IsVisible($paper) -or
+      [RePaperTodoPolicyNative]::CapsuleWindowWidth($paper) -ne 360) {
+    throw "Policy smoke repeated master collapse changed the expanded paper surface."
+  }
+  $masterTogglePreservesExpandedPaper = $true
+  [RePaperTodoPolicyNative]::ClickNativeCapsule($nativeMaster)
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke master capsule did not restore all child capsules after a repeated toggle." -Condition {
+    ([RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]") -ne [IntPtr]::Zero) -and
+    ([RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id, "Long s") -ne [IntPtr]::Zero) -and
+    ([RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id, "Remind") -ne [IntPtr]::Zero)
+  }
+  $nativeMaster = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
+    [uint32]$primary.Id, "Native Capsule [master:")
+  $expandedProxy = [RePaperTodoPolicyNative]::FindWindowByTitle(
+    [uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]")
+  $masterCapsuleRepeatedToggle = $true
+
+  # Exercise the user-facing path: collapse the real Flutter paper from its
+  # header, then click the paper's own capsule HWND to restore the paper.
+  # This catches stale child-engine geometry and native capsule registries
+  # that seeded collapsed papers do not exercise.
+  [RePaperTodoPolicyNative]::ClickRelative($paper, 336, 24)
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke paper header collapse did not persist." -Condition {
+    try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
+    $savedPaper = @($saved.papers | Where-Object { $_.id -eq "policy-paper" })[0]
+    $null -ne $savedPaper -and [bool]$savedPaper.isCollapsed
+  }
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke collapsed paper HWND did not become a capsule." -Condition {
+    $collapsed = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Policy")
+    $collapsed -ne [IntPtr]::Zero -and
+      [RePaperTodoPolicyNative]::CapsuleWindowWidth($collapsed) -lt 220
+  }
+  $collapsed = [RePaperTodoPolicyNative]::FindWindowByTitle(
+    [uint32]$primary.Id, "Policy")
+  [RePaperTodoPolicyNative]::ClickCapsule($collapsed)
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke paper capsule did not restore the collapsed paper." -Condition {
+    try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
+    $savedPaper = @($saved.papers | Where-Object { $_.id -eq "policy-paper" })[0]
+    $expanded = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Policy")
+    $null -ne $savedPaper -and -not [bool]$savedPaper.isCollapsed -and
+      $expanded -ne [IntPtr]::Zero -and
+      [RePaperTodoPolicyNative]::CapsuleWindowWidth($expanded) -eq 360
+  }
+  $paperCollapseThenCapsuleExpands = $true
+  for ($cycle = 1; $cycle -le 3; $cycle++) {
+    $paper = [RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id, "Policy")
+    if ($paper -eq [IntPtr]::Zero -or
+        [RePaperTodoPolicyNative]::CapsuleWindowWidth($paper) -ne 360) {
+      $windows = [RePaperTodoPolicyNative]::VisibleWindowSummary([uint32]$primary.Id)
+      throw "Policy smoke repeated paper cycle $cycle could not reacquire the expanded paper HWND. Visible windows: $windows"
+    }
+    [RePaperTodoPolicyNative]::ClickRelative($paper, 336, 24)
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke repeated paper collapse cycle $cycle did not persist." -Condition {
+      try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
+      $savedPaper = @($saved.papers | Where-Object { $_.id -eq "policy-paper" })[0]
+      $null -ne $savedPaper -and [bool]$savedPaper.isCollapsed
+    }
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke repeated paper collapse cycle $cycle did not reach capsule geometry." -Condition {
+      $candidate = [RePaperTodoPolicyNative]::FindWindowByTitle(
+        [uint32]$primary.Id, "Policy")
+      $candidate -ne [IntPtr]::Zero -and
+        [RePaperTodoPolicyNative]::CapsuleWindowWidth($candidate) -lt 220
+    }
+    $collapsed = [RePaperTodoPolicyNative]::FindWindowByTitle(
+      [uint32]$primary.Id, "Policy")
+    [RePaperTodoPolicyNative]::ClickCapsule($collapsed)
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke repeated paper capsule cycle $cycle did not expand." -Condition {
+      try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
+      $savedPaper = @($saved.papers | Where-Object { $_.id -eq "policy-paper" })[0]
+      $expanded = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Policy")
+      $null -ne $savedPaper -and -not [bool]$savedPaper.isCollapsed -and
+        $expanded -ne [IntPtr]::Zero -and
+        [RePaperTodoPolicyNative]::CapsuleWindowWidth($expanded) -eq 360
+    }
+    $nativeMaster = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
+      [uint32]$primary.Id, "Native Capsule [master:")
+    [RePaperTodoPolicyNative]::ClickNativeCapsule($nativeMaster)
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke repeated master collapse cycle $cycle did not retract child capsules." -Condition {
+      [RePaperTodoPolicyNative]::CountCapsules([uint32]$primary.Id) -eq 1
+    }
+    [RePaperTodoPolicyNative]::ClickNativeCapsule($nativeMaster)
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke repeated master expand cycle $cycle did not restore child capsules." -Condition {
+      [RePaperTodoPolicyNative]::FindWindowByTitle(
+        [uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]") -ne [IntPtr]::Zero -and
+      [RePaperTodoPolicyNative]::FindWindowByTitle(
+        [uint32]$primary.Id, "Long s") -ne [IntPtr]::Zero
+    }
+  }
+  $paperCapsuleRepeatedCycles = $true
   [RePaperTodoPolicyNative]::DragCapsuleVertically($nativeMaster, 64)
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke native master drag did not persist the queue start margin." -Condition {
     try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
@@ -955,7 +1126,12 @@ try {
       capsuleHoverVisibleWidth = $capsuleHoverVisibleWidth
       collapseAllMasterCapsule = $collapseAllMasterCapsule
       nativeMasterPersists = $nativeMasterPersists
-      expandedPaperProxy = $expandedPaperProxy
+       expandedPaperProxy = $expandedPaperProxy
+       collapsedPaperCapsuleClickExpands = $collapsedPaperCapsuleClickExpands
+       paperCollapseThenCapsuleExpands = $paperCollapseThenCapsuleExpands
+       paperCapsuleRepeatedCycles = $paperCapsuleRepeatedCycles
+       masterTogglePreservesExpandedPaper = $masterTogglePreservesExpandedPaper
+      masterCapsuleRepeatedToggle = $masterCapsuleRepeatedToggle
       masterCapsuleDragPersistence = $masterCapsuleDragPersistence
       expandedProxyClickActivates = $expandedProxyClickActivates
       expandedProxyDropRouting = $expandedProxyDropRouting
@@ -966,6 +1142,7 @@ try {
       contentEditGeometryStable = $contentEditGeometryStable
       desktopPinnedPaperVisible = $desktopPinnedPaperVisible
       desktopPinnedPaperInteractive = $desktopPinnedPaperInteractive
+      pinnedCapsuleUnpinsAndForegrounds = $pinnedCapsuleUnpinsAndForegrounds
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $resultPath -Encoding ascii
   }
   Write-Host "Windows policy smoke passed: tray recovery, fullscreen avoidance, and long-running script capsules verified."
@@ -973,6 +1150,8 @@ try {
   $failure = $_
   throw
 } finally {
+  [Environment]::SetEnvironmentVariable(
+    $dataDirectoryOverrideName, $previousDataDirectoryOverride, "Process")
   if ($null -ne $fullscreen -and -not $fullscreen.HasExited) { Stop-Process -Id $fullscreen.Id -Force -ErrorAction SilentlyContinue }
   if ($null -ne $primary -and -not $primary.HasExited) { Stop-Process -Id $primary.Id -Force -ErrorAction SilentlyContinue }
   if ($null -eq $failure -and (Test-Path -LiteralPath $smokeRoot)) {

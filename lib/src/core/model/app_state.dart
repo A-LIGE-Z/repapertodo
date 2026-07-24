@@ -59,13 +59,13 @@ class AppState {
     this.deepCapsuleMonitorDeviceName = '',
     SyncSettings? sync,
     JsonMap? extra,
-  })  : papers = papers ?? <PaperData>[],
-        capsuleCollapseAllActiveQueues =
-            capsuleCollapseAllActiveQueues ?? <String, bool>{},
-        deepCapsuleQueueStartTopMargins =
-            deepCapsuleQueueStartTopMargins ?? <String, double>{},
-        sync = sync ?? SyncSettings(),
-        extra = extra ?? <String, Object?>{};
+  }) : papers = papers ?? <PaperData>[],
+       capsuleCollapseAllActiveQueues =
+           capsuleCollapseAllActiveQueues ?? <String, bool>{},
+       deepCapsuleQueueStartTopMargins =
+           deepCapsuleQueueStartTopMargins ?? <String, double>{},
+       sync = sync ?? SyncSettings(),
+       extra = extra ?? <String, Object?>{};
 
   static const _knownKeys = {
     'papers',
@@ -186,67 +186,108 @@ class AppState {
     final topBarNewNoteButton = retiredTopBarButtons is bool
         ? retiredTopBarButtons
         : boolValue(json['showTopBarNewNoteButton'], true);
-    final hideDeepCapsulesWhenCovered =
-        boolValue(json['hideDeepCapsulesWhenCovered'], false);
-    final hideDeepCapsulesWhenFullscreen =
-        boolValue(json['hideDeepCapsulesWhenFullscreen'], false);
+    final hideDeepCapsulesWhenCovered = boolValue(
+      json['hideDeepCapsulesWhenCovered'],
+      false,
+    );
+    final hideDeepCapsulesWhenFullscreen = boolValue(
+      json['hideDeepCapsulesWhenFullscreen'],
+      false,
+    );
 
     return AppState(
       papers: jsonMapList(json['papers']).map(PaperData.fromJson).toList(),
       theme: stringValue(json['theme'], 'system'),
       colorScheme: stringValue(json['colorScheme'], ColorSchemes.warm),
       customThemeColorHex: stringValue(json['customThemeColorHex'], ''),
-      markdownRenderMode:
-          stringValue(json['markdownRenderMode'], MarkdownRenderModes.enhanced),
-      todoVisualSize:
-          stringValue(json['todoVisualSize'], TodoVisualSizes.medium),
+      markdownRenderMode: stringValue(
+        json['markdownRenderMode'],
+        MarkdownRenderModes.enhanced,
+      ),
+      todoVisualSize: stringValue(
+        json['todoVisualSize'],
+        TodoVisualSizes.medium,
+      ),
       uiFontPreset: stringValue(json['uiFontPreset'], 'default'),
       systemFontFamilyName: stringValue(json['systemFontFamilyName'], ''),
-      externalMarkdownExtension:
-          stringValue(json['externalMarkdownExtension'], '.md'),
+      externalMarkdownExtension: stringValue(
+        json['externalMarkdownExtension'],
+        '.md',
+      ),
       zoom: doubleValue(json['zoom'], 1),
       useCapsuleMode: boolValue(json['useCapsuleMode'], true),
       useDeepCapsuleMode: boolValue(json['useDeepCapsuleMode'], true),
       showTopBarNewTodoButton: topBarNewTodoButton,
       showTopBarNewNoteButton: topBarNewNoteButton,
-      showTopBarExternalOpenButton:
-          boolValue(json['showTopBarExternalOpenButton'], true),
-      hidePapersFromWindowSwitcher:
-          boolValue(json['hidePapersFromWindowSwitcher'], false),
+      showTopBarExternalOpenButton: boolValue(
+        json['showTopBarExternalOpenButton'],
+        true,
+      ),
+      hidePapersFromWindowSwitcher: boolValue(
+        json['hidePapersFromWindowSwitcher'],
+        false,
+      ),
       enableTodoNoteLinks: boolValue(json['enableTodoNoteLinks'], true),
-      showTodoDueRelativeTime:
-          boolValue(json['showTodoDueRelativeTime'], false),
+      showTodoDueRelativeTime: boolValue(
+        json['showTodoDueRelativeTime'],
+        false,
+      ),
       todoDueYearDisplayMode: stringValue(
-          json['todoDueYearDisplayMode'], TodoDueYearDisplayModes.none),
+        json['todoDueYearDisplayMode'],
+        TodoDueYearDisplayModes.none,
+      ),
       todoLineSpacing: doubleValue(json['todoLineSpacing'], 1),
       noteLineSpacing: doubleValue(json['noteLineSpacing'], 1),
-      useTodoReminderInterval:
-          boolValue(json['useTodoReminderInterval'], false),
-      todoReminderIntervalValue:
-          intValue(json['todoReminderIntervalValue'], 10),
+      useTodoReminderInterval: boolValue(
+        json['useTodoReminderInterval'],
+        false,
+      ),
+      todoReminderIntervalValue: intValue(
+        json['todoReminderIntervalValue'],
+        10,
+      ),
       todoReminderIntervalUnit: stringValue(
-          json['todoReminderIntervalUnit'], TodoReminderIntervalUnits.minutes),
-      todoReminderScope:
-          stringValue(json['todoReminderScope'], TodoReminderScopes.all),
-      todoReminderBubbleDurationSeconds:
-          intValue(json['todoReminderBubbleDurationSeconds'], 5),
+        json['todoReminderIntervalUnit'],
+        TodoReminderIntervalUnits.minutes,
+      ),
+      todoReminderScope: stringValue(
+        json['todoReminderScope'],
+        TodoReminderScopes.all,
+      ),
+      todoReminderBubbleDurationSeconds: intValue(
+        json['todoReminderBubbleDurationSeconds'],
+        5,
+      ),
       showLinkedNoteName: boolValue(json['showLinkedNoteName'], false),
-      allowLongLinkedNoteTitles:
-          boolValue(json['allowLongLinkedNoteTitles'], false),
-      hideLinkedNotesFromCapsules:
-          boolValue(json['hideLinkedNotesFromCapsules'], false),
-      runLinkedScriptCapsulesOnClick:
-          boolValue(json['runLinkedScriptCapsulesOnClick'], false),
+      allowLongLinkedNoteTitles: boolValue(
+        json['allowLongLinkedNoteTitles'],
+        false,
+      ),
+      hideLinkedNotesFromCapsules: boolValue(
+        json['hideLinkedNotesFromCapsules'],
+        false,
+      ),
+      runLinkedScriptCapsulesOnClick: boolValue(
+        json['runLinkedScriptCapsulesOnClick'],
+        false,
+      ),
       maxTitleLength: intValue(json['maxTitleLength'], 6),
       useCapsuleCollapseAll: boolValue(json['useCapsuleCollapseAll'], false),
-      capsuleCollapseAllActive:
-          boolValue(json['capsuleCollapseAllActive'], false),
-      capsuleCollapseAllActiveQueues:
-          boolMap(json['capsuleCollapseAllActiveQueues']),
-      showDeepCapsuleWhileExpanded:
-          boolValue(json['showDeepCapsuleWhileExpanded'], true),
-      collapseExpandedDeepCapsuleOnClick:
-          boolValue(json['collapseExpandedDeepCapsuleOnClick'], false),
+      capsuleCollapseAllActive: boolValue(
+        json['capsuleCollapseAllActive'],
+        false,
+      ),
+      capsuleCollapseAllActiveQueues: boolMap(
+        json['capsuleCollapseAllActiveQueues'],
+      ),
+      showDeepCapsuleWhileExpanded: boolValue(
+        json['showDeepCapsuleWhileExpanded'],
+        true,
+      ),
+      collapseExpandedDeepCapsuleOnClick: boolValue(
+        json['collapseExpandedDeepCapsuleOnClick'],
+        false,
+      ),
       hideDeepCapsulesWhenCovered: hideDeepCapsulesWhenCovered,
       hideDeepCapsulesWhenFullscreen: hideDeepCapsulesWhenFullscreen,
       enableAnimations: boolValue(json['enableAnimations'], true),
@@ -255,19 +296,30 @@ class AppState {
       pinnedTodoHotKey: stringValue(json['pinnedTodoHotKey'], ''),
       pinnedNoteHotKey: stringValue(json['pinnedNoteHotKey'], ''),
       fullscreenTopmostMode: stringValue(
-          json['fullscreenTopmostMode'], FullscreenTopmostModes.avoid),
-      usePersistentPowerShellProcess:
-          boolValue(json['usePersistentPowerShellProcess'], false),
+        json['fullscreenTopmostMode'],
+        FullscreenTopmostModes.avoid,
+      ),
+      usePersistentPowerShellProcess: boolValue(
+        json['usePersistentPowerShellProcess'],
+        false,
+      ),
       preferPowerShell7: boolValue(json['preferPowerShell7'], true),
       hideScriptRunWindow: boolValue(json['hideScriptRunWindow'], true),
-      deepCapsuleStartTopMargin:
-          doubleValue(json['deepCapsuleStartTopMargin'], 48),
-      deepCapsuleQueueStartTopMargins:
-          doubleMap(json['deepCapsuleQueueStartTopMargins']),
-      deepCapsuleSide:
-          stringValue(json['deepCapsuleSide'], DeepCapsuleSides.right),
-      deepCapsuleMonitorDeviceName:
-          stringValue(json['deepCapsuleMonitorDeviceName'], ''),
+      deepCapsuleStartTopMargin: doubleValue(
+        json['deepCapsuleStartTopMargin'],
+        48,
+      ),
+      deepCapsuleQueueStartTopMargins: doubleMap(
+        json['deepCapsuleQueueStartTopMargins'],
+      ),
+      deepCapsuleSide: stringValue(
+        json['deepCapsuleSide'],
+        DeepCapsuleSides.right,
+      ),
+      deepCapsuleMonitorDeviceName: stringValue(
+        json['deepCapsuleMonitorDeviceName'],
+        '',
+      ),
       sync: syncJson == null ? null : SyncSettings.fromJson(syncJson),
       extra: preserveUnknown(json, _knownKeys),
     )..normalize(storageCompatibility: true);
@@ -280,26 +332,35 @@ class AppState {
     markdownRenderMode = MarkdownRenderModes.normalize(markdownRenderMode);
     todoVisualSize = TodoVisualSizes.normalize(todoVisualSize);
     uiFontPreset = UiFontPresets.normalize(uiFontPreset);
-    systemFontFamilyName = normalizeSystemFontFamilyName(
-      systemFontFamilyName,
-    );
+    systemFontFamilyName = normalizeSystemFontFamilyName(systemFontFamilyName);
     zoom = _normalizeZoom(zoom);
-    todoDueYearDisplayMode =
-        TodoDueYearDisplayModes.normalize(todoDueYearDisplayMode);
+    todoDueYearDisplayMode = TodoDueYearDisplayModes.normalize(
+      todoDueYearDisplayMode,
+    );
     todoLineSpacing = _normalizeLineSpacing(todoLineSpacing);
     noteLineSpacing = _normalizeLineSpacing(noteLineSpacing);
-    todoReminderIntervalValue =
-        _normalizePositiveIntRange(todoReminderIntervalValue, 10, 1, 240);
-    todoReminderIntervalUnit =
-        TodoReminderIntervalUnits.normalize(todoReminderIntervalUnit);
+    todoReminderIntervalValue = _normalizePositiveIntRange(
+      todoReminderIntervalValue,
+      10,
+      1,
+      240,
+    );
+    todoReminderIntervalUnit = TodoReminderIntervalUnits.normalize(
+      todoReminderIntervalUnit,
+    );
     todoReminderScope = TodoReminderScopes.normalize(todoReminderScope);
     todoReminderBubbleDurationSeconds = _normalizePositiveIntRange(
-        todoReminderBubbleDurationSeconds, 5, 1, 600);
+      todoReminderBubbleDurationSeconds,
+      5,
+      1,
+      600,
+    );
     maxTitleLength = PaperTitles.normalizeMaxTitleLength(maxTitleLength);
     pinnedTodoHotKey = _normalizeHotKeyForSettings(pinnedTodoHotKey);
     pinnedNoteHotKey = _normalizeHotKeyForSettings(pinnedNoteHotKey);
-    fullscreenTopmostMode =
-        FullscreenTopmostModes.normalize(fullscreenTopmostMode);
+    fullscreenTopmostMode = FullscreenTopmostModes.normalize(
+      fullscreenTopmostMode,
+    );
     if (!useCapsuleMode) {
       useDeepCapsuleMode = false;
     }
@@ -314,25 +375,29 @@ class AppState {
       capsuleCollapseAllActive = false;
       capsuleCollapseAllActiveQueues = <String, bool>{};
     } else {
-      capsuleCollapseAllActiveQueues =
-          _normalizeCollapseAllActiveQueues(capsuleCollapseAllActiveQueues);
+      capsuleCollapseAllActiveQueues = _normalizeCollapseAllActiveQueues(
+        capsuleCollapseAllActiveQueues,
+      );
       if (capsuleCollapseAllActiveQueues.isNotEmpty) {
         capsuleCollapseAllActive = true;
       }
     }
     deepCapsuleSide = DeepCapsuleSides.normalize(deepCapsuleSide);
-    deepCapsuleMonitorDeviceName =
-        normalizeCapsuleMonitorDeviceName(deepCapsuleMonitorDeviceName);
+    deepCapsuleMonitorDeviceName = normalizeCapsuleMonitorDeviceName(
+      deepCapsuleMonitorDeviceName,
+    );
     final keepDeepCapsuleStartTopMargins =
         useCapsuleMode && useDeepCapsuleMode && useCapsuleCollapseAll;
     if (storageCompatibility && !keepDeepCapsuleStartTopMargins) {
       deepCapsuleStartTopMargin = 48;
       deepCapsuleQueueStartTopMargins = <String, double>{};
     } else {
-      deepCapsuleStartTopMargin =
-          deepCapsuleStartTopMargin.clamp(8, 10000).toDouble();
-      deepCapsuleQueueStartTopMargins =
-          _normalizeQueueStartTopMargins(deepCapsuleQueueStartTopMargins);
+      deepCapsuleStartTopMargin = deepCapsuleStartTopMargin
+          .clamp(8, 10000)
+          .toDouble();
+      deepCapsuleQueueStartTopMargins = _normalizeQueueStartTopMargins(
+        deepCapsuleQueueStartTopMargins,
+      );
     }
     externalMarkdownExtension = _normalizeExtension(externalMarkdownExtension);
     sync.normalize();
@@ -363,8 +428,10 @@ class AppState {
         paper.isCollapsed = false;
       }
     }
-    final noteIds =
-        papers.where((paper) => paper.isNote).map((paper) => paper.id).toSet();
+    final noteIds = papers
+        .where((paper) => paper.isNote)
+        .map((paper) => paper.id)
+        .toSet();
     final linkedNoteIds = <String>{};
     for (final paper in papers) {
       if (!paper.isTodo) {
@@ -496,16 +563,18 @@ class AppState {
     setCapsuleCollapseAllActiveFor(paper, !active);
   }
 
-  void toggleCapsuleCollapseAllQueue(String queueKey) {
+  bool toggleCapsuleCollapseAllQueue(String queueKey) {
     if (!useCapsuleMode || !useCapsuleCollapseAll || !useDeepCapsuleMode) {
-      return;
+      return false;
     }
     final normalizedQueueKey = queueKey.trim();
     if (normalizedQueueKey.isEmpty ||
-        !papers.any((paper) =>
-            paper.isVisible &&
-            capsuleQueueKeyFor(paper) == normalizedQueueKey)) {
-      return;
+        !papers.any(
+          (paper) =>
+              paper.isVisible &&
+              capsuleQueueKeyFor(paper) == normalizedQueueKey,
+        )) {
+      return false;
     }
     final active = capsuleCollapseAllActiveQueues[normalizedQueueKey] ?? false;
     if (active) {
@@ -514,6 +583,7 @@ class AppState {
       capsuleCollapseAllActiveQueues[normalizedQueueKey] = true;
     }
     capsuleCollapseAllActive = capsuleCollapseAllActiveQueues.isNotEmpty;
+    return true;
   }
 
   JsonMap toJson() {
@@ -580,8 +650,9 @@ String _normalizeColorHex(String value) {
   if (trimmed.isEmpty) {
     return '';
   }
-  final withoutPrefix =
-      trimmed.startsWith('#') ? trimmed.substring(1) : trimmed;
+  final withoutPrefix = trimmed.startsWith('#')
+      ? trimmed.substring(1)
+      : trimmed;
   if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(withoutPrefix)) {
     return '';
   }
@@ -603,12 +674,7 @@ double _normalizeZoom(double value) {
   return value.clamp(0.5, 1.5).toDouble();
 }
 
-int _normalizePositiveIntRange(
-  int value,
-  int fallback,
-  int min,
-  int max,
-) {
+int _normalizePositiveIntRange(int value, int fallback, int min, int max) {
   final normalized = value <= 0 ? fallback : value;
   return normalized.clamp(min, max).toInt();
 }
@@ -697,7 +763,9 @@ String? _normalizeQueueKey(String? key) {
     return _queueKey('', value);
   }
   return _queueKey(
-      value.substring(0, separator), value.substring(separator + 1));
+    value.substring(0, separator),
+    value.substring(separator + 1),
+  );
 }
 
 String _queueKey(String? monitorDeviceName, String? side) {
