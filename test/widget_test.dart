@@ -16314,6 +16314,94 @@ void main() {
     expect(secondPastedEntrance, findsNothing);
   });
 
+  testWidgets(
+      'completing a middle todo moves it without duplicate editable rows and clears due',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(620, 520));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const due = '2099-07-18T18:30:00';
+    final paper = PaperData(
+      id: 'completion-sort-paper',
+      type: PaperTypes.todo,
+      title: 'Completion order',
+      width: 560,
+      height: 440,
+      items: [
+        PaperItem(id: 'completion-first', text: 'First'),
+        PaperItem(
+          id: 'completion-middle',
+          text: 'Middle',
+          dueAtLocal: due,
+        ),
+        PaperItem(id: 'completion-last', text: 'Last'),
+      ],
+    );
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        enableAnimations: true,
+        moveCompletedTodosToBottom: true,
+        papers: [paper],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('completion-sort-paper-completion-middle-checkbox'),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      controller.state.papers.single.items.map((item) => item.id),
+      ['completion-first', 'completion-last', 'completion-middle'],
+    );
+    expect(controller.state.papers.single.items.last.done, true);
+    expect(controller.state.papers.single.items.last.dueAtLocal, isNull);
+    expect(
+      find.byKey(
+        const ValueKey(
+          'completion-sort-paper-completion-middle-departure-snapshot-row',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const ValueKey(
+          'completion-sort-paper-completion-middle-departure-snapshot-row',
+        ),
+      ),
+      findsNothing,
+    );
+
+    // Undo restores both the original order and the due value.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(
+      controller.state.papers.single.items.map((item) => item.id),
+      ['completion-first', 'completion-middle', 'completion-last'],
+    );
+    expect(controller.state.papers.single.items[1].done, false);
+    expect(controller.state.papers.single.items[1].dueAtLocal, due);
+  });
+
   testWidgets('splits pasted todo lists from extra columns like PaperTodo',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -21407,6 +21495,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     final restoreCount = platform.paperWindows.restoredTitleSnapshots.length;
+    final registryCount =
+        platform.paperWindows.registryCollapseAllSnapshots.length;
     final before = controller.state.papers
         .map((paper) => <Object?>[
               paper.isVisible,
@@ -21430,9 +21520,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
 
     expect(controller.state.capsuleCollapseAllActive, false);
+    expect(platform.paperWindows.restoredTitleSnapshots.length, restoreCount);
     expect(
-      platform.paperWindows.restoredTitleSnapshots.length,
-      greaterThan(restoreCount),
+      platform.paperWindows.registryCollapseAllSnapshots.length,
+      greaterThan(registryCount),
     );
     expect(store.savedState.capsuleCollapseAllActive, false);
     expect(
@@ -21500,7 +21591,7 @@ void main() {
       RePaperTodoApp(controller: controller, store: store),
     );
     await tester.pumpAndSettle();
-    final before = platform.paperWindows.restoredCollapseAllSnapshots.length;
+    final before = platform.paperWindows.registryCollapseAllSnapshots.length;
 
     // This is the sequence produced by a fast real double click.  The first
     // click must be rendered as a collapse before the second expands it again;
@@ -21525,7 +21616,7 @@ void main() {
 
     expect(controller.state.capsuleCollapseAllActive, true);
     expect(
-      platform.paperWindows.restoredCollapseAllSnapshots.sublist(before),
+      platform.paperWindows.registryCollapseAllSnapshots.sublist(before),
       [false, true],
     );
     expect(store.savedState.capsuleCollapseAllActive, true);
@@ -23548,6 +23639,7 @@ class _RecordingTrayHost extends NoopTrayHost {
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final restoredTitleSnapshots = <List<String>>[];
   final restoredCollapseAllSnapshots = <bool>[];
+  final registryCollapseAllSnapshots = <bool>[];
   final updatedTitles = <String>[];
   final shownTitles = <String>[];
   final hiddenTitles = <String>[];
@@ -23609,6 +23701,11 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
       state.papers.map((paper) => paper.title).toList(),
     );
     restoredCollapseAllSnapshots.add(state.capsuleCollapseAllActive);
+  }
+
+  @override
+  Future<void> refreshSurfaceRegistry(AppState state) async {
+    registryCollapseAllSnapshots.add(state.capsuleCollapseAllActive);
   }
 
   @override

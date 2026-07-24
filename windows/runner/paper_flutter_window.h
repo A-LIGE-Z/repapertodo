@@ -138,6 +138,7 @@ class PaperFlutterWindow : public Win32Window {
   LONG paper_shadow_top_ = 0;
   bool paper_shadow_visible_ = false;
   bool paper_shadow_z_order_dirty_ = true;
+  bool paper_shadow_refresh_pending_ = false;
   bool paper_shadow_dark_ = false;
   bool rendered_paper_shadow_dark_ = false;
   HWND reminder_bubble_ = nullptr;

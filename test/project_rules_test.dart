@@ -4032,6 +4032,10 @@ void main() {
     expect(nativeCapsule, contains('IsPointerOverWindow()'));
     expect(
       nativeCapsule,
+      contains('RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE'),
+    );
+    expect(
+      nativeCapsule,
       contains('!visible || !z_order_initialized_ ||'),
     );
     expect(
@@ -4045,6 +4049,15 @@ void main() {
       contains('!in_size_move_ && !queue_drag_offset_active_'),
     );
     expect(paperWindow, contains('paper_shadow_z_order_dirty_'));
+    expect(
+      paperWindow,
+      contains('kDeferredPaperShadowRefreshMessage'),
+    );
+    expect(paperWindow, contains('SetNextFrameCallback('));
+    expect(
+      paperWindow,
+      contains('(visible ? 0 : SWP_SHOWWINDOW)'),
+    );
     expect(runner, contains('kFullscreenTopmostRefreshIntervalMs = 250'));
     expect(paperWindowApp, contains("'capsuleHoverChanged'"));
     expect(paperWindowHeader, contains('bool in_size_move_ = false;'));

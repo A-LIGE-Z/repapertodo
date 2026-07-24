@@ -14,8 +14,8 @@ class RePaperTodoController {
   RePaperTodoController({
     required AppState initialState,
     required PlatformServices platform,
-  }) : state = initialState,
-       _platform = platform {
+  })  : state = initialState,
+        _platform = platform {
     state.normalize();
   }
 
@@ -247,6 +247,16 @@ class RePaperTodoController {
     final surfaceState = AppState.fromJson((snapshot ?? state).toJson())
       ..normalize();
     await _platform.paperWindows.restoreAll(surfaceState);
+  }
+
+  Future<void> refreshSurfaceRegistry({AppState? snapshot}) async {
+    // Registry-only updates are used for capsule-queue state that must not
+    // move, show, hide, activate, or otherwise restack any paper HWND. Keep
+    // the same immutable snapshot guarantee as [refreshPaperSurfaces] so
+    // rapid master-capsule clicks are still applied in pointer order.
+    final surfaceState = AppState.fromJson((snapshot ?? state).toJson())
+      ..normalize();
+    await _platform.paperWindows.refreshSurfaceRegistry(surfaceState);
   }
 
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {
@@ -744,7 +754,7 @@ class RePaperTodoController {
         _paperIdsPendingWorkAreaRescue.remove(paper.id) && paper.isVisible;
     final clampAwayFromDeepCapsuleStrip =
         _paperIdsPendingDeepCapsuleStripClamp.remove(paper.id) &&
-        _canClampNewPaperAwayFromDeepCapsuleStrip(paper);
+            _canClampNewPaperAwayFromDeepCapsuleStrip(paper);
     if (!rescueIntoWorkArea && !clampAwayFromDeepCapsuleStrip) {
       return;
     }
@@ -899,8 +909,8 @@ class RePaperTodoController {
     final targetX = rightX <= maxX
         ? rightX
         : leftX >= minX
-        ? leftX
-        : rightX.clamp(minX, maxX).toDouble();
+            ? leftX
+            : rightX.clamp(minX, maxX).toDouble();
 
     final minY = area.y + margin;
     final maxY = math.max(minY, area.bottom - noteHeight - margin);

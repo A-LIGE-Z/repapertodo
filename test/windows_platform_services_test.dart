@@ -233,6 +233,8 @@ void main() {
         'isCollapsed': false,
         'capsuleHiddenByMaster': false,
         'capsuleTopIsWorkAreaRelative': false,
+        'capsuleMasterTop': 48.0,
+        'capsuleMasterTopIsWorkAreaRelative': true,
         'useDeepCapsuleMode': true,
         'capsuleSide': DeepCapsuleSides.left,
         'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
@@ -955,6 +957,8 @@ void main() {
         'isCollapsed': false,
         'capsuleHiddenByMaster': false,
         'capsuleTopIsWorkAreaRelative': false,
+        'capsuleMasterTop': 48.0,
+        'capsuleMasterTopIsWorkAreaRelative': true,
         'useDeepCapsuleMode': true,
         'capsuleSide': '',
         'capsuleMonitorDeviceName': '',
@@ -979,6 +983,8 @@ void main() {
         'isCollapsed': true,
         'capsuleHiddenByMaster': false,
         'capsuleTopIsWorkAreaRelative': true,
+        'capsuleMasterTop': 48.0,
+        'capsuleMasterTopIsWorkAreaRelative': true,
         'useDeepCapsuleMode': true,
         'capsuleSide': DeepCapsuleSides.left,
         'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
@@ -1093,6 +1099,8 @@ void main() {
         'isCollapsed': false,
         'capsuleHiddenByMaster': false,
         'capsuleTopIsWorkAreaRelative': false,
+        'capsuleMasterTop': 48.0,
+        'capsuleMasterTopIsWorkAreaRelative': true,
         'useDeepCapsuleMode': true,
         'capsuleSide': '',
         'capsuleMonitorDeviceName': '',
@@ -1117,6 +1125,8 @@ void main() {
         'isCollapsed': true,
         'capsuleHiddenByMaster': false,
         'capsuleTopIsWorkAreaRelative': false,
+        'capsuleMasterTop': 48.0,
+        'capsuleMasterTopIsWorkAreaRelative': true,
         'useDeepCapsuleMode': true,
         'capsuleSide': DeepCapsuleSides.left,
         'capsuleMonitorDeviceName': r'\\.\DISPLAY2',
@@ -1494,7 +1504,13 @@ void main() {
           .toList();
       expect(collapsedProxies, hasLength(2));
       expect(
-        collapsedProxies.every((surface) => surface['isVisible'] == false),
+        collapsedProxies.every((surface) => surface['isVisible'] == true),
+        true,
+      );
+      expect(
+        collapsedProxies.every(
+          (surface) => surface['capsuleHiddenByMaster'] == true,
+        ),
         true,
       );
       expect(collapsedMaster, containsPair('kind', 'master'));

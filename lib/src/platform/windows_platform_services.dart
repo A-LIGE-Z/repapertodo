@@ -962,6 +962,8 @@ List<Map<String, Object?>> _paperSurfaceRegistryEntries(
     final queueKey = state.capsuleQueueKeyFor(paper);
     final queueY = queueSlots[queueKey]?[paper.id];
     final collapseAllActive = state.isCapsuleCollapseAllActiveFor(paper);
+    final masterTop = state.deepCapsuleQueueStartTopMargins[queueKey] ??
+        state.deepCapsuleStartTopMargin;
     final fallbackNumber = typeCounts.update(
       PaperTypes.normalize(paper.type),
       (value) => value + 1,
@@ -975,6 +977,7 @@ List<Map<String, Object?>> _paperSurfaceRegistryEntries(
         fallbackNumber: fallbackNumber,
         capsuleHiddenByMaster: collapseAllActive && paper.isCollapsed,
         capsuleY: paper.isCollapsed ? queueY : null,
+        capsuleMasterTop: masterTop,
       ),
     );
   }
@@ -1114,7 +1117,13 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(
         // Keep the proxy HWND alive while the master retracts its queue. A
         // visibility transition is cheaper and visually stable; removing the
         // entry destroys/recreates the native capsule on every master click.
-        'isVisible': paper.isVisible && !collapseAllActive,
+        // Keep proxy HWNDs alive while the master retracts/releases the
+        // queue. The native surface animates the transition; removing the
+        // entry would destroy it and reintroduce a one-frame flash.
+        'isVisible': paper.isVisible,
+        'capsuleHiddenByMaster': collapseAllActive,
+        'capsuleMasterTop': startTop,
+        'capsuleMasterTopIsWorkAreaRelative': true,
         // Respect PaperTodo's edge-capsule preference.  A desktop-pinned
         // paper always uses the capsule as its unpin/activate escape route;
         // otherwise only the explicit "click again to retract" setting may
@@ -1140,6 +1149,7 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
   TrayMenuLabels? labels,
   required int fallbackNumber,
   required bool capsuleHiddenByMaster,
+  required double capsuleMasterTop,
   double? capsuleY,
 }) {
   final title = PaperTitles.shorten(
@@ -1165,6 +1175,8 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
     'isCollapsed': paper.isCollapsed,
     'capsuleHiddenByMaster': capsuleHiddenByMaster,
     'capsuleTopIsWorkAreaRelative': capsuleY != null,
+    'capsuleMasterTop': capsuleMasterTop,
+    'capsuleMasterTopIsWorkAreaRelative': true,
     'useDeepCapsuleMode': state.useCapsuleMode && state.useDeepCapsuleMode,
     'capsuleSide': paper.capsuleSide,
     'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,

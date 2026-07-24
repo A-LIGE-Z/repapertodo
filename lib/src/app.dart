@@ -2187,7 +2187,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
           'queuePaperCount': queuePaperCount,
         },
       );
-      await controller.refreshPaperSurfaces(snapshot: snapshot);
+      // A master capsule changes only the capsule queue. A full restore also
+      // reapplies paper bounds, visibility and z-order, which makes otherwise
+      // stationary cards flash when the queue is collapsed or expanded.
+      await controller.refreshSurfaceRegistry(snapshot: snapshot);
       await _saveState();
       await UsageLog.instance.record(
         'capsule',
@@ -10991,17 +10994,142 @@ class _TodoEditorState extends State<_TodoEditor> {
           duration: departure.duration,
           slideDistance: departure.slideDistance,
           onFinished: () => _finishDepartingTodoGroup(departure),
-          child: _todoRow(
+          child: _todoDepartureSnapshotRow(
             context: context,
             item: departure.item,
             itemTextStyle: itemTextStyle,
             visualSpec: visualSpec,
-            compactActions: compactActions,
           ),
         ),
       );
     }
     return rows;
+  }
+
+  Widget _todoDepartureSnapshotRow({
+    required BuildContext context,
+    required PaperItem item,
+    required TextStyle? itemTextStyle,
+    required _TodoVisualSpec visualSpec,
+  }) {
+    final mobileBoard = !widget.standaloneSurface &&
+        MediaQuery.sizeOf(context).shortestSide < 600;
+    final leadingExtent = mobileBoard ? 48.0 : visualSpec.checkColumnWidth;
+    final paperColors = PaperTodoThemeColors.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final texts = <String>[item.text, ...item.todoExtraColumns];
+    final textStyle = itemTextStyle?.copyWith(
+      color: item.done ? paperColors.brightWeakText : colorScheme.onSurface,
+      decoration: item.done ? TextDecoration.lineThrough : null,
+      decorationColor: paperColors.brightWeakText.withValues(alpha: 0.8),
+    );
+
+    Widget textColumn(int index) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(minHeight: visualSpec.rowMinHeight),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: index == 0
+                ? visualSpec.mainContentPadding
+                : visualSpec.extraContentPadding,
+            child: Text(
+              index < texts.length ? texts[index] : '',
+              style: textStyle,
+              softWrap: true,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final columns = LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < visualSpec.checkColumnWidth) {
+          return SizedBox(height: visualSpec.rowMinHeight);
+        }
+        if (item.todoColumnCount <= 1) {
+          return textColumn(0);
+        }
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var index = 0; index < item.todoColumnCount; index++) ...[
+                if (index > 0)
+                  SizedBox(
+                    width: _todoColumnSplitterWidth,
+                    child: CustomPaint(
+                      painter: _TodoColumnSeparatorPainter(
+                        paperColors.paperBorder.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  flex: _columnFlex(item, index),
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      left: index == 0 ? 0 : 6,
+                      right: index == item.todoColumnCount - 1 ? 0 : 3,
+                    ),
+                    child: textColumn(index),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+    final dueAt = parsePaperTodoDueAtLocal(item.dueAtLocal);
+
+    return Padding(
+      key: ValueKey(
+        '${widget.paper.id}-${item.id}-departure-snapshot-row',
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          border: Border.all(
+            color: paperColors.tint.withValues(
+              alpha: Theme.of(context).brightness == Brightness.dark
+                  ? 18 / 255
+                  : 12 / 255,
+            ),
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox.square(
+                dimension: leadingExtent,
+                child: Center(
+                  child: Transform.scale(
+                    scale: 16 / 18,
+                    child: Checkbox(value: item.done, onChanged: null),
+                  ),
+                ),
+              ),
+              Expanded(child: columns),
+              if (dueAt != null) ...[
+                const SizedBox(width: 4),
+                Text(
+                  _formatAbsoluteDueDate(dueAt),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: paperColors.weakText,
+                        fontSize: 10,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _finishDepartingTodoGroup(_DepartingTodoRow departure) {
@@ -11032,6 +11160,19 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   void _clearEnteringTodoRows() {
     _enteringTodoRows.clear();
+  }
+
+  void _clearTodoRowAnimations(String itemId) {
+    _enteringTodoRows.remove(itemId);
+    final groupTokens = _departingTodoRows
+        .where((departure) => departure.item.id == itemId)
+        .map((departure) => departure.groupToken)
+        .toSet();
+    _departingTodoRows.removeWhere(
+      (departure) =>
+          departure.item.id == itemId ||
+          groupTokens.contains(departure.groupToken),
+    );
   }
 
   Widget _todoReorderDropTarget({
@@ -11518,8 +11659,10 @@ class _TodoEditorState extends State<_TodoEditor> {
     _pushTodoUndoSnapshot();
     var moved = false;
     setState(() {
-      _clearEnteringTodoRows();
-      _clearDepartingTodoRows();
+      // Do not interrupt unrelated row animations. The previous implementation
+      // cleared every entrance/departure on each checkbox click, which made
+      // simultaneous completions visibly snap and flicker.
+      _clearTodoRowAnimations(item.id);
       item.done = value;
       if (value) {
         item.dueAtLocal = null;

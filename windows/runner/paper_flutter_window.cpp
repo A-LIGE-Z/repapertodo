@@ -192,6 +192,7 @@ void ActivatePaperWindow(HWND window, bool always_on_top) {
   }
 }
 constexpr UINT kDeferredPaperActionMessage = WM_APP + 0x351;
+constexpr UINT kDeferredPaperShadowRefreshMessage = WM_APP + 0x352;
 
 bool IsSystemPaperThemeDark() {
   DWORD light_mode = 1;
@@ -2365,6 +2366,7 @@ void PaperFlutterWindow::OnDestroy() {
   }
   capsule_animation_active_ = false;
   queue_drag_animation_active_ = false;
+  paper_shadow_refresh_pending_ = false;
   DestroyPaperShadowWindow();
   HideReminderBubble();
   channel_.reset();
@@ -2401,6 +2403,12 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       }
       return 0;
     }
+    case kDeferredPaperShadowRefreshMessage:
+      if (paper_shadow_refresh_pending_ && !in_size_move_) {
+        paper_shadow_refresh_pending_ = false;
+        UpdatePaperShadowWindow(true);
+      }
+      return 0;
     case WM_CLOSE:
       HidePaper();
       SendEvent("closeRequested", flutter::EncodableMap{
@@ -2428,6 +2436,7 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       break;
     case WM_ENTERSIZEMOVE:
       in_size_move_ = true;
+      paper_shadow_refresh_pending_ = false;
       // The shadow is a separate layered HWND. Rebuilding its DIB for every
       // interactive resize frame exposes a transient black rectangle on
       // Windows 10/11. Keep the paper itself live and restore one freshly
@@ -2436,7 +2445,24 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       break;
     case WM_EXITSIZEMOVE:
       in_size_move_ = false;
-      UpdatePaperShadowWindow(true);
+      // Wait for Flutter's final resized frame before showing the separate
+      // layered shadow again. Showing the shadow immediately can expose it
+      // around one stale/black swap-chain frame at pointer release.
+      HidePaperShadowWindow();
+      paper_shadow_refresh_pending_ = true;
+      if (flutter_controller_ && flutter_controller_->engine()) {
+        const HWND target_window = window;
+        flutter_controller_->engine()->SetNextFrameCallback(
+            [target_window]() {
+              if (IsWindow(target_window)) {
+                PostMessageW(target_window,
+                             kDeferredPaperShadowRefreshMessage, 0, 0);
+              }
+            });
+        flutter_controller_->ForceRedraw();
+      } else {
+        PostMessageW(window, kDeferredPaperShadowRefreshMessage, 0, 0);
+      }
       if (surface_initialized_) {
         if (collapsed_ && deep_capsule_mode_) {
           SendCapsuleDropped();
@@ -3608,12 +3634,7 @@ void PaperFlutterWindow::RefreshZOrder() {
     paper_shadow_z_order_dirty_ = true;
     return;
   }
-  if (!IsWindowVisible(window)) {
-    // Revealing a capsule (including a master-toggle reveal) must not activate
-    // the child HWND or steal the foreground window. SW_SHOWNORMAL caused a
-    // visible flash and a z-order jump on fast master clicks.
-    ShowWindow(window, SW_SHOWNOACTIVATE);
-  }
+  const bool visible = IsWindowVisible(window) != FALSE;
   RemoveTaskbarButton(window);
   if (pinned_to_desktop_) {
     // Keep pinned papers as ordinary top-level windows. Parenting them to a
@@ -3631,10 +3652,11 @@ void PaperFlutterWindow::RefreshZOrder() {
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
                        SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
-    if (!z_order_initialized_ || !z_order_pinned_) {
+    if (!visible || !z_order_initialized_ || !z_order_pinned_) {
       SetWindowPos(window, HWND_BOTTOM, 0, 0, 0, 0,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                       SWP_NOOWNERZORDER);
+                       SWP_NOOWNERZORDER |
+                       (visible ? 0 : SWP_SHOWWINDOW));
       z_order_initialized_ = true;
       z_order_pinned_ = true;
       z_order_topmost_ = false;
@@ -3646,10 +3668,15 @@ void PaperFlutterWindow::RefreshZOrder() {
   const HWND z_order =
       always_on_top_ && !fullscreen_blocked_ ? HWND_TOPMOST : HWND_NOTOPMOST;
   const bool topmost = z_order == HWND_TOPMOST;
-  if (!z_order_initialized_ || z_order_pinned_ || z_order_topmost_ != topmost) {
+  if (!visible || !z_order_initialized_ || z_order_pinned_ ||
+      z_order_topmost_ != topmost) {
+    // Showing and assigning z-order in one SetWindowPos transaction avoids a
+    // transient default-z-order frame when a hidden capsule is released by
+    // the master capsule.
     SetWindowPos(window, z_order, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                     SWP_NOOWNERZORDER);
+                     SWP_NOOWNERZORDER |
+                     (visible ? 0 : SWP_SHOWWINDOW));
     z_order_initialized_ = true;
     z_order_pinned_ = false;
     z_order_topmost_ = topmost;

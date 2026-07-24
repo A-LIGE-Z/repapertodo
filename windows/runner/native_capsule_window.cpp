@@ -936,6 +936,13 @@ void NativeCapsuleWindow::RefreshVisibility() {
   const bool topmost = z_order == HWND_TOPMOST;
   const bool visible = IsWindowVisible(window) != FALSE;
   if (!visible || !z_order_initialized_ || z_order_topmost_ != topmost) {
+    if (!visible) {
+      // Paint the final label, hover state and theme into the hidden HWND
+      // before revealing it. Otherwise Windows can briefly present the last
+      // cached frame when a master capsule expands its queue.
+      RedrawWindow(window, nullptr, nullptr,
+                   RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
+    }
     SetWindowPos(window, z_order, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                      SWP_NOOWNERZORDER | (visible ? 0 : SWP_SHOWWINDOW));
