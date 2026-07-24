@@ -419,7 +419,10 @@ void NativeCapsuleWindow::ApplySurface(
         current_visible_width_, 1.0, static_cast<double>(full_width_));
   }
   ApplyWindowRegion();
-  if (!queue_drag_animation_active_) {
+  // A master drag owns the live position of every child capsule. A model
+  // refresh can arrive between mouse-move messages, so never replay the saved
+  // queue slot while that live offset is active.
+  if (!queue_drag_offset_active_ && !queue_drag_animation_active_) {
     ApplyDockedPosition();
   }
   if (HWND window = GetHandle()) {
@@ -896,6 +899,15 @@ bool NativeCapsuleWindow::IsCoveredByHigherWindow() const {
   return false;
 }
 
+bool NativeCapsuleWindow::IsPointerOverWindow() const {
+  HWND window = const_cast<NativeCapsuleWindow*>(this)->GetHandle();
+  if (!window || !IsWindowVisible(window)) return false;
+  POINT cursor = {};
+  RECT bounds = {};
+  return GetCursorPos(&cursor) && GetWindowRect(window, &bounds) &&
+         PtInRect(&bounds, cursor) == TRUE;
+}
+
 void NativeCapsuleWindow::RefreshVisibility() {
   HWND window = GetHandle();
   if (!window) return;
@@ -904,20 +916,32 @@ void NativeCapsuleWindow::RefreshVisibility() {
   // capsule HWNDs are no-activate windows, the previously focused fullscreen
   // or overlapping app can otherwise remain foreground and make the capsule
   // disappear directly under the cursor.
-  const bool policy_hidden = !hovered_ && !pointer_down_ &&
-                             (fullscreen ||
+  const bool pointer_over = hovered_ || pointer_down_ || dragging_ ||
+                            IsPointerOverWindow();
+  const bool policy_hidden = !pointer_over &&
+                             ((hide_when_fullscreen_ && fullscreen) ||
                               (hide_when_covered_ &&
                                IsCoveredByHigherWindow()));
   if (!intended_visible_ || policy_hidden) {
-    ShowWindow(window, SW_HIDE);
+    if (IsWindowVisible(window)) {
+      SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                       SWP_NOOWNERZORDER | SWP_HIDEWINDOW);
+    }
+    z_order_initialized_ = false;
     return;
   }
-  if (!IsWindowVisible(window)) ShowWindow(window, SW_SHOWNOACTIVATE);
   const HWND z_order =
       avoid_fullscreen_topmost_ && fullscreen ? HWND_NOTOPMOST : HWND_TOPMOST;
-  SetWindowPos(window, z_order, 0, 0, 0, 0,
-               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                   SWP_NOOWNERZORDER);
+  const bool topmost = z_order == HWND_TOPMOST;
+  const bool visible = IsWindowVisible(window) != FALSE;
+  if (!visible || !z_order_initialized_ || z_order_topmost_ != topmost) {
+    SetWindowPos(window, z_order, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                     SWP_NOOWNERZORDER | (visible ? 0 : SWP_SHOWWINDOW));
+    z_order_initialized_ = true;
+    z_order_topmost_ = topmost;
+  }
 }
 
 void NativeCapsuleWindow::Paint(HWND window) {
@@ -1266,6 +1290,7 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
         cursor_inside = PtInRect(&bounds, cursor) == TRUE;
       }
       SetHovered(cursor_inside);
+      RefreshVisibility();
       InvalidateRect(window, nullptr, FALSE);
       return 0;
     }
@@ -1294,7 +1319,10 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       queue_drag_animation_active_ = false;
       break;
     case WM_CLOSE:
-      ShowWindow(window, SW_HIDE);
+      z_order_initialized_ = false;
+      SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                       SWP_NOOWNERZORDER | SWP_HIDEWINDOW);
       return 0;
   }
   return Win32Window::MessageHandler(window, message, wparam, lparam);

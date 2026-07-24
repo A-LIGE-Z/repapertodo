@@ -430,6 +430,16 @@ bool IsCoveredByAnotherWindow(HWND app_window) {
   return false;
 }
 
+bool IsPointerInsideWindow(HWND window) {
+  if (!window || !IsWindowVisible(window)) {
+    return false;
+  }
+  POINT cursor = {};
+  RECT bounds = {};
+  return GetCursorPos(&cursor) && GetWindowRect(window, &bounds) &&
+         PtInRect(&bounds, cursor) == TRUE;
+}
+
 struct MonitorWorkAreaLookup {
   std::wstring device_name;
   RECT work_area = {};
@@ -2368,6 +2378,11 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
                                            WPARAM const wparam,
                                            LPARAM const lparam) noexcept {
   switch (message) {
+    case WM_ERASEBKGND:
+      // The embedded Flutter view paints the complete client area. Erasing
+      // the parent first exposes a black frame while Windows stretches the
+      // surface during interactive resize.
+      return 1;
     case WM_TIMER:
       if (wparam == kCapsuleSlideTimerId) {
         UpdateCapsuleDockAnimation();
@@ -2651,7 +2666,10 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
         std::max(static_cast<double>(work_area.top),
                  static_cast<double>(work_area.bottom) - native_height));
   }
-  if (!in_size_move_) {
+  // During a master-capsule drag the live HWND position is authoritative.
+  // Surface reconciliation can race a mouse-move event, and replaying the
+  // saved queue slot here would make the child capsule jump backwards.
+  if (!in_size_move_ && !queue_drag_offset_active_) {
     const int target_left = static_cast<int>(std::round(native_x));
     const int target_top = static_cast<int>(std::round(native_y));
     const int target_width = std::max(1, static_cast<int>(std::round(native_width)));
@@ -3345,6 +3363,8 @@ void PaperFlutterWindow::EnsurePaperShadowWindow() {
       WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
       kPaperShadowWindowClass, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
       GetModuleHandleW(nullptr), nullptr);
+  paper_shadow_visible_ = false;
+  paper_shadow_z_order_dirty_ = true;
 }
 
 void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
@@ -3370,6 +3390,10 @@ void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
   const int width = std::max(1, static_cast<int>(bounds.right - bounds.left));
   const int height =
       std::max(1, static_cast<int>(bounds.bottom - bounds.top));
+  const bool placement_changed = bounds.left != paper_shadow_left_ ||
+                                 bounds.top != paper_shadow_top_ ||
+                                 width != paper_shadow_width_ ||
+                                 height != paper_shadow_height_;
   const bool needs_redraw =
       redraw || width != paper_shadow_width_ || height != paper_shadow_height_ ||
       paper_shadow_dark_ != rendered_paper_shadow_dark_;
@@ -3442,14 +3466,24 @@ void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
     paper_shadow_height_ = height;
     rendered_paper_shadow_dark_ = paper_shadow_dark_;
   }
-  SetWindowPos(paper_shadow_window_, window, bounds.left, bounds.top, width,
-               height, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
+  if (!paper_shadow_visible_ || placement_changed ||
+      paper_shadow_z_order_dirty_) {
+    SetWindowPos(paper_shadow_window_, window, bounds.left, bounds.top, width,
+                 height, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
+    paper_shadow_left_ = bounds.left;
+    paper_shadow_top_ = bounds.top;
+    paper_shadow_visible_ = true;
+    paper_shadow_z_order_dirty_ = false;
+  }
 }
 
 void PaperFlutterWindow::HidePaperShadowWindow() {
-  if (paper_shadow_window_) {
+  if (paper_shadow_window_ &&
+      (paper_shadow_visible_ || IsWindowVisible(paper_shadow_window_))) {
     ShowWindow(paper_shadow_window_, SW_HIDE);
   }
+  paper_shadow_visible_ = false;
+  paper_shadow_z_order_dirty_ = true;
 }
 
 void PaperFlutterWindow::DestroyPaperShadowWindow() {
@@ -3459,6 +3493,8 @@ void PaperFlutterWindow::DestroyPaperShadowWindow() {
   HWND shadow = paper_shadow_window_;
   paper_shadow_window_ = nullptr;
   DestroyWindow(shadow);
+  paper_shadow_visible_ = false;
+  paper_shadow_z_order_dirty_ = true;
 }
 
 flutter::EncodableValue PaperFlutterWindow::BoundsValue() const {
@@ -3499,6 +3535,7 @@ void PaperFlutterWindow::ShowPaper(bool activate) {
   if (activate && IsWindowVisible(window)) {
     ShowWindow(window, SW_RESTORE);
     ActivatePaperWindow(window, always_on_top_);
+    paper_shadow_z_order_dirty_ = true;
   }
   UpdatePaperShadowWindow(false);
 }
@@ -3548,10 +3585,12 @@ void PaperFlutterWindow::RefreshZOrder() {
   if (!window) {
     return;
   }
-  fullscreen_blocked_ =
-      avoid_fullscreen_topmost_ && IsExternalFullscreenWindow(window);
-  const bool policy_hidden = collapsed_ && !capsule_hovered_ &&
-                             (IsExternalFullscreenWindow(window) ||
+  const bool fullscreen = IsExternalFullscreenWindow(window);
+  fullscreen_blocked_ = avoid_fullscreen_topmost_ && fullscreen;
+  const bool capsule_pointer_over =
+      capsule_hovered_ || IsPointerInsideWindow(window);
+  const bool policy_hidden = collapsed_ && !capsule_pointer_over &&
+                             ((hide_when_fullscreen_ && fullscreen) ||
                               (hide_when_covered_ &&
                                IsCoveredByAnotherWindow(window)));
   if (!intended_visible_ ||
@@ -3562,8 +3601,11 @@ void PaperFlutterWindow::RefreshZOrder() {
                        SWP_NOOWNERZORDER);
     }
     HidePaperShadowWindow();
-    ShowWindow(window, SW_HIDE);
+    if (IsWindowVisible(window)) {
+      ShowWindow(window, SW_HIDE);
+    }
     z_order_initialized_ = false;
+    paper_shadow_z_order_dirty_ = true;
     return;
   }
   if (!IsWindowVisible(window)) {
@@ -3596,6 +3638,7 @@ void PaperFlutterWindow::RefreshZOrder() {
       z_order_initialized_ = true;
       z_order_pinned_ = true;
       z_order_topmost_ = false;
+      paper_shadow_z_order_dirty_ = true;
     }
     UpdatePaperShadowWindow(false);
     return;
@@ -3610,6 +3653,7 @@ void PaperFlutterWindow::RefreshZOrder() {
     z_order_initialized_ = true;
     z_order_pinned_ = false;
     z_order_topmost_ = topmost;
+    paper_shadow_z_order_dirty_ = true;
   }
   UpdatePaperShadowWindow(false);
 }

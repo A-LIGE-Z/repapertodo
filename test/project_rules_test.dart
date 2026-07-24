@@ -3382,7 +3382,8 @@ void main() {
     expect(app, contains('paper.isNote ? -1 : -1.25'));
   });
 
-  test('pinned capsule activation clears pin and restores foreground focus', () {
+  test('pinned capsule activation clears pin and restores foreground focus',
+      () {
     final paperWindow =
         _readProjectText('windows/runner/paper_flutter_window.cpp');
     final coordinator = _readProjectText('windows/runner/flutter_window.cpp');
@@ -4018,8 +4019,26 @@ void main() {
     expect(paperWindow, contains('capsule_animation_active_'));
     expect(paperWindowHeader,
         contains('bool capsule_animations_enabled_ = true;'));
-    expect(nativeCapsule, contains('!hovered_ && !pointer_down_'));
-    expect(paperWindow, contains('collapsed_ && !capsule_hovered_'));
+    expect(
+      nativeCapsule,
+      contains('hovered_ || pointer_down_ || dragging_ ||'),
+    );
+    expect(nativeCapsule, contains('IsPointerOverWindow()'));
+    expect(
+      nativeCapsule,
+      contains('!visible || !z_order_initialized_ ||'),
+    );
+    expect(
+      nativeCapsule,
+      contains('!queue_drag_offset_active_ && !queue_drag_animation_active_'),
+    );
+    expect(paperWindow, contains('collapsed_ && !capsule_pointer_over'));
+    expect(paperWindow, contains('case WM_ERASEBKGND:'));
+    expect(
+      paperWindow,
+      contains('!in_size_move_ && !queue_drag_offset_active_'),
+    );
+    expect(paperWindow, contains('paper_shadow_z_order_dirty_'));
     expect(runner, contains('kFullscreenTopmostRefreshIntervalMs = 250'));
     expect(paperWindowApp, contains("'capsuleHoverChanged'"));
     expect(paperWindowHeader, contains('bool in_size_move_ = false;'));
@@ -4130,8 +4149,7 @@ void main() {
     expect(runner, contains('method == "commitDataDirectory"'));
     expect(storage, contains('Future<void> relocate('));
     expect(settings, contains("'settings-data-directory'"));
-    final policySmoke =
-        _readProjectText('scripts/windows_policy_smoke.ps1');
+    final policySmoke = _readProjectText('scripts/windows_policy_smoke.ps1');
     expect(policySmoke, contains('REPAPERTODO_DATA_DIRECTORY'));
     expect(policySmoke, contains('previousDataDirectoryOverride'));
     expect(policySmoke, contains('masterTogglePreservesExpandedPaper'));

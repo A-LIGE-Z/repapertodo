@@ -1485,23 +1485,34 @@ void main() {
               .single
               .arguments as List)
           .cast<Map>();
-      expect(collapsedNative, hasLength(1));
-      expect(collapsedNative.single, containsPair('kind', 'master'));
+      expect(collapsedNative, hasLength(3));
+      final collapsedMaster = collapsedNative.singleWhere(
+        (surface) => surface['kind'] == 'master',
+      );
+      final collapsedProxies = collapsedNative
+          .where((surface) => surface['kind'] == 'proxy')
+          .toList();
+      expect(collapsedProxies, hasLength(2));
       expect(
-        collapsedNative.single,
+        collapsedProxies.every((surface) => surface['isVisible'] == false),
+        true,
+      );
+      expect(collapsedMaster, containsPair('kind', 'master'));
+      expect(
+        collapsedMaster,
         containsPair('surfaceId', 'master:|right'),
       );
-      expect(collapsedNative.single, containsPair('paperId', 'master-paper'));
-      expect(collapsedNative.single, containsPair('top', 48.0));
-      expect(collapsedNative.single, containsPair('isActive', true));
-      expect(collapsedNative.single, containsPair('count', 2));
-      expect(collapsedNative.single, containsPair('labelEn', 'Collapse all'));
+      expect(collapsedMaster, containsPair('paperId', 'master-paper'));
+      expect(collapsedMaster, containsPair('top', 48.0));
+      expect(collapsedMaster, containsPair('isActive', true));
+      expect(collapsedMaster, containsPair('count', 2));
+      expect(collapsedMaster, containsPair('labelEn', 'Collapse all'));
       expect(
-        collapsedNative.single,
+        collapsedMaster,
         containsPair('fontFamily', 'Microsoft YaHei UI'),
       );
-      expect(collapsedNative.single, containsPair('enableAnimations', true));
-      expect(collapsedNative.single, containsPair('labelZh', '收起全部'));
+      expect(collapsedMaster, containsPair('enableAnimations', true));
+      expect(collapsedMaster, containsPair('labelZh', '收起全部'));
 
       state.setCapsuleCollapseAllActiveFor(state.papers.first, false);
       await services.paperWindows.restoreAll(state);
@@ -1530,6 +1541,14 @@ void main() {
           .where((surface) => surface['kind'] == 'proxy')
           .toList();
       expect(proxies, hasLength(2));
+      expect(
+        proxies.map((surface) => surface['surfaceId']),
+        collapsedProxies.map((surface) => surface['surfaceId']),
+      );
+      expect(
+        proxies.every((surface) => surface['isVisible'] == true),
+        true,
+      );
       expect(proxies.map((surface) => surface['top']), [98.0, 148.0]);
       expect(
         proxies.every((surface) => surface['collapseOnClick'] == true),

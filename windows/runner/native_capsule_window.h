@@ -63,6 +63,7 @@ class NativeCapsuleWindow : public Win32Window {
   bool IsChineseLocale() const;
   bool IsExternalFullscreenWindow() const;
   bool IsCoveredByHigherWindow() const;
+  bool IsPointerOverWindow() const;
   int ScaleMetric(int logical_pixels) const;
   double UnscaleMetric(double physical_pixels) const;
 
@@ -123,6 +124,8 @@ class NativeCapsuleWindow : public Win32Window {
   ULONGLONG queue_drag_animation_started_at_ = 0;
   int queue_drag_animation_duration_ms_ = 0;
   bool queue_drag_animation_active_ = false;
+  bool z_order_initialized_ = false;
+  bool z_order_topmost_ = false;
   int64_t surface_generation_ = -1;
 };
 

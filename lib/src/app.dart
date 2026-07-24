@@ -1959,8 +1959,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       runLinkedScriptCapsulesOnClick:
           controller.state.runLinkedScriptCapsulesOnClick,
       maxTitleLength: controller.state.maxTitleLength,
-      moveCompletedTodosToBottom:
-          controller.state.moveCompletedTodosToBottom,
+      moveCompletedTodosToBottom: controller.state.moveCompletedTodosToBottom,
       showTopBarNewTodoButton: controller.state.showTopBarNewTodoButton,
       showTopBarNewNoteButton: controller.state.showTopBarNewNoteButton,
       showTopBarExternalOpenButton:
@@ -13342,8 +13341,20 @@ class _TodoEditorState extends State<_TodoEditor> {
     BuildContext context,
     EditableTextState editableTextState,
   ) {
+    if (Platform.isWindows) {
+      // Todo rows already expose the PaperTodo item menu on secondary click.
+      // Suppress Flutter's overlapping Cut/Copy/Paste/Select-all toolbar so
+      // the user sees only actions that belong to the todo item itself.
+      return const SizedBox.shrink(
+        key: ValueKey('todo-text-context-menu-suppressed'),
+      );
+    }
     final buttonItems = editableTextState.contextMenuButtonItems
-        .where((item) => item.type != ContextMenuButtonType.paste)
+        .where(
+          (item) =>
+              item.type != ContextMenuButtonType.paste &&
+              item.type != ContextMenuButtonType.selectAll,
+        )
         .toList();
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: editableTextState.contextMenuAnchors,
