@@ -225,6 +225,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
         final paperId = map?['paperId'];
         final value = map?['value'];
         final surfaceGeneration = _intValue(map?['surfaceGeneration']);
+        final nativeActivated = map?['nativeActivated'] == true;
         if (kind is! String ||
             !PaperWindowActionKinds.values.contains(kind) ||
             paperId is! String) {
@@ -247,6 +248,7 @@ class WindowsPaperWindowHost implements PaperWindowHost {
             paperId: normalizedPaperId,
             value: value is String ? value : '',
             surfaceGeneration: surfaceGeneration,
+            nativeActivated: nativeActivated,
           ),
         );
       case 'closeRequested':

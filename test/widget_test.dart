@@ -19176,6 +19176,7 @@ void main() {
         'due-transition-paper-due-transition-item-due-transition',
       ),
     );
+    expect(tester.getSize(dueSlot).width, 0);
     expect(
       find.byKey(
         const ValueKey(
@@ -19197,21 +19198,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 75));
 
     expect(tester.element(row), same(rowElement));
-    final sizeTransitions = tester.widgetList<SizeTransition>(
-      find.descendant(of: dueSlot, matching: find.byType(SizeTransition)),
-    );
-    expect(
-      sizeTransitions.any(
-        (transition) =>
-            transition.axis == Axis.horizontal &&
-            transition.sizeFactor.value > 0 &&
-            transition.sizeFactor.value < 1,
-      ),
-      isTrue,
-    );
+    expect(tester.widget<AnimatedSize>(dueSlot).clipBehavior, Clip.hardEdge);
+    final intermediateWidth = tester.getSize(dueSlot).width;
+    expect(intermediateWidth, greaterThan(0));
     expect(tester.takeException(), isNull);
 
     await tester.pumpAndSettle();
+    expect(tester.getSize(dueSlot).width, greaterThan(intermediateWidth));
     expect(controller.state.papers.single.items.single.dueAtLocal, isNotNull);
     expect(
       find.byKey(
@@ -21571,6 +21564,58 @@ void main() {
     expect(paper.isCollapsed, false);
     expect([paper.x, paper.y, paper.width, paper.height], [123, 234, 456, 345]);
     expect(platform.paperWindows.shownTitles, contains('Pinned proxy'));
+    expect(store.savedState.papers.single.isPinnedToDesktop, false);
+  });
+
+  testWidgets(
+      'native-activated proxy reconciles without a second paper show pass',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final paper = PaperData(
+      id: 'native-activated-proxy-paper',
+      type: PaperTypes.todo,
+      title: 'Native activated proxy',
+      isPinnedToDesktop: true,
+      x: 123,
+      y: 234,
+      width: 456,
+      height: 345,
+    );
+    final state = AppState(papers: [paper]);
+    await store.save(state);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    await tester.pumpAndSettle();
+    final registryCount =
+        platform.paperWindows.registryCollapseAllSnapshots.length;
+
+    platform.paperWindows.emitAction(
+      const PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.openPaper,
+        paperId: 'native-activated-proxy-paper',
+        value: 'native-activated-proxy-paper',
+        nativeActivated: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(paper.isPinnedToDesktop, false);
+    expect(paper.isCollapsed, false);
+    expect([paper.x, paper.y, paper.width, paper.height], [123, 234, 456, 345]);
+    expect(platform.paperWindows.shownTitles, isEmpty);
+    expect(
+      platform.paperWindows.registryCollapseAllSnapshots.length,
+      greaterThan(registryCount),
+    );
     expect(store.savedState.papers.single.isPinnedToDesktop, false);
   });
 

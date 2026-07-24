@@ -3533,7 +3533,7 @@ void main() {
       runner.indexOf('message == WM_NCCALCSIZE && wparam == TRUE'),
       lessThan(runner.indexOf('HandleTopLevelWindowProc(hwnd, message')),
     );
-    expect(runner, contains('case WM_NCHITTEST:'));
+    expect(runner, contains('if (message == WM_NCHITTEST)'));
     expect(runner, contains('return SettingsCoordinatorHitTest(hwnd, lparam)'));
     expect(
         runner, contains('ScaleSettingsMetric(dpi, kSettingsWindowMinWidth)'));
@@ -4018,6 +4018,12 @@ void main() {
         runner, contains('RememberPaperPinnedToDesktop(target.value, false)'));
     expect(runner, contains('paper_window->SetPinnedToDesktop(false)'));
     expect(runner, contains('paper_window->ShowPaper(true)'));
+    expect(runner, contains('flutter::EncodableValue routed_arguments'));
+    expect(runner, contains('"nativeActivated"'));
+    expect(
+      runner,
+      contains('Content updates are intentionally geometry-neutral'),
+    );
     expect(runner, contains('existing_window->BoundsValue()'));
     expect(runner, contains('flutter::EncodableMap resolved_surface'));
     expect(
@@ -4078,10 +4084,24 @@ void main() {
     );
     expect(paperWindow, contains('paper_shadow_z_order_dirty_'));
     expect(
+      paperWindowHeader,
+      contains('uint64_t paper_shadow_refresh_generation_ = 0;'),
+    );
+    expect(
       paperWindow,
       contains('kDeferredPaperShadowRefreshMessage'),
     );
     expect(paperWindow, contains('SetNextFrameCallback('));
+    expect(
+      paperWindow,
+      contains(
+        'refresh_generation != paper_shadow_refresh_generation_',
+      ),
+    );
+    expect(
+      paperWindow,
+      contains('[target_window, refresh_generation]()'),
+    );
     expect(
       paperWindow,
       contains(

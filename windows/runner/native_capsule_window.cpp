@@ -621,11 +621,14 @@ int NativeCapsuleWindow::MasterTopPhysical() const {
 }
 
 void NativeCapsuleWindow::ApplyMasterTransitionAlpha(int alpha) {
-  current_alpha_ = std::clamp(alpha, 0, 255);
+  const int next_alpha = std::clamp(alpha, 0, 255);
+  if (current_alpha_ == next_alpha) {
+    return;
+  }
+  current_alpha_ = next_alpha;
   if (HWND window = GetHandle()) {
     SetLayeredWindowAttributes(window, 0,
                                static_cast<BYTE>(current_alpha_), LWA_ALPHA);
-    InvalidateRect(window, nullptr, FALSE);
   }
 }
 

@@ -2207,7 +2207,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     return operation;
   }
 
-  Future<void> _activatePaperFromCapsule(PaperData paper) async {
+  Future<void> _activatePaperFromCapsule(
+    PaperData paper, {
+    bool nativeActivated = false,
+  }) async {
     final wasPinned = paper.isPinnedToDesktop;
     final wasCollapsed = paper.isCollapsed;
     setState(() {
@@ -2225,9 +2228,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         'paperId': paper.id,
         'wasPinnedToDesktop': wasPinned,
         'wasCollapsed': wasCollapsed,
+        'nativeActivated': nativeActivated,
       },
     );
-    await controller.showPaper(paper);
+    if (nativeActivated && !wasCollapsed) {
+      // The native proxy handled foreground activation synchronously while
+      // Windows still associated it with the mouse click. Replaying show,
+      // bounds and z-order from Dart would make the paper/capsule flash once.
+      await controller.refreshSurfaceRegistry();
+    } else {
+      await controller.showPaper(paper);
+    }
     await _saveState();
   }
 
@@ -2900,7 +2911,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             .where((candidate) => candidate.id == request.value)
             .firstOrNull;
         if (target != null) {
-          unawaited(_activatePaperFromCapsule(target));
+          unawaited(
+            _activatePaperFromCapsule(
+              target,
+              nativeActivated: request.nativeActivated,
+            ),
+          );
         }
       case PaperWindowActionKinds.createTodo:
         unawaited(_createPaper(PaperTypes.todo, sourcePaper: paper));
@@ -11532,39 +11548,32 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
     final dueTransitionDuration =
         widget.enableAnimations ? PaperTodoMotion.quick : Duration.zero;
-    final dueSlot = AnimatedSwitcher(
+    final dueSlot = AnimatedSize(
       key: ValueKey('${widget.paper.id}-${item.id}-due-transition'),
       duration: dueTransitionDuration,
       reverseDuration:
           widget.enableAnimations ? PaperTodoMotion.fadeOut : Duration.zero,
-      switchInCurve: PaperTodoMotion.enterCurve,
-      switchOutCurve: PaperTodoMotion.exitCurve,
-      layoutBuilder: (currentChild, previousChildren) => Stack(
-        alignment: Alignment.centerRight,
-        clipBehavior: Clip.none,
-        children: [
-          ...previousChildren,
-          if (currentChild != null) currentChild,
-        ],
-      ),
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: SizeTransition(
-          axis: Axis.horizontal,
-          alignment: AlignmentDirectional.centerEnd,
-          sizeFactor: animation,
+      curve: PaperTodoMotion.enterCurve,
+      alignment: AlignmentDirectional.centerEnd,
+      clipBehavior: Clip.hardEdge,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0, end: dueIndicator == null ? 0 : 1),
+        duration: dueTransitionDuration,
+        curve: PaperTodoMotion.quickCurve,
+        builder: (context, opacity, child) => FadeTransition(
+          opacity: AlwaysStoppedAnimation<double>(opacity),
           child: child,
         ),
+        child: dueIndicator == null
+            ? SizedBox.shrink(
+                key: ValueKey('${widget.paper.id}-${item.id}-due-empty'),
+              )
+            : Padding(
+                key: ValueKey('${widget.paper.id}-${item.id}-due-present'),
+                padding: const EdgeInsets.only(left: 4),
+                child: dueIndicator,
+              ),
       ),
-      child: dueIndicator == null
-          ? SizedBox.shrink(
-              key: ValueKey('${widget.paper.id}-${item.id}-due-empty'),
-            )
-          : Padding(
-              key: ValueKey('${widget.paper.id}-${item.id}-due-present'),
-              padding: const EdgeInsets.only(left: 4),
-              child: dueIndicator,
-            ),
     );
     final trailingRow = Row(
       mainAxisSize: MainAxisSize.min,

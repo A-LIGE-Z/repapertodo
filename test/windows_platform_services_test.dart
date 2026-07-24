@@ -1923,6 +1923,7 @@ void main() {
           'paperId': 'action-note',
           'kind': PaperWindowActionKinds.openUri,
           'value': 'https://example.com/from-child',
+          'nativeActivated': true,
         }),
       ),
       (_) {},
@@ -1932,6 +1933,7 @@ void main() {
     expect(request.paperId, 'action-note');
     expect(request.kind, PaperWindowActionKinds.openUri);
     expect(request.value, 'https://example.com/from-child');
+    expect(request.nativeActivated, true);
   });
 
   test(

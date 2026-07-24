@@ -4640,6 +4640,21 @@ void FlutterWindow::ApplyPaperWindowUpdate(
   }
   PaperFlutterWindow* paper_window = EnsurePaperWindow(*paper_id);
   if (paper_window) {
+    // Content updates are intentionally geometry-neutral, but expansion and
+    // pin actions still need to reach the native surface before a following
+    // setBounds call. Otherwise a capsule HWND can interpret the new full
+    // paper bounds through its stale isCollapsed=true cache for one frame.
+    auto& surface = paper_window_surfaces_[*paper_id];
+    surface[flutter::EncodableValue("id")] =
+        flutter::EncodableValue(*paper_id);
+    for (const char* key : {"isVisible", "isCollapsed", "isPinnedToDesktop",
+                            "alwaysOnTop", "capsuleSide",
+                            "capsuleMonitorDeviceName"}) {
+      const auto value_iterator = map->find(flutter::EncodableValue(key));
+      if (value_iterator != map->end()) {
+        surface[flutter::EncodableValue(key)] = value_iterator->second;
+      }
+    }
     paper_window->ApplyPaper(paper);
   }
 }
@@ -4876,29 +4891,38 @@ void FlutterWindow::SendPaperWindowEvent(
     return;
   }
 
+  flutter::EncodableValue routed_arguments = arguments;
+
   // Native expanded-paper proxies must activate their paper synchronously
   // while handling the real mouse input. Waiting for the event to cross the
   // platform channel and return through Dart can miss Windows' foreground
   // activation window, leaving the previously focused app in front even
   // though the proxy click was accepted.
   if (method == "paperActionRequested") {
-    if (const auto* action =
-            std::get_if<flutter::EncodableMap>(&arguments)) {
+    if (auto* action =
+            std::get_if<flutter::EncodableMap>(&routed_arguments)) {
       const std::string kind = GetStringArgument(*action, "kind", "");
       const std::string target_id = GetStringArgument(*action, "value", "");
       const PaperIdArgument target = ValidatePaperIdArgumentValue(target_id);
       if (kind == "openPaper" && target.valid) {
         if (PaperFlutterWindow* paper_window =
                 PaperWindowForId(target.value)) {
-          // A proxy click on a desktop-pinned paper is the explicit escape
-          // route from desktop mode. Clear the native pin before activation so
-          // the HWND does not flash at HWND_BOTTOM and then fail to foreground.
-          RememberPaperPinnedToDesktop(target.value, false);
-          auto& surface = paper_window_surfaces_[target.value];
-          surface[flutter::EncodableValue("isPinnedToDesktop")] =
-              flutter::EncodableValue(false);
-          paper_window->SetPinnedToDesktop(false);
-          paper_window->ShowPaper(true);
+          // Only native proxy capsules point at a visible, expanded paper.
+          // Hidden/collapsed targets must remain entirely Dart-owned so an
+          // early ShowWindow cannot expose their old surface for one frame.
+          if (paper_window->IsVisible() && !paper_window->IsCollapsed()) {
+            // A proxy click on a desktop-pinned paper is the explicit escape
+            // route from desktop mode. Clear the native pin before activation
+            // so the HWND never visits HWND_BOTTOM between two show passes.
+            RememberPaperPinnedToDesktop(target.value, false);
+            auto& surface = paper_window_surfaces_[target.value];
+            surface[flutter::EncodableValue("isPinnedToDesktop")] =
+                flutter::EncodableValue(false);
+            paper_window->SetPinnedToDesktop(false);
+            paper_window->ShowPaper(true);
+            (*action)[flutter::EncodableValue("nativeActivated")] =
+                flutter::EncodableValue(true);
+          }
         }
       }
     }
@@ -4956,7 +4980,7 @@ void FlutterWindow::SendPaperWindowEvent(
     return;
   }
   window_channel_->InvokeMethod(
-      method, std::make_unique<flutter::EncodableValue>(arguments));
+      method, std::make_unique<flutter::EncodableValue>(routed_arguments));
 }
 
 void FlutterWindow::DestroyPaperWindows() {
@@ -5012,6 +5036,24 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   if (message == WM_NCACTIVATE) {
     return TRUE;
   }
+  // The settings coordinator is a borderless, thick-frame window. Resolve
+  // resize and drag hit tests before the Flutter embedder sees the message;
+  // otherwise an embedder/plugin handler can consume WM_NCHITTEST and leave
+  // the paper-looking settings page apparently immovable.
+  if (message == WM_NCHITTEST) {
+    return SettingsCoordinatorHitTest(hwnd, lparam);
+  }
+  if (message == WM_GETMINMAXINFO) {
+    auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+    if (info) {
+      const UINT dpi = GetDpiForWindow(hwnd) > 0 ? GetDpiForWindow(hwnd) : 96;
+      info->ptMinTrackSize.x =
+          ScaleSettingsMetric(dpi, kSettingsWindowMinWidth);
+      info->ptMinTrackSize.y =
+          ScaleSettingsMetric(dpi, kSettingsWindowMinHeight);
+      return 0;
+    }
+  }
 
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
@@ -5030,20 +5072,6 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
-    case WM_GETMINMAXINFO: {
-      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
-      if (info) {
-        const UINT dpi = GetDpiForWindow(hwnd) > 0 ? GetDpiForWindow(hwnd) : 96;
-        info->ptMinTrackSize.x =
-            ScaleSettingsMetric(dpi, kSettingsWindowMinWidth);
-        info->ptMinTrackSize.y =
-            ScaleSettingsMetric(dpi, kSettingsWindowMinHeight);
-        return 0;
-      }
-      break;
-    }
-    case WM_NCHITTEST:
-      return SettingsCoordinatorHitTest(hwnd, lparam);
     case WM_ERASEBKGND:
       PaintSettingsCoordinatorBackground(
           hwnd, reinterpret_cast<HDC>(wparam));

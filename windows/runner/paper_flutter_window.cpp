@@ -2373,6 +2373,7 @@ void PaperFlutterWindow::OnDestroy() {
   queue_drag_animation_active_ = false;
   master_capsule_transition_active_ = false;
   paper_shadow_refresh_pending_ = false;
+  ++paper_shadow_refresh_generation_;
   DestroyPaperShadowWindow();
   HideReminderBubble();
   channel_.reset();
@@ -2413,12 +2414,18 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       }
       return 0;
     }
-    case kDeferredPaperShadowRefreshMessage:
+    case kDeferredPaperShadowRefreshMessage: {
+      const uint64_t refresh_generation =
+          static_cast<uint64_t>(wparam);
+      if (refresh_generation != paper_shadow_refresh_generation_) {
+        return 0;
+      }
       if (paper_shadow_refresh_pending_ && !in_size_move_) {
         paper_shadow_refresh_pending_ = false;
         UpdatePaperShadowWindow(true);
       }
       return 0;
+    }
     case WM_CLOSE:
       HidePaper();
       SendEvent("closeRequested", flutter::EncodableMap{
@@ -2447,31 +2454,36 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
     case WM_ENTERSIZEMOVE:
       in_size_move_ = true;
       paper_shadow_refresh_pending_ = false;
+      ++paper_shadow_refresh_generation_;
       // The shadow is a separate layered HWND. Rebuilding its DIB for every
       // interactive resize frame exposes a transient black rectangle on
       // Windows 10/11. Keep the paper itself live and restore one freshly
       // rendered shadow after the size/move transaction completes.
       HidePaperShadowWindow();
       break;
-    case WM_EXITSIZEMOVE:
+    case WM_EXITSIZEMOVE: {
       in_size_move_ = false;
       // Wait for Flutter's final resized frame before showing the separate
       // layered shadow again. Showing the shadow immediately can expose it
       // around one stale/black swap-chain frame at pointer release.
       HidePaperShadowWindow();
       paper_shadow_refresh_pending_ = true;
+      const uint64_t refresh_generation =
+          ++paper_shadow_refresh_generation_;
       if (flutter_controller_ && flutter_controller_->engine()) {
         const HWND target_window = window;
         flutter_controller_->engine()->SetNextFrameCallback(
-            [target_window]() {
+            [target_window, refresh_generation]() {
               if (IsWindow(target_window)) {
                 PostMessageW(target_window,
-                             kDeferredPaperShadowRefreshMessage, 0, 0);
+                             kDeferredPaperShadowRefreshMessage,
+                             static_cast<WPARAM>(refresh_generation), 0);
               }
             });
         flutter_controller_->ForceRedraw();
       } else {
-        PostMessageW(window, kDeferredPaperShadowRefreshMessage, 0, 0);
+        PostMessageW(window, kDeferredPaperShadowRefreshMessage,
+                     static_cast<WPARAM>(refresh_generation), 0);
       }
       if (surface_initialized_) {
         if (collapsed_ && deep_capsule_mode_) {
@@ -2481,6 +2493,7 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
         }
       }
       break;
+    }
     case WM_WINDOWPOSCHANGED:
       if (!in_size_move_) {
         UpdatePaperShadowWindow(false);
@@ -3049,12 +3062,15 @@ int PaperFlutterWindow::MasterCapsuleTopPhysical() const {
 }
 
 void PaperFlutterWindow::ApplyMasterCapsuleAlpha(int alpha) {
-  capsule_alpha_ = std::clamp(alpha, 0, 255);
+  const int next_alpha = std::clamp(alpha, 0, 255);
+  if (capsule_alpha_ == next_alpha) {
+    return;
+  }
+  capsule_alpha_ = next_alpha;
   if (HWND window = GetHandle()) {
     SetLayeredWindowAttributes(window, RGB(1, 2, 3),
                                static_cast<BYTE>(capsule_alpha_),
                                LWA_COLORKEY | LWA_ALPHA);
-    InvalidateRect(window, nullptr, FALSE);
   }
 }
 

@@ -64,6 +64,7 @@ class PaperWindowActionRequest {
     required this.paperId,
     this.value = '',
     this.surfaceGeneration,
+    this.nativeActivated = false,
   });
 
   final String kind;
@@ -73,6 +74,11 @@ class PaperWindowActionRequest {
   // the HWND. It is optional so Android, test hosts and older runners remain
   // wire-compatible.
   final int? surfaceGeneration;
+
+  // A native proxy capsule can activate an already-expanded paper while the
+  // real mouse click still owns Windows foreground permission. Dart then only
+  // reconciles model state instead of showing and restacking the HWND again.
+  final bool nativeActivated;
 }
 
 abstract final class PaperWindowActionKinds {
