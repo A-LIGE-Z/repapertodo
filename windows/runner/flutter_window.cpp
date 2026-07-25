@@ -911,8 +911,23 @@ void AddRegistryFontFamilies(HKEY root,
     if (type != REG_SZ && type != REG_EXPAND_SZ) {
       continue;
     }
-    AddFontFamily(families, SanitizeFontFamilyName(
-                                std::wstring(name.data(), name_length), true));
+    const std::wstring registry_name = SanitizeFontFamilyName(
+        std::wstring(name.data(), name_length), true);
+    size_t family_start = 0;
+    while (family_start < registry_name.size()) {
+      const size_t separator = registry_name.find(L" & ", family_start);
+      const size_t family_end = separator == std::wstring::npos
+                                    ? registry_name.size()
+                                    : separator;
+      AddFontFamily(
+          families,
+          TrimWide(registry_name.substr(family_start,
+                                        family_end - family_start)));
+      if (separator == std::wstring::npos) {
+        break;
+      }
+      family_start = separator + 3;
+    }
   }
   RegCloseKey(key);
 }

@@ -439,6 +439,31 @@ void main() {
     expect(platform.tray.rebuildMenuCount, 1);
   });
 
+  test('expanding a capsule avoids replaying the complete paper registry',
+      () async {
+    final platform = _RecordingPlatformServices();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'capsule-paper',
+            type: PaperTypes.todo,
+            isCollapsed: true,
+          ),
+        ],
+      ),
+      platform: platform,
+    );
+    final paper = controller.state.papers.single..isCollapsed = false;
+
+    await controller.showPaperFromCapsule(paper);
+
+    expect(platform.paperWindows.shownIds, ['capsule-paper']);
+    expect(platform.paperWindows.refreshSurfaceRegistryCount, 0);
+    expect(platform.paperWindows.refreshCapsuleSurfaceRegistryCount, 1);
+    expect(platform.tray.rebuildMenuCount, 1);
+  });
+
   test('startup show and hide commands batch tray menu refreshes', () async {
     final platform = _RecordingPlatformServices();
     final controller = RePaperTodoController(
@@ -1269,6 +1294,7 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   bool? visibleSurfaces;
   var restoreAllCount = 0;
   var refreshSurfaceRegistryCount = 0;
+  var refreshCapsuleSurfaceRegistryCount = 0;
 
   @override
   Future<PaperWorkArea?> workAreaForPaper(PaperData paper) async {
@@ -1291,6 +1317,11 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   @override
   Future<void> refreshSurfaceRegistry(AppState state) async {
     refreshSurfaceRegistryCount += 1;
+  }
+
+  @override
+  Future<void> refreshCapsuleSurfaceRegistry(AppState state) async {
+    refreshCapsuleSurfaceRegistryCount += 1;
   }
 
   @override

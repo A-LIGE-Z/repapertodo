@@ -563,11 +563,11 @@ String? resolveAppFontFamily(
     return runtimeFamily;
   }
   return switch (UiFontPresets.normalize(state.uiFontPreset)) {
-    UiFontPresets.yaHei => null,
+    UiFontPresets.yaHei => _defaultContentFontFamily,
     UiFontPresets.dengXian => _dengXianFontFamily,
     UiFontPresets.serif => 'serif',
     UiFontPresets.mono => 'monospace',
-    _ => null,
+    _ => _defaultContentFontFamily,
   };
 }
 
@@ -583,9 +583,10 @@ List<String>? resolveAppFontFamilyFallback(
     return null;
   }
   return switch (UiFontPresets.normalize(state.uiFontPreset)) {
-    UiFontPresets.yaHei => null,
+    UiFontPresets.yaHei => _defaultContentFontFamilyFallback,
     UiFontPresets.dengXian => _dengXianFontFamilyFallback,
-    _ => null,
+    UiFontPresets.serif || UiFontPresets.mono => null,
+    _ => _defaultContentFontFamilyFallback,
   };
 }
 
@@ -631,7 +632,7 @@ String resolveWindowsNativeDialogFontFamily(
     UiFontPresets.dengXian => _dengXianFontFamily,
     UiFontPresets.serif => 'Georgia',
     UiFontPresets.mono => 'Consolas',
-    _ => '',
+    _ => 'Microsoft YaHei UI',
   };
 }
 
@@ -2215,7 +2216,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         'nativeActivated': nativeActivated,
       },
     );
-    if (nativeActivated && !wasCollapsed) {
+    if (wasCollapsed) {
+      // Expanding an existing capsule needs one paper-window update and one
+      // capsule-only registry reconciliation. A complete paper registry replay
+      // applies the shape change twice and exposes an intermediate frame.
+      await controller.showPaperFromCapsule(paper);
+    } else if (nativeActivated) {
       // The native proxy handled foreground activation synchronously while
       // Windows still associated it with the mouse click. Replaying show,
       // bounds and z-order from Dart would make the paper/capsule flash once.
@@ -2868,7 +2874,6 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       // redundant pass is observable as a flash during a shape transition.
       unawaited(_applyPaperTopologyEdit(changedPaper));
     } else {
-      unawaited(controller.updatePaperSurface(changedPaper));
       if (capsuleLabelChanged) {
         // A child paper engine sends title/content edits through
         // `paperChanged`.  Keep the independent native proxy capsule's label
@@ -2876,6 +2881,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         // ordinary body edit.
         unawaited(controller.refreshSurfaceRegistry());
       }
+      // The edit originated in this paper's child engine, which already owns
+      // the new Flutter frame. Echoing an ordinary body edit back through
+      // updatePaperWindow rebuilds that same surface and can make due-date
+      // commits flash. Persist it in the coordinator without a redundant
+      // native round trip.
     }
     unawaited(_rebuildTrayMenu());
     unawaited(_saveState(rebuildTrayMenu: false));

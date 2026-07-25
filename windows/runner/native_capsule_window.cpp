@@ -982,7 +982,7 @@ void NativeCapsuleWindow::SetHovered(bool hovered) {
         target, hovered_ ? kCapsuleSlideOutMilliseconds
                          : kCapsuleSlideInMilliseconds);
   } else {
-    if (HWND window = GetHandle()) {
+    if (window) {
       KillTimer(window, kCapsuleSlideTimerId);
     }
     dock_animation_active_ = false;
@@ -1281,7 +1281,7 @@ std::wstring NativeCapsuleWindow::EffectiveLabel() const {
 
 std::wstring NativeCapsuleWindow::EffectiveFontFamily() const {
   std::wstring family = Utf8ToWide(font_family_);
-  if (family.empty()) family = L"Segoe UI";
+  if (family.empty()) family = L"Microsoft YaHei UI";
   if (family.size() >= LF_FACESIZE) family.resize(LF_FACESIZE - 1);
   return family;
 }

@@ -263,7 +263,7 @@ double CapsuleTextWidthEstimate(const std::wstring& text) {
 std::wstring CapsuleFontFamily(const std::string& family) {
   std::wstring result = Utf8WindowTitle(family);
   if (result.empty()) {
-    result = L"Segoe UI";
+    result = L"Microsoft YaHei UI";
   }
   if (result.size() >= LF_FACESIZE) {
     result.resize(LF_FACESIZE - 1);

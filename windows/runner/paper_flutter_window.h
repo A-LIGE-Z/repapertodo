@@ -144,7 +144,7 @@ class PaperFlutterWindow : public Win32Window {
   bool deep_capsule_mode_ = false;
   std::string paper_type_ = "todo";
   bool script_capsule_ = false;
-  std::string capsule_font_family_ = "Segoe UI";
+  std::string capsule_font_family_ = "Microsoft YaHei UI";
   bool capsule_hovered_ = false;
   bool capsule_animations_enabled_ = true;
   std::string capsule_side_ = "right";

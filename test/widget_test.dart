@@ -21708,6 +21708,62 @@ void main() {
     );
   });
 
+  testWidgets(
+      'ordinary independent paper edits persist without echoing the child surface',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final initialState = AppState(
+      papers: [
+        PaperData(
+          id: 'independent-due-edit',
+          type: PaperTypes.todo,
+          title: 'Due edit',
+          items: [PaperItem(id: 'independent-due-item', text: 'Task')],
+        ),
+      ],
+    );
+    await store.save(initialState);
+    final controller = RePaperTodoController(
+      initialState: AppState.fromJson(initialState.toJson()),
+      platform: platform,
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    final registryCount = platform.paperWindows.registryPaperSnapshots.length;
+    final saveCount = store.saveCount;
+    final changedPaper = PaperData.fromJson(
+      controller.state.papers.single.toJson(),
+    )..items.single.dueAtLocal = '2026-07-26T18:30:00';
+
+    platform.paperWindows.emitPaperEdit(changedPaper);
+    for (var attempt = 0;
+        attempt < 100 && store.saveCount == saveCount;
+        attempt += 1) {
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
+
+    expect(store.saveCount, greaterThan(saveCount));
+    expect(
+      store.savedState.papers.single.items.single.dueAtLocal,
+      '2026-07-26T18:30:00',
+    );
+    expect(platform.paperWindows.updatedTitles, isEmpty);
+    expect(
+      platform.paperWindows.registryPaperSnapshots.length,
+      registryCount,
+      reason: 'a content-only child edit must not rebuild its HWND',
+    );
+  });
+
   testWidgets('routes independent paper actions through primary services',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -21956,6 +22012,55 @@ void main() {
       greaterThan(registryCount),
     );
     expect(store.savedState.papers.single.isPinnedToDesktop, false);
+  });
+
+  testWidgets('collapsed capsule expansion refreshes only capsule registry',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final platform = _RecordingPlatformServices();
+    final store = _MemoryStateStore();
+    final paper = PaperData(
+      id: 'collapsed-expand-paper',
+      type: PaperTypes.todo,
+      title: 'Collapsed expand',
+      isCollapsed: true,
+    );
+    final state = AppState(papers: [paper]);
+    await store.save(state);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: platform,
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    await tester.pumpAndSettle();
+    final fullRegistryCount =
+        platform.paperWindows.registryPaperSnapshots.length;
+    final capsuleRegistryCount =
+        platform.paperWindows.capsuleOnlyRegistryCollapseAllSnapshots.length;
+
+    platform.paperWindows.emitAction(
+      const PaperWindowActionRequest(
+        kind: PaperWindowActionKinds.expandPaper,
+        paperId: 'collapsed-expand-paper',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(paper.isCollapsed, false);
+    expect(platform.paperWindows.shownTitles, ['Collapsed expand']);
+    expect(
+      platform.paperWindows.capsuleOnlyRegistryCollapseAllSnapshots.length,
+      capsuleRegistryCount + 1,
+    );
+    expect(
+      platform.paperWindows.registryPaperSnapshots.length,
+      fullRegistryCount + 1,
+      reason: 'the only registry snapshot must come from capsule-only refresh',
+    );
   });
 
   testWidgets(

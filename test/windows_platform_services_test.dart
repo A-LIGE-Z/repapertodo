@@ -261,7 +261,7 @@ void main() {
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
         'enableAnimations': true,
-        'fontFamily': 'Segoe UI',
+        'fontFamily': 'Microsoft YaHei UI',
         'isScriptCapsule': false,
       },
     ]);
@@ -986,7 +986,7 @@ void main() {
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
         'enableAnimations': true,
-        'fontFamily': 'Segoe UI',
+        'fontFamily': 'Microsoft YaHei UI',
         'isScriptCapsule': false,
       },
       {
@@ -1013,7 +1013,7 @@ void main() {
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
         'enableAnimations': true,
-        'fontFamily': 'Segoe UI',
+        'fontFamily': 'Microsoft YaHei UI',
         'isScriptCapsule': true,
       },
     ]);
@@ -1129,7 +1129,7 @@ void main() {
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
         'enableAnimations': true,
-        'fontFamily': 'Segoe UI',
+        'fontFamily': 'Microsoft YaHei UI',
         'isScriptCapsule': false,
       },
       {
@@ -1155,7 +1155,7 @@ void main() {
         'hideWhenCovered': false,
         'hideWhenFullscreen': false,
         'enableAnimations': true,
-        'fontFamily': 'Segoe UI',
+        'fontFamily': 'Microsoft YaHei UI',
         'isScriptCapsule': true,
       },
     ]);

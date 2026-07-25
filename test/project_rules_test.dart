@@ -2206,6 +2206,7 @@ void main() {
         _readProjectText('lib/src/ui/sync_settings_dialog.dart');
     final windowsRunner = _readProjectText('windows/runner/flutter_window.cpp');
     final runtimeFont = _readProjectText('lib/src/ui/runtime_custom_font.dart');
+    final appState = _readProjectText('lib/src/core/model/app_state.dart');
 
     expect(design, contains('papertodo.ttf'));
     expect(design, contains('papertodo.otf'));
@@ -2220,6 +2221,11 @@ void main() {
     expect(app, contains('resolveAppFontFamily'));
     expect(app, contains('resolveAppFontFamilyFallback'));
     expect(app, contains('Microsoft YaHei UI'));
+    expect(appState, contains('this.uiFontPreset = UiFontPresets.yaHei'));
+    expect(
+      appState,
+      contains("json['uiFontPreset'], UiFontPresets.yaHei"),
+    );
     expect(app, contains('DengXian'));
     expect(app, contains('const _paperTodoDengXianAdvanceScale = 12.5 / 13'));
     expect(app, contains('height: widget.lineSpacing / textMetricScale'));
@@ -2262,6 +2268,7 @@ void main() {
     );
     expect(windowsRunner, contains('AddRegistryFontFamilies'));
     expect(windowsRunner, contains('HKEY_CURRENT_USER'));
+    expect(windowsRunner, contains('registry_name.find(L" & ", family_start)'));
     expect(runtimeFont, contains('paperTodoRuntimeCustomFontCandidates'));
     expect(runtimeFont, contains("'papertodo.ttf'"));
     expect(runtimeFont, contains("'papertodo.otf'"));
@@ -7517,7 +7524,31 @@ void main() {
     expect(windowsSmokeScript, contains('Copy-Item'));
     expect(windowsSmokeScript, contains('Start-Process'));
     expect(windowsSmokeScript, contains('data.json'));
+    expect(
+      windowsSmokeScript,
+      contains('REPAPERTODO_DATA_DIRECTORY'),
+    );
+    expect(
+      windowsSmokeScript,
+      contains(r'$previousDataDirectoryOverride'),
+    );
+    expect(
+      windowsSmokeScript,
+      contains(
+        r'$dataDirectoryOverrideName, $smokeReleaseDirectory, "Process"',
+      ),
+    );
+    expect(
+      windowsSmokeScript,
+      contains(
+        r'$dataDirectoryOverrideName, $previousDataDirectoryOverride, "Process"',
+      ),
+    );
     expect(windowsSmokeScript, contains('ConvertFrom-Json'));
+    expect(
+      windowsSmokeScript,
+      contains('RePaperTodo Native Capsule ['),
+    );
     expect(windowsSmokeScript, contains('--hide'));
     expect(windowsSmokeScript, contains('--unknown-startup-command'));
     expect(windowsSmokeScript, contains('--new-note'));

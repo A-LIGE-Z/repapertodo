@@ -12,7 +12,7 @@ class AppState {
     this.customThemeColorHex = '',
     this.markdownRenderMode = MarkdownRenderModes.enhanced,
     this.todoVisualSize = TodoVisualSizes.medium,
-    this.uiFontPreset = 'default',
+    this.uiFontPreset = UiFontPresets.yaHei,
     this.systemFontFamilyName = '',
     this.externalMarkdownExtension = '.md',
     this.zoom = 1,
@@ -211,7 +211,7 @@ class AppState {
         json['todoVisualSize'],
         TodoVisualSizes.medium,
       ),
-      uiFontPreset: stringValue(json['uiFontPreset'], 'default'),
+      uiFontPreset: stringValue(json['uiFontPreset'], UiFontPresets.yaHei),
       systemFontFamilyName: stringValue(json['systemFontFamilyName'], ''),
       externalMarkdownExtension: stringValue(
         json['externalMarkdownExtension'],

@@ -623,6 +623,11 @@ void main() {
   });
 
   test('preserves original PaperTodo UI font presets', () {
+    expect(AppState().uiFontPreset, UiFontPresets.yaHei);
+    expect(
+      AppState.fromJson(const {}).uiFontPreset,
+      UiFontPresets.yaHei,
+    );
     expect(
       AppState.fromJson({'uiFontPreset': 'YAHEI'}).uiFontPreset,
       UiFontPresets.yaHei,

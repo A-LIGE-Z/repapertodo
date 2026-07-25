@@ -126,8 +126,11 @@ void main() {
     final yaHeiState = AppState(uiFontPreset: UiFontPresets.yaHei);
     final dengXianState = AppState(uiFontPreset: UiFontPresets.dengXian);
 
-    expect(resolveAppFontFamily(yaHeiState), isNull);
-    expect(resolveAppFontFamilyFallback(yaHeiState), isNull);
+    expect(resolveAppFontFamily(yaHeiState), 'Microsoft YaHei UI');
+    expect(
+      resolveAppFontFamilyFallback(yaHeiState),
+      contains('Microsoft YaHei'),
+    );
     expect(resolveAppFontFamily(dengXianState), 'DengXian');
     expect(
       resolveAppFontFamilyFallback(dengXianState),
@@ -144,10 +147,25 @@ void main() {
         'Segoe UI Emoji',
       ],
     );
+    expect(
+      resolveAppFontFamilyFallback(
+        AppState(uiFontPreset: UiFontPresets.serif),
+      ),
+      isNull,
+    );
+    expect(
+      resolveAppFontFamilyFallback(
+        AppState(uiFontPreset: UiFontPresets.mono),
+      ),
+      isNull,
+    );
   });
 
   test('native Windows dialogs use the same configured UI font family', () {
-    expect(resolveWindowsNativeDialogFontFamily(AppState()), isEmpty);
+    expect(
+      resolveWindowsNativeDialogFontFamily(AppState()),
+      'Microsoft YaHei UI',
+    );
     expect(
       resolveWindowsNativeDialogFontFamily(
         AppState(uiFontPreset: UiFontPresets.yaHei),

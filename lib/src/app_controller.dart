@@ -419,6 +419,16 @@ class RePaperTodoController {
     return _showPaper(paper, rebuildTrayMenu: true);
   }
 
+  Future<void> showPaperFromCapsule(PaperData paper) async {
+    await _showPaper(
+      paper,
+      rebuildTrayMenu: false,
+      refreshSurfaceRegistry: false,
+    );
+    await refreshCapsuleSurfaceRegistry();
+    await _platform.tray.rebuildMenu(state);
+  }
+
   Future<void> _showPaper(
     PaperData paper, {
     required bool rebuildTrayMenu,

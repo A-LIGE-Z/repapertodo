@@ -234,6 +234,12 @@ public static class RePaperTodoSmokeWindowEnumerator {
     if (processId != expectedProcessId || !IsWindowVisible(window)) {
       return false;
     }
+    var title = new System.Text.StringBuilder(256);
+    GetWindowText(window, title, title.Capacity);
+    if (title.ToString().StartsWith("RePaperTodo Native Capsule [",
+                                    StringComparison.Ordinal)) {
+      return false;
+    }
     const long WS_THICKFRAME = 0x00040000L;
     long style = GetWindowLongPtr(window, -16).ToInt64();
     if ((style & WS_THICKFRAME) == 0) {
@@ -881,6 +887,9 @@ $smokeRoot = Join-Path $tempRoot "repapertodo-windows-smoke-$([Guid]::NewGuid().
 $smokeReleaseDirectory = Join-Path $smokeRoot "Release"
 $smokeExe = Join-Path $smokeReleaseDirectory "repapertodo.exe"
 $smokeStateFile = Join-Path $smokeReleaseDirectory "data.json"
+$dataDirectoryOverrideName = "REPAPERTODO_DATA_DIRECTORY"
+$previousDataDirectoryOverride = [Environment]::GetEnvironmentVariable(
+  $dataDirectoryOverrideName, "Process")
 $primaryProcess = $null
 $smokeFailure = $null
 $hiddenStartupCommands = @("--hide")
@@ -918,6 +927,12 @@ try {
     -Destination $smokeReleaseDirectory `
     -Recurse `
     -Force
+
+  # Keep automated validation isolated from the user's persisted first-run
+  # data-directory choice while allowing the real application startup path to
+  # create and load data.json normally.
+  [Environment]::SetEnvironmentVariable(
+    $dataDirectoryOverrideName, $smokeReleaseDirectory, "Process")
 
   $primaryProcess = Start-Process `
     -FilePath $smokeExe `
@@ -1179,6 +1194,8 @@ try {
   $smokeFailure = $_
   throw
 } finally {
+  [Environment]::SetEnvironmentVariable(
+    $dataDirectoryOverrideName, $previousDataDirectoryOverride, "Process")
   if ($null -ne $primaryProcess -and -not $primaryProcess.HasExited) {
     Stop-Process -Id $primaryProcess.Id -Force -ErrorAction SilentlyContinue
     Wait-Process -Id $primaryProcess.Id -Timeout 5 -ErrorAction SilentlyContinue
