@@ -148,10 +148,13 @@ class PaperFlutterWindow : public Win32Window {
   bool capsule_animation_active_ = false;
   bool hide_when_covered_ = false;
   bool hide_when_fullscreen_ = false;
+  bool paper_resize_start_pending_ = false;
   bool in_size_move_ = false;
   bool queue_drag_offset_active_ = false;
   int queue_drag_base_top_ = 0;
   int queue_drag_target_top_ = 0;
+  int queue_drag_last_delta_y_ = 0;
+  bool queue_drag_master_transition_coupled_ = false;
   double queue_drag_animation_start_top_ = 0.0;
   double queue_drag_animation_target_top_ = 0.0;
   ULONGLONG queue_drag_animation_started_at_ = 0;

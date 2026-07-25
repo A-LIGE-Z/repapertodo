@@ -2375,6 +2375,7 @@ void PaperFlutterWindow::OnDestroy() {
   capsule_animation_active_ = false;
   queue_drag_animation_active_ = false;
   master_capsule_transition_active_ = false;
+  paper_resize_start_pending_ = false;
   paper_shadow_refresh_pending_ = false;
   ++paper_shadow_refresh_generation_;
   DestroyPaperShadowWindow();
@@ -2406,8 +2407,21 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
         // frame unless the shadow is withdrawn at the initiating click.
         paper_shadow_refresh_pending_ = false;
         ++paper_shadow_refresh_generation_;
+        paper_resize_start_pending_ = true;
         HidePaperShadowWindow();
         DwmFlush();
+        // DefWindowProc owns the modal resize loop. Keep the pre-resize guard
+        // active for the entire nested transaction so an early WM_MOVE,
+        // WM_SIZE or WM_WINDOWPOSCHANGED cannot restore the shadow between the
+        // initiating press and WM_ENTERSIZEMOVE. If USER32 declines to start a
+        // resize, restore the ordinary shadow path after the call returns.
+        const LRESULT result = Win32Window::MessageHandler(
+            window, message, wparam, lparam);
+        paper_resize_start_pending_ = false;
+        if (!in_size_move_ && !paper_shadow_refresh_pending_) {
+          UpdatePaperShadowWindow(false);
+        }
+        return result;
       }
       break;
     case WM_TIMER:
@@ -2676,6 +2690,9 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
     master_capsule_retracted_ = false;
     master_capsule_transition_active_ = false;
     master_capsule_transition_initialized_ = false;
+    queue_drag_offset_active_ = false;
+    queue_drag_last_delta_y_ = 0;
+    queue_drag_master_transition_coupled_ = false;
     capsule_alpha_ = 255;
     SetLayeredWindowAttributes(window, RGB(1, 2, 3),
                                static_cast<BYTE>(capsule_alpha_),
@@ -2685,6 +2702,9 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
     master_capsule_transition_active_ = false;
     master_capsule_transition_initialized_ = false;
     master_capsule_retracted_ = false;
+    queue_drag_offset_active_ = false;
+    queue_drag_last_delta_y_ = 0;
+    queue_drag_master_transition_coupled_ = false;
     capsule_alpha_ = 255;
     SetLayeredWindowAttributes(window, RGB(1, 2, 3),
                                static_cast<BYTE>(capsule_alpha_),
@@ -2790,7 +2810,8 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       native_y = capsule_hidden_by_master_
                      ? static_cast<double>(master_capsule_top)
                      : static_cast<double>(normal_capsule_top);
-    } else if (master_capsule_transition_active_) {
+    } else if (master_capsule_transition_active_ &&
+               !queue_drag_offset_active_) {
       master_capsule_transition_target_top_ =
           static_cast<double>(capsule_hidden_by_master_ ? master_capsule_top
                                                          : normal_capsule_top);
@@ -2881,8 +2902,24 @@ bool PaperFlutterWindow::PrepareQueueDragOffset(int delta_y,
   if (!queue_drag_offset_active_) {
     queue_drag_offset_active_ = true;
     queue_drag_base_top_ = bounds.top;
+    queue_drag_target_top_ = bounds.top;
+    queue_drag_last_delta_y_ = 0;
+    queue_drag_master_transition_coupled_ =
+        master_capsule_transition_active_;
   }
-  queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
+  const int incremental_delta = delta_y - queue_drag_last_delta_y_;
+  queue_drag_last_delta_y_ = delta_y;
+  queue_drag_target_top_ = bounds.top + incremental_delta;
+  if (master_capsule_transition_active_) {
+    queue_drag_master_transition_coupled_ = true;
+  }
+  if (queue_drag_master_transition_coupled_) {
+    // Keep a live master drag in the same coordinate space as an in-flight
+    // retract/reveal. Otherwise the animation timer can overwrite the atomic
+    // DeferWindowPos frame and make this Flutter capsule jump backwards.
+    master_capsule_transition_start_top_ += incremental_delta;
+    master_capsule_transition_target_top_ += incremental_delta;
+  }
   // Keep the collapsed Flutter HWND on the exact same frame as the native
   // master. Starting a fresh easing curve for every pointer event introduces
   // visible lag and a rubber-band reversal when drag direction changes.
@@ -2913,18 +2950,34 @@ void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
 
 void PaperFlutterWindow::FinishQueueDrag(bool commit) {
   if (!queue_drag_offset_active_) return;
-  const int target_top = commit ? queue_drag_target_top_
-                                : queue_drag_base_top_;
+  int target_top = commit ? queue_drag_target_top_
+                          : queue_drag_base_top_;
+  if (!commit && queue_drag_master_transition_coupled_) {
+    master_capsule_transition_start_top_ -= queue_drag_last_delta_y_;
+    master_capsule_transition_target_top_ -= queue_drag_last_delta_y_;
+    RECT bounds = {};
+    if (HWND window = GetHandle(); window && GetWindowRect(window, &bounds)) {
+      target_top = master_capsule_transition_active_
+                       ? bounds.top - queue_drag_last_delta_y_
+                       : static_cast<int>(std::lround(
+                             master_capsule_transition_target_top_));
+      if (master_capsule_transition_active_) {
+        ApplyQueueDragTop(target_top);
+      }
+    }
+  }
   if (commit) {
     if (HWND window = GetHandle()) {
       KillTimer(window, kCapsuleQueueFollowTimerId);
     }
     queue_drag_animation_active_ = false;
     ApplyQueueDragTop(target_top);
-  } else {
+  } else if (!master_capsule_transition_active_) {
     StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
   }
   queue_drag_offset_active_ = false;
+  queue_drag_last_delta_y_ = 0;
+  queue_drag_master_transition_coupled_ = false;
 }
 
 void PaperFlutterWindow::StartQueueDragAnimation(int target_top,
@@ -3132,7 +3185,12 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
 
   master_capsule_transition_target_hidden_ = target_hidden;
   master_capsule_transition_start_top_ = static_cast<double>(bounds.top);
-  master_capsule_transition_target_top_ = static_cast<double>(target_top);
+  master_capsule_transition_target_top_ = static_cast<double>(
+      target_top +
+      (queue_drag_offset_active_ ? queue_drag_last_delta_y_ : 0));
+  if (queue_drag_offset_active_) {
+    queue_drag_master_transition_coupled_ = true;
+  }
   master_capsule_transition_start_alpha_ = capsule_alpha_;
   master_capsule_transition_target_alpha_ = target_hidden ? 0 : 255;
   master_capsule_transition_started_at_ = GetTickCount64();
@@ -3689,7 +3747,7 @@ void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
   // after WM_EXITSIZEMOVE but before Flutter presents its final resized frame.
   // Keep the layered shadow suppressed until that frame posts the deferred
   // refresh message; otherwise the stale DIB appears as a one-frame black rim.
-  if (paper_shadow_refresh_pending_) {
+  if (paper_resize_start_pending_ || paper_shadow_refresh_pending_) {
     HidePaperShadowWindow();
     return;
   }

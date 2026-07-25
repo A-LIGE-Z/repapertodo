@@ -342,6 +342,8 @@ void NativeCapsuleWindow::ApplySurface(
   if (previous_capsule_side != capsule_side_ ||
       previous_monitor_device_name != monitor_device_name_) {
     queue_drag_offset_active_ = false;
+    queue_drag_last_delta_y_ = 0;
+    queue_drag_master_transition_coupled_ = false;
     queue_drag_animation_active_ = false;
     if (HWND window = GetHandle()) {
       KillTimer(window, kCapsuleQueueFollowTimerId);
@@ -379,6 +381,9 @@ void NativeCapsuleWindow::ApplySurface(
     master_transition_active_ = false;
     master_transition_initialized_ = false;
     master_retracted_ = false;
+    queue_drag_offset_active_ = false;
+    queue_drag_last_delta_y_ = 0;
+    queue_drag_master_transition_coupled_ = false;
     ApplyMasterTransitionAlpha(255);
     if (HWND window = GetHandle()) {
       KillTimer(window, kCapsuleSlideTimerId);
@@ -504,7 +509,7 @@ void NativeCapsuleWindow::ApplySurface(
           capsule_hidden_by_master_,
           animations_enabled_ ? kCapsuleMasterMoveMilliseconds : 0,
           animations_enabled_ ? kCapsuleMasterFadeMilliseconds : 0);
-    } else if (master_transition_active_) {
+    } else if (master_transition_active_ && !queue_drag_offset_active_) {
       // Retarget a transition when the master is dragged or the queue is
       // reordered while the fade is still running. Keep the current frame and
       // only change its destination; restarting from the old slot causes a
@@ -514,7 +519,7 @@ void NativeCapsuleWindow::ApplySurface(
                                                 MasterTopPhysical())
                                           : static_cast<double>(
                                                 DockedTopPhysical());
-    } else if (master_retracted_) {
+    } else if (master_retracted_ && !queue_drag_offset_active_) {
       if (HWND window = GetHandle()) {
         RECT bounds = {};
         if (GetWindowRect(window, &bounds) &&
@@ -685,7 +690,12 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
 
   master_transition_target_hidden_ = target_hidden;
   master_transition_start_top_ = static_cast<double>(bounds.top);
-  master_transition_target_top_ = static_cast<double>(target_top);
+  master_transition_target_top_ = static_cast<double>(
+      target_top +
+      (queue_drag_offset_active_ ? queue_drag_last_delta_y_ : 0));
+  if (queue_drag_offset_active_) {
+    queue_drag_master_transition_coupled_ = true;
+  }
   master_transition_start_alpha_ = current_alpha_;
   master_transition_target_alpha_ = target_hidden ? 0 : 255;
   master_transition_started_at_ = GetTickCount64();
@@ -855,6 +865,8 @@ bool NativeCapsuleWindow::PrepareMasterDragTop(int target_top,
     // while leaving the master at the last pointer position.
     queue_drag_offset_active_ = true;
     queue_drag_base_top_ = bounds.top;
+    queue_drag_last_delta_y_ = 0;
+    queue_drag_master_transition_coupled_ = false;
   }
   queue_drag_target_top_ = target_top;
   KillTimer(window, kCapsuleQueueFollowTimerId);
@@ -875,8 +887,24 @@ bool NativeCapsuleWindow::PrepareQueueDragOffset(int delta_y,
   if (!queue_drag_offset_active_) {
     queue_drag_offset_active_ = true;
     queue_drag_base_top_ = bounds.top;
+    queue_drag_target_top_ = bounds.top;
+    queue_drag_last_delta_y_ = 0;
+    queue_drag_master_transition_coupled_ = master_transition_active_;
   }
-  queue_drag_target_top_ = queue_drag_base_top_ + delta_y;
+  const int incremental_delta = delta_y - queue_drag_last_delta_y_;
+  queue_drag_last_delta_y_ = delta_y;
+  queue_drag_target_top_ = bounds.top + incremental_delta;
+  if (master_transition_active_) {
+    queue_drag_master_transition_coupled_ = true;
+  }
+  if (queue_drag_master_transition_coupled_) {
+    // A child can still be travelling into or out of the master slot when a
+    // master drag begins. Translate the whole animation coordinate system by
+    // the pointer delta so its timer and the atomic queue move produce the
+    // same visual frame instead of fighting over the HWND top coordinate.
+    master_transition_start_top_ += incremental_delta;
+    master_transition_target_top_ += incremental_delta;
+  }
   // A master drag is one physical gesture, so every child must share the
   // master's exact frame instead of starting a separate easing curve on each
   // WM_MOUSEMOVE.  Independent 64 ms curves accumulated visible lag and made
@@ -902,17 +930,37 @@ void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
 
 void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
   if (!queue_drag_offset_active_) return;
-  const int target_top = commit ? queue_drag_target_top_ : queue_drag_base_top_;
+  int target_top = commit ? queue_drag_target_top_ : queue_drag_base_top_;
+  if (!commit && queue_drag_master_transition_coupled_) {
+    master_transition_start_top_ -= queue_drag_last_delta_y_;
+    master_transition_target_top_ -= queue_drag_last_delta_y_;
+    RECT bounds = {};
+    if (HWND window = GetHandle(); window && GetWindowRect(window, &bounds)) {
+      // Remove the cancelled gesture from both the current HWND frame and the
+      // transition endpoints. Let the still-running master transition resume
+      // from that coherent frame; a second queue animation would otherwise
+      // compete with the master timer and reintroduce the backwards hop.
+      target_top = master_transition_active_
+                       ? bounds.top - queue_drag_last_delta_y_
+                       : static_cast<int>(
+                             std::lround(master_transition_target_top_));
+      if (master_transition_active_) {
+        ApplyQueueDragTop(target_top);
+      }
+    }
+  }
   if (commit) {
     if (HWND window = GetHandle()) {
       KillTimer(window, kCapsuleQueueFollowTimerId);
     }
     queue_drag_animation_active_ = false;
     ApplyQueueDragTop(target_top);
-  } else {
+  } else if (!master_transition_active_) {
     StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
   }
   queue_drag_offset_active_ = false;
+  queue_drag_last_delta_y_ = 0;
+  queue_drag_master_transition_coupled_ = false;
 }
 
 void NativeCapsuleWindow::StartQueueDragAnimation(int target_top,
@@ -1474,6 +1522,12 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
         return HTTRANSPARENT;
       }
       return HTCLIENT;
+    case WM_MOUSEACTIVATE:
+      // WS_EX_NOACTIVATE is the persistent policy, but explicitly answering
+      // the click message prevents USER32 from briefly activating a stale
+      // capsule frame on systems that recalculate styles during a show/z-order
+      // transaction.
+      return MA_NOACTIVATE;
     case WM_SETCURSOR:
       SetCursor(LoadCursor(
           nullptr, pointer_down_ && !close_pressed_ ? IDC_SIZEALL : IDC_HAND));

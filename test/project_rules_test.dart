@@ -3999,6 +3999,8 @@ void main() {
     expect(nativeCapsuleHeader, contains('public Win32Window'));
     expect(nativeCapsule, isNot(contains('FlutterViewController')));
     expect(nativeCapsule, contains('WS_EX_NOACTIVATE'));
+    expect(nativeCapsule, contains('case WM_MOUSEACTIVATE:'));
+    expect(nativeCapsule, contains('return MA_NOACTIVATE;'));
     expect(nativeCapsule, contains('"toggleCollapseAll"'));
     expect(nativeCapsule, contains('"capsuleDropped"'));
     expect(nativeCapsule, contains('"capsuleMasterDragUpdated"'));
@@ -4006,6 +4008,34 @@ void main() {
     expect(nativeCapsuleHeader, contains('PrepareMasterDragTop'));
     expect(nativeCapsuleHeader, contains('PrepareQueueDragOffset'));
     expect(nativeCapsule, contains('queue_drag_base_top_ = bounds.top'));
+    expect(nativeCapsuleHeader, contains('queue_drag_last_delta_y_'));
+    expect(paperWindowHeader, contains('queue_drag_last_delta_y_'));
+    expect(
+      nativeCapsuleHeader,
+      contains('queue_drag_master_transition_coupled_'),
+    );
+    expect(
+      paperWindowHeader,
+      contains('queue_drag_master_transition_coupled_'),
+    );
+    expect(
+      nativeCapsule,
+      contains(
+          'const int incremental_delta = delta_y - queue_drag_last_delta_y_'),
+    );
+    expect(
+      paperWindow,
+      contains(
+          'const int incremental_delta = delta_y - queue_drag_last_delta_y_'),
+    );
+    expect(
+      nativeCapsule,
+      contains('master_transition_start_top_ += incremental_delta'),
+    );
+    expect(
+      paperWindow,
+      contains('master_capsule_transition_start_top_ += incremental_delta'),
+    );
     expect(nativeCapsule, contains('kCapsuleBodyHeight = 30'));
     expect(nativeCapsule, contains('kCapsuleChromeMargin = 8'));
     expect(nativeCapsule, contains('kCapsuleCornerRadius = 12'));
@@ -4315,7 +4345,7 @@ void main() {
     expect(
       paperWindow,
       contains(
-        'if (paper_shadow_refresh_pending_) {\n'
+        'if (paper_resize_start_pending_ || paper_shadow_refresh_pending_) {\n'
         '    HidePaperShadowWindow();\n'
         '    return;',
       ),
@@ -4327,6 +4357,17 @@ void main() {
     expect(runner, contains('kFullscreenTopmostRefreshIntervalMs = 250'));
     expect(paperWindowApp, contains("'capsuleHoverChanged'"));
     expect(paperWindowHeader, contains('bool in_size_move_ = false;'));
+    expect(
+      paperWindowHeader,
+      contains('bool paper_resize_start_pending_ = false;'),
+    );
+    expect(paperWindow, contains('paper_resize_start_pending_ = true;'));
+    expect(
+      paperWindow,
+      contains(
+        'if (paper_resize_start_pending_ || paper_shadow_refresh_pending_)',
+      ),
+    );
     expect(cmake, contains('"paper_flutter_window.cpp"'));
     expect(cmake, contains('"native_capsule_window.cpp"'));
     expect(cmake, contains('"paper_motion.h"'));
