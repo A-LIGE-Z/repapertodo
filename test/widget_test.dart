@@ -21663,7 +21663,19 @@ void main() {
     expect(controller.state.papers.single.isCollapsed, true);
     expect(store.savedState.papers.single.title, 'After');
     expect(store.savedState.papers.single.content, 'Edited in child engine');
-    expect(platform.paperWindows.updatedTitles, contains('After'));
+    expect(
+      platform.paperWindows.registryPaperSnapshots.last.single.title,
+      'After',
+    );
+    expect(
+      platform.paperWindows.registryPaperSnapshots.last.single.content,
+      'Edited in child engine',
+    );
+    expect(
+      platform.paperWindows.updatedTitles,
+      isNot(contains('After')),
+      reason: 'the full registry state already updates the child engine once',
+    );
     expect(
       platform.paperWindows.restoredTitleSnapshots.length,
       restoreCountBeforeEdit,
@@ -24075,6 +24087,7 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final restoredCollapseAllSnapshots = <bool>[];
   final registryCollapseAllSnapshots = <bool>[];
   final registryCollapsedSnapshots = <Map<String, bool>>[];
+  final registryPaperSnapshots = <List<PaperData>>[];
   final updatedTitles = <String>[];
   final shownTitles = <String>[];
   final hiddenTitles = <String>[];
@@ -24147,6 +24160,11 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
     registryCollapsedSnapshots.add({
       for (final paper in state.papers) paper.id: paper.isCollapsed,
     });
+    registryPaperSnapshots.add(
+      state.papers
+          .map((paper) => PaperData.fromJson(paper.toJson()))
+          .toList(growable: false),
+    );
   }
 
   @override

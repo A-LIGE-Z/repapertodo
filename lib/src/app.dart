@@ -2888,6 +2888,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
   Future<void> _applyPaperTopologyEdit(PaperData changedPaper) async {
     try {
       await controller.refreshSurfaceRegistry();
+      // The registry transaction includes the complete AppState and applies
+      // it to every child paper engine before the native HWND shapes are
+      // reconciled. Sending updatePaperSurface again would rebuild the edited
+      // child a second time and replay pin/title/z-order messages immediately
+      // after the shape transition, which is visible as a one-frame flash.
+      return;
     } catch (error) {
       await UsageLog.instance.record(
         'surface',
@@ -2903,14 +2909,14 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       );
     }
     try {
-      // The registry pass applies native shape and visibility. The regular
-      // edit path remains responsible for child content/title synchronization
-      // and safely becomes a no-op for a hidden paper.
+      // A failed registry transaction cannot reconcile the capsule queue, but
+      // keep the edited paper content recoverable until a later registry
+      // refresh succeeds.
       await controller.updatePaperSurface(changedPaper);
     } catch (error) {
       await UsageLog.instance.record(
         'surface',
-        'topology-content-update-failed',
+        'topology-content-fallback-failed',
         level: 'ERROR',
         details: {
           'paperId': changedPaper.id,
