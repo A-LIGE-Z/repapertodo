@@ -1250,12 +1250,6 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                   color: colors.surface,
                   border: Border.all(color: colors.outlineVariant),
                   borderRadius: BorderRadius.circular(999),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colors.shadow.withValues(alpha: 0.18),
-                      blurRadius: 8,
-                    ),
-                  ],
                 ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 9),
@@ -1360,12 +1354,6 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                     color: colorScheme.surface,
                     border: Border.all(color: colorScheme.outlineVariant),
                     borderRadius: BorderRadius.circular(capsuleRadius),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colorScheme.shadow.withValues(alpha: 0.08),
-                        blurRadius: 8,
-                      ),
-                    ],
                   ),
                   child: Row(
                     children: [
@@ -2870,8 +2858,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             previousPaper.capsuleSide != changedPaper.capsuleSide ||
             previousPaper.capsuleMonitorDeviceName !=
                 changedPaper.capsuleMonitorDeviceName;
-    final capsuleLabelChanged =
-        previousPaper.title != changedPaper.title ||
+    final capsuleLabelChanged = previousPaper.title != changedPaper.title ||
         (previousPaper.isNote &&
             changedPaper.isNote &&
             ScriptCapsuleSpec.isScriptCapsuleContent(previousPaper.content) !=

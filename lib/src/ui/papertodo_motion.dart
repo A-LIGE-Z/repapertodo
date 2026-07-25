@@ -5,7 +5,10 @@ import 'package:flutter/animation.dart';
 /// owns the animation, so a state refresh never introduces a second rhythm.
 abstract final class PaperTodoMotion {
   static const Curve enterCurve = Curves.easeOutCubic;
-  static const Curve exitCurve = Curves.easeInCubic;
+  // PaperTodo uses its shared EaseOut curve in both directions. Keeping the
+  // outgoing subtree on the same curve also prevents an AnimatedSwitcher
+  // from accelerating into the instant where the native HWND changes shape.
+  static const Curve exitCurve = Curves.easeOutCubic;
   static const Curve quickCurve = Curves.easeOutQuad;
 
   /// The short state transition used for controls and row opacity. Keeping

@@ -1760,7 +1760,7 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       }
       return 0;
     }
-    case WM_CAPTURECHANGED:
+    case WM_CAPTURECHANGED: {
       if (master_ && dragging_ && event_callback_) {
         event_callback_(
             "capsuleMasterDragFinished",
@@ -1781,6 +1781,7 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
         InvalidateRect(window, nullptr, FALSE);
       }
       return 0;
+    }
     case WM_DESTROY:
       KillTimer(window, kCapsuleSlideTimerId);
       KillTimer(window, kCapsuleQueueFollowTimerId);

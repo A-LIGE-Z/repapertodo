@@ -152,6 +152,7 @@ constexpr UINT_PTR kReminderBubbleTimerId = 1;
 constexpr UINT_PTR kCapsuleSlideTimerId = 0xCA52;
 constexpr UINT_PTR kCapsuleQueueFollowTimerId = 0xCA53;
 constexpr UINT_PTR kCapsuleMasterTransitionTimerId = 0xCA56;
+constexpr COLORREF kPaperTransparencyKey = RGB(1, 2, 3);
 using repapertodo::motion::kAnimationFrameMilliseconds;
 using repapertodo::motion::kCapsuleMasterFadeMilliseconds;
 using repapertodo::motion::kCapsuleMasterMoveMilliseconds;
@@ -2378,6 +2379,7 @@ void PaperFlutterWindow::OnDestroy() {
   ClearCommittedQueueDrag();
   paper_resize_start_pending_ = false;
   paper_shadow_refresh_pending_ = false;
+  paper_surface_reveal_pending_ = false;
   ++paper_shadow_refresh_generation_;
   DestroyPaperShadowWindow();
   HideReminderBubble();
@@ -2392,11 +2394,24 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
                                            WPARAM const wparam,
                                            LPARAM const lparam) noexcept {
   switch (message) {
-    case WM_ERASEBKGND:
-      // The embedded Flutter view paints the complete client area. Erasing
-      // the parent first exposes a black frame while Windows stretches the
-      // surface during interactive resize.
+    case WM_ERASEBKGND: {
+      // The Flutter child normally covers the complete client area, but a
+      // growing interactive resize can expose a narrow parent strip before
+      // the child swap chain reaches its new size. Fill only that clipped
+      // parent region with the layered-window color key. Leaving it undefined
+      // lets Windows present black pixels; using an ordinary background brush
+      // would instead flash an opaque rectangle.
+      HDC context = reinterpret_cast<HDC>(wparam);
+      RECT bounds = {};
+      if (context && GetClientRect(window, &bounds)) {
+        const COLORREF previous_color =
+            SetDCBrushColor(context, kPaperTransparencyKey);
+        FillRect(context, &bounds,
+                 reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+        SetDCBrushColor(context, previous_color);
+      }
       return 1;
+    }
     case WM_NCLBUTTONDOWN:
       if (wparam == HTLEFT || wparam == HTRIGHT || wparam == HTTOP ||
           wparam == HTBOTTOM || wparam == HTTOPLEFT ||
@@ -2453,14 +2468,22 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       if (refresh_generation != paper_shadow_refresh_generation_) {
         return 0;
       }
-      if (paper_shadow_refresh_pending_ && !in_size_move_) {
+      if ((paper_shadow_refresh_pending_ ||
+           paper_surface_reveal_pending_) &&
+          !in_size_move_) {
         // The Flutter next-frame callback fires when the engine submits the
         // frame, which can still precede DWM presenting it. Waiting for that
-        // composition boundary prevents the layered shadow from surrounding
-        // one stretched/black swap-chain frame at resize release.
+        // composition boundary prevents either the layered shadow or the
+        // newly reshaped paper HWND from exposing one stale swap-chain frame.
         DwmFlush();
-        paper_shadow_refresh_pending_ = false;
-        UpdatePaperShadowWindow(true);
+        if (paper_surface_reveal_pending_) {
+          paper_surface_reveal_pending_ = false;
+          ApplyMasterCapsuleAlpha(capsule_alpha_);
+        }
+        if (paper_shadow_refresh_pending_) {
+          paper_shadow_refresh_pending_ = false;
+          UpdatePaperShadowWindow(true);
+        }
       }
       return 0;
     }
@@ -2640,9 +2663,16 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
   if (!window) {
     return;
   }
+  const bool had_surface = surface_initialized_;
   const bool previous_intended_visible = intended_visible_;
   intended_visible_ =
       BoolValue(surface, "isVisible", intended_visible_);
+  if (!intended_visible_ &&
+      (paper_shadow_refresh_pending_ || paper_surface_reveal_pending_)) {
+    paper_shadow_refresh_pending_ = false;
+    paper_surface_reveal_pending_ = false;
+    ++paper_shadow_refresh_generation_;
+  }
   RECT current = {};
   GetWindowRect(window, &current);
   const double x = NumberValue(surface, "x", current.left);
@@ -2666,6 +2696,8 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
       capsule_monitor_device_name_;
   collapsed_ = BoolValue(surface, "isCollapsed", collapsed_);
   const bool expanded_from_capsule = previous_collapsed && !collapsed_;
+  const bool surface_shape_changed =
+      had_surface && previous_collapsed != collapsed_;
   const bool was_capsule_hidden_by_master = capsule_hidden_by_master_;
   capsule_hidden_by_master_ =
       BoolValue(surface, "capsuleHiddenByMaster", capsule_hidden_by_master_);
@@ -2700,10 +2732,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
     ClearCommittedQueueDrag();
-    capsule_alpha_ = 255;
-    SetLayeredWindowAttributes(window, RGB(1, 2, 3),
-                               static_cast<BYTE>(capsule_alpha_),
-                               LWA_COLORKEY | LWA_ALPHA);
+    ApplyMasterCapsuleAlpha(255);
     KillTimer(window, kCapsuleMasterTransitionTimerId);
   } else if (!intended_visible_ && previous_intended_visible) {
     master_capsule_transition_active_ = false;
@@ -2713,10 +2742,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
     ClearCommittedQueueDrag();
-    capsule_alpha_ = 255;
-    SetLayeredWindowAttributes(window, RGB(1, 2, 3),
-                               static_cast<BYTE>(capsule_alpha_),
-                               LWA_COLORKEY | LWA_ALPHA);
+    ApplyMasterCapsuleAlpha(255);
     KillTimer(window, kCapsuleMasterTransitionTimerId);
   }
   hide_when_covered_ =
@@ -2900,12 +2926,18 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
   pinned_to_desktop_ =
       BoolValue(surface, "isPinnedToDesktop", pinned_to_desktop_);
   SetHideFromWindowSwitcher(hide_from_window_switcher_);
-  if (expanded_from_capsule) {
-    // The child Flutter engine has just switched from the compact capsule to
-    // the full paper layout. Keep the detached shadow hidden until that new
-    // frame has actually been submitted; otherwise the shadow outlines one
-    // stretched capsule/transparent frame during the size jump.
-    DeferPaperShadowRefreshUntilNextFrame();
+  if (surface_shape_changed) {
+    // A capsule and a paper use radically different Flutter layouts and HWND
+    // bounds. Keep the reshaped surface color-key transparent until the child
+    // engine submits the matching frame. This covers both directions and
+    // prevents a click from exposing a stretched capsule, a tiny paper, or a
+    // black parent strip. Expanded papers restore their detached shadow in the
+    // same composition transaction.
+    DeferPaperShadowRefreshUntilNextFrame(true);
+  } else if (expanded_from_capsule) {
+    // Defensive compatibility path for a surface initialized by an older
+    // coordinator without the shape marker above.
+    DeferPaperShadowRefreshUntilNextFrame(true);
   }
   RefreshZOrder();
 }
@@ -3236,13 +3268,16 @@ void PaperFlutterWindow::ClearCommittedQueueDrag() {
 
 void PaperFlutterWindow::ApplyMasterCapsuleAlpha(int alpha) {
   const int next_alpha = std::clamp(alpha, 0, 255);
-  if (capsule_alpha_ == next_alpha) {
+  capsule_alpha_ = next_alpha;
+  const int next_applied_alpha =
+      paper_surface_reveal_pending_ ? 0 : next_alpha;
+  if (applied_window_alpha_ == next_applied_alpha) {
     return;
   }
-  capsule_alpha_ = next_alpha;
+  applied_window_alpha_ = next_applied_alpha;
   if (HWND window = GetHandle()) {
-    SetLayeredWindowAttributes(window, RGB(1, 2, 3),
-                               static_cast<BYTE>(capsule_alpha_),
+    SetLayeredWindowAttributes(window, kPaperTransparencyKey,
+                               static_cast<BYTE>(applied_window_alpha_),
                                LWA_COLORKEY | LWA_ALPHA);
   }
 }
@@ -3264,7 +3299,11 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
   if (queue_drag_offset_active_) {
     queue_drag_master_transition_coupled_ = true;
   }
-  master_capsule_transition_start_alpha_ = capsule_alpha_;
+  // A paper/capsule shape change can temporarily keep the HWND fully
+  // transparent while Flutter renders its matching frame. Start any
+  // overlapping master transition from the alpha that DWM actually has,
+  // rather than jumping from the logical target that has not been presented.
+  master_capsule_transition_start_alpha_ = applied_window_alpha_;
   master_capsule_transition_target_alpha_ = target_hidden ? 0 : 255;
   master_capsule_transition_started_at_ =
       animation_epoch > 0 ? animation_epoch : GetTickCount64();
@@ -3791,15 +3830,34 @@ void PaperFlutterWindow::EnsurePaperShadowWindow() {
   paper_shadow_z_order_dirty_ = true;
 }
 
-void PaperFlutterWindow::DeferPaperShadowRefreshUntilNextFrame() {
+void PaperFlutterWindow::DeferPaperShadowRefreshUntilNextFrame(
+    bool reveal_surface) {
   HWND window = GetHandle();
   HidePaperShadowWindow();
   paper_shadow_refresh_pending_ = false;
+  const bool should_reveal_surface =
+      (reveal_surface || paper_surface_reveal_pending_) && window &&
+      intended_visible_;
+  paper_surface_reveal_pending_ = should_reveal_surface;
   const uint64_t refresh_generation = ++paper_shadow_refresh_generation_;
-  if (!window || collapsed_ || !intended_visible_) {
+  if (!window || !intended_visible_) {
     return;
   }
-  paper_shadow_refresh_pending_ = true;
+  paper_shadow_refresh_pending_ = !collapsed_;
+  if (paper_surface_reveal_pending_) {
+    // Resizing the HWND from a capsule to a paper (or back) stretches the old
+    // Flutter swap-chain contents until the next frame arrives. Keep that
+    // interim composition color-key transparent while retaining the logical
+    // alpha so a concurrent master-capsule transition can continue normally.
+    if (applied_window_alpha_ != 0) {
+      applied_window_alpha_ = 0;
+      SetLayeredWindowAttributes(window, kPaperTransparencyKey, 0,
+                                 LWA_COLORKEY | LWA_ALPHA);
+    }
+  }
+  if (!paper_shadow_refresh_pending_ && !paper_surface_reveal_pending_) {
+    return;
+  }
   if (flutter_controller_ && flutter_controller_->engine()) {
     const HWND target_window = window;
     flutter_controller_->engine()->SetNextFrameCallback(
@@ -3821,7 +3879,8 @@ void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
   // after WM_EXITSIZEMOVE but before Flutter presents its final resized frame.
   // Keep the layered shadow suppressed until that frame posts the deferred
   // refresh message; otherwise the stale DIB appears as a one-frame black rim.
-  if (paper_resize_start_pending_ || paper_shadow_refresh_pending_) {
+  if (paper_resize_start_pending_ || paper_shadow_refresh_pending_ ||
+      paper_surface_reveal_pending_) {
     HidePaperShadowWindow();
     return;
   }
@@ -4222,8 +4281,9 @@ void PaperFlutterWindow::ApplyNativeStyle() {
   const LONG_PTR extended_style =
       GetWindowLongPtrW(window, GWL_EXSTYLE) | WS_EX_LAYERED;
   SetWindowLongPtrW(window, GWL_EXSTYLE, extended_style);
-  SetLayeredWindowAttributes(window, RGB(1, 2, 3),
-                             static_cast<BYTE>(capsule_alpha_),
+  applied_window_alpha_ = capsule_alpha_;
+  SetLayeredWindowAttributes(window, kPaperTransparencyKey,
+                             static_cast<BYTE>(applied_window_alpha_),
                              LWA_COLORKEY | LWA_ALPHA);
   const DWMNCRENDERINGPOLICY non_client_rendering = DWMNCRP_DISABLED;
   DwmSetWindowAttribute(window, DWMWA_NCRENDERING_POLICY,

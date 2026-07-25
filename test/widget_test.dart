@@ -23135,9 +23135,12 @@ void main() {
     final capsuleDecoration =
         tester.widget<DecoratedBox>(capsuleSurface).decoration as BoxDecoration;
     expect(capsuleDecoration.borderRadius, BorderRadius.circular(12));
-    expect(capsuleDecoration.boxShadow, hasLength(1));
-    expect(capsuleDecoration.boxShadow!.single.blurRadius, 8);
-    expect(capsuleDecoration.boxShadow!.single.color.a, closeTo(0.08, 0.001));
+    expect(
+      capsuleDecoration.boxShadow,
+      isNull,
+      reason: 'a color-key HWND cannot composite a translucent Flutter shadow '
+          'without producing a dark click/resize fringe',
+    );
     final capsuleIcon = tester.widget<Text>(
       find.descendant(of: capsuleSurface, matching: find.text('\u2713')),
     );

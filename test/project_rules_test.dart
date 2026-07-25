@@ -4093,6 +4093,8 @@ void main() {
     expect(nativeMotion, contains('kAnimationFrameMilliseconds = 16'));
     expect(nativeMotion, contains('EaseOutCubic'));
     expect(nativeMotion, contains('AnimationProgress'));
+    expect(dartMotion, contains('enterCurve = Curves.easeOutCubic'));
+    expect(dartMotion, contains('exitCurve = Curves.easeOutCubic'));
     expect(nativeCapsule, contains('using repapertodo::motion::EaseOutCubic'));
     expect(paperWindow, contains('using repapertodo::motion::EaseOutCubic'));
     expect(nativeCapsule, contains('master_transition_move_duration_ms_'));
@@ -4212,7 +4214,9 @@ void main() {
     expect(
       paperWindow,
       contains(
-          'void PaperFlutterWindow::DeferPaperShadowRefreshUntilNextFrame()'),
+        'void PaperFlutterWindow::DeferPaperShadowRefreshUntilNextFrame(\n'
+        '    bool reveal_surface)',
+      ),
     );
     expect(paperWindow, contains('expanded_from_capsule'));
     expect(paperWindow, contains('DeferPaperShadowRefreshUntilNextFrame();'));
@@ -4237,8 +4241,11 @@ void main() {
     expect(paperWindow, contains('case WM_GETMINMAXINFO:'));
     expect(paperWindow, contains('GetDpiForWindow(window)'));
     expect(paperWindow, contains('WS_EX_LAYERED'));
-    expect(paperWindow,
-        contains('SetLayeredWindowAttributes(window, RGB(1, 2, 3)'));
+    expect(paperWindow, contains('kPaperTransparencyKey = RGB(1, 2, 3)'));
+    expect(
+      paperWindow,
+      contains('SetLayeredWindowAttributes(window, kPaperTransparencyKey'),
+    );
     expect(paperWindow, contains('DWMNCRP_DISABLED'));
     expect(paperWindow, contains('MARGINS margins = {0, 0, 0, 0}'));
     expect(paperWindow, contains('case WM_NCPAINT:'));
@@ -4356,6 +4363,9 @@ void main() {
     );
     expect(paperWindow, contains('collapsed_ && !capsule_pointer_over'));
     expect(paperWindow, contains('case WM_ERASEBKGND:'));
+    expect(paperWindow,
+        contains('SetDCBrushColor(context, kPaperTransparencyKey)'));
+    expect(paperWindow, contains('GetStockObject(DC_BRUSH)'));
     final preResizeStart = paperWindow.indexOf('case WM_NCLBUTTONDOWN:');
     final preResizeEnd = paperWindow.indexOf('case WM_TIMER:', preResizeStart);
     expect(preResizeStart, isNonNegative);
@@ -4381,6 +4391,14 @@ void main() {
       contains('uint64_t paper_shadow_refresh_generation_ = 0;'),
     );
     expect(
+      paperWindowHeader,
+      contains('int applied_window_alpha_ = 255;'),
+    );
+    expect(
+      paperWindowHeader,
+      contains('bool paper_surface_reveal_pending_ = false;'),
+    );
+    expect(
       paperWindow,
       contains('kDeferredPaperShadowRefreshMessage'),
     );
@@ -4398,11 +4416,26 @@ void main() {
     expect(
       paperWindow,
       contains(
-        'if (paper_resize_start_pending_ || paper_shadow_refresh_pending_) {\n'
+        'if (paper_resize_start_pending_ || paper_shadow_refresh_pending_ ||\n'
+        '      paper_surface_reveal_pending_) {\n'
         '    HidePaperShadowWindow();\n'
         '    return;',
       ),
     );
+    expect(
+      paperWindow,
+      contains('paper_surface_reveal_pending_ ? 0 : next_alpha'),
+    );
+    expect(
+      paperWindow,
+      contains(
+          'master_capsule_transition_start_alpha_ = applied_window_alpha_'),
+    );
+    expect(
+      paperWindow,
+      contains('DeferPaperShadowRefreshUntilNextFrame(true);'),
+    );
+    expect(paperWindow, contains('DwmFlush();'));
     expect(
       paperWindow,
       contains('(visible ? SWP_NOREDRAW : SWP_SHOWWINDOW)'),
@@ -4418,7 +4451,7 @@ void main() {
     expect(
       paperWindow,
       contains(
-        'if (paper_resize_start_pending_ || paper_shadow_refresh_pending_)',
+        'if (paper_resize_start_pending_ || paper_shadow_refresh_pending_ ||',
       ),
     );
     expect(cmake, contains('"paper_flutter_window.cpp"'));

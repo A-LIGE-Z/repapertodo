@@ -60,7 +60,7 @@ class PaperFlutterWindow : public Win32Window {
   void ApplyNativeStyle();
   void EnsurePaperShadowWindow();
   void UpdatePaperShadowWindow(bool redraw);
-  void DeferPaperShadowRefreshUntilNextFrame();
+  void DeferPaperShadowRefreshUntilNextFrame(bool reveal_surface = false);
   void HidePaperShadowWindow();
   void DestroyPaperShadowWindow();
   static LRESULT CALLBACK PaperShadowWindowProc(HWND window, UINT message,
@@ -132,6 +132,7 @@ class PaperFlutterWindow : public Win32Window {
   int master_capsule_transition_move_duration_ms_ = 0;
   int master_capsule_transition_fade_duration_ms_ = 0;
   int capsule_alpha_ = 255;
+  int applied_window_alpha_ = 255;
   int64_t surface_generation_ = -1;
   bool collapsed_ = false;
   bool deep_capsule_mode_ = false;
@@ -182,6 +183,7 @@ class PaperFlutterWindow : public Win32Window {
   bool paper_shadow_visible_ = false;
   bool paper_shadow_z_order_dirty_ = true;
   bool paper_shadow_refresh_pending_ = false;
+  bool paper_surface_reveal_pending_ = false;
   uint64_t paper_shadow_refresh_generation_ = 0;
   bool paper_shadow_dark_ = false;
   bool rendered_paper_shadow_dark_ = false;
