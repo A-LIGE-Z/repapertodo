@@ -344,6 +344,7 @@ void NativeCapsuleWindow::ApplySurface(
       previous_monitor_device_name != monitor_device_name_) {
     queue_drag_offset_active_ = false;
     queue_drag_last_delta_y_ = 0;
+    ResumeMasterTransitionAfterQueueDrag();
     queue_drag_master_transition_coupled_ = false;
     ClearCommittedQueueDrag();
     queue_drag_animation_active_ = false;
@@ -386,6 +387,7 @@ void NativeCapsuleWindow::ApplySurface(
     queue_drag_offset_active_ = false;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
+    queue_drag_master_transition_paused_at_ = 0;
     ClearCommittedQueueDrag();
     ApplyMasterTransitionAlpha(255);
     if (HWND window = GetHandle()) {
@@ -782,6 +784,7 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
                 master_transition_target_top_) < 0.5 &&
        master_transition_start_alpha_ == master_transition_target_alpha_)) {
     master_transition_active_ = false;
+    queue_drag_master_transition_paused_at_ = 0;
     master_retracted_ = target_hidden;
     ApplyMasterTransitionAlpha(master_transition_target_alpha_);
     SetWindowPos(window, nullptr, bounds.left,
@@ -795,12 +798,25 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
   }
 
   master_transition_active_ = true;
-  SetTimer(window, kCapsuleMasterTransitionTimerId,
-           kAnimationFrameMilliseconds, nullptr);
+  if (queue_drag_offset_active_) {
+    // A master drag owns the vertical position of every queue member. Arm the
+    // transition but freeze its clock until the gesture ends, otherwise its
+    // 16 ms timer adds an independent vertical delta between atomic drag
+    // frames and the child visibly lags behind the master.
+    queue_drag_master_transition_coupled_ = true;
+    queue_drag_master_transition_paused_at_ = GetTickCount64();
+    KillTimer(window, kCapsuleMasterTransitionTimerId);
+  } else {
+    SetTimer(window, kCapsuleMasterTransitionTimerId,
+             kAnimationFrameMilliseconds, nullptr);
+  }
 }
 
 void NativeCapsuleWindow::UpdateMasterTransition() {
-  if (!master_transition_active_) return;
+  if (!master_transition_active_ ||
+      queue_drag_master_transition_paused_at_ != 0) {
+    return;
+  }
   HWND window = GetHandle();
   if (!window) return;
   const ULONGLONG elapsed = GetTickCount64() - master_transition_started_at_;
@@ -826,10 +842,47 @@ void NativeCapsuleWindow::UpdateMasterTransition() {
   ApplyMasterTransitionAlpha(alpha);
   if (move_progress >= 1.0 && fade_progress >= 1.0) {
     master_transition_active_ = false;
+    queue_drag_master_transition_paused_at_ = 0;
     master_retracted_ = master_transition_target_hidden_;
     KillTimer(window, kCapsuleMasterTransitionTimerId);
     ApplyMasterTransitionAlpha(master_transition_target_alpha_);
     RefreshVisibility();
+  }
+}
+
+void NativeCapsuleWindow::PauseMasterTransitionForQueueDrag() {
+  if (!master_transition_active_ ||
+      queue_drag_master_transition_paused_at_ != 0) {
+    return;
+  }
+  // Commit the transition's current visual frame before the coordinator
+  // captures bounds for its DeferWindowPos transaction.
+  UpdateMasterTransition();
+  if (!master_transition_active_) {
+    return;
+  }
+  if (HWND window = GetHandle()) {
+    queue_drag_master_transition_paused_at_ = GetTickCount64();
+    queue_drag_master_transition_coupled_ = true;
+    KillTimer(window, kCapsuleMasterTransitionTimerId);
+  }
+}
+
+void NativeCapsuleWindow::ResumeMasterTransitionAfterQueueDrag() {
+  const ULONGLONG paused_at = queue_drag_master_transition_paused_at_;
+  if (paused_at == 0) {
+    return;
+  }
+  const ULONGLONG now = GetTickCount64();
+  if (now >= paused_at) {
+    master_transition_started_at_ += now - paused_at;
+  }
+  queue_drag_master_transition_paused_at_ = 0;
+  if (master_transition_active_) {
+    if (HWND window = GetHandle()) {
+      SetTimer(window, kCapsuleMasterTransitionTimerId,
+               kAnimationFrameMilliseconds, nullptr);
+    }
   }
 }
 
@@ -943,14 +996,20 @@ bool NativeCapsuleWindow::PrepareQueueDragOffset(int delta_y,
                                                  RECT* target_bounds) {
   if (master_ || !target_bounds) return false;
   HWND window = GetHandle();
+  if (!window) return false;
+  if (!queue_drag_offset_active_) {
+    PauseMasterTransitionForQueueDrag();
+  }
   RECT bounds = {};
-  if (!window || !GetWindowRect(window, &bounds)) return false;
+  if (!GetWindowRect(window, &bounds)) return false;
   if (!queue_drag_offset_active_) {
     queue_drag_offset_active_ = true;
     queue_drag_base_top_ = bounds.top;
     queue_drag_target_top_ = bounds.top;
     queue_drag_last_delta_y_ = 0;
-    queue_drag_master_transition_coupled_ = master_transition_active_;
+    queue_drag_master_transition_coupled_ =
+        master_transition_active_ ||
+        queue_drag_master_transition_paused_at_ != 0;
     CaptureQueueDragModelAnchors();
   }
   const int incremental_delta = delta_y - queue_drag_last_delta_y_;
@@ -1024,6 +1083,7 @@ void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
   }
   queue_drag_offset_active_ = false;
   queue_drag_last_delta_y_ = 0;
+  ResumeMasterTransitionAfterQueueDrag();
   queue_drag_master_transition_coupled_ = false;
 }
 

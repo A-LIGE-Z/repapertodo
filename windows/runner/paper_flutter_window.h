@@ -77,6 +77,8 @@ class PaperFlutterWindow : public Win32Window {
                                     int fade_duration_ms,
                                     ULONGLONG animation_epoch = 0);
   void UpdateMasterCapsuleTransition();
+  void PauseMasterTransitionForQueueDrag();
+  void ResumeMasterTransitionAfterQueueDrag();
   void ApplyMasterCapsuleAlpha(int alpha);
   int MasterCapsuleTopPhysical() const;
   int DockedCapsuleTopPhysical() const;
@@ -164,6 +166,7 @@ class PaperFlutterWindow : public Win32Window {
   int queue_drag_target_top_ = 0;
   int queue_drag_last_delta_y_ = 0;
   bool queue_drag_master_transition_coupled_ = false;
+  ULONGLONG queue_drag_master_transition_paused_at_ = 0;
   bool queue_drag_commit_pending_ = false;
   int queue_drag_committed_delta_y_ = 0;
   int queue_drag_model_base_docked_top_ = 0;

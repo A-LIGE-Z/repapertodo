@@ -3020,7 +3020,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
               },
             ),
           );
-          unawaited(controller.refreshPaperSurfaces());
+          // Collapsing an expanded proxy only changes the surface registry.
+          // A full restore would replay every paper HWND's bounds, pin state,
+          // and z-order after the proxy click, producing a visible flash.
+          unawaited(controller.refreshSurfaceRegistry());
           unawaited(_saveState());
         }
       case PaperWindowActionKinds.expandPaper:
@@ -3074,7 +3077,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         },
       ),
     );
-    unawaited(controller.refreshPaperSurfaces());
+    // The native drag has already moved the queue to its final position.
+    // Commit only the reordered registry so dropping a capsule cannot replay
+    // paper-window placement or snap the just-finished native animation.
+    unawaited(controller.refreshSurfaceRegistry());
     unawaited(_saveState());
   }
 
@@ -4710,9 +4716,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       _surfacePaperId = paper.id;
     });
     await controller.openReminderPaper(paper);
-    if (wasCollapseAllActive) {
-      await controller.refreshPaperSurfaces();
-    }
+    // openReminderPaper already shows the target surface and refreshes the
+    // complete registry with the cleared collapse-all state. Do not follow it
+    // with restoreAll: that would replay every paper HWND and flash the paper
+    // that was just raised by the reminder.
     await _saveState();
   }
 

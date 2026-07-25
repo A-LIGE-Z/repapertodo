@@ -2738,6 +2738,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
     queue_drag_offset_active_ = false;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
+    queue_drag_master_transition_paused_at_ = 0;
     ClearCommittedQueueDrag();
     ApplyMasterCapsuleAlpha(255);
     KillTimer(window, kCapsuleMasterTransitionTimerId);
@@ -2748,6 +2749,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
     queue_drag_offset_active_ = false;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
+    queue_drag_master_transition_paused_at_ = 0;
     ClearCommittedQueueDrag();
     ApplyMasterCapsuleAlpha(255);
     KillTimer(window, kCapsuleMasterTransitionTimerId);
@@ -2786,6 +2788,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
             capsule_monitor_device_name_) {
       queue_drag_offset_active_ = false;
       queue_drag_last_delta_y_ = 0;
+      ResumeMasterTransitionAfterQueueDrag();
       queue_drag_master_transition_coupled_ = false;
       ClearCommittedQueueDrag();
       queue_drag_animation_active_ = false;
@@ -2960,15 +2963,20 @@ bool PaperFlutterWindow::PrepareQueueDragOffset(int delta_y,
                                                 RECT* target_bounds) {
   if (!collapsed_ || !target_bounds) return false;
   HWND window = GetHandle();
+  if (!window) return false;
+  if (!queue_drag_offset_active_) {
+    PauseMasterTransitionForQueueDrag();
+  }
   RECT bounds = {};
-  if (!window || !GetWindowRect(window, &bounds)) return false;
+  if (!GetWindowRect(window, &bounds)) return false;
   if (!queue_drag_offset_active_) {
     queue_drag_offset_active_ = true;
     queue_drag_base_top_ = bounds.top;
     queue_drag_target_top_ = bounds.top;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ =
-        master_capsule_transition_active_;
+        master_capsule_transition_active_ ||
+        queue_drag_master_transition_paused_at_ != 0;
     CaptureQueueDragModelAnchors();
   }
   const int incremental_delta = delta_y - queue_drag_last_delta_y_;
@@ -3043,6 +3051,7 @@ void PaperFlutterWindow::FinishQueueDrag(bool commit) {
   }
   queue_drag_offset_active_ = false;
   queue_drag_last_delta_y_ = 0;
+  ResumeMasterTransitionAfterQueueDrag();
   queue_drag_master_transition_coupled_ = false;
 }
 
@@ -3338,6 +3347,7 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
        master_capsule_transition_start_alpha_ ==
            master_capsule_transition_target_alpha_)) {
     master_capsule_transition_active_ = false;
+    queue_drag_master_transition_paused_at_ = 0;
     master_capsule_retracted_ = target_hidden;
     ApplyMasterCapsuleAlpha(master_capsule_transition_target_alpha_);
     SetWindowPos(window, nullptr, bounds.left,
@@ -3351,12 +3361,21 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
   }
 
   master_capsule_transition_active_ = true;
-  SetTimer(window, kCapsuleMasterTransitionTimerId,
-           kAnimationFrameMilliseconds, nullptr);
+  if (queue_drag_offset_active_) {
+    queue_drag_master_transition_coupled_ = true;
+    queue_drag_master_transition_paused_at_ = GetTickCount64();
+    KillTimer(window, kCapsuleMasterTransitionTimerId);
+  } else {
+    SetTimer(window, kCapsuleMasterTransitionTimerId,
+             kAnimationFrameMilliseconds, nullptr);
+  }
 }
 
 void PaperFlutterWindow::UpdateMasterCapsuleTransition() {
-  if (!master_capsule_transition_active_) return;
+  if (!master_capsule_transition_active_ ||
+      queue_drag_master_transition_paused_at_ != 0) {
+    return;
+  }
   HWND window = GetHandle();
   if (!window) return;
   const ULONGLONG elapsed =
@@ -3385,10 +3404,45 @@ void PaperFlutterWindow::UpdateMasterCapsuleTransition() {
   ApplyMasterCapsuleAlpha(alpha);
   if (move_progress >= 1.0 && fade_progress >= 1.0) {
     master_capsule_transition_active_ = false;
+    queue_drag_master_transition_paused_at_ = 0;
     master_capsule_retracted_ = master_capsule_transition_target_hidden_;
     KillTimer(window, kCapsuleMasterTransitionTimerId);
     ApplyMasterCapsuleAlpha(master_capsule_transition_target_alpha_);
     RefreshZOrder();
+  }
+}
+
+void PaperFlutterWindow::PauseMasterTransitionForQueueDrag() {
+  if (!master_capsule_transition_active_ ||
+      queue_drag_master_transition_paused_at_ != 0) {
+    return;
+  }
+  UpdateMasterCapsuleTransition();
+  if (!master_capsule_transition_active_) {
+    return;
+  }
+  if (HWND window = GetHandle()) {
+    queue_drag_master_transition_paused_at_ = GetTickCount64();
+    queue_drag_master_transition_coupled_ = true;
+    KillTimer(window, kCapsuleMasterTransitionTimerId);
+  }
+}
+
+void PaperFlutterWindow::ResumeMasterTransitionAfterQueueDrag() {
+  const ULONGLONG paused_at = queue_drag_master_transition_paused_at_;
+  if (paused_at == 0) {
+    return;
+  }
+  const ULONGLONG now = GetTickCount64();
+  if (now >= paused_at) {
+    master_capsule_transition_started_at_ += now - paused_at;
+  }
+  queue_drag_master_transition_paused_at_ = 0;
+  if (master_capsule_transition_active_) {
+    if (HWND window = GetHandle()) {
+      SetTimer(window, kCapsuleMasterTransitionTimerId,
+               kAnimationFrameMilliseconds, nullptr);
+    }
   }
 }
 

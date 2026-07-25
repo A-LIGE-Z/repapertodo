@@ -4042,6 +4042,14 @@ void main() {
       paperWindowHeader,
       contains('queue_drag_master_transition_coupled_'),
     );
+    expect(
+      nativeCapsuleHeader,
+      contains('queue_drag_master_transition_paused_at_'),
+    );
+    expect(
+      paperWindowHeader,
+      contains('queue_drag_master_transition_paused_at_'),
+    );
     expect(nativeCapsuleHeader, contains('queue_drag_commit_pending_'));
     expect(paperWindowHeader, contains('queue_drag_commit_pending_'));
     expect(nativeCapsule, contains('ReconcileCommittedQueueModel'));
@@ -4079,6 +4087,18 @@ void main() {
     expect(
       paperWindow,
       contains('master_capsule_transition_start_top_ += incremental_delta'),
+    );
+    expect(nativeCapsule, contains('PauseMasterTransitionForQueueDrag();'));
+    expect(nativeCapsule, contains('ResumeMasterTransitionAfterQueueDrag();'));
+    expect(paperWindow, contains('PauseMasterTransitionForQueueDrag();'));
+    expect(paperWindow, contains('ResumeMasterTransitionAfterQueueDrag();'));
+    expect(
+      nativeCapsule,
+      contains('queue_drag_master_transition_paused_at_ != 0'),
+    );
+    expect(
+      paperWindow,
+      contains('queue_drag_master_transition_paused_at_ != 0'),
     );
     expect(nativeCapsule, contains('kCapsuleBodyHeight = 30'));
     expect(nativeCapsule, contains('kCapsuleChromeMargin = 8'));

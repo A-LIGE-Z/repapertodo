@@ -21750,6 +21750,11 @@ void main() {
     await tester.pumpWidget(
       RePaperTodoApp(controller: controller, store: store),
     );
+    await tester.pumpAndSettle();
+    final restoreCountBeforeAction =
+        platform.paperWindows.restoredTitleSnapshots.length;
+    final registryCountBeforeAction =
+        platform.paperWindows.registryPaperSnapshots.length;
 
     platform.paperWindows.emitAction(
       const PaperWindowActionRequest(
@@ -21764,6 +21769,21 @@ void main() {
     expect(controller.state.capsuleCollapseAllActive, false);
     expect(platform.paperWindows.shownTitles, contains('Reminder action'));
     expect(store.savedState.papers.single.isCollapsed, false);
+    expect(
+      platform.paperWindows.restoredTitleSnapshots.length,
+      restoreCountBeforeAction,
+      reason: 'opening a reminder must not restore and restack every paper',
+    );
+    expect(
+      platform.paperWindows.registryPaperSnapshots.length,
+      registryCountBeforeAction + 1,
+    );
+    expect(
+      platform.paperWindows.registryCollapsedSnapshots
+          .last['native-reminder-action-paper'],
+      false,
+    );
+    expect(platform.paperWindows.registryCollapseAllSnapshots.last, false);
   });
 
   testWidgets('expanded native proxy can collapse its owning paper',
@@ -21791,6 +21811,10 @@ void main() {
       RePaperTodoApp(controller: controller, store: store),
     );
     await tester.pumpAndSettle();
+    final restoreCountBeforeAction =
+        platform.paperWindows.restoredTitleSnapshots.length;
+    final registryCountBeforeAction =
+        platform.paperWindows.registryPaperSnapshots.length;
 
     platform.paperWindows.emitAction(
       const PaperWindowActionRequest(
@@ -21803,7 +21827,20 @@ void main() {
 
     expect(controller.state.papers.single.isCollapsed, true);
     expect(store.savedState.papers.single.isCollapsed, true);
-    expect(platform.paperWindows.restoredTitleSnapshots, isNotEmpty);
+    expect(
+      platform.paperWindows.restoredTitleSnapshots.length,
+      restoreCountBeforeAction,
+      reason: 'proxy collapse must not replay paper HWND placement',
+    );
+    expect(
+      platform.paperWindows.registryPaperSnapshots.length,
+      registryCountBeforeAction + 1,
+    );
+    expect(
+      platform
+          .paperWindows.registryCollapsedSnapshots.last['expanded-proxy-paper'],
+      true,
+    );
   });
 
   testWidgets('stale collapse proxy click unpins and activates pinned paper',
@@ -22086,6 +22123,11 @@ void main() {
     await tester.pumpWidget(
       RePaperTodoApp(controller: controller, store: store),
     );
+    await tester.pumpAndSettle();
+    final restoreCountBeforeDrop =
+        platform.paperWindows.restoredTitleSnapshots.length;
+    final registryCountBeforeDrop =
+        platform.paperWindows.registryPaperSnapshots.length;
 
     platform.paperWindows.emitCapsuleDrop(
       const CapsuleDropRequest(
@@ -22103,6 +22145,19 @@ void main() {
     expect(controller.state.deepCapsuleQueueStartTopMargins[queueKey], 180);
     expect(paper.capsuleSide, DeepCapsuleSides.right);
     expect(store.savedState.deepCapsuleQueueStartTopMargins[queueKey], 180);
+    expect(
+      platform.paperWindows.restoredTitleSnapshots.length,
+      restoreCountBeforeDrop,
+      reason: 'finishing a native capsule drag must not restore paper HWNDs',
+    );
+    expect(
+      platform.paperWindows.registryPaperSnapshots.length,
+      registryCountBeforeDrop + 1,
+    );
+    expect(
+      platform.paperWindows.registryQueueStartTopMarginSnapshots.last[queueKey],
+      180,
+    );
   });
 
   testWidgets('dragging edge capsules reassigns and reorders their queue',
@@ -22123,6 +22178,11 @@ void main() {
     await tester.pumpWidget(
       RePaperTodoApp(controller: controller, store: store),
     );
+    await tester.pumpAndSettle();
+    final restoreCountBeforeDrop =
+        platform.paperWindows.restoredTitleSnapshots.length;
+    final registryCountBeforeDrop =
+        platform.paperWindows.registryPaperSnapshots.length;
 
     platform.paperWindows.emitCapsuleDrop(
       const CapsuleDropRequest(
@@ -22143,6 +22203,20 @@ void main() {
     );
     expect(
       store.savedState.papers.map((paper) => paper.id),
+      ['queue-third', 'queue-first', 'queue-second'],
+    );
+    expect(
+      platform.paperWindows.restoredTitleSnapshots.length,
+      restoreCountBeforeDrop,
+      reason: 'capsule reordering must not restore unrelated paper HWNDs',
+    );
+    expect(
+      platform.paperWindows.registryPaperSnapshots.length,
+      registryCountBeforeDrop + 1,
+    );
+    expect(
+      platform.paperWindows.registryPaperSnapshots.last
+          .map((paper) => paper.id),
       ['queue-third', 'queue-first', 'queue-second'],
     );
   });
@@ -24088,6 +24162,7 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final registryCollapseAllSnapshots = <bool>[];
   final registryCollapsedSnapshots = <Map<String, bool>>[];
   final registryPaperSnapshots = <List<PaperData>>[];
+  final registryQueueStartTopMarginSnapshots = <Map<String, double>>[];
   final updatedTitles = <String>[];
   final shownTitles = <String>[];
   final hiddenTitles = <String>[];
@@ -24164,6 +24239,9 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
       state.papers
           .map((paper) => PaperData.fromJson(paper.toJson()))
           .toList(growable: false),
+    );
+    registryQueueStartTopMarginSnapshots.add(
+      Map<String, double>.from(state.deepCapsuleQueueStartTopMargins),
     );
   }
 
