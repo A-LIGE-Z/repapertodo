@@ -74,6 +74,7 @@ public static class RePaperTodoPolicyNative {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, System.Text.StringBuilder name, int maximum);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr window, System.Text.StringBuilder text, int maximum);
   [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
+  [DllImport("user32.dll", SetLastError = true)] static extern bool GetLayeredWindowAttributes(IntPtr window, out uint colorKey, out byte alpha, out uint flags);
   [DllImport("user32.dll")] static extern uint RegisterWindowMessage(string name);
   [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
@@ -97,6 +98,25 @@ public static class RePaperTodoPolicyNative {
     return className.ToString() != "RePaperTodo.PaperShadow";
   }
 
+  static byte EffectiveWindowAlpha(IntPtr window) {
+    const long WS_EX_LAYERED = 0x00080000L;
+    const uint LWA_ALPHA = 0x00000002;
+    if ((GetWindowLongPtr(window, -20).ToInt64() & WS_EX_LAYERED) == 0) {
+      return 255;
+    }
+    uint colorKey, flags;
+    byte alpha;
+    if (!GetLayeredWindowAttributes(window, out colorKey, out alpha, out flags) ||
+        (flags & LWA_ALPHA) == 0) {
+      return 255;
+    }
+    return alpha;
+  }
+
+  static bool IsPerceptible(IntPtr window) {
+    return IsWindowVisible(window) && EffectiveWindowAlpha(window) > 0;
+  }
+
   public static IntPtr FindCoordinator(uint pid) {
     IntPtr result = IntPtr.Zero; long largest = 0;
     EnumWindows((window, parameter) => {
@@ -111,7 +131,8 @@ public static class RePaperTodoPolicyNative {
   public static IntPtr FindPaper(uint pid) {
     IntPtr result = IntPtr.Zero;
     EnumWindows((window, parameter) => {
-      RECT r; if (Belongs(window, pid, true) && GetWindowRect(window, out r) &&
+      RECT r; if (Belongs(window, pid, true) && IsPerceptible(window) &&
+          GetWindowRect(window, out r) &&
           (r.Right - r.Left < 800 || r.Bottom - r.Top < 500)) { result = window; return false; }
       return true;
     }, IntPtr.Zero);
@@ -121,7 +142,8 @@ public static class RePaperTodoPolicyNative {
   public static IntPtr FindSizedPaper(uint pid, int width, int height) {
     IntPtr result = IntPtr.Zero;
     EnumWindows((window, parameter) => {
-      RECT r; if (Belongs(window, pid, true) && GetWindowRect(window, out r) &&
+      RECT r; if (Belongs(window, pid, true) && IsPerceptible(window) &&
+          GetWindowRect(window, out r) &&
           r.Right - r.Left == width && r.Bottom - r.Top == height) { result = window; return false; }
       return true;
     }, IntPtr.Zero);
@@ -131,7 +153,8 @@ public static class RePaperTodoPolicyNative {
   public static IntPtr FindCapsule(uint pid) {
     IntPtr result = IntPtr.Zero;
     EnumWindows((window, parameter) => {
-      RECT r; if (Belongs(window, pid, true) && GetWindowRect(window, out r) &&
+      RECT r; if (Belongs(window, pid, true) && IsPerceptible(window) &&
+          GetWindowRect(window, out r) &&
           r.Right - r.Left >= 34 && r.Bottom - r.Top == 46) {
         result = window; return false;
       }
@@ -143,7 +166,7 @@ public static class RePaperTodoPolicyNative {
   public static IntPtr FindWindowByTitle(uint pid, string expectedTitle) {
     IntPtr result = IntPtr.Zero;
     EnumWindows((window, parameter) => {
-      if (!Belongs(window, pid, true)) return true;
+      if (!Belongs(window, pid, true) || !IsPerceptible(window)) return true;
       var title = new System.Text.StringBuilder(256);
       GetWindowText(window, title, title.Capacity);
       if (title.ToString() == expectedTitle) { result = window; return false; }
@@ -170,7 +193,7 @@ public static class RePaperTodoPolicyNative {
   public static IntPtr FindWindowByTitleFragment(uint pid, string fragment) {
     IntPtr result = IntPtr.Zero;
     EnumWindows((window, parameter) => {
-      if (!Belongs(window, pid, true)) return true;
+      if (!Belongs(window, pid, true) || !IsPerceptible(window)) return true;
       var title = new System.Text.StringBuilder(256);
       GetWindowText(window, title, title.Capacity);
       if (title.ToString().Contains(fragment)) {
@@ -198,7 +221,8 @@ public static class RePaperTodoPolicyNative {
   public static int CountCapsules(uint pid) {
     int count = 0;
     EnumWindows((window, parameter) => {
-      RECT r; if (Belongs(window, pid, true) && GetWindowRect(window, out r) &&
+      RECT r; if (Belongs(window, pid, true) && IsPerceptible(window) &&
+          GetWindowRect(window, out r) &&
           r.Right - r.Left >= 34 && r.Bottom - r.Top == 46) count++;
       return true;
     }, IntPtr.Zero);
@@ -208,7 +232,8 @@ public static class RePaperTodoPolicyNative {
   public static IntPtr FindLargestVisible(uint pid) {
     IntPtr result = IntPtr.Zero; long largest = 0;
     EnumWindows((window, parameter) => {
-      RECT r; if (!Belongs(window, pid, true) || !GetWindowRect(window, out r)) return true;
+      RECT r; if (!Belongs(window, pid, true) || !IsPerceptible(window) ||
+          !GetWindowRect(window, out r)) return true;
       long area = (long)(r.Right - r.Left) * (r.Bottom - r.Top);
       if (area > largest) { largest = area; result = window; }
       return true;
@@ -225,6 +250,7 @@ public static class RePaperTodoPolicyNative {
 
   public static bool IsTopmost(IntPtr window) { return (GetWindowLongPtr(window, -20).ToInt64() & 8) != 0; }
   public static bool IsVisible(IntPtr window) { return IsWindowVisible(window); }
+  public static int LayeredAlpha(IntPtr window) { return EffectiveWindowAlpha(window); }
   public static bool IsForeground(IntPtr window) {
     return window != IntPtr.Zero && GetForegroundWindow() == window;
   }
@@ -338,8 +364,9 @@ public static class RePaperTodoPolicyNative {
       GetWindowText(window, title, title.Capacity);
       GetClassName(window, name, name.Capacity);
       if (GetWindowRect(window, out bounds)) {
-        entries.Add(String.Format("{0}|{1}|{2},{3},{4},{5}",
-          title, name, bounds.Left, bounds.Top, bounds.Right, bounds.Bottom));
+        entries.Add(String.Format("{0}|{1}|{2},{3},{4},{5}|alpha={6}",
+          title, name, bounds.Left, bounds.Top, bounds.Right, bounds.Bottom,
+          EffectiveWindowAlpha(window)));
       }
       return true;
     }, IntPtr.Zero);
@@ -713,13 +740,18 @@ try {
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke collapse-all did not expose exactly one master capsule for the queue." -Condition {
     [RePaperTodoPolicyNative]::CountCapsules([uint32]$primary.Id) -eq 1
   }
-  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke expanded paper did not finish its initial window reconciliation." -Condition {
-    $candidate = [RePaperTodoPolicyNative]::FindWindowByTitle(
-      [uint32]$primary.Id, "Policy")
-    $candidate -ne [IntPtr]::Zero -and
-      [RePaperTodoPolicyNative]::CapsuleWindowWidth($candidate) -eq 360
+  try {
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke expanded paper did not finish its initial window reconciliation." -Condition {
+      $candidate = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
+        [uint32]$primary.Id, "Policy")
+      $candidate -ne [IntPtr]::Zero -and
+        [RePaperTodoPolicyNative]::CapsuleWindowWidth($candidate) -eq 360
+    }
+  } catch {
+    $windows = [RePaperTodoPolicyNative]::VisibleWindowSummary([uint32]$primary.Id)
+    throw "Policy smoke expanded paper did not finish its initial window reconciliation. Visible windows: $windows"
   }
-  $paper = [RePaperTodoPolicyNative]::FindWindowByTitle(
+  $paper = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
     [uint32]$primary.Id, "Policy")
   if ($paper -eq [IntPtr]::Zero -or
       [RePaperTodoPolicyNative]::CapsuleWindowWidth($paper) -ne 360) {
@@ -806,25 +838,30 @@ try {
     $savedPaper = @($saved.papers | Where-Object { $_.id -eq "policy-paper" })[0]
     $null -ne $savedPaper -and [bool]$savedPaper.isCollapsed
   }
-  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke collapsed paper HWND did not become a capsule." -Condition {
-    $collapsed = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Policy")
-    $collapsed -ne [IntPtr]::Zero -and
-      [RePaperTodoPolicyNative]::CapsuleWindowWidth($collapsed) -lt 220
+  try {
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke collapsed paper HWND did not become a capsule." -Condition {
+    $collapsed = [RePaperTodoPolicyNative]::FindWindowByTitleFragment([uint32]$primary.Id, "Policy")
+      $collapsed -ne [IntPtr]::Zero -and
+        [RePaperTodoPolicyNative]::CapsuleWindowWidth($collapsed) -lt 220
+    }
+  } catch {
+    $windows = [RePaperTodoPolicyNative]::VisibleWindowSummary([uint32]$primary.Id)
+    throw "Policy smoke collapsed paper HWND did not become a perceptible capsule. Visible windows: $windows"
   }
-  $collapsed = [RePaperTodoPolicyNative]::FindWindowByTitle(
+  $collapsed = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
     [uint32]$primary.Id, "Policy")
   [RePaperTodoPolicyNative]::ClickCapsule($collapsed)
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke paper capsule did not restore the collapsed paper." -Condition {
     try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
     $savedPaper = @($saved.papers | Where-Object { $_.id -eq "policy-paper" })[0]
-    $expanded = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Policy")
+    $expanded = [RePaperTodoPolicyNative]::FindWindowByTitleFragment([uint32]$primary.Id, "Policy")
     $null -ne $savedPaper -and -not [bool]$savedPaper.isCollapsed -and
       $expanded -ne [IntPtr]::Zero -and
       [RePaperTodoPolicyNative]::CapsuleWindowWidth($expanded) -eq 360
   }
   $paperCollapseThenCapsuleExpands = $true
   for ($cycle = 1; $cycle -le 3; $cycle++) {
-    $paper = [RePaperTodoPolicyNative]::FindWindowByTitle(
+    $paper = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
       [uint32]$primary.Id, "Policy")
     if ($paper -eq [IntPtr]::Zero -or
         [RePaperTodoPolicyNative]::CapsuleWindowWidth($paper) -ne 360) {
@@ -838,18 +875,18 @@ try {
       $null -ne $savedPaper -and [bool]$savedPaper.isCollapsed
     }
     Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke repeated paper collapse cycle $cycle did not reach capsule geometry." -Condition {
-      $candidate = [RePaperTodoPolicyNative]::FindWindowByTitle(
+      $candidate = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
         [uint32]$primary.Id, "Policy")
       $candidate -ne [IntPtr]::Zero -and
         [RePaperTodoPolicyNative]::CapsuleWindowWidth($candidate) -lt 220
     }
-    $collapsed = [RePaperTodoPolicyNative]::FindWindowByTitle(
+    $collapsed = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
       [uint32]$primary.Id, "Policy")
     [RePaperTodoPolicyNative]::ClickCapsule($collapsed)
     Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke repeated paper capsule cycle $cycle did not expand." -Condition {
       try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
       $savedPaper = @($saved.papers | Where-Object { $_.id -eq "policy-paper" })[0]
-      $expanded = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Policy")
+      $expanded = [RePaperTodoPolicyNative]::FindWindowByTitleFragment([uint32]$primary.Id, "Policy")
       $null -ne $savedPaper -and -not [bool]$savedPaper.isCollapsed -and
         $expanded -ne [IntPtr]::Zero -and
         [RePaperTodoPolicyNative]::CapsuleWindowWidth($expanded) -eq 360
@@ -917,7 +954,7 @@ try {
   # the reminder opens. Selecting by size made this assertion depend on
   # EnumWindows order and occasionally checked the reminder HWND instead of
   # the paper owned by the expanded proxy.
-  $paper = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Policy")
+  $paper = [RePaperTodoPolicyNative]::FindWindowByTitleFragment([uint32]$primary.Id, "Policy")
   if ($paper -eq [IntPtr]::Zero) {
     throw "Policy smoke could not identify the expanded proxy's owning paper."
   }
@@ -995,7 +1032,7 @@ try {
   }
   $fullscreenRestored = $true
 
-  $paper = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Policy")
+  $paper = [RePaperTodoPolicyNative]::FindWindowByTitleFragment([uint32]$primary.Id, "Policy")
   if ($paper -eq [IntPtr]::Zero) {
     throw "Policy smoke could not find the ordinary paper for drag/edit geometry validation."
   }
