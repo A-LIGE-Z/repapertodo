@@ -477,6 +477,10 @@ void NativeCapsuleWindow::ApplySurface(
   resting_visible_width_ = ScaleMetric(logical_resting_visible_width);
   hover_visible_width_ = ScaleMetric(logical_hover_visible_width);
   height_ = ScaleMetric(46);
+  // Update the clip before a retarget can snap/reposition the HWND. This keeps
+  // a disabled-animation surface refresh from composing one frame with the
+  // new bounds but the previous title-width region.
+  ApplyWindowRegion();
   const int desired_visible_width =
       hovered_ ? hover_visible_width_ : resting_visible_width_;
   if (previous_dpi != dpi_ || current_visible_width_ <= 0.0 ||
@@ -486,8 +490,22 @@ void NativeCapsuleWindow::ApplySurface(
   } else {
     current_visible_width_ = std::clamp(
         current_visible_width_, 1.0, static_cast<double>(full_width_));
+    // Surface refreshes can change the measured title/font widths during a
+    // hover reveal. Retarget from the currently composed width; keeping the
+    // old start time while only swapping the endpoint makes the next timer
+    // frame jump. The same path cancels an in-flight reveal immediately when
+    // the user confirms that animations should be disabled.
+    if (!animations_enabled_ ||
+        std::abs(animation_target_visible_width_ -
+                 desired_visible_width) >= 0.5) {
+      StartDockAnimation(
+          desired_visible_width,
+          hovered_ ? kCapsuleSlideOutMilliseconds
+                   : kCapsuleSlideInMilliseconds);
+    } else {
+      animation_target_visible_width_ = desired_visible_width;
+    }
   }
-  ApplyWindowRegion();
   // The master capsule owns only the visibility of this queue item. Keep the
   // child HWND alive and move/fade it through the master slot instead of
   // destroying or hiding it synchronously; this avoids a stale cached frame
@@ -953,7 +971,8 @@ void NativeCapsuleWindow::StartDockAnimation(int target_visible_width,
   const double target = std::clamp(
       static_cast<double>(target_visible_width), 1.0,
       static_cast<double>(full_width_));
-  if (std::abs(current_visible_width_ - target) < 0.5 || duration_ms <= 0) {
+  if (!animations_enabled_ ||
+      std::abs(current_visible_width_ - target) < 0.5 || duration_ms <= 0) {
     KillTimer(window, kCapsuleSlideTimerId);
     dock_animation_active_ = false;
     current_visible_width_ = target;

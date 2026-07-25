@@ -2828,7 +2828,22 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
     } else {
       capsule_current_visible_width_ = std::clamp(
           capsule_current_visible_width_, 1.0, native_width);
-      capsule_animation_target_width_ = desired_visible_width;
+      // Font/title updates can change the capsule metrics while the edge
+      // reveal timer is still active. Merely replacing the target makes the
+      // next timer tick reuse the old start/progress against a new endpoint,
+      // which produces an observable horizontal jump. Restart from the width
+      // that is currently composed instead. This also lets disabling
+      // animations snap an in-flight capsule cleanly to its final width.
+      if (!capsule_animations_enabled_ ||
+          std::abs(capsule_animation_target_width_ -
+                   desired_visible_width) >= 0.5) {
+        StartCapsuleDockAnimation(
+            desired_visible_width,
+            capsule_hovered_ ? kCapsuleSlideOutMilliseconds
+                             : kCapsuleSlideInMilliseconds);
+      } else {
+        capsule_animation_target_width_ = desired_visible_width;
+      }
     }
     const double visible_width = capsule_current_visible_width_;
     native_x = capsule_side_ == "left"

@@ -4224,6 +4224,25 @@ void main() {
     expect(nativeCapsule, contains('return HTTRANSPARENT;'));
     expect(nativeCapsule, contains('UpdateDockAnimation'));
     expect(
+      nativeCapsule,
+      contains(
+        'std::abs(animation_target_visible_width_ -\n'
+        '                 desired_visible_width) >= 0.5',
+      ),
+    );
+    expect(
+      nativeCapsule,
+      contains(
+        'StartDockAnimation(\n'
+        '          desired_visible_width,',
+      ),
+    );
+    expect(
+      nativeCapsule,
+      contains('if (!animations_enabled_ ||\n'
+          '      std::abs(current_visible_width_ - target) < 0.5'),
+    );
+    expect(
       windowsPlatform,
       contains("'enableAnimations': state.enableAnimations"),
     );
@@ -4416,6 +4435,20 @@ void main() {
     expect(paperWindow, contains('kCapsuleMasterTransitionTimerId'));
     expect(paperWindow, contains('return HTTRANSPARENT;'));
     expect(paperWindow, contains('capsule_animation_active_'));
+    expect(
+      paperWindow,
+      contains(
+        'std::abs(capsule_animation_target_width_ -\n'
+        '                   desired_visible_width) >= 0.5',
+      ),
+    );
+    expect(
+      paperWindow,
+      contains(
+        'StartCapsuleDockAnimation(\n'
+        '            desired_visible_width,',
+      ),
+    );
     expect(paperWindowHeader,
         contains('bool capsule_animations_enabled_ = true;'));
     expect(
