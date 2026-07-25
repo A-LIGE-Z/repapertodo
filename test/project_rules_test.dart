@@ -4220,6 +4220,25 @@ void main() {
     expect(nativeCapsule, contains('capsule_master_top_ ='));
     expect(nativeCapsule, contains('StartMasterTransition('));
     expect(nativeCapsule, contains('UpdateMasterTransition'));
+    final nativeMasterTransitionStart = _sliceBetween(
+      nativeCapsule,
+      'void NativeCapsuleWindow::StartMasterTransition(',
+      'void NativeCapsuleWindow::UpdateMasterTransition()',
+    );
+    expect(
+      nativeMasterTransitionStart,
+      isNot(contains('RefreshVisibility();')),
+    );
+    expect(
+      nativeCapsule,
+      contains('void NativeCapsuleWindow::CompleteMasterTransitionAtTarget()'),
+    );
+    expect(nativeCapsule, contains('CompleteMasterTransitionAtTarget();'));
+    expect(
+      nativeCapsule,
+      contains('if (!animations_enabled_ && queue_drag_animation_active_)'),
+    );
+    expect(nativeCapsule, contains('ApplyDockedPosition();'));
     expect(nativeCapsule, contains('kCapsuleMasterTransitionTimerId'));
     expect(nativeCapsule, contains('return HTTRANSPARENT;'));
     expect(nativeCapsule, contains('UpdateDockAnimation'));
@@ -4432,6 +4451,32 @@ void main() {
     expect(paperWindow, contains('capsule_master_top_ ='));
     expect(paperWindow, contains('StartMasterCapsuleTransition('));
     expect(paperWindow, contains('UpdateMasterCapsuleTransition'));
+    final paperMasterTransitionStart = _sliceBetween(
+      paperWindow,
+      'void PaperFlutterWindow::StartMasterCapsuleTransition(',
+      'void PaperFlutterWindow::UpdateMasterCapsuleTransition()',
+    );
+    expect(
+      paperMasterTransitionStart,
+      isNot(contains('RefreshZOrder();')),
+    );
+    expect(
+      paperWindow,
+      contains(
+        'void PaperFlutterWindow::CompleteMasterCapsuleTransitionAtTarget()',
+      ),
+    );
+    expect(
+      paperWindow,
+      contains('CompleteMasterCapsuleTransitionAtTarget();'),
+    );
+    expect(
+      paperWindow,
+      contains(
+        'if (!capsule_animations_enabled_ && queue_drag_animation_active_)',
+      ),
+    );
+    expect(paperWindow, contains('ApplyCapsuleHorizontalPosition();'));
     expect(paperWindow, contains('kCapsuleMasterTransitionTimerId'));
     expect(paperWindow, contains('return HTTRANSPARENT;'));
     expect(paperWindow, contains('capsule_animation_active_'));

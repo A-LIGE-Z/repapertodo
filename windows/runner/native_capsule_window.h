@@ -52,6 +52,7 @@ class NativeCapsuleWindow : public Win32Window {
                              int move_duration_ms, int fade_duration_ms,
                              ULONGLONG animation_epoch = 0);
   void UpdateMasterTransition();
+  void CompleteMasterTransitionAtTarget();
   void PauseMasterTransitionForQueueDrag();
   void ResumeMasterTransitionAfterQueueDrag();
   void ApplyMasterTransitionAlpha(int alpha);

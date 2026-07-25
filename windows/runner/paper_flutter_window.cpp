@@ -2732,6 +2732,13 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
       BoolValue(surface, "useDeepCapsuleMode", deep_capsule_mode_);
   capsule_animations_enabled_ = BoolValue(
       surface, "enableAnimations", capsule_animations_enabled_);
+  if (!capsule_animations_enabled_ && queue_drag_animation_active_) {
+    // Settle an already-running queue-follow timer when animations are turned
+    // off.  Otherwise its old easing curve can overwrite the setting change
+    // on the next tick and leave this proxy between two queue slots.
+    queue_drag_animation_active_ = false;
+    KillTimer(window, kCapsuleQueueFollowTimerId);
+  }
   if (!collapsed_) {
     capsule_hovered_ = false;
     KillTimer(window, kCapsuleSlideTimerId);
@@ -2891,12 +2898,20 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
       native_y = capsule_hidden_by_master_
                      ? static_cast<double>(master_capsule_top)
                      : static_cast<double>(normal_capsule_top);
-    } else if (master_capsule_transition_active_ &&
-               !queue_drag_offset_active_) {
+    } else if (master_capsule_transition_active_) {
       master_capsule_transition_target_top_ =
           static_cast<double>(capsule_hidden_by_master_ ? master_capsule_top
-                                                         : normal_capsule_top);
-      native_y = static_cast<double>(master_capsule_transition_start_top_);
+                                                         : normal_capsule_top) +
+          (queue_drag_offset_active_ ? queue_drag_last_delta_y_ : 0);
+      if (!capsule_animations_enabled_) {
+        // A settings update can arrive between two transition timer ticks.
+        // Finish the retained HWND in one transaction instead of letting the
+        // old timer expose a half-faded capsule frame.
+        CompleteMasterCapsuleTransitionAtTarget();
+        native_y = master_capsule_transition_target_top_;
+      } else {
+        native_y = static_cast<double>(master_capsule_transition_start_top_);
+      }
     } else if (master_capsule_retracted_) {
       native_y = static_cast<double>(master_capsule_top);
     }
@@ -3319,6 +3334,35 @@ void PaperFlutterWindow::ApplyMasterCapsuleAlpha(int alpha) {
   }
 }
 
+void PaperFlutterWindow::CompleteMasterCapsuleTransitionAtTarget() {
+  HWND window = GetHandle();
+  master_capsule_transition_active_ = false;
+  queue_drag_master_transition_paused_at_ = 0;
+  master_capsule_retracted_ = master_capsule_transition_target_hidden_;
+  if (window) {
+    KillTimer(window, kCapsuleMasterTransitionTimerId);
+    RECT bounds = {};
+    if (GetWindowRect(window, &bounds)) {
+      applying_bounds_ = true;
+      SetWindowPos(
+          window, nullptr, bounds.left,
+          static_cast<int>(std::lround(
+              master_capsule_transition_target_top_)),
+          0, 0,
+          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+              SWP_NOREDRAW);
+      applying_bounds_ = false;
+    }
+  }
+  ApplyMasterCapsuleAlpha(master_capsule_transition_target_alpha_);
+  // A width reveal may have continued while the capsule was travelling to the
+  // master slot. Re-apply the horizontal frame after the vertical transition
+  // settles so the final composed frame uses the current width.
+  if (!master_capsule_retracted_) {
+    ApplyCapsuleHorizontalPosition();
+  }
+}
+
 void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
                                                       bool target_hidden,
                                                       int move_duration_ms,
@@ -3373,17 +3417,10 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
                 master_capsule_transition_target_top_) < 0.5 &&
        master_capsule_transition_start_alpha_ ==
            master_capsule_transition_target_alpha_)) {
-    master_capsule_transition_active_ = false;
-    queue_drag_master_transition_paused_at_ = 0;
-    master_capsule_retracted_ = target_hidden;
-    ApplyMasterCapsuleAlpha(master_capsule_transition_target_alpha_);
-    SetWindowPos(window, nullptr, bounds.left,
-                 static_cast<int>(std::lround(master_capsule_transition_target_top_)),
-                 0, 0,
-                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                     SWP_NOOWNERZORDER | SWP_NOREDRAW);
-    KillTimer(window, kCapsuleMasterTransitionTimerId);
-    RefreshZOrder();
+    CompleteMasterCapsuleTransitionAtTarget();
+    // ApplySurface performs the one visibility/z-order pass for an immediate
+    // transition. A second pass here can compose a redundant show/restack
+    // frame before the complete surface transaction is committed.
     return;
   }
 
@@ -3430,11 +3467,7 @@ void PaperFlutterWindow::UpdateMasterCapsuleTransition() {
   applying_bounds_ = false;
   ApplyMasterCapsuleAlpha(alpha);
   if (move_progress >= 1.0 && fade_progress >= 1.0) {
-    master_capsule_transition_active_ = false;
-    queue_drag_master_transition_paused_at_ = 0;
-    master_capsule_retracted_ = master_capsule_transition_target_hidden_;
-    KillTimer(window, kCapsuleMasterTransitionTimerId);
-    ApplyMasterCapsuleAlpha(master_capsule_transition_target_alpha_);
+    CompleteMasterCapsuleTransitionAtTarget();
     RefreshZOrder();
   }
 }

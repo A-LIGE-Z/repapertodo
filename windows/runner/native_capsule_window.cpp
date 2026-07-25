@@ -334,6 +334,15 @@ void NativeCapsuleWindow::ApplySurface(
       BoolValue(surface, "hideWhenFullscreen", hide_when_fullscreen_);
   animations_enabled_ =
       BoolValue(surface, "enableAnimations", animations_enabled_);
+  if (!animations_enabled_ && queue_drag_animation_active_) {
+    // The setting change must also settle an animation that was already
+    // armed.  Leaving its timer alive after the setting is disabled lets an
+    // old easing curve overwrite the newly committed capsule position.
+    queue_drag_animation_active_ = false;
+    if (HWND window = GetHandle()) {
+      KillTimer(window, kCapsuleQueueFollowTimerId);
+    }
+  }
   theme_ = StringValue(surface, "theme", theme_);
   color_scheme_ = StringValue(surface, "colorScheme", color_scheme_);
   custom_theme_color_hex_ = StringValue(
@@ -536,16 +545,24 @@ void NativeCapsuleWindow::ApplySurface(
           animations_enabled_ ? kCapsuleMasterMoveMilliseconds : 0,
           animations_enabled_ ? kCapsuleMasterFadeMilliseconds : 0,
           animation_epoch);
-    } else if (master_transition_active_ && !queue_drag_offset_active_) {
+    } else if (master_transition_active_) {
       // Retarget a transition when the master is dragged or the queue is
       // reordered while the fade is still running. Keep the current frame and
       // only change its destination; restarting from the old slot causes a
       // visible backwards hop.
-      master_transition_target_top_ = capsule_hidden_by_master_
-                                          ? static_cast<double>(
-                                                EffectiveMasterTopPhysical())
-                                          : static_cast<double>(
-                                                EffectiveDockedTopPhysical());
+      if (!queue_drag_offset_active_) {
+        master_transition_target_top_ = capsule_hidden_by_master_
+                                            ? static_cast<double>(
+                                                  EffectiveMasterTopPhysical())
+                                            : static_cast<double>(
+                                                  EffectiveDockedTopPhysical());
+      }
+      if (!animations_enabled_) {
+        // Settings can disable animations while this transition is between
+        // timer ticks.  Snap the retained HWND and alpha together instead of
+        // allowing the stale timer to present a half-retracted frame.
+        CompleteMasterTransitionAtTarget();
+      }
     } else if (master_retracted_ && !queue_drag_offset_active_) {
       if (HWND window = GetHandle()) {
         RECT bounds = {};
@@ -757,6 +774,32 @@ void NativeCapsuleWindow::ApplyMasterTransitionAlpha(int alpha) {
   }
 }
 
+void NativeCapsuleWindow::CompleteMasterTransitionAtTarget() {
+  HWND window = GetHandle();
+  master_transition_active_ = false;
+  queue_drag_master_transition_paused_at_ = 0;
+  master_retracted_ = master_transition_target_hidden_;
+  if (window) {
+    KillTimer(window, kCapsuleMasterTransitionTimerId);
+    RECT bounds = {};
+    if (GetWindowRect(window, &bounds)) {
+      SetWindowPos(
+          window, nullptr, bounds.left,
+          static_cast<int>(std::lround(master_transition_target_top_)), 0, 0,
+          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+              SWP_NOREDRAW);
+    }
+  }
+  ApplyMasterTransitionAlpha(master_transition_target_alpha_);
+  // A horizontal reveal may have been running while the child travelled
+  // between the docked and master slots.  Apply its current width after the
+  // vertical transition is settled so the final frame cannot retain the old
+  // edge position.
+  if (!master_retracted_) {
+    ApplyDockedPosition();
+  }
+}
+
 void NativeCapsuleWindow::StartMasterTransition(int target_top,
                                                 bool target_hidden,
                                                 int move_duration_ms,
@@ -808,17 +851,10 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
       (std::abs(master_transition_start_top_ -
                 master_transition_target_top_) < 0.5 &&
        master_transition_start_alpha_ == master_transition_target_alpha_)) {
-    master_transition_active_ = false;
-    queue_drag_master_transition_paused_at_ = 0;
-    master_retracted_ = target_hidden;
-    ApplyMasterTransitionAlpha(master_transition_target_alpha_);
-    SetWindowPos(window, nullptr, bounds.left,
-                 static_cast<int>(std::lround(master_transition_target_top_)),
-                 0, 0,
-                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                     SWP_NOOWNERZORDER | SWP_NOREDRAW);
-    KillTimer(window, kCapsuleMasterTransitionTimerId);
-    RefreshVisibility();
+    CompleteMasterTransitionAtTarget();
+    // ApplySurface owns the single visibility/z-order pass for an immediate
+    // transition. Refreshing here and again at the end of that transaction
+    // briefly exposes two show/restack compositions.
     return;
   }
 
@@ -866,11 +902,7 @@ void NativeCapsuleWindow::UpdateMasterTransition() {
                    SWP_NOOWNERZORDER | SWP_NOREDRAW);
   ApplyMasterTransitionAlpha(alpha);
   if (move_progress >= 1.0 && fade_progress >= 1.0) {
-    master_transition_active_ = false;
-    queue_drag_master_transition_paused_at_ = 0;
-    master_retracted_ = master_transition_target_hidden_;
-    KillTimer(window, kCapsuleMasterTransitionTimerId);
-    ApplyMasterTransitionAlpha(master_transition_target_alpha_);
+    CompleteMasterTransitionAtTarget();
     RefreshVisibility();
   }
 }

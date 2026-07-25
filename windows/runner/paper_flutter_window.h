@@ -77,6 +77,7 @@ class PaperFlutterWindow : public Win32Window {
                                     int fade_duration_ms,
                                     ULONGLONG animation_epoch = 0);
   void UpdateMasterCapsuleTransition();
+  void CompleteMasterCapsuleTransitionAtTarget();
   void PauseMasterTransitionForQueueDrag();
   void ResumeMasterTransitionAfterQueueDrag();
   void ApplyMasterCapsuleAlpha(int alpha);
