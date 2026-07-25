@@ -59,6 +59,7 @@ class PaperFlutterWindow : public Win32Window {
   void ApplyNativeStyle();
   void EnsurePaperShadowWindow();
   void UpdatePaperShadowWindow(bool redraw);
+  void DeferPaperShadowRefreshUntilNextFrame();
   void HidePaperShadowWindow();
   void DestroyPaperShadowWindow();
   static LRESULT CALLBACK PaperShadowWindowProc(HWND window, UINT message,
@@ -70,7 +71,8 @@ class PaperFlutterWindow : public Win32Window {
   void UpdateCapsuleDockAnimation();
   void ApplyCapsuleHorizontalPosition();
   void StartMasterCapsuleTransition(int target_top, bool target_hidden,
-                                    int duration_ms);
+                                    int move_duration_ms,
+                                    int fade_duration_ms);
   void UpdateMasterCapsuleTransition();
   void ApplyMasterCapsuleAlpha(int alpha);
   int MasterCapsuleTopPhysical() const;
@@ -120,7 +122,8 @@ class PaperFlutterWindow : public Win32Window {
   int master_capsule_transition_start_alpha_ = 255;
   int master_capsule_transition_target_alpha_ = 255;
   ULONGLONG master_capsule_transition_started_at_ = 0;
-  int master_capsule_transition_duration_ms_ = 0;
+  int master_capsule_transition_move_duration_ms_ = 0;
+  int master_capsule_transition_fade_duration_ms_ = 0;
   int capsule_alpha_ = 255;
   int64_t surface_generation_ = -1;
   bool collapsed_ = false;

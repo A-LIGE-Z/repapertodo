@@ -158,6 +158,8 @@ using repapertodo::motion::kCapsuleMasterMoveMilliseconds;
 using repapertodo::motion::kCapsuleQueueMoveMilliseconds;
 using repapertodo::motion::kCapsuleSlideInMilliseconds;
 using repapertodo::motion::kCapsuleSlideOutMilliseconds;
+using repapertodo::motion::AnimationProgress;
+using repapertodo::motion::EaseOutCubic;
 
 // A deep capsule is deliberately a WS_EX_NOACTIVATE window.  When its click
 // is delivered through the native proxy, Windows does not always grant the
@@ -2492,25 +2494,7 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       // Wait for Flutter's final resized frame before showing the separate
       // layered shadow again. Showing the shadow immediately can expose it
       // around one stale/black swap-chain frame at pointer release.
-      HidePaperShadowWindow();
-      paper_shadow_refresh_pending_ = true;
-      const uint64_t refresh_generation =
-          ++paper_shadow_refresh_generation_;
-      if (flutter_controller_ && flutter_controller_->engine()) {
-        const HWND target_window = window;
-        flutter_controller_->engine()->SetNextFrameCallback(
-            [target_window, refresh_generation]() {
-              if (IsWindow(target_window)) {
-                PostMessageW(target_window,
-                             kDeferredPaperShadowRefreshMessage,
-                             static_cast<WPARAM>(refresh_generation), 0);
-              }
-            });
-        flutter_controller_->ForceRedraw();
-      } else {
-        PostMessageW(window, kDeferredPaperShadowRefreshMessage,
-                     static_cast<WPARAM>(refresh_generation), 0);
-      }
+      DeferPaperShadowRefreshUntilNextFrame();
       if (surface_initialized_) {
         if (collapsed_ && deep_capsule_mode_) {
           SendCapsuleDropped();
@@ -2574,7 +2558,11 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       break;
     }
     case WM_MOUSEACTIVATE:
-      if (pinned_to_desktop_) {
+      // A collapsed deep-capsule paper is a no-activate proxy until Dart has
+      // committed the expanded paper state.  Letting USER32 activate this
+      // HWND on mouse-down exposes the old capsule swap-chain frame for one
+      // composition tick and is the source of the intermittent click flash.
+      if (pinned_to_desktop_ || (collapsed_ && deep_capsule_mode_)) {
         return MA_NOACTIVATE;
       }
       break;
@@ -2655,7 +2643,9 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       BoolValue(surface, "isScriptCapsule", script_capsule_);
   capsule_font_family_ =
       StringValue(surface, "fontFamily", capsule_font_family_);
+  const bool previous_collapsed = collapsed_;
   collapsed_ = BoolValue(surface, "isCollapsed", collapsed_);
+  const bool expanded_from_capsule = previous_collapsed && !collapsed_;
   const bool was_capsule_hidden_by_master = capsule_hidden_by_master_;
   capsule_hidden_by_master_ =
       BoolValue(surface, "capsuleHiddenByMaster", capsule_hidden_by_master_);
@@ -2795,10 +2785,8 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
       StartMasterCapsuleTransition(
           capsule_hidden_by_master_ ? master_capsule_top : normal_capsule_top,
           capsule_hidden_by_master_,
-          capsule_animations_enabled_
-              ? std::max(kCapsuleMasterMoveMilliseconds,
-                         kCapsuleMasterFadeMilliseconds)
-              : 0);
+          capsule_animations_enabled_ ? kCapsuleMasterMoveMilliseconds : 0,
+          capsule_animations_enabled_ ? kCapsuleMasterFadeMilliseconds : 0);
       native_y = capsule_hidden_by_master_
                      ? static_cast<double>(master_capsule_top)
                      : static_cast<double>(normal_capsule_top);
@@ -2867,6 +2855,13 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
   pinned_to_desktop_ =
       BoolValue(surface, "isPinnedToDesktop", pinned_to_desktop_);
   SetHideFromWindowSwitcher(hide_from_window_switcher_);
+  if (expanded_from_capsule) {
+    // The child Flutter engine has just switched from the compact capsule to
+    // the full paper layout. Keep the detached shadow hidden until that new
+    // frame has actually been submitted; otherwise the shadow outlines one
+    // stretched capsule/transparent frame during the size jump.
+    DeferPaperShadowRefreshUntilNextFrame();
+  }
   RefreshZOrder();
 }
 
@@ -2960,12 +2955,9 @@ void PaperFlutterWindow::UpdateQueueDragAnimation() {
   if (!window) return;
   const ULONGLONG elapsed =
       GetTickCount64() - queue_drag_animation_started_at_;
-  const double progress = std::clamp(
-      static_cast<double>(elapsed) /
-          static_cast<double>(std::max(1, queue_drag_animation_duration_ms_)),
-      0.0, 1.0);
-  const double inverse = 1.0 - progress;
-  const double eased = 1.0 - inverse * inverse * inverse;
+  const double progress = AnimationProgress(
+      elapsed, queue_drag_animation_duration_ms_);
+  const double eased = EaseOutCubic(progress);
   const int top = static_cast<int>(std::lround(
       queue_drag_animation_start_top_ +
       (queue_drag_animation_target_top_ - queue_drag_animation_start_top_) *
@@ -3054,12 +3046,9 @@ void PaperFlutterWindow::UpdateCapsuleDockAnimation() {
   HWND window = GetHandle();
   if (!window) return;
   const ULONGLONG elapsed = GetTickCount64() - capsule_animation_started_at_;
-  const double progress = std::clamp(
-      static_cast<double>(elapsed) /
-          static_cast<double>(std::max(1, capsule_animation_duration_ms_)),
-      0.0, 1.0);
-  const double inverse = 1.0 - progress;
-  const double eased = 1.0 - inverse * inverse * inverse;
+  const double progress = AnimationProgress(
+      elapsed, capsule_animation_duration_ms_);
+  const double eased = EaseOutCubic(progress);
   capsule_current_visible_width_ =
       capsule_animation_start_width_ +
       (capsule_animation_target_width_ - capsule_animation_start_width_) *
@@ -3135,7 +3124,8 @@ void PaperFlutterWindow::ApplyMasterCapsuleAlpha(int alpha) {
 
 void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
                                                       bool target_hidden,
-                                                      int duration_ms) {
+                                                      int move_duration_ms,
+                                                      int fade_duration_ms) {
   HWND window = GetHandle();
   RECT bounds = {};
   if (!window || !GetWindowRect(window, &bounds)) return;
@@ -3146,7 +3136,10 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
   master_capsule_transition_start_alpha_ = capsule_alpha_;
   master_capsule_transition_target_alpha_ = target_hidden ? 0 : 255;
   master_capsule_transition_started_at_ = GetTickCount64();
-  master_capsule_transition_duration_ms_ = std::max(0, duration_ms);
+  master_capsule_transition_move_duration_ms_ =
+      std::max(0, move_duration_ms);
+  master_capsule_transition_fade_duration_ms_ =
+      std::max(0, fade_duration_ms);
   master_capsule_transition_active_ = false;
 
   if (target_hidden) {
@@ -3159,7 +3152,9 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
     // before the correct capsule z-order is established.
   }
 
-  if (!capsule_animations_enabled_ || duration_ms <= 0 ||
+  if (!capsule_animations_enabled_ ||
+      std::max(master_capsule_transition_move_duration_ms_,
+               master_capsule_transition_fade_duration_ms_) <= 0 ||
       (std::abs(master_capsule_transition_start_top_ -
                 master_capsule_transition_target_top_) < 0.5 &&
        master_capsule_transition_start_alpha_ ==
@@ -3188,29 +3183,29 @@ void PaperFlutterWindow::UpdateMasterCapsuleTransition() {
   if (!window) return;
   const ULONGLONG elapsed =
       GetTickCount64() - master_capsule_transition_started_at_;
-  const double progress = std::clamp(
-      static_cast<double>(elapsed) /
-          static_cast<double>(std::max(1, master_capsule_transition_duration_ms_)),
-      0.0, 1.0);
-  const double inverse = 1.0 - progress;
-  const double eased = 1.0 - inverse * inverse * inverse;
+  const double move_progress = AnimationProgress(
+      elapsed, master_capsule_transition_move_duration_ms_);
+  const double fade_progress = AnimationProgress(
+      elapsed, master_capsule_transition_fade_duration_ms_);
+  const double move_eased = EaseOutCubic(move_progress);
+  const double fade_eased = EaseOutCubic(fade_progress);
   RECT bounds = {};
   if (!GetWindowRect(window, &bounds)) return;
   const int top = static_cast<int>(std::lround(
       master_capsule_transition_start_top_ +
       (master_capsule_transition_target_top_ -
-       master_capsule_transition_start_top_) * eased));
+       master_capsule_transition_start_top_) * move_eased));
   const int alpha = static_cast<int>(std::lround(
       master_capsule_transition_start_alpha_ +
       (master_capsule_transition_target_alpha_ -
-       master_capsule_transition_start_alpha_) * eased));
+       master_capsule_transition_start_alpha_) * fade_eased));
   applying_bounds_ = true;
   SetWindowPos(window, nullptr, bounds.left, top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                    SWP_NOOWNERZORDER | SWP_NOREDRAW);
   applying_bounds_ = false;
   ApplyMasterCapsuleAlpha(alpha);
-  if (progress >= 1.0) {
+  if (move_progress >= 1.0 && fade_progress >= 1.0) {
     master_capsule_transition_active_ = false;
     master_capsule_retracted_ = master_capsule_transition_target_hidden_;
     KillTimer(window, kCapsuleMasterTransitionTimerId);
@@ -3664,6 +3659,31 @@ void PaperFlutterWindow::EnsurePaperShadowWindow() {
   paper_shadow_z_order_dirty_ = true;
 }
 
+void PaperFlutterWindow::DeferPaperShadowRefreshUntilNextFrame() {
+  HWND window = GetHandle();
+  HidePaperShadowWindow();
+  paper_shadow_refresh_pending_ = false;
+  const uint64_t refresh_generation = ++paper_shadow_refresh_generation_;
+  if (!window || collapsed_ || !intended_visible_) {
+    return;
+  }
+  paper_shadow_refresh_pending_ = true;
+  if (flutter_controller_ && flutter_controller_->engine()) {
+    const HWND target_window = window;
+    flutter_controller_->engine()->SetNextFrameCallback(
+        [target_window, refresh_generation]() {
+          if (IsWindow(target_window)) {
+            PostMessageW(target_window, kDeferredPaperShadowRefreshMessage,
+                         static_cast<WPARAM>(refresh_generation), 0);
+          }
+        });
+    flutter_controller_->ForceRedraw();
+    return;
+  }
+  PostMessageW(window, kDeferredPaperShadowRefreshMessage,
+               static_cast<WPARAM>(refresh_generation), 0);
+}
+
 void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
   // WM_MOVE, WM_SIZE, WM_WINDOWPOSCHANGED and z-order refreshes can all arrive
   // after WM_EXITSIZEMOVE but before Flutter presents its final resized frame.
@@ -3884,7 +3904,7 @@ void PaperFlutterWindow::SetHideFromWindowSwitcher(bool hidden) {
     SetWindowLongPtrW(window, GWL_EXSTYLE, extended_style);
     SetWindowPos(window, nullptr, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                     SWP_FRAMECHANGED);
+                     SWP_NOREDRAW | SWP_FRAMECHANGED);
   }
   RemoveTaskbarButton(window);
 }

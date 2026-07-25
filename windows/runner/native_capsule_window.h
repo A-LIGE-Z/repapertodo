@@ -48,7 +48,7 @@ class NativeCapsuleWindow : public Win32Window {
   void StartDockAnimation(int target_visible_width, int duration_ms);
   void UpdateDockAnimation();
   void StartMasterTransition(int target_top, bool target_hidden,
-                             int duration_ms);
+                             int move_duration_ms, int fade_duration_ms);
   void UpdateMasterTransition();
   void ApplyMasterTransitionAlpha(int alpha);
   int MasterTopPhysical() const;
@@ -124,7 +124,8 @@ class NativeCapsuleWindow : public Win32Window {
   int master_transition_start_alpha_ = 255;
   int master_transition_target_alpha_ = 255;
   ULONGLONG master_transition_started_at_ = 0;
-  int master_transition_duration_ms_ = 0;
+  int master_transition_move_duration_ms_ = 0;
+  int master_transition_fade_duration_ms_ = 0;
   int current_alpha_ = 255;
   bool hide_when_covered_ = false;
   bool hide_when_fullscreen_ = false;

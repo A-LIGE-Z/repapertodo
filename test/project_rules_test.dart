@@ -4017,6 +4017,28 @@ void main() {
     expect(nativeMotion, contains('kCapsuleMasterMoveMilliseconds = 200'));
     expect(nativeMotion, contains('kCapsuleMasterFadeMilliseconds = 160'));
     expect(nativeMotion, contains('kAnimationFrameMilliseconds = 16'));
+    expect(nativeMotion, contains('EaseOutCubic'));
+    expect(nativeMotion, contains('AnimationProgress'));
+    expect(nativeCapsule, contains('using repapertodo::motion::EaseOutCubic'));
+    expect(paperWindow, contains('using repapertodo::motion::EaseOutCubic'));
+    expect(nativeCapsule, contains('master_transition_move_duration_ms_'));
+    expect(nativeCapsule, contains('master_transition_fade_duration_ms_'));
+    expect(
+      paperWindow,
+      contains('master_capsule_transition_move_duration_ms_'),
+    );
+    expect(
+      paperWindow,
+      contains('master_capsule_transition_fade_duration_ms_'),
+    );
+    expect(
+      nativeCapsule,
+      isNot(contains('const double inverse = 1.0 - progress;')),
+    );
+    expect(
+      paperWindow,
+      isNot(contains('const double inverse = 1.0 - progress;')),
+    );
     expect(
         dartMotion, contains('capsuleSlideOut = Duration(milliseconds: 220)'));
     expect(
@@ -4091,6 +4113,10 @@ void main() {
     expect(paperWindow, contains('WS_EX_NOACTIVATE'));
     expect(paperWindow, contains('case WM_MOUSEACTIVATE:'));
     expect(paperWindow, contains('return MA_NOACTIVATE;'));
+    expect(
+      paperWindow,
+      contains('pinned_to_desktop_ || (collapsed_ && deep_capsule_mode_)'),
+    );
     expect(paperWindow, isNot(contains('case WM_WINDOWPOSCHANGING:')));
     expect(paperWindow, contains('SetHideFromWindowSwitcher'));
     expect(
@@ -4109,6 +4135,17 @@ void main() {
         contains('wcscmp(class_name, kPaperShadowWindowClass) == 0'));
     expect(paperWindow, contains('case WM_ENTERSIZEMOVE:'));
     expect(paperWindow, contains('case WM_EXITSIZEMOVE:'));
+    expect(
+      paperWindow,
+      contains(
+          'void PaperFlutterWindow::DeferPaperShadowRefreshUntilNextFrame()'),
+    );
+    expect(paperWindow, contains('expanded_from_capsule'));
+    expect(paperWindow, contains('DeferPaperShadowRefreshUntilNextFrame();'));
+    expect(
+      paperWindow,
+      contains('SWP_NOREDRAW | SWP_FRAMECHANGED'),
+    );
     expect(paperWindow, contains('ResizeChildContent(!in_size_move_)'));
     expect(
       paperWindow,
@@ -4211,6 +4248,7 @@ void main() {
       nativeCapsule,
       contains('FillRect(buffer, &bounds, background_brush)'),
     );
+    expect(nativeCapsule, contains('SetWindowRgn(window, region, FALSE)'));
     expect(
       nativeCapsule,
       contains('(master_ && force_master_z_order)'),

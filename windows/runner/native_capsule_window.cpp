@@ -23,10 +23,13 @@ constexpr int kCapsuleCornerRadius = 12;
 constexpr int kCapsuleCloseWidth = 30;
 constexpr int kCapsuleCloseGlyphOffset = 8;
 using repapertodo::motion::kAnimationFrameMilliseconds;
+using repapertodo::motion::kCapsuleMasterFadeMilliseconds;
 using repapertodo::motion::kCapsuleMasterMoveMilliseconds;
 using repapertodo::motion::kCapsuleQueueMoveMilliseconds;
 using repapertodo::motion::kCapsuleSlideInMilliseconds;
 using repapertodo::motion::kCapsuleSlideOutMilliseconds;
+using repapertodo::motion::AnimationProgress;
+using repapertodo::motion::EaseOutCubic;
 
 double NumberValue(const flutter::EncodableMap& map, const char* key,
                    double fallback) {
@@ -499,7 +502,8 @@ void NativeCapsuleWindow::ApplySurface(
           capsule_hidden_by_master_ ? MasterTopPhysical()
                                      : DockedTopPhysical(),
           capsule_hidden_by_master_,
-          animations_enabled_ ? kCapsuleMasterMoveMilliseconds : 0);
+          animations_enabled_ ? kCapsuleMasterMoveMilliseconds : 0,
+          animations_enabled_ ? kCapsuleMasterFadeMilliseconds : 0);
     } else if (master_transition_active_) {
       // Retarget a transition when the master is dragged or the queue is
       // reordered while the fade is still running. Keep the current frame and
@@ -600,7 +604,11 @@ void NativeCapsuleWindow::ApplyWindowRegion() {
       body_left, body_top, body_right + 1, body_bottom + 1,
       ScaleMetric(kCapsuleCornerRadius * 2),
       ScaleMetric(kCapsuleCornerRadius * 2));
-  SetWindowRgn(window, region, TRUE);
+  // The caller invalidates the fully updated back buffer at the end of the
+  // surface transaction.  Asking USER32 to redraw immediately here can expose
+  // a clipped, uninitialised frame while a capsule title or queue state is
+  // being committed.
+  SetWindowRgn(window, region, FALSE);
   region_width_ = full_width_;
   region_height_ = height_;
   region_side_ = capsule_side_;
@@ -669,7 +677,8 @@ void NativeCapsuleWindow::ApplyMasterTransitionAlpha(int alpha) {
 
 void NativeCapsuleWindow::StartMasterTransition(int target_top,
                                                 bool target_hidden,
-                                                int duration_ms) {
+                                                int move_duration_ms,
+                                                int fade_duration_ms) {
   HWND window = GetHandle();
   RECT bounds = {};
   if (!window || !GetWindowRect(window, &bounds)) return;
@@ -680,7 +689,8 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
   master_transition_start_alpha_ = current_alpha_;
   master_transition_target_alpha_ = target_hidden ? 0 : 255;
   master_transition_started_at_ = GetTickCount64();
-  master_transition_duration_ms_ = std::max(0, duration_ms);
+  master_transition_move_duration_ms_ = std::max(0, move_duration_ms);
+  master_transition_fade_duration_ms_ = std::max(0, fade_duration_ms);
   master_transition_active_ = false;
 
   if (target_hidden) {
@@ -696,7 +706,9 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
                  RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
   }
 
-  if (!animations_enabled_ || duration_ms <= 0 ||
+  if (!animations_enabled_ ||
+      std::max(master_transition_move_duration_ms_,
+               master_transition_fade_duration_ms_) <= 0 ||
       (std::abs(master_transition_start_top_ -
                 master_transition_target_top_) < 0.5 &&
        master_transition_start_alpha_ == master_transition_target_alpha_)) {
@@ -723,27 +735,27 @@ void NativeCapsuleWindow::UpdateMasterTransition() {
   HWND window = GetHandle();
   if (!window) return;
   const ULONGLONG elapsed = GetTickCount64() - master_transition_started_at_;
-  const double progress = std::clamp(
-      static_cast<double>(elapsed) /
-          static_cast<double>(std::max(1, master_transition_duration_ms_)),
-      0.0, 1.0);
-  const double inverse = 1.0 - progress;
-  const double eased = 1.0 - inverse * inverse * inverse;
+  const double move_progress = AnimationProgress(
+      elapsed, master_transition_move_duration_ms_);
+  const double fade_progress = AnimationProgress(
+      elapsed, master_transition_fade_duration_ms_);
+  const double move_eased = EaseOutCubic(move_progress);
+  const double fade_eased = EaseOutCubic(fade_progress);
   RECT bounds = {};
   if (!GetWindowRect(window, &bounds)) return;
   const int top = static_cast<int>(std::lround(
       master_transition_start_top_ +
       (master_transition_target_top_ - master_transition_start_top_) *
-          eased));
+          move_eased));
   const int alpha = static_cast<int>(std::lround(
       master_transition_start_alpha_ +
       (master_transition_target_alpha_ - master_transition_start_alpha_) *
-          eased));
+          fade_eased));
   SetWindowPos(window, nullptr, bounds.left, top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                    SWP_NOOWNERZORDER | SWP_NOREDRAW);
   ApplyMasterTransitionAlpha(alpha);
-  if (progress >= 1.0) {
+  if (move_progress >= 1.0 && fade_progress >= 1.0) {
     master_transition_active_ = false;
     master_retracted_ = master_transition_target_hidden_;
     KillTimer(window, kCapsuleMasterTransitionTimerId);
@@ -799,12 +811,8 @@ void NativeCapsuleWindow::UpdateDockAnimation() {
   HWND window = GetHandle();
   if (!window) return;
   const ULONGLONG elapsed = GetTickCount64() - animation_started_at_;
-  const double progress = std::clamp(
-      static_cast<double>(elapsed) /
-          static_cast<double>(std::max(1, animation_duration_ms_)),
-      0.0, 1.0);
-  const double inverse = 1.0 - progress;
-  const double eased = 1.0 - inverse * inverse * inverse;
+  const double progress = AnimationProgress(elapsed, animation_duration_ms_);
+  const double eased = EaseOutCubic(progress);
   current_visible_width_ =
       animation_start_visible_width_ +
       (animation_target_visible_width_ - animation_start_visible_width_) *
@@ -935,12 +943,9 @@ void NativeCapsuleWindow::UpdateQueueDragAnimation() {
   if (!window) return;
   const ULONGLONG elapsed =
       GetTickCount64() - queue_drag_animation_started_at_;
-  const double progress = std::clamp(
-      static_cast<double>(elapsed) /
-          static_cast<double>(std::max(1, queue_drag_animation_duration_ms_)),
-      0.0, 1.0);
-  const double inverse = 1.0 - progress;
-  const double eased = 1.0 - inverse * inverse * inverse;
+  const double progress = AnimationProgress(
+      elapsed, queue_drag_animation_duration_ms_);
+  const double eased = EaseOutCubic(progress);
   const int top = static_cast<int>(std::lround(
       queue_drag_animation_start_top_ +
       (queue_drag_animation_target_top_ - queue_drag_animation_start_top_) *

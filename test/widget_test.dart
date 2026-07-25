@@ -2172,9 +2172,9 @@ void main() {
     final platform = _RecordingPlatformServices(
       installedFontFamilies: const [
         'Arial',
-        'Microsoft YaHei UI',
         'DengXian',
-        'SimSun',
+        '\u5FAE\u8F6F\u96C5\u9ED1',
+        '\u5B8B\u4F53',
       ],
     );
     await tester.pumpWidget(
@@ -2205,6 +2205,25 @@ void main() {
     expect(scrollbar.thumbVisibility, true);
     expect(scrollbar.interactive, true);
     expect(scrollbar.controller, same(list.controller));
+    final visibleFontLabels = tester
+        .widgetList<Text>(
+          find.descendant(of: listFinder, matching: find.byType(Text)),
+        )
+        .map((text) => text.data)
+        .whereType<String>()
+        .where(
+          const {
+            '\u5B8B\u4F53',
+            '\u5FAE\u8F6F\u96C5\u9ED1',
+            'Arial',
+            'DengXian',
+          }.contains,
+        )
+        .toList(growable: false);
+    expect(
+      visibleFontLabels,
+      const ['\u5B8B\u4F53', '\u5FAE\u8F6F\u96C5\u9ED1', 'Arial', 'DengXian'],
+    );
   });
 
   testWidgets('confirming settings preserves an existing built-in font preset',
