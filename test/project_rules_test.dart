@@ -3948,6 +3948,7 @@ void main() {
     expect(nativeCapsule, contains('"targetTop"'));
     expect(nativeCapsuleHeader, contains('PrepareMasterDragTop'));
     expect(nativeCapsuleHeader, contains('PrepareQueueDragOffset'));
+    expect(nativeCapsule, contains('queue_drag_base_top_ = bounds.top'));
     expect(nativeCapsule, contains('kCapsuleBodyHeight = 30'));
     expect(nativeCapsule, contains('kCapsuleChromeMargin = 8'));
     expect(nativeCapsule, contains('kCapsuleCornerRadius = 12'));
@@ -3974,6 +3975,7 @@ void main() {
       contains("'enableAnimations': state.enableAnimations"),
     );
     expect(runner, contains('ApplyQueueDragOffset(delta_y)'));
+    expect(runner, contains('entry.second->FinishQueueDrag(commit)'));
     final masterDragBlock = _sliceBetween(
       runner,
       'if (method == "capsuleMasterDragUpdated" ||',
@@ -4002,6 +4004,8 @@ void main() {
     expect(paperWindowHeader, contains('bool script_capsule_ = false'));
     expect(paperWindowHeader, contains('PrepareQueueDragOffset'));
     expect(paperWindowHeader, contains('SetQueueDragBoundsApplying'));
+    expect(paperWindowHeader, contains('queue_drag_bounds_applying_'));
+    expect(paperWindow, contains('!queue_drag_bounds_applying_'));
     expect(paperWindow, contains('ApplyQueueDragTop(target_top)'));
     expect(paperWindow, contains('collapsed_ ? 46.0'));
     expect(paperWindow, isNot(contains('FindDesktopWorkerWindow')));

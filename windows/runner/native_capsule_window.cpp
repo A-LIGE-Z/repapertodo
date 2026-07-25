@@ -836,6 +836,17 @@ bool NativeCapsuleWindow::PrepareMasterDragTop(int target_top,
   HWND window = GetHandle();
   RECT bounds = {};
   if (!window || !GetWindowRect(window, &bounds)) return false;
+  if (!queue_drag_offset_active_) {
+    // Treat the master as a first-class member of the same queue drag
+    // transaction as its proxies.  Without retaining the original top here,
+    // a cancelled capture could return the child capsules to their old slots
+    // while leaving the master at the last pointer position.
+    queue_drag_offset_active_ = true;
+    queue_drag_base_top_ = bounds.top;
+  }
+  queue_drag_target_top_ = target_top;
+  KillTimer(window, kCapsuleQueueFollowTimerId);
+  queue_drag_animation_active_ = false;
   *target_bounds = bounds;
   const int height = bounds.bottom - bounds.top;
   target_bounds->top = target_top;

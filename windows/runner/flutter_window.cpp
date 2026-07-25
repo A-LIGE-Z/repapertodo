@@ -5048,8 +5048,7 @@ void FlutterWindow::SendPaperWindowEvent(
       } else {
         const bool commit = GetBoolArgument(*drag, "commit", false);
         for (auto& entry : native_capsule_windows_) {
-          if (!entry.second->is_master() &&
-              entry.second->IsInQueue(monitor, side)) {
+          if (entry.second->IsInQueue(monitor, side)) {
             entry.second->FinishQueueDrag(commit);
           }
         }

@@ -97,6 +97,10 @@ class PaperFlutterWindow : public Win32Window {
   flutter::EncodableValue latest_paper_;
   bool child_ready_ = false;
   bool applying_bounds_ = false;
+  // A queue drag is applied by the coordinator's DeferWindowPos transaction.
+  // Keep that marker separate from the paper's own SetWindowPos guards so a
+  // nested native transaction cannot clear an already-active bounds update.
+  bool queue_drag_bounds_applying_ = false;
   bool surface_initialized_ = false;
   bool always_on_top_ = false;
   bool pinned_to_desktop_ = false;

@@ -2454,6 +2454,7 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
         UpdatePaperShadowWindow(false);
       }
       if (surface_initialized_ && !collapsed_ && !applying_bounds_ &&
+          !queue_drag_bounds_applying_ &&
           !in_size_move_ &&
           wparam != SIZE_MINIMIZED) {
         SendBoundsChanged();
@@ -2883,7 +2884,7 @@ bool PaperFlutterWindow::PrepareQueueDragOffset(int delta_y,
 }
 
 void PaperFlutterWindow::SetQueueDragBoundsApplying(bool applying) {
-  applying_bounds_ = applying;
+  queue_drag_bounds_applying_ = applying;
 }
 
 void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
