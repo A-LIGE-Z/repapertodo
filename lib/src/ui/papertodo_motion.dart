@@ -17,6 +17,15 @@ abstract final class PaperTodoMotion {
   static const Duration move = Duration(milliseconds: 200);
   static const Duration moveLong = Duration(milliseconds: 220);
 
+  // Native Windows capsule surfaces mirror these exact values in
+  // windows/runner/paper_motion.h. They remain part of the Dart motion
+  // contract even though the HWND animation itself is driven natively.
+  static const Duration capsuleSlideOut = Duration(milliseconds: 220);
+  static const Duration capsuleSlideIn = Duration(milliseconds: 180);
+  static const Duration capsuleQueueMove = Duration(milliseconds: 200);
+  static const Duration capsuleMasterMove = Duration(milliseconds: 200);
+  static const Duration capsuleMasterFade = Duration(milliseconds: 160);
+
   /// PaperTodo's new-row entrance is intentionally a little longer than a
   /// normal move so the row has time to settle without a visible jump.
   static const Duration rowEntrance = Duration(milliseconds: 250);

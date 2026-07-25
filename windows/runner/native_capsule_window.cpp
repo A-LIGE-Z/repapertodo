@@ -10,6 +10,8 @@
 #include <dwmapi.h>
 #include <flutter_windows.h>
 
+#include "paper_motion.h"
+
 namespace {
 
 constexpr UINT_PTR kCapsuleSlideTimerId = 0xCA51;
@@ -20,11 +22,11 @@ constexpr int kCapsuleBodyHeight = 30;
 constexpr int kCapsuleCornerRadius = 12;
 constexpr int kCapsuleCloseWidth = 30;
 constexpr int kCapsuleCloseGlyphOffset = 8;
-constexpr int kCapsuleSlideOutMilliseconds = 220;
-constexpr int kCapsuleSlideInMilliseconds = 180;
-constexpr int kCapsuleQueueMoveMilliseconds = 200;
-constexpr int kCapsuleMasterMoveMilliseconds = 200;
-constexpr int kCapsuleMasterFadeMilliseconds = 160;
+using repapertodo::motion::kAnimationFrameMilliseconds;
+using repapertodo::motion::kCapsuleMasterMoveMilliseconds;
+using repapertodo::motion::kCapsuleQueueMoveMilliseconds;
+using repapertodo::motion::kCapsuleSlideInMilliseconds;
+using repapertodo::motion::kCapsuleSlideOutMilliseconds;
 
 double NumberValue(const flutter::EncodableMap& map, const char* key,
                    double fallback) {
@@ -622,7 +624,7 @@ void NativeCapsuleWindow::ApplyDockedPosition() {
     return;
   }
   SetWindowPos(window, nullptr, x, y, full_width_, height_,
-               SWP_NOZORDER | SWP_NOACTIVATE);
+               SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
 }
 
 int NativeCapsuleWindow::DockedTopPhysical() const {
@@ -705,14 +707,15 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
                  static_cast<int>(std::lround(master_transition_target_top_)),
                  0, 0,
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                     SWP_NOOWNERZORDER);
+                     SWP_NOOWNERZORDER | SWP_NOREDRAW);
     KillTimer(window, kCapsuleMasterTransitionTimerId);
     RefreshVisibility();
     return;
   }
 
   master_transition_active_ = true;
-  SetTimer(window, kCapsuleMasterTransitionTimerId, 16, nullptr);
+  SetTimer(window, kCapsuleMasterTransitionTimerId,
+           kAnimationFrameMilliseconds, nullptr);
 }
 
 void NativeCapsuleWindow::UpdateMasterTransition() {
@@ -738,7 +741,7 @@ void NativeCapsuleWindow::UpdateMasterTransition() {
           eased));
   SetWindowPos(window, nullptr, bounds.left, top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                   SWP_NOOWNERZORDER);
+                   SWP_NOOWNERZORDER | SWP_NOREDRAW);
   ApplyMasterTransitionAlpha(alpha);
   if (progress >= 1.0) {
     master_transition_active_ = false;
@@ -787,7 +790,8 @@ void NativeCapsuleWindow::StartDockAnimation(int target_visible_width,
   animation_started_at_ = GetTickCount64();
   animation_duration_ms_ = duration_ms;
   dock_animation_active_ = true;
-  SetTimer(window, kCapsuleSlideTimerId, 16, nullptr);
+  SetTimer(window, kCapsuleSlideTimerId, kAnimationFrameMilliseconds,
+           nullptr);
 }
 
 void NativeCapsuleWindow::UpdateDockAnimation() {
@@ -885,7 +889,7 @@ void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
   if (!window) return;
   SetWindowPos(window, nullptr, target_bounds.left, target_bounds.top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                   SWP_NOOWNERZORDER);
+                   SWP_NOOWNERZORDER | SWP_NOREDRAW);
 }
 
 void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
@@ -921,7 +925,8 @@ void NativeCapsuleWindow::StartQueueDragAnimation(int target_top,
   queue_drag_animation_started_at_ = GetTickCount64();
   queue_drag_animation_duration_ms_ = duration_ms;
   queue_drag_animation_active_ = true;
-  SetTimer(window, kCapsuleQueueFollowTimerId, 16, nullptr);
+  SetTimer(window, kCapsuleQueueFollowTimerId,
+           kAnimationFrameMilliseconds, nullptr);
 }
 
 void NativeCapsuleWindow::UpdateQueueDragAnimation() {
@@ -955,7 +960,7 @@ void NativeCapsuleWindow::ApplyQueueDragTop(int top) {
   if (!window || !GetWindowRect(window, &bounds) || bounds.top == top) return;
   SetWindowPos(window, nullptr, bounds.left, top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                   SWP_NOOWNERZORDER);
+                   SWP_NOOWNERZORDER | SWP_NOREDRAW);
 }
 
 bool NativeCapsuleWindow::IsChineseLocale() const {
@@ -1179,7 +1184,7 @@ bool NativeCapsuleWindow::IsPointerOverWindow() const {
          PtInRect(&bounds, cursor) == TRUE;
 }
 
-void NativeCapsuleWindow::RefreshVisibility() {
+void NativeCapsuleWindow::RefreshVisibility(bool force_master_z_order) {
   HWND window = GetHandle();
   if (!window) return;
   const bool fullscreen = IsExternalFullscreenWindow();
@@ -1224,7 +1229,7 @@ void NativeCapsuleWindow::RefreshVisibility() {
   const bool topmost = z_order == HWND_TOPMOST;
   const bool visible = IsWindowVisible(window) != FALSE;
   if (!visible || !z_order_initialized_ || z_order_topmost_ != topmost ||
-      master_) {
+      (master_ && force_master_z_order)) {
     if (!visible) {
       // Paint the final label, hover state and theme into the hidden HWND
       // before revealing it. Otherwise Windows can briefly present the last
@@ -1234,7 +1239,8 @@ void NativeCapsuleWindow::RefreshVisibility() {
     }
     SetWindowPos(window, z_order, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                     SWP_NOOWNERZORDER | (visible ? 0 : SWP_SHOWWINDOW));
+                     SWP_NOOWNERZORDER |
+                     (visible ? SWP_NOREDRAW : SWP_SHOWWINDOW));
     z_order_initialized_ = true;
     z_order_topmost_ = topmost;
   }
@@ -1271,6 +1277,11 @@ void NativeCapsuleWindow::Paint(HWND window) {
       CreatePen(PS_SOLID, std::max(1, ScaleMetric(1)), border);
   HGDIOBJ old_brush = SelectObject(buffer, background_brush);
   HGDIOBJ old_pen = SelectObject(buffer, border_pen);
+  // CreateCompatibleBitmap leaves its pixels undefined. A click repaint or
+  // DWM composition boundary can expose those bytes before the rounded pill
+  // has covered them, producing a one-frame black patch on Windows 10. Start
+  // every back buffer from a valid paper-colored frame.
+  FillRect(buffer, &bounds, background_brush);
   const bool left = capsule_side_ == "left";
   const int chrome_margin = ScaleMetric(kCapsuleChromeMargin);
   const int body_height = ScaleMetric(kCapsuleBodyHeight);
@@ -1522,28 +1533,39 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
               });
         } else {
           SetWindowPos(window, nullptr, drag_start_bounds_.left, target_top,
-                       width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+                       width, height,
+                       SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
         }
       } else {
         SetWindowPos(window, HWND_TOPMOST,
                      drag_start_bounds_.left + delta_x,
                      drag_start_bounds_.top + delta_y, width, height,
-                     SWP_NOACTIVATE);
+                     SWP_NOACTIVATE | SWP_NOREDRAW);
       }
       return 0;
     }
-    case WM_MOUSELEAVE:
+    case WM_MOUSELEAVE: {
       tracking_mouse_leave_ = false;
+      const bool close_visual_changed = close_hovered_;
       close_hovered_ = false;
-      if (!pointer_down_) SetHovered(false);
+      const bool hover_changed = !pointer_down_ && hovered_;
+      if (!pointer_down_) {
+        SetHovered(false);
+      }
       RefreshVisibility();
-      InvalidateRect(window, nullptr, FALSE);
+      if (!hover_changed && close_visual_changed) {
+        InvalidateRect(window, nullptr, FALSE);
+      }
       return 0;
+    }
     case WM_LBUTTONDOWN: {
       POINT client_point = {
           static_cast<LONG>(static_cast<short>(LOWORD(lparam))),
           static_cast<LONG>(static_cast<short>(HIWORD(lparam))),
       };
+      const bool hover_changed = !hovered_;
+      const bool previous_close_hovered = close_hovered_;
+      const bool previous_close_pressed = close_pressed_;
       pointer_down_ = true;
       close_pressed_ = IsClosePoint(client_point);
       close_hovered_ = close_pressed_;
@@ -1552,7 +1574,11 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       GetWindowRect(window, &drag_start_bounds_);
       SetCapture(window);
       SetHovered(true);
-      InvalidateRect(window, nullptr, FALSE);
+      if (!hover_changed &&
+          (previous_close_hovered != close_hovered_ ||
+           previous_close_pressed != close_pressed_)) {
+        InvalidateRect(window, nullptr, FALSE);
+      }
       return 0;
     }
     case WM_LBUTTONUP: {
@@ -1562,6 +1588,7 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
           static_cast<LONG>(static_cast<short>(HIWORD(lparam))),
       };
       const bool was_dragging = dragging_;
+      const bool had_close_press = close_pressed_;
       const bool close_clicked =
           close_pressed_ && IsClosePoint(client_point);
       pointer_down_ = false;
@@ -1597,9 +1624,17 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       if (GetCursorPos(&cursor) && GetWindowRect(window, &bounds)) {
         cursor_inside = PtInRect(&bounds, cursor) == TRUE;
       }
+      const bool next_close_hovered =
+          cursor_inside && IsClosePoint(client_point);
+      const bool close_visual_changed =
+          had_close_press || close_hovered_ != next_close_hovered;
+      close_hovered_ = next_close_hovered;
+      const bool hover_changed = hovered_ != cursor_inside;
       SetHovered(cursor_inside);
       RefreshVisibility();
-      InvalidateRect(window, nullptr, FALSE);
+      if (!hover_changed && close_visual_changed && IsWindowVisible(window)) {
+        InvalidateRect(window, nullptr, FALSE);
+      }
       return 0;
     }
     case WM_CAPTURECHANGED:
@@ -1615,10 +1650,13 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
                  flutter::EncodableValue(false)},
             });
       }
+      const bool close_visual_changed = close_pressed_;
       pointer_down_ = false;
       close_pressed_ = false;
       dragging_ = false;
-      InvalidateRect(window, nullptr, FALSE);
+      if (close_visual_changed) {
+        InvalidateRect(window, nullptr, FALSE);
+      }
       return 0;
     case WM_DESTROY:
       KillTimer(window, kCapsuleSlideTimerId);

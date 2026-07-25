@@ -3387,6 +3387,23 @@ void main() {
     expect(motion, contains('rowEntrance = Duration(milliseconds: 250)'));
   });
 
+  test('PaperTodo visual animations use the shared motion contract', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final motion = _readProjectText('lib/src/ui/papertodo_motion.dart');
+    final nativeMotion = _readProjectText('windows/runner/paper_motion.h');
+
+    final rawMillisecondDuration = RegExp(
+      r'(?:duration|reverseDuration):\s*const Duration\(milliseconds:',
+    );
+    expect(rawMillisecondDuration.hasMatch(app), isFalse);
+    expect(rawMillisecondDuration.hasMatch(settings), isFalse);
+    expect(app, contains('PaperTodoMotion.'));
+    expect(settings, contains('PaperTodoMotion.'));
+    expect(motion, contains('capsuleSlideOut'));
+    expect(nativeMotion, contains('kCapsuleSlideOutMilliseconds'));
+  });
+
   test('Flutter secondary surfaces keep PaperTodo paper dialog chrome', () {
     final app = _readProjectText('lib/src/app.dart');
     final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
@@ -3563,6 +3580,22 @@ void main() {
     );
     expect(runner, contains('if (message == WM_NCHITTEST)'));
     expect(runner, contains('return SettingsCoordinatorHitTest(hwnd, lparam)'));
+    expect(runner, contains('kSettingsPositionedProperty'));
+    expect(runner, contains('GetPropW(window, kSettingsPositionedProperty)'));
+    expect(runner, contains('SetPropW(window, kSettingsPositionedProperty'));
+    for (final hitTest in const [
+      'HTCAPTION',
+      'HTLEFT',
+      'HTRIGHT',
+      'HTTOP',
+      'HTBOTTOM',
+      'HTTOPLEFT',
+      'HTTOPRIGHT',
+      'HTBOTTOMLEFT',
+      'HTBOTTOMRIGHT',
+    ]) {
+      expect(runner, contains(hitTest));
+    }
     expect(
         runner, contains('ScaleSettingsMetric(dpi, kSettingsWindowMinWidth)'));
     expect(app, contains('backgroundColor: _windowsPaperTransparencyKey'));
@@ -3919,6 +3952,8 @@ void main() {
         _readProjectText('windows/runner/native_capsule_window.cpp');
     final nativeCapsuleHeader =
         _readProjectText('windows/runner/native_capsule_window.h');
+    final nativeMotion = _readProjectText('windows/runner/paper_motion.h');
+    final dartMotion = _readProjectText('lib/src/ui/papertodo_motion.dart');
     final cmake = _readProjectText('windows/runner/CMakeLists.txt');
     final mainDart = _readProjectText('lib/main.dart');
     final paperWindowApp =
@@ -3951,7 +3986,7 @@ void main() {
     final proxyApply = capsuleReconcile.indexOf('apply_surfaces(false);');
     final masterApply = capsuleReconcile.indexOf('apply_surfaces(true);');
     final masterRefresh = capsuleReconcile.indexOf(
-      'entry.second->RefreshVisibility();',
+      'entry.second->RefreshVisibility(true);',
     );
     expect(staleRemoval, isNonNegative);
     expect(proxyApply, greaterThan(staleRemoval));
@@ -3974,8 +4009,24 @@ void main() {
     expect(nativeCapsule, contains('kCapsuleBodyHeight = 30'));
     expect(nativeCapsule, contains('kCapsuleChromeMargin = 8'));
     expect(nativeCapsule, contains('kCapsuleCornerRadius = 12'));
-    expect(nativeCapsule, contains('kCapsuleSlideOutMilliseconds = 220'));
-    expect(nativeCapsule, contains('kCapsuleSlideInMilliseconds = 180'));
+    expect(nativeCapsule, contains('#include "paper_motion.h"'));
+    expect(paperWindow, contains('#include "paper_motion.h"'));
+    expect(nativeMotion, contains('kCapsuleSlideOutMilliseconds = 220'));
+    expect(nativeMotion, contains('kCapsuleSlideInMilliseconds = 180'));
+    expect(nativeMotion, contains('kCapsuleQueueMoveMilliseconds = 200'));
+    expect(nativeMotion, contains('kCapsuleMasterMoveMilliseconds = 200'));
+    expect(nativeMotion, contains('kCapsuleMasterFadeMilliseconds = 160'));
+    expect(nativeMotion, contains('kAnimationFrameMilliseconds = 16'));
+    expect(
+        dartMotion, contains('capsuleSlideOut = Duration(milliseconds: 220)'));
+    expect(
+        dartMotion, contains('capsuleSlideIn = Duration(milliseconds: 180)'));
+    expect(
+        dartMotion, contains('capsuleQueueMove = Duration(milliseconds: 200)'));
+    expect(dartMotion,
+        contains('capsuleMasterMove = Duration(milliseconds: 200)'));
+    expect(dartMotion,
+        contains('capsuleMasterFade = Duration(milliseconds: 160)'));
     expect(
       nativeCapsule,
       contains('ApplyQueueDragTop(target_top)'),
@@ -4010,6 +4061,7 @@ void main() {
     expect(masterDragBlock, contains('PrepareQueueDragOffset('));
     expect(masterDragBlock, contains('SetQueueDragBoundsApplying(true)'));
     expect(masterDragBlock, contains('SetQueueDragBoundsApplying(false)'));
+    expect(masterDragBlock, contains('SWP_NOOWNERZORDER | SWP_NOREDRAW'));
     expect(paperWindow,
         contains('std::make_unique<flutter::FlutterViewController>'));
     expect(paperWindow, contains('"repapertodo/paper_window"'));
@@ -4124,8 +4176,10 @@ void main() {
     expect(paperWindow, contains('SetCapsuleHovered(*hovered)'));
     expect(paperWindow, contains('StartCapsuleDockAnimation'));
     expect(paperWindow, contains('UpdateCapsuleDockAnimation'));
-    expect(paperWindow, contains('kCapsuleSlideOutMilliseconds = 220'));
-    expect(paperWindow, contains('kCapsuleSlideInMilliseconds = 180'));
+    expect(paperWindow,
+        contains('using repapertodo::motion::kCapsuleSlideOutMilliseconds'));
+    expect(paperWindow,
+        contains('using repapertodo::motion::kCapsuleSlideInMilliseconds'));
     expect(
       paperWindow,
       contains('ApplyQueueDragTop(target_top)'),
@@ -4155,6 +4209,24 @@ void main() {
     );
     expect(
       nativeCapsule,
+      contains('FillRect(buffer, &bounds, background_brush)'),
+    );
+    expect(
+      nativeCapsule,
+      contains('(master_ && force_master_z_order)'),
+    );
+    expect(
+      nativeCapsule,
+      contains('(visible ? SWP_NOREDRAW : SWP_SHOWWINDOW)'),
+    );
+    expect(
+      runner,
+      contains(
+        'entry.second->RefreshVisibility(entry.second->is_master());',
+      ),
+    );
+    expect(
+      nativeCapsule,
       contains('!visible || !z_order_initialized_ ||'),
     );
     expect(
@@ -4163,6 +4235,21 @@ void main() {
     );
     expect(paperWindow, contains('collapsed_ && !capsule_pointer_over'));
     expect(paperWindow, contains('case WM_ERASEBKGND:'));
+    final preResizeStart = paperWindow.indexOf('case WM_NCLBUTTONDOWN:');
+    final preResizeEnd = paperWindow.indexOf('case WM_TIMER:', preResizeStart);
+    expect(preResizeStart, isNonNegative);
+    expect(preResizeEnd, greaterThan(preResizeStart));
+    final preResizeBlock = paperWindow.substring(preResizeStart, preResizeEnd);
+    expect(preResizeBlock, contains('HidePaperShadowWindow();'));
+    expect(preResizeBlock, contains('DwmFlush();'));
+    expect(
+      preResizeBlock.indexOf('HidePaperShadowWindow();'),
+      lessThan(preResizeBlock.indexOf('DwmFlush();')),
+    );
+    expect(
+      paperWindow,
+      contains('SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_HIDEWINDOW'),
+    );
     expect(
       paperWindow,
       contains('!in_size_move_ && !queue_drag_offset_active_'),
@@ -4204,6 +4291,7 @@ void main() {
     expect(paperWindowHeader, contains('bool in_size_move_ = false;'));
     expect(cmake, contains('"paper_flutter_window.cpp"'));
     expect(cmake, contains('"native_capsule_window.cpp"'));
+    expect(cmake, contains('"paper_motion.h"'));
     expect(mainDart, contains('PaperWindowArguments.tryParse(args)'));
     expect(paperWindowApp, contains("'paperChanged'"));
     expect(paperWindowApp, contains("import 'dart:convert';"));
@@ -4235,11 +4323,11 @@ void main() {
     final nativeReconcileBlock =
         runner.substring(nativeReconcileStart, nativeReconcileEnd);
     expect(nativeReconcileBlock, contains('if (entry.second->is_master())'));
-    expect(
-        nativeReconcileBlock, contains('entry.second->RefreshVisibility();'));
+    expect(nativeReconcileBlock,
+        contains('entry.second->RefreshVisibility(true);'));
 
-    final nativeRefreshStart =
-        nativeCapsule.indexOf('void NativeCapsuleWindow::RefreshVisibility()');
+    final nativeRefreshStart = nativeCapsule.indexOf(
+        'void NativeCapsuleWindow::RefreshVisibility(bool force_master_z_order)');
     final nativeRefreshEnd = nativeCapsule.indexOf(
         'void NativeCapsuleWindow::Paint(', nativeRefreshStart);
     expect(nativeRefreshStart, isNonNegative);

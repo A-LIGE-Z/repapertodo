@@ -2164,6 +2164,49 @@ void main() {
     expect(controller.state.systemFontFamilyName, 'Paper Sans');
   });
 
+  testWidgets('installed font options expose an interactive visible scrollbar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final platform = _RecordingPlatformServices(
+      installedFontFamilies: const [
+        'Arial',
+        'Microsoft YaHei UI',
+        'DengXian',
+        'SimSun',
+      ],
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(theme: 'light'),
+          platform: platform,
+        ),
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'display');
+    final fontField =
+        find.byKey(const ValueKey('settings-custom-font-family-field'));
+    await tester.tap(fontField);
+    await tester.pumpAndSettle();
+
+    final scrollbarFinder =
+        find.byKey(const ValueKey('settings-font-options-scrollbar'));
+    final listFinder = find.byKey(const ValueKey('settings-font-options-list'));
+    expect(scrollbarFinder, findsOneWidget);
+    expect(listFinder, findsOneWidget);
+    final scrollbar = tester.widget<Scrollbar>(scrollbarFinder);
+    final list = tester.widget<ListView>(listFinder);
+    expect(scrollbar.thumbVisibility, true);
+    expect(scrollbar.interactive, true);
+    expect(scrollbar.controller, same(list.controller));
+  });
+
   testWidgets('confirming settings preserves an existing built-in font preset',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -5857,6 +5900,96 @@ void main() {
     await _commitVisibleDialog(tester);
     await tester.pumpAndSettle();
     expect(controller.state.maxTitleLength, 7);
+  });
+
+  testWidgets('standalone todo title display follows the configured length',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(440, 320));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const title = 'Configurable todo title';
+
+    for (final maxLength in const [4, 12]) {
+      final paper = PaperData(
+        id: 'configurable-title-$maxLength',
+        type: PaperTypes.todo,
+        title: title,
+        items: [PaperItem(id: 'configurable-title-item-$maxLength')],
+      );
+      await tester.pumpWidget(
+        RePaperTodoApp(
+          key: ValueKey('configurable-title-app-$maxLength'),
+          controller: RePaperTodoController(
+            initialState: AppState(
+              maxTitleLength: maxLength,
+              papers: [paper],
+            ),
+            platform: NoopPlatformServices(),
+          ),
+          store: _MemoryStateStore(),
+          initialSurfacePaperId: paper.id,
+          paperWindowMode: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final titleDisplay = tester.widget<RichText>(
+        find.byKey(ValueKey('${paper.id}-title-display')),
+      );
+      expect(
+        (titleDisplay.text as TextSpan).text,
+        PaperTitles.shorten(title, maxLength),
+      );
+    }
+  });
+
+  testWidgets('confirming settings applies and persists the draft once',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final store = _MemoryStateStore();
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        maxTitleLength: 6,
+        papers: [
+          PaperData(
+            id: 'confirm-settings-paper',
+            type: PaperTypes.todo,
+            items: [PaperItem(id: 'confirm-settings-item')],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(controller: controller, store: store),
+    );
+    await tester.pumpAndSettle();
+    final savesBeforeSettings = store.saveCount;
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await _selectSettingsCategory(tester, 'capsules');
+    final stepper = find.byKey(const ValueKey('settings-max-title-length'));
+    await tester.scrollUntilVisible(
+      stepper,
+      320,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(
+      find.descendant(of: stepper, matching: find.text('\uFF0B')),
+    );
+    await tester.pump();
+
+    expect(controller.state.maxTitleLength, 6);
+    expect(store.saveCount, savesBeforeSettings);
+
+    await tester.tap(find.byKey(const ValueKey('settings-confirm-button')));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.maxTitleLength, 7);
+    expect(store.saveCount, greaterThan(savesBeforeSettings));
+    expect(store.savedState.maxTitleLength, 7);
   });
 
   testWidgets('line spacing settings accept keyboard input and clamp',
@@ -19133,6 +19266,30 @@ void main() {
         find.byKey(const ValueKey('context-menu-paper-context-item-row'));
     expect(row, findsOneWidget);
 
+    if (Platform.isWindows) {
+      final textField = find
+          .descendant(
+            of: row,
+            matching: find.byType(TextFormField),
+          )
+          .first;
+      final editable = find.descendant(
+        of: textField,
+        matching: find.byType(EditableText),
+      );
+      final contextMenuBuilder =
+          tester.widget<EditableText>(editable).contextMenuBuilder;
+      expect(contextMenuBuilder, isNotNull);
+      final toolbar = contextMenuBuilder!(
+        tester.element(textField),
+        tester.state<EditableTextState>(editable),
+      );
+      expect(
+        toolbar.key,
+        const ValueKey('todo-text-context-menu-suppressed'),
+      );
+    }
+
     await tester.tapAt(tester.getCenter(row), buttons: kSecondaryMouseButton);
     await tester.pumpAndSettle();
 
@@ -19141,6 +19298,9 @@ void main() {
     expect(find.text('Add column'), findsOneWidget);
     expect(find.text('Delete this item'), findsOneWidget);
     expect(find.text('Paste'), findsNothing);
+    expect(find.text('Select all'), findsNothing);
+    expect(find.text('Cut'), findsNothing);
+    expect(find.text('Copy'), findsNothing);
 
     await tester.tap(
       find.byWidgetPredicate(

@@ -4948,7 +4948,7 @@ void FlutterWindow::ReconcileNativeCapsuleWindows(
   // make the collapse/expand button appear to flicker or miss clicks.
   for (auto& entry : native_capsule_windows_) {
     if (entry.second->is_master()) {
-      entry.second->RefreshVisibility();
+      entry.second->RefreshVisibility(true);
     }
   }
 }
@@ -5077,7 +5077,7 @@ void FlutterWindow::SendPaperWindowEvent(
                 deferred, move.window, nullptr, move.target.left,
                 move.target.top, 0, 0,
                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                    SWP_NOOWNERZORDER);
+                    SWP_NOOWNERZORDER | SWP_NOREDRAW);
             if (!deferred) {
               break;
             }
@@ -5106,7 +5106,7 @@ void FlutterWindow::SendPaperWindowEvent(
             SetWindowPos(move.window, nullptr, move.target.left,
                          move.target.top, 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                             SWP_NOOWNERZORDER);
+                             SWP_NOOWNERZORDER | SWP_NOREDRAW);
             if (move.paper_window) {
               move.paper_window->SetQueueDragBoundsApplying(false);
             }
@@ -5394,7 +5394,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_TIMER:
       if (wparam == kFullscreenTopmostRefreshTimerId) {
         for (auto& entry : native_capsule_windows_) {
-          entry.second->RefreshVisibility();
+          entry.second->RefreshVisibility(entry.second->is_master());
         }
         for (auto& entry : paper_windows_) {
           entry.second->RefreshZOrder();

@@ -15,6 +15,7 @@
 #include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "paper_motion.h"
 #include "resource.h"
 #include "utils.h"
 
@@ -151,11 +152,12 @@ constexpr UINT_PTR kReminderBubbleTimerId = 1;
 constexpr UINT_PTR kCapsuleSlideTimerId = 0xCA52;
 constexpr UINT_PTR kCapsuleQueueFollowTimerId = 0xCA53;
 constexpr UINT_PTR kCapsuleMasterTransitionTimerId = 0xCA56;
-constexpr int kCapsuleSlideOutMilliseconds = 220;
-constexpr int kCapsuleSlideInMilliseconds = 180;
-constexpr int kCapsuleQueueMoveMilliseconds = 200;
-constexpr int kCapsuleMasterMoveMilliseconds = 200;
-constexpr int kCapsuleMasterFadeMilliseconds = 160;
+using repapertodo::motion::kAnimationFrameMilliseconds;
+using repapertodo::motion::kCapsuleMasterFadeMilliseconds;
+using repapertodo::motion::kCapsuleMasterMoveMilliseconds;
+using repapertodo::motion::kCapsuleQueueMoveMilliseconds;
+using repapertodo::motion::kCapsuleSlideInMilliseconds;
+using repapertodo::motion::kCapsuleSlideOutMilliseconds;
 
 // A deep capsule is deliberately a WS_EX_NOACTIVATE window.  When its click
 // is delivered through the native proxy, Windows does not always grant the
@@ -2391,6 +2393,21 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       // the parent first exposes a black frame while Windows stretches the
       // surface during interactive resize.
       return 1;
+    case WM_NCLBUTTONDOWN:
+      if (wparam == HTLEFT || wparam == HTRIGHT || wparam == HTTOP ||
+          wparam == HTBOTTOM || wparam == HTTOPLEFT ||
+          wparam == HTTOPRIGHT || wparam == HTBOTTOMLEFT ||
+          wparam == HTBOTTOMRIGHT) {
+        // Remove the separate layered shadow before USER32 enters its modal
+        // sizing loop. On some Windows 10 systems WM_ENTERSIZEMOVE follows
+        // the first composition transaction, leaving one stale/black shadow
+        // frame unless the shadow is withdrawn at the initiating click.
+        paper_shadow_refresh_pending_ = false;
+        ++paper_shadow_refresh_generation_;
+        HidePaperShadowWindow();
+        DwmFlush();
+      }
+      break;
     case WM_TIMER:
       if (wparam == kCapsuleSlideTimerId) {
         UpdateCapsuleDockAnimation();
@@ -2895,7 +2912,7 @@ void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
   applying_bounds_ = true;
   SetWindowPos(window, nullptr, target_bounds.left, target_bounds.top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                   SWP_NOOWNERZORDER);
+                   SWP_NOOWNERZORDER | SWP_NOREDRAW);
   applying_bounds_ = false;
 }
 
@@ -2933,7 +2950,8 @@ void PaperFlutterWindow::StartQueueDragAnimation(int target_top,
   queue_drag_animation_started_at_ = GetTickCount64();
   queue_drag_animation_duration_ms_ = duration_ms;
   queue_drag_animation_active_ = true;
-  SetTimer(window, kCapsuleQueueFollowTimerId, 16, nullptr);
+  SetTimer(window, kCapsuleQueueFollowTimerId,
+           kAnimationFrameMilliseconds, nullptr);
 }
 
 void PaperFlutterWindow::UpdateQueueDragAnimation() {
@@ -2968,7 +2986,7 @@ void PaperFlutterWindow::ApplyQueueDragTop(int top) {
   applying_bounds_ = true;
   SetWindowPos(window, nullptr, bounds.left, top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                   SWP_NOOWNERZORDER);
+                   SWP_NOOWNERZORDER | SWP_NOREDRAW);
   applying_bounds_ = false;
 }
 
@@ -3027,7 +3045,8 @@ void PaperFlutterWindow::StartCapsuleDockAnimation(
   capsule_animation_started_at_ = GetTickCount64();
   capsule_animation_duration_ms_ = duration_ms;
   capsule_animation_active_ = true;
-  SetTimer(window, kCapsuleSlideTimerId, 16, nullptr);
+  SetTimer(window, kCapsuleSlideTimerId, kAnimationFrameMilliseconds,
+           nullptr);
 }
 
 void PaperFlutterWindow::UpdateCapsuleDockAnimation() {
@@ -3075,7 +3094,7 @@ void PaperFlutterWindow::ApplyCapsuleHorizontalPosition() {
   SetWindowPos(window, nullptr, static_cast<int>(std::round(x)), current.top,
                0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                   SWP_NOOWNERZORDER);
+                   SWP_NOOWNERZORDER | SWP_NOREDRAW);
   applying_bounds_ = false;
 }
 
@@ -3152,14 +3171,15 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
                  static_cast<int>(std::lround(master_capsule_transition_target_top_)),
                  0, 0,
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                     SWP_NOOWNERZORDER);
+                     SWP_NOOWNERZORDER | SWP_NOREDRAW);
     KillTimer(window, kCapsuleMasterTransitionTimerId);
     RefreshZOrder();
     return;
   }
 
   master_capsule_transition_active_ = true;
-  SetTimer(window, kCapsuleMasterTransitionTimerId, 16, nullptr);
+  SetTimer(window, kCapsuleMasterTransitionTimerId,
+           kAnimationFrameMilliseconds, nullptr);
 }
 
 void PaperFlutterWindow::UpdateMasterCapsuleTransition() {
@@ -3187,7 +3207,7 @@ void PaperFlutterWindow::UpdateMasterCapsuleTransition() {
   applying_bounds_ = true;
   SetWindowPos(window, nullptr, bounds.left, top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                   SWP_NOOWNERZORDER);
+                   SWP_NOOWNERZORDER | SWP_NOREDRAW);
   applying_bounds_ = false;
   ApplyMasterCapsuleAlpha(alpha);
   if (progress >= 1.0) {
@@ -3765,7 +3785,9 @@ void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {
 void PaperFlutterWindow::HidePaperShadowWindow() {
   if (paper_shadow_window_ &&
       (paper_shadow_visible_ || IsWindowVisible(paper_shadow_window_))) {
-    ShowWindow(paper_shadow_window_, SW_HIDE);
+    SetWindowPos(paper_shadow_window_, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                     SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_HIDEWINDOW);
   }
   paper_shadow_visible_ = false;
   paper_shadow_z_order_dirty_ = true;

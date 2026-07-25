@@ -21,7 +21,7 @@ class NativeCapsuleWindow : public Win32Window {
 
   void ApplySurface(const flutter::EncodableMap& surface);
   void SetAvoidFullscreenTopmost(bool avoid);
-  void RefreshVisibility();
+  void RefreshVisibility(bool force_master_z_order = false);
 
   const std::string& surface_id() const { return surface_id_; }
   const std::string& paper_id() const { return paper_id_; }
