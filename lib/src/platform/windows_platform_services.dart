@@ -214,11 +214,23 @@ class WindowsPaperWindowHost implements PaperWindowHost {
         // the live window geometry.  A child edit can arrive with a stale
         // snapshot of x/y/width/height after the user has just dragged or
         // resized the native window, so never let that snapshot move it back.
-        _copyPaperEditData(changedPaper, knownPaper);
+        //
+        // Do not apply the edit in-place to [knownPaper]. At startup this map
+        // can still contain the exact PaperData instance owned by the app
+        // controller. Mutating it before emitting the event erases the
+        // controller's pre-edit snapshot, so collapse/pin/visibility changes
+        // look unchanged and the native surface registry is never reconciled.
+        // Emit and remember a detached copy instead; the app remains the sole
+        // owner that decides when the edit becomes authoritative.
+        final editedPaper = _paperEditWithKnownGeometry(
+          changedPaper,
+          knownPaper,
+        );
+        _knownPapers[paperId] = editedPaper;
         if (normalizeLocalModelId(_activePaper?.id) == paperId) {
-          _activePaper = knownPaper;
+          _activePaper = editedPaper;
         }
-        _paperEdits.add(knownPaper);
+        _paperEdits.add(editedPaper);
       case 'paperActionRequested':
         final map = _argumentMap(call.arguments);
         final kind = map?['kind'];
@@ -622,31 +634,15 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     _knownPapers[paperId] = paper;
   }
 
-  void _copyPaperEditData(PaperData source, PaperData target) {
-    final copy = PaperData.fromJson(source.toJson());
-    final x = target.x;
-    final y = target.y;
-    final width = target.width;
-    final height = target.height;
-    target
-      ..id = copy.id
-      ..type = copy.type
-      ..title = copy.title
-      ..x = x
-      ..y = y
-      ..width = width
-      ..height = height
-      ..isVisible = copy.isVisible
-      ..alwaysOnTop = copy.alwaysOnTop
-      ..isCollapsed = copy.isCollapsed
-      ..isPinnedToDesktop = copy.isPinnedToDesktop
-      ..textZoom = copy.textZoom
-      ..capsuleSide = copy.capsuleSide
-      ..capsuleMonitorDeviceName = copy.capsuleMonitorDeviceName
-      ..items = copy.items
-      ..content = copy.content
-      ..noteCanvasElements = copy.noteCanvasElements
-      ..extra = copy.extra;
+  PaperData _paperEditWithKnownGeometry(
+    PaperData source,
+    PaperData geometrySource,
+  ) {
+    return PaperData.fromJson(source.toJson())
+      ..x = geometrySource.x
+      ..y = geometrySource.y
+      ..width = geometrySource.width
+      ..height = geometrySource.height;
   }
 
   void _syncKnownPapers(AppState state) {

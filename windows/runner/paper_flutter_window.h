@@ -60,6 +60,7 @@ class PaperFlutterWindow : public Win32Window {
   void ApplyNativeStyle();
   void EnsurePaperShadowWindow();
   void UpdatePaperShadowWindow(bool redraw);
+  void PreparePaperSurfaceShapeChange();
   void DeferPaperShadowRefreshUntilNextFrame(bool reveal_surface = false);
   void HidePaperShadowWindow();
   void DestroyPaperShadowWindow();

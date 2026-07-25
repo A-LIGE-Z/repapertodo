@@ -23,6 +23,35 @@ function Wait-ForCondition {
   throw $Message
 }
 
+function Assert-MonotonicAlpha {
+  param(
+    [int[]]$Samples,
+    [bool]$Increasing,
+    [string]$Message,
+    [int]$Tolerance = 3
+  )
+  if ($null -eq $Samples -or $Samples.Count -lt 2) {
+    throw "$Message Alpha samples were unavailable."
+  }
+  for ($index = 1; $index -lt $Samples.Count; $index++) {
+    $previous = [int]$Samples[$index - 1]
+    $current = [int]$Samples[$index]
+    $reversed = if ($Increasing) {
+      $current + $Tolerance -lt $previous
+    } else {
+      $current - $Tolerance -gt $previous
+    }
+    if ($reversed) {
+      throw "$Message Alpha reversed at sample $index ($previous -> $current): $($Samples -join ',')."
+    }
+  }
+  $minimum = ($Samples | Measure-Object -Minimum).Minimum
+  $maximum = ($Samples | Measure-Object -Maximum).Maximum
+  if ([int]$minimum -gt 5 -or [int]$maximum -lt 250) {
+    throw "$Message Alpha did not cover both visible and retracted endpoints: $($Samples -join ',')."
+  }
+}
+
 function Assert-PathInside {
   param([string]$Path, [string]$ParentPath)
   $child = [IO.Path]::GetFullPath($Path)
@@ -69,6 +98,7 @@ public static class RePaperTodoPolicyNative {
   [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] static extern bool IsWindow(IntPtr window);
   [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr window);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window, out RECT bounds);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, System.Text.StringBuilder name, int maximum);
@@ -250,7 +280,22 @@ public static class RePaperTodoPolicyNative {
 
   public static bool IsTopmost(IntPtr window) { return (GetWindowLongPtr(window, -20).ToInt64() & 8) != 0; }
   public static bool IsVisible(IntPtr window) { return IsWindowVisible(window); }
+  public static bool IsWindowHandle(IntPtr window) {
+    return window != IntPtr.Zero && IsWindow(window);
+  }
   public static int LayeredAlpha(IntPtr window) { return EffectiveWindowAlpha(window); }
+  public static int CountVisiblePaperShadows(uint pid) {
+    int count = 0;
+    EnumWindows((window, parameter) => {
+      uint actualPid; GetWindowThreadProcessId(window, out actualPid);
+      if (actualPid != pid || !IsWindowVisible(window)) return true;
+      var className = new System.Text.StringBuilder(128);
+      GetClassName(window, className, className.Capacity);
+      if (className.ToString() == "RePaperTodo.PaperShadow") count++;
+      return true;
+    }, IntPtr.Zero);
+    return count;
+  }
   public static bool IsForeground(IntPtr window) {
     return window != IntPtr.Zero && GetForegroundWindow() == window;
   }
@@ -400,6 +445,31 @@ public static class RePaperTodoPolicyNative {
     System.Threading.Thread.Sleep(300);
   }
 
+  public static int[] ClickNativeCapsuleAndSampleAlpha(
+      IntPtr clickWindow, IntPtr sampleWindow, int durationMilliseconds,
+      int intervalMilliseconds) {
+    var samples = new List<int>();
+    if (clickWindow == IntPtr.Zero || sampleWindow == IntPtr.Zero) {
+      return samples.ToArray();
+    }
+    samples.Add(EffectiveWindowAlpha(sampleWindow));
+    RECT bounds;
+    if (!GetWindowRect(clickWindow, out bounds)) return samples.ToArray();
+    int x = Math.Max(1, (bounds.Right - bounds.Left) / 2);
+    int y = Math.Max(1, (bounds.Bottom - bounds.Top) / 2);
+    IntPtr point = new IntPtr((y << 16) | (x & 0xFFFF));
+    SendMessage(clickWindow, 0x0201, new IntPtr(1), point);
+    SendMessage(clickWindow, 0x0202, IntPtr.Zero, point);
+    int interval = Math.Max(1, intervalMilliseconds);
+    int sampleCount = Math.Max(1, durationMilliseconds / interval);
+    for (int index = 0; index < sampleCount; index++) {
+      System.Threading.Thread.Sleep(interval);
+      if (!IsWindow(sampleWindow)) break;
+      samples.Add(EffectiveWindowAlpha(sampleWindow));
+    }
+    return samples.ToArray();
+  }
+
   public static void HideWindow(IntPtr window) {
     if (window != IntPtr.Zero) ShowWindow(window, 0);
   }
@@ -445,6 +515,40 @@ public static class RePaperTodoPolicyNative {
     System.Threading.Thread.Sleep(300);
   }
 
+  public static int MeasureVerticalDragFollowing(
+      IntPtr masterWindow, IntPtr childWindow, int deltaY) {
+    RECT masterStart, childStart, workArea;
+    if (masterWindow == IntPtr.Zero || childWindow == IntPtr.Zero ||
+        !GetWindowRect(masterWindow, out masterStart) ||
+        !GetWindowRect(childWindow, out childStart) ||
+        !SystemParametersInfo(0x0030, 0, out workArea, 0)) return Int32.MaxValue;
+    int visibleLeft = Math.Max(masterStart.Left, workArea.Left);
+    int visibleRight = Math.Min(masterStart.Right, workArea.Right);
+    int startX = visibleLeft + Math.Max(8, (visibleRight - visibleLeft) / 2);
+    int startY = (masterStart.Top + masterStart.Bottom) / 2;
+    SetCursorPos(startX, startY);
+    System.Threading.Thread.Sleep(80);
+    mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+    int maximumError = 0;
+    for (int step = 1; step <= 12; step++) {
+      SetCursorPos(startX, startY + (deltaY * step / 12));
+      System.Threading.Thread.Sleep(35);
+      RECT masterCurrent, childCurrent;
+      if (!GetWindowRect(masterWindow, out masterCurrent) ||
+          !GetWindowRect(childWindow, out childCurrent)) {
+        maximumError = Int32.MaxValue;
+        break;
+      }
+      int masterOffset = masterCurrent.Top - masterStart.Top;
+      int childOffset = childCurrent.Top - childStart.Top;
+      maximumError = Math.Max(maximumError,
+                              Math.Abs(masterOffset - childOffset));
+    }
+    mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    System.Threading.Thread.Sleep(300);
+    return maximumError;
+  }
+
   public static void MoveFlutterCapsuleToLeftAndFinish(IntPtr window) {
     RECT bounds, workArea;
     if (!GetWindowRect(window, out bounds) ||
@@ -474,6 +578,44 @@ public static class RePaperTodoPolicyNative {
     }
     mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
     System.Threading.Thread.Sleep(500);
+  }
+
+  public static int[] ResizePaperAndMeasureSurface(
+      IntPtr window, uint pid, int deltaX, int deltaY) {
+    RECT start;
+    if (window == IntPtr.Zero || !GetWindowRect(window, out start)) {
+      return new int[] { Int32.MaxValue, 0, 0, 0 };
+    }
+    int startX = start.Right - 2;
+    int startY = start.Bottom - 2;
+    SetForegroundWindow(window);
+    SetCursorPos(startX, startY);
+    System.Threading.Thread.Sleep(100);
+    mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+    int maximumVisibleShadows = 0;
+    int minimumPaperAlpha = EffectiveWindowAlpha(window);
+    for (int step = 1; step <= 12; step++) {
+      SetCursorPos(startX + (deltaX * step / 12),
+                   startY + (deltaY * step / 12));
+      System.Threading.Thread.Sleep(35);
+      maximumVisibleShadows = Math.Max(
+          maximumVisibleShadows, CountVisiblePaperShadows(pid));
+      minimumPaperAlpha = Math.Min(
+          minimumPaperAlpha, EffectiveWindowAlpha(window));
+    }
+    mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    System.Threading.Thread.Sleep(500);
+    RECT finalBounds;
+    if (!GetWindowRect(window, out finalBounds)) {
+      return new int[] {
+          maximumVisibleShadows, minimumPaperAlpha, 0, 0 };
+    }
+    return new int[] {
+        maximumVisibleShadows,
+        minimumPaperAlpha,
+        (finalBounds.Right - finalBounds.Left) - (start.Right - start.Left),
+        (finalBounds.Bottom - finalBounds.Top) - (start.Bottom - start.Top),
+    };
   }
 
   public static void ClickRelative(IntPtr window, int x, int y) {
@@ -612,6 +754,10 @@ $paperCapsuleRepeatedCycles = $false
 $masterTogglePreservesExpandedPaper = $false
 $masterCapsuleRepeatedToggle = $false
 $masterCapsuleDragPersistence = $false
+$masterCapsuleChildHandlePersists = $false
+$masterCapsuleCollapseAlphaMonotonic = $false
+$masterCapsuleExpandAlphaMonotonic = $false
+$masterCapsuleDragMaxFrameError = [int]::MaxValue
 $expandedProxyClickActivates = $false
 $expandedProxyDropRouting = $false
 $reminderBubbleAdjacent = $false
@@ -619,6 +765,11 @@ $reminderBubbleHoverPause = $false
 $reminderBubbleClickOpensPaper = $false
 $capsuleDropRouting = $false
 $contentEditGeometryStable = $false
+$interactiveResizeShadowSuppressed = $false
+$interactiveResizePaperVisible = $false
+$interactiveResizeBoundsChanged = $false
+$settingsWindowMovable = $false
+$settingsWindowResizable = $false
 $desktopPinnedPaperVisible = $false
 $desktopPinnedPaperInteractive = $false
 $pinnedCapsuleUnpinsAndForegrounds = $false
@@ -804,16 +955,31 @@ try {
       [RePaperTodoPolicyNative]::CapsuleWindowWidth($expandedCollapsedPaper) -eq 360
   }
   $collapsedPaperCapsuleClickExpands = $true
-  [RePaperTodoPolicyNative]::ClickNativeCapsule($nativeMaster)
+  $masterHandleBeforeToggle = $nativeMaster
+  $proxyHandleBeforeToggle = $expandedProxy
+  $collapseAlphaSamples =
+    [RePaperTodoPolicyNative]::ClickNativeCapsuleAndSampleAlpha(
+      $nativeMaster, $expandedProxy, 800, 8)
+  Assert-MonotonicAlpha -Samples $collapseAlphaSamples -Increasing $false `
+    -Message "Policy smoke master collapse flashed a child capsule."
+  $masterCapsuleCollapseAlphaMonotonic = $true
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke master capsule did not collapse its child capsule queue on the second toggle." -Condition {
     [RePaperTodoPolicyNative]::CountCapsules([uint32]$primary.Id) -eq 1
+  }
+  if (-not [RePaperTodoPolicyNative]::IsWindowHandle($proxyHandleBeforeToggle)) {
+    throw "Policy smoke master collapse destroyed its retained child capsule HWND."
   }
   if (-not [RePaperTodoPolicyNative]::IsVisible($paper) -or
       [RePaperTodoPolicyNative]::CapsuleWindowWidth($paper) -ne 360) {
     throw "Policy smoke repeated master collapse changed the expanded paper surface."
   }
   $masterTogglePreservesExpandedPaper = $true
-  [RePaperTodoPolicyNative]::ClickNativeCapsule($nativeMaster)
+  $expandAlphaSamples =
+    [RePaperTodoPolicyNative]::ClickNativeCapsuleAndSampleAlpha(
+      $nativeMaster, $expandedProxy, 800, 8)
+  Assert-MonotonicAlpha -Samples $expandAlphaSamples -Increasing $true `
+    -Message "Policy smoke master expansion flashed a child capsule."
+  $masterCapsuleExpandAlphaMonotonic = $true
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke master capsule did not restore all child capsules after a repeated toggle." -Condition {
     ([RePaperTodoPolicyNative]::FindWindowByTitle(
       [uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]") -ne [IntPtr]::Zero) -and
@@ -826,6 +992,11 @@ try {
     [uint32]$primary.Id, "Native Capsule [master:")
   $expandedProxy = [RePaperTodoPolicyNative]::FindWindowByTitle(
     [uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]")
+  if ($nativeMaster -ne $masterHandleBeforeToggle -or
+      $expandedProxy -ne $proxyHandleBeforeToggle) {
+    throw "Policy smoke master toggle recreated a retained master/proxy capsule HWND."
+  }
+  $masterCapsuleChildHandlePersists = $true
   $masterCapsuleRepeatedToggle = $true
 
   # Exercise the user-facing path: collapse the real Flutter paper from its
@@ -906,7 +1077,14 @@ try {
     }
   }
   $paperCapsuleRepeatedCycles = $true
-  [RePaperTodoPolicyNative]::DragCapsuleVertically($nativeMaster, 64)
+  $expandedProxy = [RePaperTodoPolicyNative]::FindWindowByTitle(
+    [uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]")
+  $masterCapsuleDragMaxFrameError =
+    [RePaperTodoPolicyNative]::MeasureVerticalDragFollowing(
+      $nativeMaster, $expandedProxy, 64)
+  if ($masterCapsuleDragMaxFrameError -gt 2) {
+    throw "Policy smoke child capsules did not follow the master in the same animation frame (maximum error=$masterCapsuleDragMaxFrameError px)."
+  }
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke native master drag did not persist the queue start margin." -Condition {
     try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
     $margins = @($saved.deepCapsuleQueueStartTopMargins.PSObject.Properties | ForEach-Object { [double]$_.Value })
@@ -1075,6 +1253,25 @@ try {
        ([int][Math]::Round([double]$paperState.y)) -ne 160)
   }
 
+  $resizeMetrics = [RePaperTodoPolicyNative]::ResizePaperAndMeasureSurface(
+    $paper, [uint32]$primary.Id, 96, 72)
+  if ($resizeMetrics.Count -ne 4) {
+    throw "Policy smoke paper resize did not return complete frame metrics."
+  }
+  if ([int]$resizeMetrics[0] -ne 0) {
+    throw "Policy smoke paper shadow remained visible during interactive resize (maximum visible shadows=$($resizeMetrics[0]))."
+  }
+  $interactiveResizeShadowSuppressed = $true
+  if ([int]$resizeMetrics[1] -le 0) {
+    throw "Policy smoke paper became fully transparent during interactive resize."
+  }
+  $interactiveResizePaperVisible = $true
+  if ([Math]::Abs([int]$resizeMetrics[2]) -lt 48 -or
+      [Math]::Abs([int]$resizeMetrics[3]) -lt 36) {
+    throw "Policy smoke paper resize did not change the HWND by the requested amount (widthDelta=$($resizeMetrics[2]), heightDelta=$($resizeMetrics[3]))."
+  }
+  $interactiveResizeBoundsChanged = $true
+
   $expandedProxy = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "RePaperTodo Native Capsule [proxy:policy-paper]")
   if ($expandedProxy -eq [IntPtr]::Zero) {
     throw "Policy smoke expanded paper proxy disappeared before drag routing validation."
@@ -1134,6 +1331,22 @@ try {
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke UI did not respond while script was running." -Condition {
     [RePaperTodoPolicyNative]::IsVisible($coordinator)
   }
+  $settingsBoundsBeforeMove =
+    [RePaperTodoPolicyNative]::BoundsString($coordinator)
+  [RePaperTodoPolicyNative]::DragPaperBy($coordinator, 84, 58)
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke settings window could not be moved from its paper header." -Condition {
+    [RePaperTodoPolicyNative]::BoundsString($coordinator) -ne
+      $settingsBoundsBeforeMove
+  }
+  $settingsWindowMovable = $true
+  $settingsResizeMetrics =
+    [RePaperTodoPolicyNative]::ResizePaperAndMeasureSurface(
+      $coordinator, [uint32]0, 90, 64)
+  if ([Math]::Abs([int]$settingsResizeMetrics[2]) -lt 45 -or
+      [Math]::Abs([int]$settingsResizeMetrics[3]) -lt 32) {
+    throw "Policy smoke settings window could not be resized (widthDelta=$($settingsResizeMetrics[2]), heightDelta=$($settingsResizeMetrics[3]))."
+  }
+  $settingsWindowResizable = $true
   [RePaperTodoPolicyNative]::CloseWindow($coordinator)
   $longRunningScriptCapsule = $true
 
@@ -1170,6 +1383,10 @@ try {
        masterTogglePreservesExpandedPaper = $masterTogglePreservesExpandedPaper
       masterCapsuleRepeatedToggle = $masterCapsuleRepeatedToggle
       masterCapsuleDragPersistence = $masterCapsuleDragPersistence
+      masterCapsuleChildHandlePersists = $masterCapsuleChildHandlePersists
+      masterCapsuleCollapseAlphaMonotonic = $masterCapsuleCollapseAlphaMonotonic
+      masterCapsuleExpandAlphaMonotonic = $masterCapsuleExpandAlphaMonotonic
+      masterCapsuleDragMaxFrameError = $masterCapsuleDragMaxFrameError
       expandedProxyClickActivates = $expandedProxyClickActivates
       expandedProxyDropRouting = $expandedProxyDropRouting
       reminderBubbleAdjacent = $reminderBubbleAdjacent
@@ -1177,6 +1394,11 @@ try {
       reminderBubbleClickOpensPaper = $reminderBubbleClickOpensPaper
       capsuleDropRouting = $capsuleDropRouting
       contentEditGeometryStable = $contentEditGeometryStable
+      interactiveResizeShadowSuppressed = $interactiveResizeShadowSuppressed
+      interactiveResizePaperVisible = $interactiveResizePaperVisible
+      interactiveResizeBoundsChanged = $interactiveResizeBoundsChanged
+      settingsWindowMovable = $settingsWindowMovable
+      settingsWindowResizable = $settingsWindowResizable
       desktopPinnedPaperVisible = $desktopPinnedPaperVisible
       desktopPinnedPaperInteractive = $desktopPinnedPaperInteractive
       pinnedCapsuleUnpinsAndForegrounds = $pinnedCapsuleUnpinsAndForegrounds

@@ -2698,6 +2698,13 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
   const bool expanded_from_capsule = previous_collapsed && !collapsed_;
   const bool surface_shape_changed =
       had_surface && previous_collapsed != collapsed_;
+  if (surface_shape_changed) {
+    // Hide the old swap-chain frame before resizing the HWND. Deferring this
+    // until after SetWindowPos leaves a composition window in which DWM can
+    // stretch the capsule over paper bounds (or squash the paper into a
+    // capsule), which appears as a bright/black click flash.
+    PreparePaperSurfaceShapeChange();
+  }
   const bool was_capsule_hidden_by_master = capsule_hidden_by_master_;
   capsule_hidden_by_master_ =
       BoolValue(surface, "capsuleHiddenByMaster", capsule_hidden_by_master_);
@@ -3872,6 +3879,25 @@ void PaperFlutterWindow::DeferPaperShadowRefreshUntilNextFrame(
   }
   PostMessageW(window, kDeferredPaperShadowRefreshMessage,
                static_cast<WPARAM>(refresh_generation), 0);
+}
+
+void PaperFlutterWindow::PreparePaperSurfaceShapeChange() {
+  HWND window = GetHandle();
+  HidePaperShadowWindow();
+  paper_shadow_refresh_pending_ = false;
+  paper_surface_reveal_pending_ = window && intended_visible_;
+  // Invalidate any callback armed for the previous shape. The final
+  // DeferPaperShadowRefreshUntilNextFrame call will publish a new generation
+  // after the HWND has its target geometry.
+  ++paper_shadow_refresh_generation_;
+  if (paper_surface_reveal_pending_ && applied_window_alpha_ != 0) {
+    applied_window_alpha_ = 0;
+    SetLayeredWindowAttributes(window, kPaperTransparencyKey, 0,
+                               LWA_COLORKEY | LWA_ALPHA);
+    // Complete the transparent composition before changing the HWND bounds.
+    // This is a one-off shape transition, not a per-frame animation path.
+    DwmFlush();
+  }
 }
 
 void PaperFlutterWindow::UpdatePaperShadowWindow(bool redraw) {

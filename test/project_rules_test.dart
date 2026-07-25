@@ -4435,6 +4435,35 @@ void main() {
       paperWindow,
       contains('DeferPaperShadowRefreshUntilNextFrame(true);'),
     );
+    expect(
+      paperWindowHeader,
+      contains('void PreparePaperSurfaceShapeChange();'),
+    );
+    final applySurfaceStart = paperWindow.indexOf(
+      'void PaperFlutterWindow::ApplySurface(',
+    );
+    final applySurfaceEnd = paperWindow.indexOf(
+      'bool PaperFlutterWindow::IsInCapsuleQueue(',
+      applySurfaceStart,
+    );
+    expect(applySurfaceStart, isNonNegative);
+    expect(applySurfaceEnd, greaterThan(applySurfaceStart));
+    final applySurfaceBlock = paperWindow.substring(
+      applySurfaceStart,
+      applySurfaceEnd,
+    );
+    final prepareShape = applySurfaceBlock.indexOf(
+      'PreparePaperSurfaceShapeChange();',
+    );
+    final resizeShape = applySurfaceBlock.indexOf(
+      'SetWindowPos(window, nullptr, target_left, target_top, target_width,',
+    );
+    final revealShape = applySurfaceBlock.lastIndexOf(
+      'DeferPaperShadowRefreshUntilNextFrame(true);',
+    );
+    expect(prepareShape, isNonNegative);
+    expect(resizeShape, greaterThan(prepareShape));
+    expect(revealShape, greaterThan(resizeShape));
     expect(paperWindow, contains('DwmFlush();'));
     expect(
       paperWindow,
@@ -5316,7 +5345,7 @@ void main() {
     expect(
       windowsPolicySmokeScript,
       contains(
-        r'FindWindowByTitle([uint32]$primary.Id, "Policy")',
+        r'FindWindowByTitleFragment([uint32]$primary.Id, "Policy")',
       ),
     );
     expect(
@@ -5325,6 +5354,49 @@ void main() {
     );
     expect(windowsPolicySmokeScript, contains('BroadcastTaskbarCreated'));
     expect(windowsPolicySmokeScript, contains('Start-FullscreenProbe'));
+    expect(windowsPolicySmokeScript, contains('Assert-MonotonicAlpha'));
+    expect(
+      windowsPolicySmokeScript,
+      contains('ClickNativeCapsuleAndSampleAlpha'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('masterCapsuleChildHandlePersists'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('masterCapsuleCollapseAlphaMonotonic'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('masterCapsuleExpandAlphaMonotonic'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('MeasureVerticalDragFollowing'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('masterCapsuleDragMaxFrameError'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('ResizePaperAndMeasureSurface'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('interactiveResizeShadowSuppressed'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('interactiveResizePaperVisible'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('interactiveResizeBoundsChanged'),
+    );
+    expect(windowsPolicySmokeScript, contains('settingsWindowMovable'));
+    expect(windowsPolicySmokeScript, contains('settingsWindowResizable'));
     expect(
       releaseReadinessAudit,
       contains(

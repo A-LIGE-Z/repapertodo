@@ -21645,6 +21645,8 @@ void main() {
     await tester.pumpWidget(
       RePaperTodoApp(controller: controller, store: store),
     );
+    final restoreCountBeforeEdit =
+        platform.paperWindows.restoredTitleSnapshots.length;
     platform.paperWindows.emitPaperEdit(
       PaperData(
         id: 'independent-edit-note',
@@ -21662,8 +21664,16 @@ void main() {
     expect(store.savedState.papers.single.title, 'After');
     expect(store.savedState.papers.single.content, 'Edited in child engine');
     expect(platform.paperWindows.updatedTitles, contains('After'));
-    expect(platform.paperWindows.restoredTitleSnapshots, isNotEmpty,
-        reason: 'collapse edits must reconcile the native capsule registry');
+    expect(
+      platform.paperWindows.restoredTitleSnapshots.length,
+      restoreCountBeforeEdit,
+      reason: 'a topology edit must not replay full first-paper restoration',
+    );
+    expect(
+      platform.paperWindows.registryCollapsedSnapshots.last,
+      {'independent-edit-note': true},
+      reason: 'collapse edits must reach the native surface registry snapshot',
+    );
   });
 
   testWidgets('routes independent paper actions through primary services',
@@ -24061,8 +24071,10 @@ class _RecordingTrayHost extends NoopTrayHost {
 
 class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final restoredTitleSnapshots = <List<String>>[];
+  final restoredCollapsedSnapshots = <Map<String, bool>>[];
   final restoredCollapseAllSnapshots = <bool>[];
   final registryCollapseAllSnapshots = <bool>[];
+  final registryCollapsedSnapshots = <Map<String, bool>>[];
   final updatedTitles = <String>[];
   final shownTitles = <String>[];
   final hiddenTitles = <String>[];
@@ -24123,12 +24135,18 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
     restoredTitleSnapshots.add(
       state.papers.map((paper) => paper.title).toList(),
     );
+    restoredCollapsedSnapshots.add({
+      for (final paper in state.papers) paper.id: paper.isCollapsed,
+    });
     restoredCollapseAllSnapshots.add(state.capsuleCollapseAllActive);
   }
 
   @override
   Future<void> refreshSurfaceRegistry(AppState state) async {
     registryCollapseAllSnapshots.add(state.capsuleCollapseAllActive);
+    registryCollapsedSnapshots.add({
+      for (final paper in state.papers) paper.id: paper.isCollapsed,
+    });
   }
 
   @override

@@ -1205,12 +1205,72 @@ void main() {
       expect(changedPaper.id, 'child-note');
       expect(changedPaper.title, 'After');
       expect(changedPaper.content, 'Edited in its own Flutter engine');
-      expect(paper.title, 'After');
-      expect(paper.content, 'Edited in its own Flutter engine');
+      expect(changedPaper, isNot(same(paper)));
+      expect(paper.title, 'Before');
+      expect(paper.content, 'Before body');
       expect(paper.x, 481);
       expect(paper.y, 263);
       expect(paper.width, 612);
       expect(paper.height, 507);
+    },
+  );
+
+  test(
+    'child topology edits preserve the controller pre-edit snapshot',
+    () async {
+      const channel = MethodChannel(
+        'repapertodo/window_child_topology_snapshot_test',
+      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (_) async => null);
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+      final services = WindowsPlatformServices(channel: channel);
+      final controllerPaper = PaperData(
+        id: 'child-topology-paper',
+        type: PaperTypes.todo,
+        title: 'Expanded',
+        x: 220,
+        y: 160,
+        width: 360,
+        height: 280,
+      );
+      await services.paperWindows.restoreAll(
+        AppState(papers: [controllerPaper]),
+      );
+      final edit = services.paperWindows.paperEdits.first;
+
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('paperSurfaceChanged', {
+            'id': 'child-topology-paper',
+            'type': PaperTypes.todo,
+            'title': 'Expanded',
+            'x': 0.0,
+            'y': 0.0,
+            'width': 92.0,
+            'height': 46.0,
+            'isVisible': true,
+            'isCollapsed': true,
+            'items': <Object?>[],
+            'noteCanvasElements': <Object?>[],
+          }),
+        ),
+        (_) {},
+      );
+
+      final changedPaper = await edit;
+      expect(changedPaper, isNot(same(controllerPaper)));
+      expect(controllerPaper.isCollapsed, false);
+      expect(changedPaper.isCollapsed, true);
+      expect(changedPaper.x, 220);
+      expect(changedPaper.y, 160);
+      expect(changedPaper.width, 360);
+      expect(changedPaper.height, 280);
     },
   );
 

@@ -2867,19 +2867,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     if (surfaceTopologyChanged) {
       // A child engine reports collapse/expand through `paperChanged`. That
       // event changes the HWND shape and the native capsule queue, so a plain
-      // content update is insufficient. Reconcile the complete registry
-      // before showing or hiding the changed paper.
-      unawaited(() async {
-        await controller.refreshPaperSurfaces();
-        if (changedPaper.isVisible) {
-          // The registry pass has already applied the new HWND shape. Keep
-          // the regular edit path as well so title/content and native state
-          // remain synchronized for both the real host and test hosts.
-          await controller.updatePaperSurface(changedPaper);
-        } else {
-          await controller.hidePaper(changedPaper);
-        }
-      }());
+      // content update is insufficient. Commit the complete registry without
+      // replaying restoreAll's first-paper bounds/show/z-order sequence; that
+      // redundant pass is observable as a flash during a shape transition.
+      unawaited(_applyPaperTopologyEdit(changedPaper));
     } else {
       unawaited(controller.updatePaperSurface(changedPaper));
       if (capsuleLabelChanged) {
@@ -2892,6 +2883,41 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     }
     unawaited(_rebuildTrayMenu());
     unawaited(_saveState(rebuildTrayMenu: false));
+  }
+
+  Future<void> _applyPaperTopologyEdit(PaperData changedPaper) async {
+    try {
+      await controller.refreshSurfaceRegistry();
+    } catch (error) {
+      await UsageLog.instance.record(
+        'surface',
+        'topology-registry-refresh-failed',
+        level: 'ERROR',
+        details: {
+          'paperId': changedPaper.id,
+          'isVisible': changedPaper.isVisible,
+          'isCollapsed': changedPaper.isCollapsed,
+          'isPinnedToDesktop': changedPaper.isPinnedToDesktop,
+          'error': error.toString(),
+        },
+      );
+    }
+    try {
+      // The registry pass applies native shape and visibility. The regular
+      // edit path remains responsible for child content/title synchronization
+      // and safely becomes a no-op for a hidden paper.
+      await controller.updatePaperSurface(changedPaper);
+    } catch (error) {
+      await UsageLog.instance.record(
+        'surface',
+        'topology-content-update-failed',
+        level: 'ERROR',
+        details: {
+          'paperId': changedPaper.id,
+          'error': error.toString(),
+        },
+      );
+    }
   }
 
   void _handlePaperWindowAction(PaperWindowActionRequest request) {
