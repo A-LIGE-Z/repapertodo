@@ -430,10 +430,42 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     await _enqueueSurfaceOperation(() => _refreshSurfaceRegistryNow(state));
   }
 
+  @override
+  Future<void> refreshCapsuleSurfaceRegistry(AppState state) async {
+    await _enqueueSurfaceOperation(
+      () => _refreshCapsuleSurfaceRegistryNow(state),
+    );
+  }
+
   Future<void> _refreshSurfaceRegistryNow(AppState state) async {
     await _normalizeStateForPlatform(state);
     _syncKnownPapers(state);
     await _syncPaperSurfaceRegistry(state);
+  }
+
+  Future<void> _refreshCapsuleSurfaceRegistryNow(AppState state) async {
+    await _normalizeStateForPlatform(state);
+    _syncKnownPapers(state);
+    final generation = _surfaceGeneration + 1;
+    // Master-capsule changes are presentation-only. Send one atomic native
+    // registry transaction containing the changed capsule flags and queue
+    // surfaces, without setPaperWindowState; the latter would rebuild every
+    // independent Flutter paper engine.
+    await _channel.invokeMethod<void>('setCapsuleSurfaceRegistry', {
+      'surfaceGeneration': generation,
+      'paperSurfaces': _paperSurfaceRegistryEntries(
+        state,
+        surfaceGeneration: generation,
+      ),
+      'nativeCapsuleSurfaces': _nativeCapsuleSurfaceEntries(
+        state,
+        surfaceGeneration: generation,
+      ),
+    });
+    _surfaceGeneration = generation;
+    for (final paper in state.papers) {
+      _rememberSynchronizedBounds(paper);
+    }
   }
 
   @override

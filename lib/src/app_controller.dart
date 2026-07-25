@@ -259,6 +259,15 @@ class RePaperTodoController {
     await _platform.paperWindows.refreshSurfaceRegistry(surfaceState);
   }
 
+  Future<void> refreshCapsuleSurfaceRegistry({AppState? snapshot}) async {
+    // A master-capsule toggle changes only native capsule presentation. Do not
+    // send the complete AppState to every child paper engine: replacing their
+    // controller state can rebuild a stationary card and expose a flash.
+    final surfaceState = AppState.fromJson((snapshot ?? state).toJson())
+      ..normalize();
+    await _platform.paperWindows.refreshCapsuleSurfaceRegistry(surfaceState);
+  }
+
   Future<void> capturePaperSurfaceBounds(PaperData paper) async {
     await _platform.paperWindows.capturePaperSurfaceBounds(paper);
   }

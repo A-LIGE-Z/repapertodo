@@ -1479,6 +1479,58 @@ void main() {
     },
   );
 
+  test(
+    'capsule-only registry refresh does not broadcast state to paper engines',
+    () async {
+      const channel = MethodChannel('test/windows-capsule-only-registry');
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
+      final services = WindowsPlatformServices(channel: channel);
+      final state = AppState(
+        useCapsuleCollapseAll: true,
+        capsuleCollapseAllActive: true,
+        papers: [
+          PaperData(
+            id: 'capsule-only-paper',
+            title: 'Capsule only',
+            isCollapsed: true,
+            capsuleSide: DeepCapsuleSides.right,
+          ),
+        ],
+      )..normalize();
+
+      await services.paperWindows.restoreAll(state);
+      calls.clear();
+
+      state.setCapsuleCollapseAllActiveFor(state.papers.single, false);
+      await services.paperWindows.refreshCapsuleSurfaceRegistry(state);
+
+      expect(calls.map((call) => call.method), ['setCapsuleSurfaceRegistry']);
+      final payload = calls.single.arguments as Map<Object?, Object?>;
+      expect(payload.keys,
+          containsAll(['paperSurfaces', 'nativeCapsuleSurfaces']));
+      expect(
+        (payload['paperSurfaces'] as List).single['capsuleHiddenByMaster'],
+        false,
+      );
+      expect(
+        (payload['nativeCapsuleSurfaces'] as List).singleWhere(
+          (surface) => surface['kind'] == 'master',
+        )['isActive'],
+        false,
+      );
+    },
+  );
+
   test('paper host serializes native surface reconciliation', () async {
     const channel = MethodChannel('test/windows-surface-operation-queue');
     final calls = <MethodCall>[];

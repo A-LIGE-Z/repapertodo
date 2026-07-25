@@ -109,10 +109,15 @@ class FlutterWindow : public Win32Window {
   // no observer can see a paper/capsule registry half-applied.
   void CommitPendingSurfaceRegistry(
       const flutter::EncodableList& native_capsules);
+  void CommitCapsuleSurfaceRegistry(
+      const flutter::EncodableList& paper_surfaces,
+      const flutter::EncodableList& native_capsules);
   void ApplyPendingPaperWindowStateOnly();
   void ApplyPaperWindowUpdate(const flutter::EncodableValue& paper);
   void ReconcilePaperWindows(const flutter::EncodableList& papers,
                              ULONGLONG animation_epoch);
+  void ReconcileCapsulePaperWindows(const flutter::EncodableList& papers,
+                                    ULONGLONG animation_epoch);
   void ReconcileNativeCapsuleWindows(const flutter::EncodableList& surfaces,
                                      ULONGLONG animation_epoch);
   PaperFlutterWindow* EnsurePaperWindow(

@@ -4688,6 +4688,40 @@ void main() {
     );
   });
 
+  test('capsule-only refresh keeps paper engines out of the transaction', () {
+    final controller = _readProjectText('lib/src/app_controller.dart');
+    final platform =
+        _readProjectText('lib/src/platform/platform_services.dart');
+    final windowsPlatform =
+        _readProjectText('lib/src/platform/windows_platform_services.dart');
+    final runner = _readProjectText('windows/runner/flutter_window.cpp');
+    final header = _readProjectText('windows/runner/flutter_window.h');
+
+    expect(controller, contains('refreshCapsuleSurfaceRegistry'));
+    expect(platform, contains('Future<void> refreshCapsuleSurfaceRegistry'));
+    expect(windowsPlatform, contains("'setCapsuleSurfaceRegistry'"));
+    expect(header, contains('CommitCapsuleSurfaceRegistry'));
+    expect(header, contains('ReconcileCapsulePaperWindows'));
+
+    final commit = _sliceBetween(
+      runner,
+      'void FlutterWindow::CommitCapsuleSurfaceRegistry(',
+      'void FlutterWindow::ApplyPaperWindowUpdate(',
+    );
+    expect(commit, contains('ReconcileCapsulePaperWindows'));
+    expect(commit, contains('ReconcileNativeCapsuleWindows'));
+    expect(commit, isNot(contains('ApplyPendingPaperWindowStateOnly')));
+
+    final capsulePaper = _sliceBetween(
+      runner,
+      'void FlutterWindow::ReconcileCapsulePaperWindows(',
+      'void FlutterWindow::ReconcileNativeCapsuleWindows(',
+    );
+    expect(capsulePaper, contains('paper_window->ApplySurface'));
+    expect(capsulePaper, contains('paper_window->IsCollapsed()'));
+    expect(capsulePaper, isNot(contains('EnsurePaperWindow(')));
+  });
+
   test('independent paper windows expose a visible native drag affordance', () {
     final app = _readProjectText('lib/src/app.dart');
     final strings = _readProjectText('lib/src/ui/papertodo_strings.dart');

@@ -1970,10 +1970,6 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         controller.state,
         runtimeCustomFontFamily: widget.runtimeCustomFontFamily,
       ),
-      collapseAllActive: Platform.isWindows &&
-          controller.state.useCapsuleMode &&
-          controller.state.useCapsuleCollapseAll &&
-          controller.state.isCapsuleCollapseAllActiveFor(paper),
       noteLineSpacing: controller.state.noteLineSpacing,
       syncing: _isSyncing,
       onSync: actionSender == null
@@ -2178,7 +2174,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       // A master capsule changes only the capsule queue. A full restore also
       // reapplies paper bounds, visibility and z-order, which makes otherwise
       // stationary cards flash when the queue is collapsed or expanded.
-      await controller.refreshSurfaceRegistry(snapshot: snapshot);
+      await controller.refreshCapsuleSurfaceRegistry(snapshot: snapshot);
       await _saveState();
       await UsageLog.instance.record(
         'capsule',
@@ -5886,7 +5882,6 @@ class PaperPreview extends StatelessWidget {
     required this.defaultTodoReminderIntervalValue,
     required this.defaultTodoReminderIntervalUnit,
     required this.nativeDialogFontFamily,
-    required this.collapseAllActive,
     required this.noteLineSpacing,
     required this.syncing,
     required this.onSync,
@@ -5951,7 +5946,6 @@ class PaperPreview extends StatelessWidget {
   final int defaultTodoReminderIntervalValue;
   final String defaultTodoReminderIntervalUnit;
   final String nativeDialogFontFamily;
-  final bool collapseAllActive;
   final double noteLineSpacing;
   final bool syncing;
   final Future<void> Function() onSync;
@@ -7234,14 +7228,13 @@ class PaperPreview extends StatelessWidget {
               ? strings.get(PaperTodoStringKeys.actionUnpinFromDesktop)
               : strings.get(PaperTodoStringKeys.actionPinToDesktop),
         ),
-        if (!collapseAllActive)
-          _paperActionMenuItem(
-            value: _compactPaperActionToggleCollapsed,
-            icon: paper.isCollapsed ? Icons.expand_more : Icons.expand_less,
-            label: paper.isCollapsed
-                ? strings.get(PaperTodoStringKeys.actionRestoreWindow)
-                : strings.get(PaperTodoStringKeys.actionCollapseToCapsule),
-          ),
+        _paperActionMenuItem(
+          value: _compactPaperActionToggleCollapsed,
+          icon: paper.isCollapsed ? Icons.expand_more : Icons.expand_less,
+          label: paper.isCollapsed
+              ? strings.get(PaperTodoStringKeys.actionRestoreWindow)
+              : strings.get(PaperTodoStringKeys.actionCollapseToCapsule),
+        ),
         _paperActionMenuItem(
           value: _compactPaperActionCaptureBounds,
           icon: Icons.aspect_ratio_outlined,
@@ -7408,10 +7401,7 @@ class PaperPreview extends StatelessWidget {
   }
 
   bool get _canAddCanvasBlockFromPaperMenu {
-    return paper.isNote &&
-        !paper.isCollapsed &&
-        !collapseAllActive &&
-        !paper.isPinnedToDesktop;
+    return paper.isNote && !paper.isCollapsed && !paper.isPinnedToDesktop;
   }
 
   void _clearDoneTodoItemsFromPaperMenu() {

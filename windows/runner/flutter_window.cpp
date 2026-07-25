@@ -3217,6 +3217,29 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (method == "setCapsuleSurfaceRegistry") {
+          if (call.arguments()) {
+            if (const auto* registry =
+                    std::get_if<flutter::EncodableMap>(call.arguments())) {
+              const auto papers_iterator = registry->find(
+                  flutter::EncodableValue("paperSurfaces"));
+              const auto capsules_iterator = registry->find(
+                  flutter::EncodableValue("nativeCapsuleSurfaces"));
+              if (papers_iterator != registry->end() &&
+                  capsules_iterator != registry->end()) {
+                const auto* papers = std::get_if<flutter::EncodableList>(
+                    &papers_iterator->second);
+                const auto* capsules = std::get_if<flutter::EncodableList>(
+                    &capsules_iterator->second);
+                if (papers && capsules) {
+                  CommitCapsuleSurfaceRegistry(*papers, *capsules);
+                }
+              }
+            }
+          }
+          result->Success();
+          return;
+        }
         if (method == "updatePaperWindow") {
           if (call.arguments()) {
             ApplyPaperWindowUpdate(*call.arguments());
@@ -4742,6 +4765,19 @@ void FlutterWindow::CommitPendingSurfaceRegistry(
   ReconcileNativeCapsuleWindows(native_capsules, animation_epoch);
 }
 
+void FlutterWindow::CommitCapsuleSurfaceRegistry(
+    const flutter::EncodableList& paper_surfaces,
+    const flutter::EncodableList& native_capsules) {
+  // A master-capsule click must not call ApplyPaperWindowState: that method
+  // sends applyState to every child Flutter engine and rebuilds otherwise
+  // stationary paper contents. Apply only the native capsule presentation in
+  // one coordinator dispatch so child and master HWNDs share an animation
+  // epoch without touching paper content, bounds, activation, or z-order.
+  const ULONGLONG animation_epoch = GetTickCount64();
+  ReconcileCapsulePaperWindows(paper_surfaces, animation_epoch);
+  ReconcileNativeCapsuleWindows(native_capsules, animation_epoch);
+}
+
 void FlutterWindow::ApplyPaperWindowUpdate(
     const flutter::EncodableValue& paper) {
   const auto* map = std::get_if<flutter::EncodableMap>(&paper);
@@ -4863,6 +4899,80 @@ void FlutterWindow::ReconcilePaperWindows(
   }
   if (has_visible_paper && GetHandle()) {
     ShowWindow(GetHandle(), SW_HIDE);
+  }
+}
+
+void FlutterWindow::ReconcileCapsulePaperWindows(
+    const flutter::EncodableList& papers,
+    ULONGLONG animation_epoch) {
+  static constexpr const char* kCapsuleSurfaceKeys[] = {
+      "surfaceGeneration",
+      "title",
+      "type",
+      "isVisible",
+      "isCollapsed",
+      "capsuleHiddenByMaster",
+      "capsuleTopIsWorkAreaRelative",
+      "capsuleMasterTop",
+      "capsuleMasterTopIsWorkAreaRelative",
+      "useDeepCapsuleMode",
+      "capsuleSide",
+      "capsuleMonitorDeviceName",
+      "hideWhenCovered",
+      "hideWhenFullscreen",
+      "enableAnimations",
+      "fontFamily",
+      "isScriptCapsule",
+  };
+
+  for (const auto& value : papers) {
+    const auto* surface = std::get_if<flutter::EncodableMap>(&value);
+    if (!surface) {
+      continue;
+    }
+    const auto id_iterator = surface->find(flutter::EncodableValue("id"));
+    if (id_iterator == surface->end()) {
+      continue;
+    }
+    const auto* paper_id = std::get_if<std::string>(&id_iterator->second);
+    if (!paper_id || !ValidatePaperIdArgumentValue(*paper_id).valid) {
+      continue;
+    }
+
+    auto cached_iterator = paper_window_surfaces_.find(*paper_id);
+    if (cached_iterator == paper_window_surfaces_.end()) {
+      // A capsule-only transaction never creates or destroys a paper HWND, but
+      // retaining a first snapshot lets the next explicit paper operation use
+      // current capsule metadata if startup messages were unusually reordered.
+      paper_window_surfaces_[*paper_id] = *surface;
+    } else {
+      auto& cached_surface = cached_iterator->second;
+      for (const char* key : kCapsuleSurfaceKeys) {
+        const auto incoming = surface->find(flutter::EncodableValue(key));
+        if (incoming != surface->end()) {
+          cached_surface[flutter::EncodableValue(key)] = incoming->second;
+        }
+      }
+      if (GetBoolArgument(*surface, "isCollapsed", false)) {
+        // For collapsed papers y is the queue slot, not saved paper geometry.
+        // Merge it so later capsule-only transactions cannot resurrect an old
+        // slot while leaving expanded-card x/width/height untouched.
+        const auto y = surface->find(flutter::EncodableValue("y"));
+        if (y != surface->end()) {
+          cached_surface[flutter::EncodableValue("y")] = y->second;
+        }
+      }
+    }
+
+    PaperFlutterWindow* paper_window = PaperWindowForId(*paper_id);
+    const bool incoming_collapsed =
+        GetBoolArgument(*surface, "isCollapsed", false);
+    if (paper_window && incoming_collapsed && paper_window->IsCollapsed()) {
+      // ApplySurface is safe here because the shape remains a capsule. It
+      // updates the master retract/reveal transition without invoking
+      // ApplyState or rebuilding the Flutter paper body.
+      paper_window->ApplySurface(*surface, animation_epoch);
+    }
   }
 }
 

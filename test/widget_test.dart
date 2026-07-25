@@ -20432,6 +20432,13 @@ void main() {
 
     expect(find.text('Visible task'), findsOneWidget);
     expect(find.text('Visible note'), findsWidgets);
+    final todoSurface = find.byKey(const ValueKey('collapse-a-paper-surface'));
+    final todoBody = find.descendant(
+      of: todoSurface,
+      matching: find.byKey(const ValueKey('expanded')),
+    );
+    final todoBodyElement = tester.element(todoBody);
+    final todoBodyRect = tester.getRect(todoBody);
 
     await tester.tap(find.byTooltip('Collapse all papers'));
     await tester.pumpAndSettle();
@@ -20440,6 +20447,19 @@ void main() {
     expect(find.text('Visible task'), findsOneWidget);
     expect(find.text('Visible note'), findsWidgets);
     expect(find.byTooltip('Expand all papers'), findsOneWidget);
+    expect(tester.element(todoBody), same(todoBodyElement));
+    expect(tester.getRect(todoBody), todoBodyRect);
+
+    final noteHeader = find.byKey(const ValueKey('collapse-b-paper-header'));
+    await tester.tapAt(
+      tester.getTopLeft(noteHeader) + const Offset(12, 12),
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Collapse to capsule'), findsOneWidget);
+    expect(find.text('Add canvas block'), findsOneWidget);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Expand all papers'));
     await tester.pumpAndSettle();
@@ -22001,6 +22021,10 @@ void main() {
     expect(controller.state.capsuleCollapseAllActive, false);
     expect(platform.paperWindows.restoredTitleSnapshots.length, restoreCount);
     expect(
+      platform.paperWindows.capsuleOnlyRegistryCollapseAllSnapshots.last,
+      false,
+    );
+    expect(
       platform.paperWindows.registryCollapseAllSnapshots.length,
       greaterThan(registryCount),
     );
@@ -22097,6 +22121,10 @@ void main() {
     expect(
       platform.paperWindows.registryCollapseAllSnapshots.sublist(before),
       [false, true],
+    );
+    expect(
+      platform.paperWindows.capsuleOnlyRegistryCollapseAllSnapshots,
+      containsAllInOrder([false, true]),
     );
     expect(store.savedState.capsuleCollapseAllActive, true);
   });
@@ -24160,6 +24188,7 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
   final restoredCollapsedSnapshots = <Map<String, bool>>[];
   final restoredCollapseAllSnapshots = <bool>[];
   final registryCollapseAllSnapshots = <bool>[];
+  final capsuleOnlyRegistryCollapseAllSnapshots = <bool>[];
   final registryCollapsedSnapshots = <Map<String, bool>>[];
   final registryPaperSnapshots = <List<PaperData>>[];
   final registryQueueStartTopMarginSnapshots = <Map<String, double>>[];
@@ -24231,6 +24260,18 @@ class _RecordingPaperWindowHost extends NoopPaperWindowHost {
 
   @override
   Future<void> refreshSurfaceRegistry(AppState state) async {
+    _recordRegistrySnapshot(state);
+  }
+
+  @override
+  Future<void> refreshCapsuleSurfaceRegistry(AppState state) async {
+    capsuleOnlyRegistryCollapseAllSnapshots.add(
+      state.capsuleCollapseAllActive,
+    );
+    _recordRegistrySnapshot(state);
+  }
+
+  void _recordRegistrySnapshot(AppState state) {
     registryCollapseAllSnapshots.add(state.capsuleCollapseAllActive);
     registryCollapsedSnapshots.add({
       for (final paper in state.papers) paper.id: paper.isCollapsed,

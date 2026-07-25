@@ -35,6 +35,10 @@ abstract interface class PaperWindowHost {
   Future<void> updatePaperSurface(PaperData paper);
   Future<void> capturePaperSurfaceBounds(PaperData paper);
   Future<void> refreshSurfaceRegistry(AppState state);
+
+  /// Refresh only native paper/capsule registry state that belongs to the
+  /// capsule queue. This must not broadcast AppState to child paper engines.
+  Future<void> refreshCapsuleSurfaceRegistry(AppState state);
   Future<void> restoreAll(AppState state);
   Future<void> setCoordinatorBackgroundColor(int argb);
   Future<void> hideCoordinatorWindow();

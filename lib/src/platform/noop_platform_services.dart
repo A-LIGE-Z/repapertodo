@@ -98,6 +98,9 @@ class NoopPaperWindowHost implements PaperWindowHost {
   Future<void> refreshSurfaceRegistry(AppState state) async {}
 
   @override
+  Future<void> refreshCapsuleSurfaceRegistry(AppState state) async {}
+
+  @override
   Future<void> restoreAll(AppState state) async {}
 
   @override
