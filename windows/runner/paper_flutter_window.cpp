@@ -148,6 +148,12 @@ double UnscalePhysicalValue(double value, UINT dpi) {
 constexpr wchar_t kReminderBubbleWindowClass[] =
     L"RePaperTodo.ReminderBubble";
 constexpr wchar_t kPaperShadowWindowClass[] = L"RePaperTodo.PaperShadow";
+// Expose the exact paper HWND represented by a shadow without making the
+// shadow an owned window.  Ownership changes Win32 z-order semantics, while a
+// named property gives diagnostics and policy tests an unambiguous relation
+// between multiple simultaneously visible papers and their shadow surfaces.
+constexpr wchar_t kPaperShadowOwnerProperty[] =
+    L"RePaperTodo.PaperShadowOwner";
 constexpr UINT_PTR kReminderBubbleTimerId = 1;
 constexpr UINT_PTR kCapsuleSlideTimerId = 0xCA52;
 constexpr UINT_PTR kCapsuleQueueFollowTimerId = 0xCA53;
@@ -3321,8 +3327,14 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
   // rather than jumping from the logical target that has not been presented.
   master_capsule_transition_start_alpha_ = applied_window_alpha_;
   master_capsule_transition_target_alpha_ = target_hidden ? 0 : 255;
-  master_capsule_transition_started_at_ =
-      animation_epoch > 0 ? animation_epoch : GetTickCount64();
+  // Keep a transition created during an active queue drag on the same frozen
+  // clock as its native siblings. An older shared epoch would be consumed as
+  // elapsed time when the drag resumes and cause a release-time snap.
+  master_capsule_transition_started_at_ = queue_drag_offset_active_
+                                             ? GetTickCount64()
+                                             : (animation_epoch > 0
+                                                    ? animation_epoch
+                                                    : GetTickCount64());
   master_capsule_transition_move_duration_ms_ =
       std::max(0, move_duration_ms);
   master_capsule_transition_fade_duration_ms_ =
@@ -3417,15 +3429,50 @@ void PaperFlutterWindow::PauseMasterTransitionForQueueDrag() {
       queue_drag_master_transition_paused_at_ != 0) {
     return;
   }
-  UpdateMasterCapsuleTransition();
-  if (!master_capsule_transition_active_) {
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!window || !GetWindowRect(window, &bounds)) {
     return;
   }
-  if (HWND window = GetHandle()) {
-    queue_drag_master_transition_paused_at_ = GetTickCount64();
-    queue_drag_master_transition_coupled_ = true;
+
+  // Preserve the last composed Flutter-capsule frame at drag start. Advancing
+  // the transition here would move this child before the coordinator's first
+  // DeferWindowPos transaction and make the queue appear to bend backwards.
+  const ULONGLONG paused_at = GetTickCount64();
+  const ULONGLONG elapsed =
+      paused_at >= master_capsule_transition_started_at_
+          ? paused_at - master_capsule_transition_started_at_
+          : 0;
+  const auto remaining_duration = [elapsed](int duration,
+                                             bool value_not_at_target) {
+    if (!value_not_at_target) {
+      return 0;
+    }
+    if (duration <= 0 || elapsed >= static_cast<ULONGLONG>(duration)) {
+      return kAnimationFrameMilliseconds;
+    }
+    return std::max(1, duration - static_cast<int>(elapsed));
+  };
+  master_capsule_transition_move_duration_ms_ = remaining_duration(
+      master_capsule_transition_move_duration_ms_,
+      std::abs(static_cast<double>(bounds.top) -
+               master_capsule_transition_target_top_) >= 0.5);
+  master_capsule_transition_fade_duration_ms_ = remaining_duration(
+      master_capsule_transition_fade_duration_ms_,
+      applied_window_alpha_ != master_capsule_transition_target_alpha_);
+  master_capsule_transition_start_top_ = static_cast<double>(bounds.top);
+  master_capsule_transition_start_alpha_ = applied_window_alpha_;
+  master_capsule_transition_started_at_ = paused_at;
+  if (master_capsule_transition_move_duration_ms_ <= 0 &&
+      master_capsule_transition_fade_duration_ms_ <= 0) {
+    master_capsule_transition_active_ = false;
+    master_capsule_retracted_ = master_capsule_transition_target_hidden_;
     KillTimer(window, kCapsuleMasterTransitionTimerId);
+    return;
   }
+  queue_drag_master_transition_paused_at_ = paused_at;
+  queue_drag_master_transition_coupled_ = true;
+  KillTimer(window, kCapsuleMasterTransitionTimerId);
 }
 
 void PaperFlutterWindow::ResumeMasterTransitionAfterQueueDrag() {
@@ -3887,6 +3934,16 @@ void PaperFlutterWindow::EnsurePaperShadowWindow() {
       WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
       kPaperShadowWindowClass, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
       GetModuleHandleW(nullptr), nullptr);
+  HWND paper_window = GetHandle();
+  if (!paper_shadow_window_ || !paper_window ||
+      !SetPropW(paper_shadow_window_, kPaperShadowOwnerProperty,
+                paper_window)) {
+    if (paper_shadow_window_) {
+      DestroyWindow(paper_shadow_window_);
+      paper_shadow_window_ = nullptr;
+    }
+    return;
+  }
   paper_shadow_visible_ = false;
   paper_shadow_z_order_dirty_ = true;
 }
@@ -4090,6 +4147,7 @@ void PaperFlutterWindow::DestroyPaperShadowWindow() {
   }
   HWND shadow = paper_shadow_window_;
   paper_shadow_window_ = nullptr;
+  RemovePropW(shadow, kPaperShadowOwnerProperty);
   DestroyWindow(shadow);
   paper_shadow_visible_ = false;
   paper_shadow_z_order_dirty_ = true;

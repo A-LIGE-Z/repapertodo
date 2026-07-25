@@ -103,6 +103,7 @@ public static class RePaperTodoPolicyNative {
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window, out RECT bounds);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, System.Text.StringBuilder name, int maximum);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr window, System.Text.StringBuilder text, int maximum);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr GetProp(IntPtr window, string name);
   [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
   [DllImport("user32.dll", SetLastError = true)] static extern bool GetLayeredWindowAttributes(IntPtr window, out uint colorKey, out byte alpha, out uint flags);
   [DllImport("user32.dll")] static extern uint RegisterWindowMessage(string name);
@@ -284,17 +285,37 @@ public static class RePaperTodoPolicyNative {
     return window != IntPtr.Zero && IsWindow(window);
   }
   public static int LayeredAlpha(IntPtr window) { return EffectiveWindowAlpha(window); }
-  public static int CountVisiblePaperShadows(uint pid) {
-    int count = 0;
+  public static IntPtr FindPaperShadowFor(IntPtr paperWindow) {
+    RECT paperBounds;
+    if (paperWindow == IntPtr.Zero ||
+        !GetWindowRect(paperWindow, out paperBounds)) {
+      return IntPtr.Zero;
+    }
+    IntPtr taggedShadow = IntPtr.Zero;
+    IntPtr boundsMatchedShadow = IntPtr.Zero;
     EnumWindows((window, parameter) => {
-      uint actualPid; GetWindowThreadProcessId(window, out actualPid);
-      if (actualPid != pid || !IsWindowVisible(window)) return true;
       var className = new System.Text.StringBuilder(128);
       GetClassName(window, className, className.Capacity);
-      if (className.ToString() == "RePaperTodo.PaperShadow") count++;
+      if (className.ToString() != "RePaperTodo.PaperShadow") return true;
+      if (GetProp(window, "RePaperTodo.PaperShadowOwner") == paperWindow) {
+        taggedShadow = window;
+        return false;
+      }
+      RECT shadowBounds;
+      if (boundsMatchedShadow == IntPtr.Zero &&
+          GetWindowRect(window, out shadowBounds) &&
+          shadowBounds.Left == paperBounds.Left &&
+          shadowBounds.Top == paperBounds.Top &&
+          shadowBounds.Right == paperBounds.Right &&
+          shadowBounds.Bottom == paperBounds.Bottom) {
+        // Older already-built smoke binaries predate the diagnostic property.
+        // Capture the exact pre-resize shadow HWND once; later samples inspect
+        // that same handle even if it retains stale geometry during sizing.
+        boundsMatchedShadow = window;
+      }
       return true;
     }, IntPtr.Zero);
-    return count;
+    return taggedShadow != IntPtr.Zero ? taggedShadow : boundsMatchedShadow;
   }
   public static bool IsForeground(IntPtr window) {
     return window != IntPtr.Zero && GetForegroundWindow() == window;
@@ -530,6 +551,11 @@ public static class RePaperTodoPolicyNative {
     System.Threading.Thread.Sleep(80);
     mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
     int maximumError = 0;
+    int previousMasterTop = masterStart.Top;
+    int previousChildTop = childStart.Top;
+    int activeMasterStart = masterStart.Top;
+    int activeChildStart = childStart.Top;
+    bool dragStarted = false;
     for (int step = 1; step <= 12; step++) {
       SetCursorPos(startX, startY + (deltaY * step / 12));
       System.Threading.Thread.Sleep(35);
@@ -539,14 +565,30 @@ public static class RePaperTodoPolicyNative {
         maximumError = Int32.MaxValue;
         break;
       }
-      int masterOffset = masterCurrent.Top - masterStart.Top;
-      int childOffset = childCurrent.Top - childStart.Top;
+      if (!dragStarted) {
+        if (masterCurrent.Top == previousMasterTop) {
+          // Cursor motion below the system drag threshold is still a click.
+          // A child may legitimately finish an earlier reveal during this
+          // interval; keep refreshing the baselines until the master itself
+          // proves that the queue drag has begun.
+          previousMasterTop = masterCurrent.Top;
+          previousChildTop = childCurrent.Top;
+          continue;
+        }
+        dragStarted = true;
+        activeMasterStart = previousMasterTop;
+        activeChildStart = previousChildTop;
+      }
+      int masterOffset = masterCurrent.Top - activeMasterStart;
+      int childOffset = childCurrent.Top - activeChildStart;
       maximumError = Math.Max(maximumError,
                               Math.Abs(masterOffset - childOffset));
+      previousMasterTop = masterCurrent.Top;
+      previousChildTop = childCurrent.Top;
     }
     mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
     System.Threading.Thread.Sleep(300);
-    return maximumError;
+    return dragStarted ? maximumError : Int32.MaxValue;
   }
 
   public static void MoveFlutterCapsuleToLeftAndFinish(IntPtr window) {
@@ -581,13 +623,14 @@ public static class RePaperTodoPolicyNative {
   }
 
   public static int[] ResizePaperAndMeasureSurface(
-      IntPtr window, uint pid, int deltaX, int deltaY) {
+      IntPtr window, int deltaX, int deltaY) {
     RECT start;
     if (window == IntPtr.Zero || !GetWindowRect(window, out start)) {
       return new int[] { Int32.MaxValue, 0, 0, 0 };
     }
     int startX = start.Right - 2;
     int startY = start.Bottom - 2;
+    IntPtr paperShadow = FindPaperShadowFor(window);
     SetForegroundWindow(window);
     SetCursorPos(startX, startY);
     System.Threading.Thread.Sleep(100);
@@ -598,10 +641,22 @@ public static class RePaperTodoPolicyNative {
       SetCursorPos(startX + (deltaX * step / 12),
                    startY + (deltaY * step / 12));
       System.Threading.Thread.Sleep(35);
-      maximumVisibleShadows = Math.Max(
-          maximumVisibleShadows, CountVisiblePaperShadows(pid));
-      minimumPaperAlpha = Math.Min(
-          minimumPaperAlpha, EffectiveWindowAlpha(window));
+      RECT interactiveFrame;
+      if (GetWindowRect(window, out interactiveFrame) &&
+          (interactiveFrame.Right - interactiveFrame.Left !=
+               start.Right - start.Left ||
+           interactiveFrame.Bottom - interactiveFrame.Top !=
+               start.Bottom - start.Top)) {
+        // Flutter's edge listener enters the native modal sizing loop through
+        // an asynchronous method-channel call. The ordinary shadow is still
+        // expected before USER32 changes the first HWND frame; measure only
+        // frames whose bounds prove that interactive sizing has begun.
+        maximumVisibleShadows = Math.Max(
+            maximumVisibleShadows,
+            paperShadow != IntPtr.Zero && IsWindowVisible(paperShadow) ? 1 : 0);
+        minimumPaperAlpha = Math.Min(
+            minimumPaperAlpha, EffectiveWindowAlpha(window));
+      }
     }
     mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
     System.Threading.Thread.Sleep(500);
@@ -1254,7 +1309,7 @@ try {
   }
 
   $resizeMetrics = [RePaperTodoPolicyNative]::ResizePaperAndMeasureSurface(
-    $paper, [uint32]$primary.Id, 96, 72)
+    $paper, 96, 72)
   if ($resizeMetrics.Count -ne 4) {
     throw "Policy smoke paper resize did not return complete frame metrics."
   }
@@ -1341,7 +1396,7 @@ try {
   $settingsWindowMovable = $true
   $settingsResizeMetrics =
     [RePaperTodoPolicyNative]::ResizePaperAndMeasureSurface(
-      $coordinator, [uint32]0, 90, 64)
+      $coordinator, 90, 64)
   if ([Math]::Abs([int]$settingsResizeMetrics[2]) -lt 45 -or
       [Math]::Abs([int]$settingsResizeMetrics[3]) -lt 32) {
     throw "Policy smoke settings window could not be resized (widthDelta=$($settingsResizeMetrics[2]), heightDelta=$($settingsResizeMetrics[3]))."

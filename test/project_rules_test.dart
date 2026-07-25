@@ -4062,14 +4062,16 @@ void main() {
       paperWindow,
       contains('queue_drag_committed_delta_y_ += queue_drag_last_delta_y_'),
     );
-    expect(
-      nativeCapsule,
-      contains('animation_epoch > 0 ? animation_epoch : GetTickCount64()'),
-    );
-    expect(
-      paperWindow,
-      contains('animation_epoch > 0 ? animation_epoch : GetTickCount64()'),
-    );
+    // The transition start clock intentionally uses a multiline conditional
+    // so a queue drag can freeze the current frame without consuming the
+    // shared animation epoch.  Assert the meaningful branches independently
+    // instead of relying on one exact whitespace/layout string.
+    expect(nativeCapsule, contains('animation_epoch > 0'));
+    expect(nativeCapsule, contains('queue_drag_offset_active_'));
+    expect(nativeCapsule, contains('GetTickCount64()'));
+    expect(paperWindow, contains('animation_epoch > 0'));
+    expect(paperWindow, contains('queue_drag_offset_active_'));
+    expect(paperWindow, contains('GetTickCount64()'));
     expect(
       nativeCapsule,
       contains(
@@ -4092,6 +4094,66 @@ void main() {
     expect(nativeCapsule, contains('ResumeMasterTransitionAfterQueueDrag();'));
     expect(paperWindow, contains('PauseMasterTransitionForQueueDrag();'));
     expect(paperWindow, contains('ResumeMasterTransitionAfterQueueDrag();'));
+    final nativePauseStart = nativeCapsule.indexOf(
+      'void NativeCapsuleWindow::PauseMasterTransitionForQueueDrag()',
+    );
+    final nativePauseEnd = nativeCapsule.indexOf(
+      'void NativeCapsuleWindow::ResumeMasterTransitionAfterQueueDrag()',
+      nativePauseStart,
+    );
+    final nativePauseBlock = nativeCapsule.substring(
+      nativePauseStart,
+      nativePauseEnd,
+    );
+    expect(nativePauseBlock, isNot(contains('UpdateMasterTransition();')));
+    expect(
+      nativePauseBlock,
+      contains(
+          'master_transition_start_top_ = static_cast<double>(bounds.top)'),
+    );
+    expect(
+      nativePauseBlock,
+      contains('master_transition_start_alpha_ = current_alpha_'),
+    );
+    expect(
+      nativeCapsule,
+      contains(
+        'master_transition_started_at_ = queue_drag_offset_active_',
+      ),
+    );
+    final paperPauseStart = paperWindow.indexOf(
+      'void PaperFlutterWindow::PauseMasterTransitionForQueueDrag()',
+    );
+    final paperPauseEnd = paperWindow.indexOf(
+      'void PaperFlutterWindow::ResumeMasterTransitionAfterQueueDrag()',
+      paperPauseStart,
+    );
+    final paperPauseBlock = paperWindow.substring(
+      paperPauseStart,
+      paperPauseEnd,
+    );
+    expect(
+      paperPauseBlock,
+      isNot(contains('UpdateMasterCapsuleTransition();')),
+    );
+    expect(
+      paperPauseBlock,
+      contains(
+        'master_capsule_transition_start_top_ = '
+        'static_cast<double>(bounds.top)',
+      ),
+    );
+    expect(
+      paperPauseBlock,
+      contains(
+          'master_capsule_transition_start_alpha_ = applied_window_alpha_'),
+    );
+    expect(
+      paperWindow,
+      contains(
+        'master_capsule_transition_started_at_ = queue_drag_offset_active_',
+      ),
+    );
     expect(
       nativeCapsule,
       contains('queue_drag_master_transition_paused_at_ != 0'),
@@ -4275,6 +4337,17 @@ void main() {
         contains('const int drag_width = ScaleForDpi(window, 26)'));
     expect(paperWindow, contains('return HTCAPTION;'));
     expect(paperWindow, contains('kPaperShadowWindowClass'));
+    expect(paperWindow, contains('kPaperShadowOwnerProperty'));
+    expect(
+      paperWindow,
+      contains(
+        'SetPropW(paper_shadow_window_, kPaperShadowOwnerProperty,',
+      ),
+    );
+    expect(
+      paperWindow,
+      contains('RemovePropW(shadow, kPaperShadowOwnerProperty)'),
+    );
     expect(paperWindow, contains('RoundedRectSignedDistance'));
     expect(paperWindow,
         contains('edge_opacity = paper_shadow_dark_ ? 0.34 : 0.18'));
@@ -5395,6 +5468,12 @@ void main() {
       windowsPolicySmokeScript,
       contains('MeasureVerticalDragFollowing'),
     );
+    expect(windowsPolicySmokeScript, contains('bool dragStarted = false;'));
+    expect(
+      windowsPolicySmokeScript,
+      contains(
+          'master itself\n          // proves that the queue drag has begun'),
+    );
     expect(
       windowsPolicySmokeScript,
       contains('masterCapsuleDragMaxFrameError'),
@@ -5402,6 +5481,32 @@ void main() {
     expect(
       windowsPolicySmokeScript,
       contains('ResizePaperAndMeasureSurface'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('FindPaperShadowFor(IntPtr paperWindow)'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains(
+        'GetProp(window, "RePaperTodo.PaperShadowOwner") == paperWindow',
+      ),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('paperShadow != IntPtr.Zero && IsWindowVisible(paperShadow)'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('RECT interactiveFrame;'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('interactive sizing has begun'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      isNot(contains('CountVisiblePaperShadows(')),
     );
     expect(
       windowsPolicySmokeScript,

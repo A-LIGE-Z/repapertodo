@@ -758,8 +758,15 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
   }
   master_transition_start_alpha_ = current_alpha_;
   master_transition_target_alpha_ = target_hidden ? 0 : 255;
-  master_transition_started_at_ =
-      animation_epoch > 0 ? animation_epoch : GetTickCount64();
+  // A transition armed while a queue drag is already active must start its
+  // clock at the frozen drag frame. Reusing an older animation epoch would
+  // make ResumeMasterTransitionAfterQueueDrag see the whole pre-drag delay as
+  // elapsed and snap the child to its endpoint on release.
+  master_transition_started_at_ = queue_drag_offset_active_
+                                      ? GetTickCount64()
+                                      : (animation_epoch > 0
+                                             ? animation_epoch
+                                             : GetTickCount64());
   master_transition_move_duration_ms_ = std::max(0, move_duration_ms);
   master_transition_fade_duration_ms_ = std::max(0, fade_duration_ms);
   master_transition_active_ = false;
@@ -855,17 +862,51 @@ void NativeCapsuleWindow::PauseMasterTransitionForQueueDrag() {
       queue_drag_master_transition_paused_at_ != 0) {
     return;
   }
-  // Commit the transition's current visual frame before the coordinator
-  // captures bounds for its DeferWindowPos transaction.
-  UpdateMasterTransition();
-  if (!master_transition_active_) {
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!window || !GetWindowRect(window, &bounds)) {
     return;
   }
-  if (HWND window = GetHandle()) {
-    queue_drag_master_transition_paused_at_ = GetTickCount64();
-    queue_drag_master_transition_coupled_ = true;
+
+  // Freeze the frame that DWM has actually presented. Calling
+  // UpdateMasterTransition here advances the child by one timer interval
+  // before the first atomic queue move, so a drag that begins during a master
+  // reveal/retract starts with an observable 8-12 px child-only jump.
+  const ULONGLONG paused_at = GetTickCount64();
+  const ULONGLONG elapsed =
+      paused_at >= master_transition_started_at_
+          ? paused_at - master_transition_started_at_
+          : 0;
+  const auto remaining_duration = [elapsed](int duration,
+                                             bool value_not_at_target) {
+    if (!value_not_at_target) {
+      return 0;
+    }
+    if (duration <= 0 || elapsed >= static_cast<ULONGLONG>(duration)) {
+      return kAnimationFrameMilliseconds;
+    }
+    return std::max(1, duration - static_cast<int>(elapsed));
+  };
+  master_transition_move_duration_ms_ = remaining_duration(
+      master_transition_move_duration_ms_,
+      std::abs(static_cast<double>(bounds.top) -
+               master_transition_target_top_) >= 0.5);
+  master_transition_fade_duration_ms_ = remaining_duration(
+      master_transition_fade_duration_ms_,
+      current_alpha_ != master_transition_target_alpha_);
+  master_transition_start_top_ = static_cast<double>(bounds.top);
+  master_transition_start_alpha_ = current_alpha_;
+  master_transition_started_at_ = paused_at;
+  if (master_transition_move_duration_ms_ <= 0 &&
+      master_transition_fade_duration_ms_ <= 0) {
+    master_transition_active_ = false;
+    master_retracted_ = master_transition_target_hidden_;
     KillTimer(window, kCapsuleMasterTransitionTimerId);
+    return;
   }
+  queue_drag_master_transition_paused_at_ = paused_at;
+  queue_drag_master_transition_coupled_ = true;
+  KillTimer(window, kCapsuleMasterTransitionTimerId);
 }
 
 void NativeCapsuleWindow::ResumeMasterTransitionAfterQueueDrag() {
