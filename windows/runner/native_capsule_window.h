@@ -19,7 +19,8 @@ class NativeCapsuleWindow : public Win32Window {
   explicit NativeCapsuleWindow(EventCallback event_callback);
   ~NativeCapsuleWindow() override;
 
-  void ApplySurface(const flutter::EncodableMap& surface);
+  void ApplySurface(const flutter::EncodableMap& surface,
+                    ULONGLONG animation_epoch = 0);
   void SetAvoidFullscreenTopmost(bool avoid);
   void RefreshVisibility(bool force_master_z_order = false);
 
@@ -48,11 +49,18 @@ class NativeCapsuleWindow : public Win32Window {
   void StartDockAnimation(int target_visible_width, int duration_ms);
   void UpdateDockAnimation();
   void StartMasterTransition(int target_top, bool target_hidden,
-                             int move_duration_ms, int fade_duration_ms);
+                             int move_duration_ms, int fade_duration_ms,
+                             ULONGLONG animation_epoch = 0);
   void UpdateMasterTransition();
   void ApplyMasterTransitionAlpha(int alpha);
   int MasterTopPhysical() const;
   int DockedTopPhysical() const;
+  int EffectiveMasterTopPhysical() const;
+  int EffectiveDockedTopPhysical() const;
+  int QueueDragModelOffsetY() const;
+  void CaptureQueueDragModelAnchors();
+  void ReconcileCommittedQueueModel(int docked_top, int master_top);
+  void ClearCommittedQueueDrag();
   void StartQueueDragAnimation(int target_top, int duration_ms);
   void UpdateQueueDragAnimation();
   void ApplyQueueDragTop(int top);
@@ -144,6 +152,10 @@ class NativeCapsuleWindow : public Win32Window {
   int queue_drag_target_top_ = 0;
   int queue_drag_last_delta_y_ = 0;
   bool queue_drag_master_transition_coupled_ = false;
+  bool queue_drag_commit_pending_ = false;
+  int queue_drag_committed_delta_y_ = 0;
+  int queue_drag_model_base_docked_top_ = 0;
+  int queue_drag_model_base_master_top_ = 0;
   double queue_drag_animation_start_top_ = 0.0;
   double queue_drag_animation_target_top_ = 0.0;
   ULONGLONG queue_drag_animation_started_at_ = 0;

@@ -557,7 +557,10 @@ class WindowsPaperWindowHost implements PaperWindowHost {
     await _channel.invokeMethod<void>('setPaperWindowState', state.toJson());
     await _channel.invokeMethod<void>(
       'setPaperSurfaces',
-      _paperSurfaceRegistryEntries(state),
+      _paperSurfaceRegistryEntries(
+        state,
+        surfaceGeneration: generation,
+      ),
     );
     await _channel.invokeMethod<void>(
       'setNativeCapsuleSurfaces',
@@ -966,6 +969,7 @@ Object _trayMenuPayload(AppState state, TrayMenuLabels? labels) {
 List<Map<String, Object?>> _paperSurfaceRegistryEntries(
   AppState state, {
   TrayMenuLabels? labels,
+  int surfaceGeneration = 0,
 }) {
   final typeCounts = <String, int>{};
   final queuePapers = _capsuleQueueOccupants(state);
@@ -989,6 +993,7 @@ List<Map<String, Object?>> _paperSurfaceRegistryEntries(
         state: state,
         labels: labels,
         fallbackNumber: fallbackNumber,
+        surfaceGeneration: surfaceGeneration,
         capsuleHiddenByMaster: collapseAllActive && paper.isCollapsed,
         capsuleY: paper.isCollapsed ? queueY : null,
         capsuleMasterTop: masterTop,
@@ -1162,6 +1167,7 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
   required AppState state,
   TrayMenuLabels? labels,
   required int fallbackNumber,
+  int surfaceGeneration = 0,
   required bool capsuleHiddenByMaster,
   required double capsuleMasterTop,
   double? capsuleY,
@@ -1175,6 +1181,7 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
       state.maxTitleLength);
   return <String, Object?>{
     'id': paper.id,
+    if (surfaceGeneration > 0) 'surfaceGeneration': surfaceGeneration,
     'title': title,
     'type': paper.type,
     'x': paper.x,

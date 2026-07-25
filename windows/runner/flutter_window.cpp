@@ -3275,14 +3275,14 @@ bool FlutterWindow::OnCreate() {
           }
           if (papers) {
             // Tray rebuilds use the same state preamble as a regular surface
-            // refresh but do not send a capsule commit.  Apply only the
-            // pending coordinator state here, then reconcile the tray list in
-            // one pass.
+            // refresh but do not send a capsule commit. Apply the coordinator
+            // settings and tray metadata only: replaying the paper geometry
+            // here can race a just-finished native drag with an older menu
+            // snapshot and visibly move the HWND backwards.
             ApplyPendingPaperWindowStateOnly();
             has_pending_paper_surfaces_ = false;
             pending_paper_surfaces_.clear();
             ApplyPaperSurfaceRegistry(*papers, true);
-            ReconcilePaperWindows(*papers);
           } else {
             tray_papers_.clear();
           }
@@ -4731,14 +4731,15 @@ void FlutterWindow::CommitPendingSurfaceRegistry(
   // and only after that are native capsule HWNDs updated.  All three steps
   // run inside one method-channel dispatch, so USER32 cannot process a
   // partially committed registry between them.
+  const ULONGLONG animation_epoch = GetTickCount64();
   ApplyPendingPaperWindowStateOnly();
   if (has_pending_paper_surfaces_) {
     ApplyPaperSurfaceRegistry(pending_paper_surfaces_, false);
-    ReconcilePaperWindows(pending_paper_surfaces_);
+    ReconcilePaperWindows(pending_paper_surfaces_, animation_epoch);
     pending_paper_surfaces_.clear();
     has_pending_paper_surfaces_ = false;
   }
-  ReconcileNativeCapsuleWindows(native_capsules);
+  ReconcileNativeCapsuleWindows(native_capsules, animation_epoch);
 }
 
 void FlutterWindow::ApplyPaperWindowUpdate(
@@ -4777,7 +4778,8 @@ void FlutterWindow::ApplyPaperWindowUpdate(
 }
 
 void FlutterWindow::ReconcilePaperWindows(
-    const flutter::EncodableList& papers) {
+    const flutter::EncodableList& papers,
+    ULONGLONG animation_epoch) {
   std::map<std::string, flutter::EncodableMap> next_surfaces;
   bool has_visible_paper = false;
   for (const auto& value : papers) {
@@ -4842,10 +4844,10 @@ void FlutterWindow::ReconcilePaperWindows(
           EnsurePaperWindow(*paper_id);
       if (paper_window) {
         paper_window->ApplyState(paper_window_state_);
-        paper_window->ApplySurface(resolved_surface);
+        paper_window->ApplySurface(resolved_surface, animation_epoch);
       }
     } else if (existing_window) {
-      existing_window->ApplySurface(resolved_surface);
+      existing_window->ApplySurface(resolved_surface, animation_epoch);
     }
   }
   paper_window_surfaces_ = std::move(next_surfaces);
@@ -4865,7 +4867,8 @@ void FlutterWindow::ReconcilePaperWindows(
 }
 
 void FlutterWindow::ReconcileNativeCapsuleWindows(
-    const flutter::EncodableList& surfaces) {
+    const flutter::EncodableList& surfaces,
+    ULONGLONG animation_epoch) {
   std::map<std::string, flutter::EncodableMap> next_surfaces;
   for (const auto& value : surfaces) {
     const auto* surface = std::get_if<flutter::EncodableMap>(&value);
@@ -4921,19 +4924,20 @@ void FlutterWindow::ReconcileNativeCapsuleWindows(
     }
   }
 
-  const auto apply_surfaces = [this, &next_surfaces](bool masters) {
-    for (const auto& entry : next_surfaces) {
-      const bool is_master =
-          GetStringArgument(entry.second, "kind", "proxy") == "master";
-      if (is_master != masters) {
-        continue;
-      }
-      const auto window = native_capsule_windows_.find(entry.first);
-      if (window != native_capsule_windows_.end()) {
-        window->second->ApplySurface(entry.second);
-      }
-    }
-  };
+  const auto apply_surfaces =
+      [this, &next_surfaces, animation_epoch](bool masters) {
+        for (const auto& entry : next_surfaces) {
+          const bool is_master =
+              GetStringArgument(entry.second, "kind", "proxy") == "master";
+          if (is_master != masters) {
+            continue;
+          }
+          const auto window = native_capsule_windows_.find(entry.first);
+          if (window != native_capsule_windows_.end()) {
+            window->second->ApplySurface(entry.second, animation_epoch);
+          }
+        }
+      };
 
   // Start every child transition first, then repaint/reposition the master.
   // DWM therefore receives one coherent queue state instead of a frame where

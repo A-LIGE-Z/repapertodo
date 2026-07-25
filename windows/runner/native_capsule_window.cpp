@@ -281,7 +281,8 @@ void NativeCapsuleWindow::ApplyNativeStyle() {
 }
 
 void NativeCapsuleWindow::ApplySurface(
-    const flutter::EncodableMap& surface) {
+    const flutter::EncodableMap& surface,
+    ULONGLONG animation_epoch) {
   const double generation_value =
       NumberValue(surface, "surfaceGeneration", -1.0);
   if (std::isfinite(generation_value) && generation_value >= 0.0) {
@@ -344,6 +345,7 @@ void NativeCapsuleWindow::ApplySurface(
     queue_drag_offset_active_ = false;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
+    ClearCommittedQueueDrag();
     queue_drag_animation_active_ = false;
     if (HWND window = GetHandle()) {
       KillTimer(window, kCapsuleQueueFollowTimerId);
@@ -384,6 +386,7 @@ void NativeCapsuleWindow::ApplySurface(
     queue_drag_offset_active_ = false;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
+    ClearCommittedQueueDrag();
     ApplyMasterTransitionAlpha(255);
     if (HWND window = GetHandle()) {
       KillTimer(window, kCapsuleSlideTimerId);
@@ -393,6 +396,9 @@ void NativeCapsuleWindow::ApplySurface(
 
   const UINT previous_dpi = dpi_;
   ResolveWorkArea();
+  const int raw_docked_top = DockedTopPhysical();
+  const int raw_master_top = master_ ? raw_docked_top : MasterTopPhysical();
+  ReconcileCommittedQueueModel(raw_docked_top, raw_master_top);
   const std::wstring label = EffectiveLabel();
   const bool chinese_locale = IsChineseLocale();
   const std::wstring master_idle_label =
@@ -495,8 +501,8 @@ void NativeCapsuleWindow::ApplySurface(
         if (HWND window = GetHandle()) {
           RECT bounds = {};
           if (GetWindowRect(window, &bounds)) {
-            SetWindowPos(window, nullptr, bounds.left, MasterTopPhysical(), 0,
-                         0,
+            SetWindowPos(window, nullptr, bounds.left,
+                         EffectiveMasterTopPhysical(), 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                              SWP_NOOWNERZORDER);
           }
@@ -504,11 +510,12 @@ void NativeCapsuleWindow::ApplySurface(
       }
     } else if (previous_master_hidden != capsule_hidden_by_master_) {
       StartMasterTransition(
-          capsule_hidden_by_master_ ? MasterTopPhysical()
-                                     : DockedTopPhysical(),
+          capsule_hidden_by_master_ ? EffectiveMasterTopPhysical()
+                                     : EffectiveDockedTopPhysical(),
           capsule_hidden_by_master_,
           animations_enabled_ ? kCapsuleMasterMoveMilliseconds : 0,
-          animations_enabled_ ? kCapsuleMasterFadeMilliseconds : 0);
+          animations_enabled_ ? kCapsuleMasterFadeMilliseconds : 0,
+          animation_epoch);
     } else if (master_transition_active_ && !queue_drag_offset_active_) {
       // Retarget a transition when the master is dragged or the queue is
       // reordered while the fade is still running. Keep the current frame and
@@ -516,16 +523,16 @@ void NativeCapsuleWindow::ApplySurface(
       // visible backwards hop.
       master_transition_target_top_ = capsule_hidden_by_master_
                                           ? static_cast<double>(
-                                                MasterTopPhysical())
+                                                EffectiveMasterTopPhysical())
                                           : static_cast<double>(
-                                                DockedTopPhysical());
+                                                EffectiveDockedTopPhysical());
     } else if (master_retracted_ && !queue_drag_offset_active_) {
       if (HWND window = GetHandle()) {
         RECT bounds = {};
         if (GetWindowRect(window, &bounds) &&
-            bounds.top != MasterTopPhysical()) {
-          SetWindowPos(window, nullptr, bounds.left, MasterTopPhysical(), 0,
-                       0,
+            bounds.top != EffectiveMasterTopPhysical()) {
+          SetWindowPos(window, nullptr, bounds.left,
+                       EffectiveMasterTopPhysical(), 0, 0,
                        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                            SWP_NOOWNERZORDER);
         }
@@ -629,7 +636,7 @@ void NativeCapsuleWindow::ApplyDockedPosition() {
   const int x = capsule_side_ == "left"
                     ? work_area_.left - (full_width_ - visible_width)
                     : work_area_.right - visible_width;
-  const int y = DockedTopPhysical();
+  const int y = EffectiveDockedTopPhysical();
   RECT current = {};
   if (GetWindowRect(window, &current) && current.left == x &&
       current.top == y && current.right - current.left == full_width_ &&
@@ -668,6 +675,56 @@ int NativeCapsuleWindow::MasterTopPhysical() const {
   return std::clamp(requested, minimum_top, maximum_top);
 }
 
+int NativeCapsuleWindow::QueueDragModelOffsetY() const {
+  return queue_drag_commit_pending_ ? queue_drag_committed_delta_y_ : 0;
+}
+
+int NativeCapsuleWindow::EffectiveDockedTopPhysical() const {
+  return DockedTopPhysical() + QueueDragModelOffsetY();
+}
+
+int NativeCapsuleWindow::EffectiveMasterTopPhysical() const {
+  return MasterTopPhysical() + QueueDragModelOffsetY();
+}
+
+void NativeCapsuleWindow::CaptureQueueDragModelAnchors() {
+  if (queue_drag_commit_pending_) {
+    return;
+  }
+  queue_drag_model_base_docked_top_ = DockedTopPhysical();
+  queue_drag_model_base_master_top_ =
+      master_ ? queue_drag_model_base_docked_top_ : MasterTopPhysical();
+}
+
+void NativeCapsuleWindow::ReconcileCommittedQueueModel(int docked_top,
+                                                       int master_top) {
+  if (!queue_drag_commit_pending_) {
+    return;
+  }
+  constexpr int kPositionTolerance = 2;
+  const int docked_change =
+      docked_top - queue_drag_model_base_docked_top_;
+  const int master_change =
+      master_top - queue_drag_model_base_master_top_;
+  const bool unchanged = std::abs(docked_change) <= kPositionTolerance &&
+                         std::abs(master_change) <= kPositionTolerance;
+  const bool acknowledged =
+      std::abs(docked_change - queue_drag_committed_delta_y_) <=
+          kPositionTolerance ||
+      std::abs(master_change - queue_drag_committed_delta_y_) <=
+          kPositionTolerance;
+  if (!unchanged || acknowledged) {
+    ClearCommittedQueueDrag();
+    queue_drag_model_base_docked_top_ = docked_top;
+    queue_drag_model_base_master_top_ = master_top;
+  }
+}
+
+void NativeCapsuleWindow::ClearCommittedQueueDrag() {
+  queue_drag_commit_pending_ = false;
+  queue_drag_committed_delta_y_ = 0;
+}
+
 void NativeCapsuleWindow::ApplyMasterTransitionAlpha(int alpha) {
   const int next_alpha = std::clamp(alpha, 0, 255);
   if (current_alpha_ == next_alpha) {
@@ -683,7 +740,8 @@ void NativeCapsuleWindow::ApplyMasterTransitionAlpha(int alpha) {
 void NativeCapsuleWindow::StartMasterTransition(int target_top,
                                                 bool target_hidden,
                                                 int move_duration_ms,
-                                                int fade_duration_ms) {
+                                                int fade_duration_ms,
+                                                ULONGLONG animation_epoch) {
   HWND window = GetHandle();
   RECT bounds = {};
   if (!window || !GetWindowRect(window, &bounds)) return;
@@ -698,7 +756,8 @@ void NativeCapsuleWindow::StartMasterTransition(int target_top,
   }
   master_transition_start_alpha_ = current_alpha_;
   master_transition_target_alpha_ = target_hidden ? 0 : 255;
-  master_transition_started_at_ = GetTickCount64();
+  master_transition_started_at_ =
+      animation_epoch > 0 ? animation_epoch : GetTickCount64();
   master_transition_move_duration_ms_ = std::max(0, move_duration_ms);
   master_transition_fade_duration_ms_ = std::max(0, fade_duration_ms);
   master_transition_active_ = false;
@@ -867,8 +926,10 @@ bool NativeCapsuleWindow::PrepareMasterDragTop(int target_top,
     queue_drag_base_top_ = bounds.top;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
+    CaptureQueueDragModelAnchors();
   }
   queue_drag_target_top_ = target_top;
+  queue_drag_last_delta_y_ = target_top - queue_drag_base_top_;
   KillTimer(window, kCapsuleQueueFollowTimerId);
   queue_drag_animation_active_ = false;
   *target_bounds = bounds;
@@ -890,6 +951,7 @@ bool NativeCapsuleWindow::PrepareQueueDragOffset(int delta_y,
     queue_drag_target_top_ = bounds.top;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = master_transition_active_;
+    CaptureQueueDragModelAnchors();
   }
   const int incremental_delta = delta_y - queue_drag_last_delta_y_;
   queue_drag_last_delta_y_ = delta_y;
@@ -955,6 +1017,8 @@ void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
     }
     queue_drag_animation_active_ = false;
     ApplyQueueDragTop(target_top);
+    queue_drag_committed_delta_y_ += queue_drag_last_delta_y_;
+    queue_drag_commit_pending_ = queue_drag_committed_delta_y_ != 0;
   } else if (!master_transition_active_) {
     StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
   }
@@ -1724,6 +1788,7 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       dock_animation_active_ = false;
       queue_drag_animation_active_ = false;
       master_transition_active_ = false;
+      ClearCommittedQueueDrag();
       break;
     case WM_CLOSE:
       z_order_initialized_ = false;

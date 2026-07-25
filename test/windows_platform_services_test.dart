@@ -964,6 +964,7 @@ void main() {
     expect(initialSurfacesCall.arguments, [
       {
         'id': 'paper-1',
+        'surfaceGeneration': 1,
         'title': 'First',
         'type': PaperTypes.todo,
         'x': 10.0,
@@ -990,6 +991,7 @@ void main() {
       },
       {
         'id': 'paper-2',
+        'surfaceGeneration': 1,
         'title': 'Second',
         'type': PaperTypes.note,
         'x': 30.0,
@@ -1975,6 +1977,57 @@ void main() {
     expect(request.kind, PaperWindowActionKinds.openUri);
     expect(request.value, 'https://example.com/from-child');
     expect(request.nativeActivated, true);
+  });
+
+  test('paper and capsule registries share one increasing surface generation',
+      () async {
+    const channel =
+        MethodChannel('repapertodo/window_shared_surface_generation_test');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final services = WindowsPlatformServices(channel: channel);
+    final state = AppState(
+      useCapsuleCollapseAll: true,
+      papers: [
+        PaperData(
+          id: 'shared-generation-paper',
+          title: 'Shared generation',
+          isCollapsed: true,
+        ),
+      ],
+    )..normalize();
+
+    await services.paperWindows.refreshSurfaceRegistry(state);
+    await services.paperWindows.refreshSurfaceRegistry(state);
+
+    final paperCalls =
+        calls.where((call) => call.method == 'setPaperSurfaces').toList();
+    final capsuleCalls = calls
+        .where((call) => call.method == 'setNativeCapsuleSurfaces')
+        .toList();
+    expect(paperCalls, hasLength(2));
+    expect(capsuleCalls, hasLength(2));
+    expect(
+      paperCalls.map(
+        (call) => ((call.arguments as List).single as Map)['surfaceGeneration'],
+      ),
+      [1, 2],
+    );
+    expect(
+      capsuleCalls.map(
+        (call) => ((call.arguments as List).first as Map)['surfaceGeneration'],
+      ),
+      [1, 2],
+    );
   });
 
   test(

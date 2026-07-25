@@ -15,10 +15,9 @@ inline constexpr int kCapsuleMasterMoveMilliseconds = 200;
 inline constexpr int kCapsuleMasterFadeMilliseconds = 160;
 inline constexpr int kAnimationFrameMilliseconds = 16;
 
-// Keep the native easing curve byte-for-byte equivalent to Flutter's
-// Curves.easeOutCubic.  All HWND transitions use this helper so a queue move,
-// capsule reveal, and paper shadow transition cannot acquire subtly different
-// timing just because they live in different native files.
+// Keep the native easing curve byte-for-byte equivalent to PaperTodo's shared
+// CubicEase(EaseOut) and Flutter's Curves.easeOutCubic. The original applies
+// the same curve to slot movement, hover reveal and opacity in both directions.
 inline constexpr double EaseOutCubic(double progress) noexcept {
   const double clamped = progress < 0.0 ? 0.0 :
                          (progress > 1.0 ? 1.0 : progress);

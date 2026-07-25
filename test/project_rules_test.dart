@@ -3812,6 +3812,11 @@ void main() {
     expect(platform, contains('normalizeLocalModelId(_activePaper?.id)'));
     expect(platform, contains('_normalizePaperQueueMonitorDeviceName'));
     expect(platform, contains("'setPaperSurfaces'"));
+    expect(platform, contains('surfaceGeneration: generation'));
+    expect(
+      platform,
+      contains("if (surfaceGeneration > 0) 'surfaceGeneration'"),
+    );
     expect(platform, contains("'normalizeQueueMonitorDeviceName'"));
     expect(runner, contains('RememberPaperCapsuleState'));
     expect(runner, contains('if (method == "setPaperSurfaces")'));
@@ -3972,9 +3977,28 @@ void main() {
     expect(roadmap, contains('one visible HWND per visible'));
     expect(runnerHeader,
         contains('std::map<std::string, std::unique_ptr<PaperFlutterWindow>>'));
-    expect(runner, contains('ReconcilePaperWindows(*papers)'));
+    expect(runner, isNot(contains('ReconcilePaperWindows(*papers')));
     expect(runner, contains('CommitPendingSurfaceRegistry(*surfaces)'));
-    expect(runner, contains('ReconcileNativeCapsuleWindows(native_capsules)'));
+    expect(
+      runner,
+      contains(
+        'ReconcilePaperWindows(pending_paper_surfaces_, animation_epoch)',
+      ),
+    );
+    expect(
+      runner,
+      contains(
+        'ReconcileNativeCapsuleWindows(native_capsules, animation_epoch)',
+      ),
+    );
+    expect(
+      runner,
+      contains('const ULONGLONG animation_epoch = GetTickCount64();'),
+    );
+    expect(
+      runner,
+      contains('ApplySurface(entry.second, animation_epoch)'),
+    );
     final capsuleReconcile = _sliceBetween(
       runner,
       'void FlutterWindow::ReconcileNativeCapsuleWindows(',
@@ -4017,6 +4041,26 @@ void main() {
     expect(
       paperWindowHeader,
       contains('queue_drag_master_transition_coupled_'),
+    );
+    expect(nativeCapsuleHeader, contains('queue_drag_commit_pending_'));
+    expect(paperWindowHeader, contains('queue_drag_commit_pending_'));
+    expect(nativeCapsule, contains('ReconcileCommittedQueueModel'));
+    expect(paperWindow, contains('ReconcileCommittedQueueModel'));
+    expect(
+      nativeCapsule,
+      contains('queue_drag_committed_delta_y_ += queue_drag_last_delta_y_'),
+    );
+    expect(
+      paperWindow,
+      contains('queue_drag_committed_delta_y_ += queue_drag_last_delta_y_'),
+    );
+    expect(
+      nativeCapsule,
+      contains('animation_epoch > 0 ? animation_epoch : GetTickCount64()'),
+    );
+    expect(
+      paperWindow,
+      contains('animation_epoch > 0 ? animation_epoch : GetTickCount64()'),
     );
     expect(
       nativeCapsule,
@@ -4176,7 +4220,16 @@ void main() {
       paperWindow,
       contains('SWP_NOREDRAW | SWP_FRAMECHANGED'),
     );
-    expect(paperWindow, contains('ResizeChildContent(!in_size_move_)'));
+    expect(
+      paperWindow,
+      contains(
+        'ResizeChildContent(!in_size_move_ && !paper_resize_start_pending_)',
+      ),
+    );
+    expect(
+      paperWindow,
+      contains('!in_size_move_ && !paper_resize_start_pending_ &&'),
+    );
     expect(
       paperWindow,
       contains('SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW'),
@@ -4352,7 +4405,7 @@ void main() {
     );
     expect(
       paperWindow,
-      contains('(visible ? 0 : SWP_SHOWWINDOW)'),
+      contains('(visible ? SWP_NOREDRAW : SWP_SHOWWINDOW)'),
     );
     expect(runner, contains('kFullscreenTopmostRefreshIntervalMs = 250'));
     expect(paperWindowApp, contains("'capsuleHoverChanged'"));
@@ -4390,7 +4443,9 @@ void main() {
     );
     expect(
       paperReconcileBlock,
-      contains('paper_window->ApplySurface(resolved_surface);'),
+      contains(
+        'paper_window->ApplySurface(resolved_surface, animation_epoch);',
+      ),
     );
     final nativeReconcileStart =
         runner.indexOf('void FlutterWindow::ReconcileNativeCapsuleWindows(');

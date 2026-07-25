@@ -26,7 +26,8 @@ class PaperFlutterWindow : public Win32Window {
 
   void ApplyState(const flutter::EncodableValue& state);
   void ApplyPaper(const flutter::EncodableValue& paper);
-  void ApplySurface(const flutter::EncodableMap& surface);
+  void ApplySurface(const flutter::EncodableMap& surface,
+                    ULONGLONG animation_epoch = 0);
   bool IsCollapsed() const { return collapsed_; }
   bool IsInCapsuleQueue(const std::string& monitor_device_name,
                         const std::string& side) const;
@@ -72,11 +73,17 @@ class PaperFlutterWindow : public Win32Window {
   void ApplyCapsuleHorizontalPosition();
   void StartMasterCapsuleTransition(int target_top, bool target_hidden,
                                     int move_duration_ms,
-                                    int fade_duration_ms);
+                                    int fade_duration_ms,
+                                    ULONGLONG animation_epoch = 0);
   void UpdateMasterCapsuleTransition();
   void ApplyMasterCapsuleAlpha(int alpha);
   int MasterCapsuleTopPhysical() const;
   int DockedCapsuleTopPhysical() const;
+  int EffectiveMasterCapsuleTopPhysical() const;
+  int QueueDragModelOffsetY() const;
+  void CaptureQueueDragModelAnchors();
+  void ReconcileCommittedQueueModel(int docked_top, int master_top);
+  void ClearCommittedQueueDrag();
   void StartQueueDragAnimation(int target_top, int duration_ms);
   void UpdateQueueDragAnimation();
   void ApplyQueueDragTop(int top);
@@ -155,6 +162,10 @@ class PaperFlutterWindow : public Win32Window {
   int queue_drag_target_top_ = 0;
   int queue_drag_last_delta_y_ = 0;
   bool queue_drag_master_transition_coupled_ = false;
+  bool queue_drag_commit_pending_ = false;
+  int queue_drag_committed_delta_y_ = 0;
+  int queue_drag_model_base_docked_top_ = 0;
+  int queue_drag_model_base_master_top_ = 0;
   double queue_drag_animation_start_top_ = 0.0;
   double queue_drag_animation_target_top_ = 0.0;
   ULONGLONG queue_drag_animation_started_at_ = 0;

@@ -111,8 +111,10 @@ class FlutterWindow : public Win32Window {
       const flutter::EncodableList& native_capsules);
   void ApplyPendingPaperWindowStateOnly();
   void ApplyPaperWindowUpdate(const flutter::EncodableValue& paper);
-  void ReconcilePaperWindows(const flutter::EncodableList& papers);
-  void ReconcileNativeCapsuleWindows(const flutter::EncodableList& surfaces);
+  void ReconcilePaperWindows(const flutter::EncodableList& papers,
+                             ULONGLONG animation_epoch);
+  void ReconcileNativeCapsuleWindows(const flutter::EncodableList& surfaces,
+                                     ULONGLONG animation_epoch);
   PaperFlutterWindow* EnsurePaperWindow(
       const std::string& paper_id,
       const flutter::EncodableMap* surface = nullptr);

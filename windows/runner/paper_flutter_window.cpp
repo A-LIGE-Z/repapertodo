@@ -2375,6 +2375,7 @@ void PaperFlutterWindow::OnDestroy() {
   capsule_animation_active_ = false;
   queue_drag_animation_active_ = false;
   master_capsule_transition_active_ = false;
+  ClearCommittedQueueDrag();
   paper_resize_start_pending_ = false;
   paper_shadow_refresh_pending_ = false;
   ++paper_shadow_refresh_generation_;
@@ -2482,13 +2483,14 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       // The default Win32Window handler uses MoveWindow(..., TRUE), which
       // erases the hosted Flutter view before its next compositor frame. Use
       // the no-erase path for this layered paper window instead.
-      ResizeChildContent(!in_size_move_);
-      if (message == WM_SIZE && wparam != SIZE_MINIMIZED && !in_size_move_) {
+      ResizeChildContent(!in_size_move_ && !paper_resize_start_pending_);
+      if (wparam != SIZE_MINIMIZED && !in_size_move_ &&
+          !paper_resize_start_pending_) {
         UpdatePaperShadowWindow(false);
       }
       if (surface_initialized_ && !collapsed_ && !applying_bounds_ &&
           !queue_drag_bounds_applying_ &&
-          !in_size_move_ &&
+          !in_size_move_ && !paper_resize_start_pending_ &&
           wparam != SIZE_MINIMIZED) {
         SendBoundsChanged();
       }
@@ -2623,7 +2625,8 @@ void PaperFlutterWindow::FlushInitialState() {
   }
 }
 
-void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
+void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
+                                      ULONGLONG animation_epoch) {
   const int64_t incoming_generation = IntegerValue(
       surface, "surfaceGeneration", static_cast<int64_t>(-1));
   if (incoming_generation >= 0) {
@@ -2658,6 +2661,9 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
   capsule_font_family_ =
       StringValue(surface, "fontFamily", capsule_font_family_);
   const bool previous_collapsed = collapsed_;
+  const std::string previous_capsule_side = capsule_side_;
+  const std::string previous_capsule_monitor_device_name =
+      capsule_monitor_device_name_;
   collapsed_ = BoolValue(surface, "isCollapsed", collapsed_);
   const bool expanded_from_capsule = previous_collapsed && !collapsed_;
   const bool was_capsule_hidden_by_master = capsule_hidden_by_master_;
@@ -2693,6 +2699,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
     queue_drag_offset_active_ = false;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
+    ClearCommittedQueueDrag();
     capsule_alpha_ = 255;
     SetLayeredWindowAttributes(window, RGB(1, 2, 3),
                                static_cast<BYTE>(capsule_alpha_),
@@ -2705,6 +2712,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
     queue_drag_offset_active_ = false;
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ = false;
+    ClearCommittedQueueDrag();
     capsule_alpha_ = 255;
     SetLayeredWindowAttributes(window, RGB(1, 2, 3),
                                static_cast<BYTE>(capsule_alpha_),
@@ -2740,6 +2748,16 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
     const RECT work_area =
         WorkAreaForWindow(window, capsule_monitor_device_name_);
     capsule_side_ = StringValue(surface, "capsuleSide", "right");
+    if (previous_capsule_side != capsule_side_ ||
+        previous_capsule_monitor_device_name !=
+            capsule_monitor_device_name_) {
+      queue_drag_offset_active_ = false;
+      queue_drag_last_delta_y_ = 0;
+      queue_drag_master_transition_coupled_ = false;
+      ClearCommittedQueueDrag();
+      queue_drag_animation_active_ = false;
+      KillTimer(window, kCapsuleQueueFollowTimerId);
+    }
     capsule_work_area_ = work_area;
     capsule_width_ = native_width;
     const double logical_resting_visible_width =
@@ -2785,9 +2803,14 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
         requested_top, static_cast<double>(work_area.top),
         std::max(static_cast<double>(work_area.top),
                  static_cast<double>(work_area.bottom) - native_height));
-    const int normal_capsule_top = static_cast<int>(std::round(native_y));
-    const int master_capsule_top = MasterCapsuleTopPhysical();
-    capsule_docked_top_ = normal_capsule_top;
+    const int raw_normal_capsule_top =
+        static_cast<int>(std::round(native_y));
+    const int raw_master_capsule_top = MasterCapsuleTopPhysical();
+    ReconcileCommittedQueueModel(raw_normal_capsule_top,
+                                 raw_master_capsule_top);
+    capsule_docked_top_ = raw_normal_capsule_top;
+    const int normal_capsule_top = DockedCapsuleTopPhysical();
+    const int master_capsule_top = EffectiveMasterCapsuleTopPhysical();
     if (!master_capsule_transition_initialized_) {
       master_capsule_transition_initialized_ = true;
       master_capsule_retracted_ =
@@ -2806,7 +2829,8 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface) {
           capsule_hidden_by_master_ ? master_capsule_top : normal_capsule_top,
           capsule_hidden_by_master_,
           capsule_animations_enabled_ ? kCapsuleMasterMoveMilliseconds : 0,
-          capsule_animations_enabled_ ? kCapsuleMasterFadeMilliseconds : 0);
+          capsule_animations_enabled_ ? kCapsuleMasterFadeMilliseconds : 0,
+          animation_epoch);
       native_y = capsule_hidden_by_master_
                      ? static_cast<double>(master_capsule_top)
                      : static_cast<double>(normal_capsule_top);
@@ -2906,6 +2930,7 @@ bool PaperFlutterWindow::PrepareQueueDragOffset(int delta_y,
     queue_drag_last_delta_y_ = 0;
     queue_drag_master_transition_coupled_ =
         master_capsule_transition_active_;
+    CaptureQueueDragModelAnchors();
   }
   const int incremental_delta = delta_y - queue_drag_last_delta_y_;
   queue_drag_last_delta_y_ = delta_y;
@@ -2972,6 +2997,8 @@ void PaperFlutterWindow::FinishQueueDrag(bool commit) {
     }
     queue_drag_animation_active_ = false;
     ApplyQueueDragTop(target_top);
+    queue_drag_committed_delta_y_ += queue_drag_last_delta_y_;
+    queue_drag_commit_pending_ = queue_drag_committed_delta_y_ != 0;
   } else if (!master_capsule_transition_active_) {
     StartQueueDragAnimation(target_top, kCapsuleQueueMoveMilliseconds);
   }
@@ -3141,7 +3168,7 @@ void PaperFlutterWindow::ApplyCapsuleHorizontalPosition() {
 }
 
 int PaperFlutterWindow::DockedCapsuleTopPhysical() const {
-  return capsule_docked_top_;
+  return capsule_docked_top_ + QueueDragModelOffsetY();
 }
 
 int PaperFlutterWindow::MasterCapsuleTopPhysical() const {
@@ -3162,6 +3189,51 @@ int PaperFlutterWindow::MasterCapsuleTopPhysical() const {
   return std::clamp(requested, minimum_top, maximum_top);
 }
 
+int PaperFlutterWindow::QueueDragModelOffsetY() const {
+  return queue_drag_commit_pending_ ? queue_drag_committed_delta_y_ : 0;
+}
+
+int PaperFlutterWindow::EffectiveMasterCapsuleTopPhysical() const {
+  return MasterCapsuleTopPhysical() + QueueDragModelOffsetY();
+}
+
+void PaperFlutterWindow::CaptureQueueDragModelAnchors() {
+  if (queue_drag_commit_pending_) {
+    return;
+  }
+  queue_drag_model_base_docked_top_ = capsule_docked_top_;
+  queue_drag_model_base_master_top_ = MasterCapsuleTopPhysical();
+}
+
+void PaperFlutterWindow::ReconcileCommittedQueueModel(int docked_top,
+                                                       int master_top) {
+  if (!queue_drag_commit_pending_) {
+    return;
+  }
+  constexpr int kPositionTolerance = 2;
+  const int docked_change =
+      docked_top - queue_drag_model_base_docked_top_;
+  const int master_change =
+      master_top - queue_drag_model_base_master_top_;
+  const bool unchanged = std::abs(docked_change) <= kPositionTolerance &&
+                         std::abs(master_change) <= kPositionTolerance;
+  const bool acknowledged =
+      std::abs(docked_change - queue_drag_committed_delta_y_) <=
+          kPositionTolerance ||
+      std::abs(master_change - queue_drag_committed_delta_y_) <=
+          kPositionTolerance;
+  if (!unchanged || acknowledged) {
+    ClearCommittedQueueDrag();
+    queue_drag_model_base_docked_top_ = docked_top;
+    queue_drag_model_base_master_top_ = master_top;
+  }
+}
+
+void PaperFlutterWindow::ClearCommittedQueueDrag() {
+  queue_drag_commit_pending_ = false;
+  queue_drag_committed_delta_y_ = 0;
+}
+
 void PaperFlutterWindow::ApplyMasterCapsuleAlpha(int alpha) {
   const int next_alpha = std::clamp(alpha, 0, 255);
   if (capsule_alpha_ == next_alpha) {
@@ -3178,7 +3250,8 @@ void PaperFlutterWindow::ApplyMasterCapsuleAlpha(int alpha) {
 void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
                                                       bool target_hidden,
                                                       int move_duration_ms,
-                                                      int fade_duration_ms) {
+                                                      int fade_duration_ms,
+                                                      ULONGLONG animation_epoch) {
   HWND window = GetHandle();
   RECT bounds = {};
   if (!window || !GetWindowRect(window, &bounds)) return;
@@ -3193,7 +3266,8 @@ void PaperFlutterWindow::StartMasterCapsuleTransition(int target_top,
   }
   master_capsule_transition_start_alpha_ = capsule_alpha_;
   master_capsule_transition_target_alpha_ = target_hidden ? 0 : 255;
-  master_capsule_transition_started_at_ = GetTickCount64();
+  master_capsule_transition_started_at_ =
+      animation_epoch > 0 ? animation_epoch : GetTickCount64();
   master_capsule_transition_move_duration_ms_ =
       std::max(0, move_duration_ms);
   master_capsule_transition_fade_duration_ms_ =
@@ -3989,7 +4063,7 @@ void PaperFlutterWindow::RefreshZOrder() {
     if (!pinned_to_desktop_) {
       SetWindowPos(window, HWND_NOTOPMOST, 0, 0, 0, 0,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                       SWP_NOOWNERZORDER);
+                       SWP_NOOWNERZORDER | SWP_NOREDRAW);
     }
     HidePaperShadowWindow();
     if (IsWindowVisible(window)) {
@@ -4038,13 +4112,13 @@ void PaperFlutterWindow::RefreshZOrder() {
       SetWindowLongPtrW(window, GWL_STYLE, desired_style);
       SetWindowPos(window, nullptr, 0, 0, 0, 0,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                       SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                       SWP_NOACTIVATE | SWP_NOREDRAW | SWP_FRAMECHANGED);
     }
     if (!visible || !z_order_initialized_ || !z_order_pinned_) {
       SetWindowPos(window, HWND_BOTTOM, 0, 0, 0, 0,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                        SWP_NOOWNERZORDER |
-                       (visible ? 0 : SWP_SHOWWINDOW));
+                       (visible ? SWP_NOREDRAW : SWP_SHOWWINDOW));
       z_order_initialized_ = true;
       z_order_pinned_ = true;
       z_order_topmost_ = false;
@@ -4064,7 +4138,7 @@ void PaperFlutterWindow::RefreshZOrder() {
     SetWindowPos(window, z_order, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                      SWP_NOOWNERZORDER |
-                     (visible ? 0 : SWP_SHOWWINDOW));
+                     (visible ? SWP_NOREDRAW : SWP_SHOWWINDOW));
     z_order_initialized_ = true;
     z_order_pinned_ = false;
     z_order_topmost_ = topmost;
