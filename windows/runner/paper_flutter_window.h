@@ -30,6 +30,8 @@ class PaperFlutterWindow : public Win32Window {
   bool IsCollapsed() const { return collapsed_; }
   bool IsInCapsuleQueue(const std::string& monitor_device_name,
                         const std::string& side) const;
+  bool PrepareQueueDragOffset(int delta_y, RECT* target_bounds);
+  void SetQueueDragBoundsApplying(bool applying);
   void ApplyQueueDragOffset(int delta_y);
   void FinishQueueDrag(bool commit);
   void SetAlwaysOnTop(bool enabled);

@@ -4942,15 +4942,107 @@ void FlutterWindow::SendPaperWindowEvent(
       if (method == "capsuleMasterDragUpdated") {
         const int delta_y = static_cast<int>(
             std::round(GetNumberArgument(*drag, "deltaY", 0)));
+        const double target_top_value = GetNumberArgument(
+            *drag, "targetTop", std::numeric_limits<double>::quiet_NaN());
+        if (!std::isfinite(target_top_value)) {
+          // Compatibility path for an older native capsule sender that moved
+          // its own HWND before emitting the queue update.
+          for (auto& entry : native_capsule_windows_) {
+            if (!entry.second->is_master() &&
+                entry.second->IsInQueue(monitor, side)) {
+              entry.second->ApplyQueueDragOffset(delta_y);
+            }
+          }
+          for (auto& entry : paper_windows_) {
+            if (entry.second->IsInCapsuleQueue(monitor, side)) {
+              entry.second->ApplyQueueDragOffset(delta_y);
+            }
+          }
+          return;
+        }
+
+        struct QueueDragMove {
+          HWND window = nullptr;
+          RECT target = {};
+          PaperFlutterWindow* paper_window = nullptr;
+        };
+        const int target_top =
+            static_cast<int>(std::round(target_top_value));
+        std::vector<QueueDragMove> moves;
+        moves.reserve(native_capsule_windows_.size() + paper_windows_.size());
         for (auto& entry : native_capsule_windows_) {
-          if (!entry.second->is_master() &&
-              entry.second->IsInQueue(monitor, side)) {
-            entry.second->ApplyQueueDragOffset(delta_y);
+          if (!entry.second->IsInQueue(monitor, side)) {
+            continue;
+          }
+          RECT target = {};
+          const bool should_move = entry.second->is_master()
+                                       ? entry.second->PrepareMasterDragTop(
+                                             target_top, &target)
+                                       : entry.second->PrepareQueueDragOffset(
+                                             delta_y, &target);
+          if (should_move) {
+            moves.push_back(
+                QueueDragMove{entry.second->GetHandle(), target, nullptr});
           }
         }
         for (auto& entry : paper_windows_) {
-          if (entry.second->IsInCapsuleQueue(monitor, side)) {
-            entry.second->ApplyQueueDragOffset(delta_y);
+          if (!entry.second->IsInCapsuleQueue(monitor, side)) {
+            continue;
+          }
+          RECT target = {};
+          if (entry.second->PrepareQueueDragOffset(delta_y, &target)) {
+            moves.push_back(QueueDragMove{entry.second->GetHandle(), target,
+                                          entry.second.get()});
+          }
+        }
+
+        // USER32 applies every HWND in one positioning transaction. This
+        // prevents DWM from composing a frame where the master has moved but
+        // only part of its queue has followed it.
+        bool applied = moves.empty();
+        HDWP deferred = moves.empty()
+                            ? nullptr
+                            : BeginDeferWindowPos(
+                                  static_cast<int>(moves.size()));
+        if (deferred) {
+          for (const auto& move : moves) {
+            deferred = DeferWindowPos(
+                deferred, move.window, nullptr, move.target.left,
+                move.target.top, 0, 0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                    SWP_NOOWNERZORDER);
+            if (!deferred) {
+              break;
+            }
+          }
+          if (deferred) {
+            for (const auto& move : moves) {
+              if (move.paper_window) {
+                move.paper_window->SetQueueDragBoundsApplying(true);
+              }
+            }
+            applied = EndDeferWindowPos(deferred) != FALSE;
+            for (const auto& move : moves) {
+              if (move.paper_window) {
+                move.paper_window->SetQueueDragBoundsApplying(false);
+              }
+            }
+          }
+        }
+        if (!applied) {
+          // DeferWindowPos can fail under resource pressure. Preserve the
+          // gesture with an idempotent per-window fallback.
+          for (const auto& move : moves) {
+            if (move.paper_window) {
+              move.paper_window->SetQueueDragBoundsApplying(true);
+            }
+            SetWindowPos(move.window, nullptr, move.target.left,
+                         move.target.top, 0, 0,
+                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                             SWP_NOOWNERZORDER);
+            if (move.paper_window) {
+              move.paper_window->SetQueueDragBoundsApplying(false);
+            }
           }
         }
       } else {

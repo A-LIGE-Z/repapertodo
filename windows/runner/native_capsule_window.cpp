@@ -830,11 +830,25 @@ bool NativeCapsuleWindow::IsInQueue(
          capsule_side_ == (side == "left" ? "left" : "right");
 }
 
-void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
-  if (master_) return;
+bool NativeCapsuleWindow::PrepareMasterDragTop(int target_top,
+                                               RECT* target_bounds) {
+  if (!master_ || !target_bounds) return false;
   HWND window = GetHandle();
   RECT bounds = {};
-  if (!window || !GetWindowRect(window, &bounds)) return;
+  if (!window || !GetWindowRect(window, &bounds)) return false;
+  *target_bounds = bounds;
+  const int height = bounds.bottom - bounds.top;
+  target_bounds->top = target_top;
+  target_bounds->bottom = target_top + height;
+  return bounds.top != target_top;
+}
+
+bool NativeCapsuleWindow::PrepareQueueDragOffset(int delta_y,
+                                                 RECT* target_bounds) {
+  if (master_ || !target_bounds) return false;
+  HWND window = GetHandle();
+  RECT bounds = {};
+  if (!window || !GetWindowRect(window, &bounds)) return false;
   if (!queue_drag_offset_active_) {
     queue_drag_offset_active_ = true;
     queue_drag_base_top_ = bounds.top;
@@ -846,7 +860,21 @@ void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
   // the queue appear elastic or backwards when the pointer changed direction.
   KillTimer(window, kCapsuleQueueFollowTimerId);
   queue_drag_animation_active_ = false;
-  ApplyQueueDragTop(queue_drag_target_top_);
+  *target_bounds = bounds;
+  const int height = bounds.bottom - bounds.top;
+  target_bounds->top = queue_drag_target_top_;
+  target_bounds->bottom = queue_drag_target_top_ + height;
+  return bounds.top != queue_drag_target_top_;
+}
+
+void NativeCapsuleWindow::ApplyQueueDragOffset(int delta_y) {
+  RECT target_bounds = {};
+  if (!PrepareQueueDragOffset(delta_y, &target_bounds)) return;
+  HWND window = GetHandle();
+  if (!window) return;
+  SetWindowPos(window, nullptr, target_bounds.left, target_bounds.top, 0, 0,
+               SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_NOOWNERZORDER);
 }
 
 void NativeCapsuleWindow::FinishQueueDrag(bool commit) {
@@ -1466,8 +1494,6 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
             std::clamp(static_cast<int>(drag_start_bounds_.top) + delta_y,
                        minimum_top,
                        maximum_top);
-        SetWindowPos(window, nullptr, drag_start_bounds_.left, target_top,
-                     width, height, SWP_NOZORDER | SWP_NOACTIVATE);
         if (event_callback_) {
           event_callback_(
               "capsuleMasterDragUpdated",
@@ -1479,7 +1505,12 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
                   {flutter::EncodableValue("deltaY"),
                    flutter::EncodableValue(target_top -
                                            drag_start_bounds_.top)},
+                  {flutter::EncodableValue("targetTop"),
+                   flutter::EncodableValue(target_top)},
               });
+        } else {
+          SetWindowPos(window, nullptr, drag_start_bounds_.left, target_top,
+                       width, height, SWP_NOZORDER | SWP_NOACTIVATE);
         }
       } else {
         SetWindowPos(window, HWND_TOPMOST,

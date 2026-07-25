@@ -2859,11 +2859,12 @@ bool PaperFlutterWindow::IsInCapsuleQueue(
          capsule_side_ == (side == "left" ? "left" : "right");
 }
 
-void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
-  if (!collapsed_) return;
+bool PaperFlutterWindow::PrepareQueueDragOffset(int delta_y,
+                                                RECT* target_bounds) {
+  if (!collapsed_ || !target_bounds) return false;
   HWND window = GetHandle();
   RECT bounds = {};
-  if (!window || !GetWindowRect(window, &bounds)) return;
+  if (!window || !GetWindowRect(window, &bounds)) return false;
   if (!queue_drag_offset_active_) {
     queue_drag_offset_active_ = true;
     queue_drag_base_top_ = bounds.top;
@@ -2874,7 +2875,27 @@ void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
   // visible lag and a rubber-band reversal when drag direction changes.
   KillTimer(window, kCapsuleQueueFollowTimerId);
   queue_drag_animation_active_ = false;
-  ApplyQueueDragTop(queue_drag_target_top_);
+  *target_bounds = bounds;
+  const int height = bounds.bottom - bounds.top;
+  target_bounds->top = queue_drag_target_top_;
+  target_bounds->bottom = queue_drag_target_top_ + height;
+  return bounds.top != queue_drag_target_top_;
+}
+
+void PaperFlutterWindow::SetQueueDragBoundsApplying(bool applying) {
+  applying_bounds_ = applying;
+}
+
+void PaperFlutterWindow::ApplyQueueDragOffset(int delta_y) {
+  RECT target_bounds = {};
+  if (!PrepareQueueDragOffset(delta_y, &target_bounds)) return;
+  HWND window = GetHandle();
+  if (!window) return;
+  applying_bounds_ = true;
+  SetWindowPos(window, nullptr, target_bounds.left, target_bounds.top, 0, 0,
+               SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_NOOWNERZORDER);
+  applying_bounds_ = false;
 }
 
 void PaperFlutterWindow::FinishQueueDrag(bool commit) {

@@ -28,6 +28,8 @@ class NativeCapsuleWindow : public Win32Window {
   bool is_master() const { return master_; }
   bool IsInQueue(const std::string& monitor_device_name,
                  const std::string& side) const;
+  bool PrepareMasterDragTop(int target_top, RECT* target_bounds);
+  bool PrepareQueueDragOffset(int delta_y, RECT* target_bounds);
   void ApplyQueueDragOffset(int delta_y);
   void FinishQueueDrag(bool commit);
   bool IsVisible() const;

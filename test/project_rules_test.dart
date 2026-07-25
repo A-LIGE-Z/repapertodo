@@ -3945,6 +3945,9 @@ void main() {
     expect(nativeCapsule, contains('"toggleCollapseAll"'));
     expect(nativeCapsule, contains('"capsuleDropped"'));
     expect(nativeCapsule, contains('"capsuleMasterDragUpdated"'));
+    expect(nativeCapsule, contains('"targetTop"'));
+    expect(nativeCapsuleHeader, contains('PrepareMasterDragTop'));
+    expect(nativeCapsuleHeader, contains('PrepareQueueDragOffset'));
     expect(nativeCapsule, contains('kCapsuleBodyHeight = 30'));
     expect(nativeCapsule, contains('kCapsuleChromeMargin = 8'));
     expect(nativeCapsule, contains('kCapsuleCornerRadius = 12'));
@@ -3952,7 +3955,7 @@ void main() {
     expect(nativeCapsule, contains('kCapsuleSlideInMilliseconds = 180'));
     expect(
       nativeCapsule,
-      contains('ApplyQueueDragTop(queue_drag_target_top_)'),
+      contains('ApplyQueueDragTop(target_top)'),
     );
     expect(nativeCapsule, contains('queue_drag_animation_active_ = false'));
     expect(
@@ -3971,6 +3974,18 @@ void main() {
       contains("'enableAnimations': state.enableAnimations"),
     );
     expect(runner, contains('ApplyQueueDragOffset(delta_y)'));
+    final masterDragBlock = _sliceBetween(
+      runner,
+      'if (method == "capsuleMasterDragUpdated" ||',
+      'flutter::EncodableValue routed_arguments = arguments;',
+    );
+    expect(masterDragBlock, contains('BeginDeferWindowPos('));
+    expect(masterDragBlock, contains('DeferWindowPos('));
+    expect(masterDragBlock, contains('EndDeferWindowPos('));
+    expect(masterDragBlock, contains('PrepareMasterDragTop('));
+    expect(masterDragBlock, contains('PrepareQueueDragOffset('));
+    expect(masterDragBlock, contains('SetQueueDragBoundsApplying(true)'));
+    expect(masterDragBlock, contains('SetQueueDragBoundsApplying(false)'));
     expect(paperWindow,
         contains('std::make_unique<flutter::FlutterViewController>'));
     expect(paperWindow, contains('"repapertodo/paper_window"'));
@@ -3985,6 +4000,9 @@ void main() {
     );
     expect(paperWindowHeader, contains('std::string paper_type_ = "todo"'));
     expect(paperWindowHeader, contains('bool script_capsule_ = false'));
+    expect(paperWindowHeader, contains('PrepareQueueDragOffset'));
+    expect(paperWindowHeader, contains('SetQueueDragBoundsApplying'));
+    expect(paperWindow, contains('ApplyQueueDragTop(target_top)'));
     expect(paperWindow, contains('collapsed_ ? 46.0'));
     expect(paperWindow, isNot(contains('FindDesktopWorkerWindow')));
     expect(paperWindow, isNot(contains('SetParent(window, desktop_parent_)')));
@@ -4084,7 +4102,7 @@ void main() {
     expect(paperWindow, contains('kCapsuleSlideInMilliseconds = 180'));
     expect(
       paperWindow,
-      contains('ApplyQueueDragTop(queue_drag_target_top_)'),
+      contains('ApplyQueueDragTop(target_top)'),
     );
     expect(paperWindow, contains('queue_drag_animation_active_ = false'));
     expect(
