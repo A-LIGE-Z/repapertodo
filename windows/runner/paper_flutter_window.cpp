@@ -2735,9 +2735,9 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
   if (!capsule_animations_enabled_ && queue_drag_animation_active_) {
     // Settle an already-running queue-follow timer when animations are turned
     // off.  Otherwise its old easing curve can overwrite the setting change
-    // on the next tick and leave this proxy between two queue slots.
-    queue_drag_animation_active_ = false;
-    KillTimer(window, kCapsuleQueueFollowTimerId);
+    // on the next tick; merely killing the timer would leave this proxy between
+    // two queue slots instead of committing the target frame.
+    CompleteQueueDragAnimationAtTarget();
   }
   if (!collapsed_) {
     capsule_hovered_ = false;
@@ -3128,11 +3128,22 @@ void PaperFlutterWindow::UpdateQueueDragAnimation() {
           eased));
   ApplyQueueDragTop(top);
   if (progress >= 1.0) {
-    queue_drag_animation_active_ = false;
-    KillTimer(window, kCapsuleQueueFollowTimerId);
-    ApplyQueueDragTop(
-        static_cast<int>(std::lround(queue_drag_animation_target_top_)));
+    CompleteQueueDragAnimationAtTarget();
   }
+}
+
+void PaperFlutterWindow::CompleteQueueDragAnimationAtTarget() {
+  if (!queue_drag_animation_active_) {
+    return;
+  }
+  const int target_top = static_cast<int>(
+      std::lround(queue_drag_animation_target_top_));
+  queue_drag_animation_active_ = false;
+  queue_drag_animation_duration_ms_ = 0;
+  if (HWND window = GetHandle()) {
+    KillTimer(window, kCapsuleQueueFollowTimerId);
+  }
+  ApplyQueueDragTop(target_top);
 }
 
 void PaperFlutterWindow::ApplyQueueDragTop(int top) {
@@ -3513,9 +3524,7 @@ void PaperFlutterWindow::PauseMasterTransitionForQueueDrag() {
   master_capsule_transition_started_at_ = paused_at;
   if (master_capsule_transition_move_duration_ms_ <= 0 &&
       master_capsule_transition_fade_duration_ms_ <= 0) {
-    master_capsule_transition_active_ = false;
-    master_capsule_retracted_ = master_capsule_transition_target_hidden_;
-    KillTimer(window, kCapsuleMasterTransitionTimerId);
+    CompleteMasterCapsuleTransitionAtTarget();
     return;
   }
   queue_drag_master_transition_paused_at_ = paused_at;

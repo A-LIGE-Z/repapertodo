@@ -89,6 +89,7 @@ class PaperFlutterWindow : public Win32Window {
   void ReconcileCommittedQueueModel(int docked_top, int master_top);
   void ClearCommittedQueueDrag();
   void StartQueueDragAnimation(int target_top, int duration_ms);
+  void CompleteQueueDragAnimationAtTarget();
   void UpdateQueueDragAnimation();
   void ApplyQueueDragTop(int top);
   void SendCapsuleDropped();

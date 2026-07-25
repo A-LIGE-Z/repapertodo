@@ -337,11 +337,9 @@ void NativeCapsuleWindow::ApplySurface(
   if (!animations_enabled_ && queue_drag_animation_active_) {
     // The setting change must also settle an animation that was already
     // armed.  Leaving its timer alive after the setting is disabled lets an
-    // old easing curve overwrite the newly committed capsule position.
-    queue_drag_animation_active_ = false;
-    if (HWND window = GetHandle()) {
-      KillTimer(window, kCapsuleQueueFollowTimerId);
-    }
+    // old easing curve overwrite the newly committed capsule position; merely
+    // killing that timer would instead leave the HWND at an intermediate slot.
+    CompleteQueueDragAnimationAtTarget();
   }
   theme_ = StringValue(surface, "theme", theme_);
   color_scheme_ = StringValue(surface, "colorScheme", color_scheme_);
@@ -949,9 +947,7 @@ void NativeCapsuleWindow::PauseMasterTransitionForQueueDrag() {
   master_transition_started_at_ = paused_at;
   if (master_transition_move_duration_ms_ <= 0 &&
       master_transition_fade_duration_ms_ <= 0) {
-    master_transition_active_ = false;
-    master_retracted_ = master_transition_target_hidden_;
-    KillTimer(window, kCapsuleMasterTransitionTimerId);
+    CompleteMasterTransitionAtTarget();
     return;
   }
   queue_drag_master_transition_paused_at_ = paused_at;
@@ -1216,11 +1212,22 @@ void NativeCapsuleWindow::UpdateQueueDragAnimation() {
           eased));
   ApplyQueueDragTop(top);
   if (progress >= 1.0) {
-    queue_drag_animation_active_ = false;
-    KillTimer(window, kCapsuleQueueFollowTimerId);
-    ApplyQueueDragTop(
-        static_cast<int>(std::lround(queue_drag_animation_target_top_)));
+    CompleteQueueDragAnimationAtTarget();
   }
+}
+
+void NativeCapsuleWindow::CompleteQueueDragAnimationAtTarget() {
+  if (!queue_drag_animation_active_) {
+    return;
+  }
+  const int target_top = static_cast<int>(
+      std::lround(queue_drag_animation_target_top_));
+  queue_drag_animation_active_ = false;
+  queue_drag_animation_duration_ms_ = 0;
+  if (HWND window = GetHandle()) {
+    KillTimer(window, kCapsuleQueueFollowTimerId);
+  }
+  ApplyQueueDragTop(target_top);
 }
 
 void NativeCapsuleWindow::ApplyQueueDragTop(int top) {

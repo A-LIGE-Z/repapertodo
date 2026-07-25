@@ -4211,6 +4211,16 @@ void main() {
       nativeCapsule,
       contains('ApplyQueueDragTop(target_top)'),
     );
+    expect(
+      nativeCapsule,
+      contains(
+          'void NativeCapsuleWindow::CompleteQueueDragAnimationAtTarget()'),
+    );
+    expect(nativeCapsule, contains('CompleteQueueDragAnimationAtTarget();'));
+    expect(
+      nativeCapsule,
+      contains('std::lround(queue_drag_animation_target_top_)'),
+    );
     expect(nativeCapsule, contains('queue_drag_animation_active_ = false'));
     expect(
       nativeCapsule,
@@ -4441,6 +4451,17 @@ void main() {
     expect(
       paperWindow,
       contains('ApplyQueueDragTop(target_top)'),
+    );
+    expect(
+      paperWindow,
+      contains(
+        'void PaperFlutterWindow::CompleteQueueDragAnimationAtTarget()',
+      ),
+    );
+    expect(paperWindow, contains('CompleteQueueDragAnimationAtTarget();'));
+    expect(
+      paperWindow,
+      contains('std::lround(queue_drag_animation_target_top_)'),
     );
     expect(paperWindow, contains('queue_drag_animation_active_ = false'));
     expect(
