@@ -195,15 +195,8 @@ void main() {
       true,
     );
 
-    final itemUndoAction = tester.widget<SnackBarAction>(
-      find.byWidgetPredicate(
-        (widget) => widget is SnackBarAction && widget.label == 'Undo',
-      ),
-    );
-    itemUndoAction.onPressed();
-    tester
-        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
-        .hideCurrentSnackBar();
+    expect(find.byType(SnackBar), findsNothing);
+    await _pressControlShortcut(tester, LogicalKeyboardKey.keyZ);
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.items, hasLength(3));
@@ -5927,6 +5920,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     const title = 'Configurable todo title';
 
+    final titleHostWidths = <double>[];
     for (final maxLength in const [4, 12]) {
       final paper = PaperData(
         id: 'configurable-title-$maxLength',
@@ -5954,11 +5948,65 @@ void main() {
       final titleDisplay = tester.widget<RichText>(
         find.byKey(ValueKey('${paper.id}-title-display')),
       );
+      expect((titleDisplay.text as TextSpan).text, title);
       expect(
-        (titleDisplay.text as TextSpan).text,
-        PaperTitles.shorten(title, maxLength),
+        find.ancestor(
+          of: find.byKey(ValueKey('${paper.id}-title-display')),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsOneWidget,
+      );
+      titleHostWidths.add(
+        tester.getSize(find.byKey(ValueKey('${paper.id}-title-host'))).width,
       );
     }
+    expect(titleHostWidths.last, greaterThan(titleHostWidths.first));
+  });
+
+  testWidgets('overflowing standalone todo title scrolls the complete text',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(440, 320));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'scrolling-title-paper',
+      type: PaperTypes.todo,
+      title: 'This complete title must remain readable while it scrolls',
+      items: [PaperItem(id: 'scrolling-title-item')],
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(maxTitleLength: 4, papers: [paper]),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pump();
+
+    final titleDisplay = find.byKey(
+      const ValueKey('scrolling-title-paper-title-display'),
+    );
+    expect(
+      (tester.widget<RichText>(titleDisplay).text as TextSpan).text,
+      paper.title,
+    );
+    final scrollFinder = find
+        .ancestor(
+            of: titleDisplay, matching: find.byType(SingleChildScrollView))
+        .first;
+    final scrollController =
+        tester.widget<SingleChildScrollView>(scrollFinder).controller!;
+    expect(scrollController.position.maxScrollExtent, greaterThan(0));
+    expect(scrollController.offset, 0);
+
+    await tester.pump(const Duration(milliseconds: 1300));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(scrollController.offset, greaterThan(0));
+
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('confirming settings applies and persists the draft once',
@@ -15172,7 +15220,7 @@ void main() {
     expect(arguments['globalLabel'], 'Global');
     expect(arguments['inputBackgroundColor'], 0xFFF9F1E1);
     expect(arguments['secondaryButtonColor'], 0xFFEEE6D3);
-    expect(arguments['fontFamily'], isEmpty);
+    expect(arguments['fontFamily'], 'Microsoft YaHei UI');
     expect(find.byType(AlertDialog), findsNothing);
     expect(item.reminderIntervalValue, 15);
     expect(item.reminderIntervalUnit, TodoReminderIntervalUnits.minutes);
@@ -17690,8 +17738,7 @@ void main() {
     await tester.tap(find.byTooltip('Delete this item'));
     await tester.pumpAndSettle();
 
-    final deletionSnackBar = tester.widget<SnackBar>(find.byType(SnackBar));
-    expect(deletionSnackBar.duration, const Duration(seconds: 10));
+    expect(find.byType(SnackBar), findsNothing);
 
     final fallback = controller.state.papers.single.items.single;
     expect(fallback.id, isNot('only-item'));
@@ -17710,15 +17757,7 @@ void main() {
     );
     expect(fallbackField.focusNode.hasFocus, true);
 
-    final undoAction = tester.widget<SnackBarAction>(
-      find.byWidgetPredicate(
-        (widget) => widget is SnackBarAction && widget.label == 'Undo',
-      ),
-    );
-    undoAction.onPressed();
-    tester
-        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
-        .hideCurrentSnackBar();
+    await tester.tap(find.byTooltip('Undo todo change'));
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.items.map((item) => item.id), [
@@ -17728,6 +17767,71 @@ void main() {
       controller.state.sync.deletedTodoItemTombstones['delete-only-paper']
           ?.containsKey('only-item'),
       isNot(true),
+    );
+  });
+
+  testWidgets('todo Ctrl+Z expires structural changes after thirty minutes',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    var undoClock = Duration.zero;
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'undo-expiry-paper',
+            type: PaperTypes.todo,
+            title: 'Undo expiry',
+            items: [
+              PaperItem(id: 'expiry-delete', text: 'Delete me'),
+              PaperItem(id: 'expiry-keep', text: 'Keep me', order: 1),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+        todoUndoClock: () => undoClock,
+      ),
+    );
+    await tester.tap(find.byTooltip('Delete this item').first);
+    await tester.pumpAndSettle();
+    expect(
+      controller.state.papers.single.items.map((item) => item.id),
+      ['expiry-keep'],
+    );
+    expect(find.byType(SnackBar), findsNothing);
+
+    undoClock = const Duration(minutes: 29);
+    await _pressControlShortcut(tester, LogicalKeyboardKey.keyZ);
+    await tester.pumpAndSettle();
+    expect(
+      controller.state.papers.single.items.map((item) => item.id),
+      ['expiry-delete', 'expiry-keep'],
+      reason: 'Ctrl+Z remains available during the thirty-minute window',
+    );
+
+    await tester.tap(find.byTooltip('Delete this item').first);
+    await tester.pumpAndSettle();
+    expect(
+      controller.state.papers.single.items.map((item) => item.id),
+      ['expiry-keep'],
+    );
+
+    undoClock = const Duration(minutes: 60);
+    await tester.pump();
+    await _pressControlShortcut(tester, LogicalKeyboardKey.keyZ);
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.state.papers.single.items.map((item) => item.id),
+      ['expiry-keep'],
+      reason: 'structural undo history is limited to thirty minutes',
     );
   });
 
@@ -18016,15 +18120,7 @@ void main() {
       true,
     );
 
-    final undoAction = tester.widget<SnackBarAction>(
-      find.byWidgetPredicate(
-        (widget) => widget is SnackBarAction && widget.label == 'Undo',
-      ),
-    );
-    undoAction.onPressed();
-    tester
-        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
-        .hideCurrentSnackBar();
+    await tester.tap(find.byTooltip('Undo todo change'));
     await tester.pumpAndSettle();
 
     expect(controller.state.papers.single.items.map((item) => item.id), [

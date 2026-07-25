@@ -52,6 +52,7 @@ const _maxExternalMarkdownPaperIdFileNameLength = 96;
 const _maxTodoReminderDetailLines = 4;
 const _todoReminderLeadTime = Duration(minutes: 10);
 const _todoReminderGraceTime = Duration(minutes: 2);
+const _todoUndoRetention = Duration(minutes: 30);
 const _windowsPaperTransparencyKey = Color(0xFF010203);
 const _paperWindowChromeMargin = 8.0;
 const _dengXianFontFamily = 'DengXian';
@@ -169,6 +170,7 @@ class RePaperTodoApp extends StatefulWidget {
     this.paperWindowCapsuleHoverChanged,
     this.paperWindowResizeStarter,
     this.paperWindowReminderPresenter,
+    this.todoUndoClock,
     super.key,
   });
 
@@ -185,6 +187,7 @@ class RePaperTodoApp extends StatefulWidget {
   final Future<void> Function(bool hovered)? paperWindowCapsuleHoverChanged;
   final Future<void> Function(String direction)? paperWindowResizeStarter;
   final PaperWindowReminderPresenter? paperWindowReminderPresenter;
+  final Duration Function()? todoUndoClock;
 
   @override
   State<RePaperTodoApp> createState() => _RePaperTodoAppState();
@@ -244,6 +247,7 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
         paperWindowCapsuleHoverChanged: widget.paperWindowCapsuleHoverChanged,
         paperWindowResizeStarter: widget.paperWindowResizeStarter,
         paperWindowReminderPresenter: widget.paperWindowReminderPresenter,
+        todoUndoClock: widget.todoUndoClock,
       ),
     );
   }
@@ -876,6 +880,7 @@ class PaperBoardScreen extends StatefulWidget {
     this.paperWindowCapsuleHoverChanged,
     this.paperWindowResizeStarter,
     this.paperWindowReminderPresenter,
+    this.todoUndoClock,
     super.key,
   });
 
@@ -893,6 +898,7 @@ class PaperBoardScreen extends StatefulWidget {
   final Future<void> Function(bool hovered)? paperWindowCapsuleHoverChanged;
   final Future<void> Function(String direction)? paperWindowResizeStarter;
   final PaperWindowReminderPresenter? paperWindowReminderPresenter;
+  final Duration Function()? todoUndoClock;
 
   @override
   State<PaperBoardScreen> createState() => _PaperBoardScreenState();
@@ -1973,6 +1979,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       ),
       noteLineSpacing: controller.state.noteLineSpacing,
       syncing: _isSyncing,
+      todoUndoClock: widget.todoUndoClock,
       onSync: actionSender == null
           ? () => _syncNow()
           : () => actionSender(PaperWindowActionKinds.syncNow),
@@ -5894,6 +5901,7 @@ class PaperPreview extends StatelessWidget {
     required this.nativeDialogFontFamily,
     required this.noteLineSpacing,
     required this.syncing,
+    this.todoUndoClock,
     required this.onSync,
     required this.onChanged,
     required this.onPersist,
@@ -5958,6 +5966,7 @@ class PaperPreview extends StatelessWidget {
   final String nativeDialogFontFamily;
   final double noteLineSpacing;
   final bool syncing;
+  final Duration Function()? todoUndoClock;
   final Future<void> Function() onSync;
   final Future<void> Function() onChanged;
   final Future<void> Function() onPersist;
@@ -6147,7 +6156,7 @@ class PaperPreview extends StatelessWidget {
                                         constraints: BoxConstraints(
                                           minWidth: standaloneSurface ? 38 : 0,
                                           maxWidth: standaloneSurface
-                                              ? 86
+                                              ? 180
                                               : double.infinity,
                                         ),
                                         child: _PaperTitleEditor(
@@ -6395,6 +6404,7 @@ class PaperPreview extends StatelessWidget {
                       defaultTodoReminderIntervalValue,
                   defaultReminderIntervalUnit: defaultTodoReminderIntervalUnit,
                   nativeDialogFontFamily: nativeDialogFontFamily,
+                  todoUndoClock: todoUndoClock,
                   onOpenLinkedNote: onOpenLinkedNote,
                   onRunScriptCapsule: onRunScriptCapsule,
                   onChanged: onChanged,
@@ -7786,6 +7796,171 @@ class _PaperTodoScrollViewportState extends State<_PaperTodoScrollViewport> {
   }
 }
 
+class _PaperTitleMarquee extends StatefulWidget {
+  const _PaperTitleMarquee({
+    required this.text,
+    required this.style,
+    required this.textScaler,
+    required this.richTextKey,
+  });
+
+  final String text;
+  final TextStyle? style;
+  final TextScaler textScaler;
+  final Key richTextKey;
+
+  @override
+  State<_PaperTitleMarquee> createState() => _PaperTitleMarqueeState();
+}
+
+class _PaperTitleMarqueeState extends State<_PaperTitleMarquee> {
+  static const _initialPause = Duration(milliseconds: 1200);
+  static const _endPause = Duration(milliseconds: 900);
+  static const _restartPause = Duration(milliseconds: 1400);
+
+  late final ScrollController _scrollController;
+  Timer? _phaseTimer;
+  double? _scheduledExtent;
+  int _cycleToken = 0;
+  bool _cycleActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PaperTitleMarquee oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text ||
+        oldWidget.style != widget.style ||
+        oldWidget.textScaler != widget.textScaler) {
+      _cancelCycle();
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _cancelCycle();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textPainter = TextPainter(
+          text: TextSpan(text: widget.text, style: widget.style),
+          textDirection: Directionality.of(context),
+          textScaler: widget.textScaler,
+          maxLines: 1,
+        )..layout();
+        final viewportWidth = constraints.maxWidth;
+        final overflow =
+            viewportWidth.isFinite && textPainter.width > viewportWidth + 0.5;
+        if (!overflow) {
+          _cancelCycle();
+          if (_scrollController.hasClients && _scrollController.offset != 0) {
+            _scrollController.jumpTo(0);
+          }
+        } else {
+          _scheduleCycle(textPainter.width - viewportWidth);
+        }
+        return ClipRect(
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            child: RichText(
+              key: widget.richTextKey,
+              text: TextSpan(text: widget.text, style: widget.style),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.clip,
+              textScaler: widget.textScaler,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _scheduleCycle(double extent) {
+    if (extent <= 0 ||
+        (_scheduledExtent != null &&
+            (_scheduledExtent! - extent).abs() < 0.5 &&
+            _cycleActive)) {
+      return;
+    }
+    _cancelCycle();
+    _scheduledExtent = extent;
+    _cycleActive = true;
+    final token = ++_cycleToken;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || token != _cycleToken) {
+        return;
+      }
+      _phaseTimer = Timer(_initialPause, () {
+        if (!mounted || token != _cycleToken || !_scrollController.hasClients) {
+          return;
+        }
+        final duration = Duration(
+          milliseconds: (extent / 24 * 1000).round().clamp(1600, 8000),
+        );
+        _scrollController
+            .animateTo(
+          extent,
+          duration: duration,
+          curve: Curves.linear,
+        )
+            .then<void>((_) {
+          if (!mounted || token != _cycleToken) {
+            return;
+          }
+          _phaseTimer = Timer(_endPause, () {
+            if (!mounted ||
+                token != _cycleToken ||
+                !_scrollController.hasClients) {
+              return;
+            }
+            _scrollController
+                .animateTo(
+              0,
+              duration: duration,
+              curve: Curves.linear,
+            )
+                .then<void>((_) {
+              if (!mounted || token != _cycleToken) {
+                return;
+              }
+              _phaseTimer = Timer(_restartPause, () {
+                if (mounted && token == _cycleToken) {
+                  _phaseTimer = null;
+                  _cycleActive = false;
+                  _scheduleCycle(extent);
+                }
+              });
+            }, onError: (_, __) {});
+          });
+        }, onError: (_, __) {});
+      });
+    });
+  }
+
+  void _cancelCycle() {
+    _phaseTimer?.cancel();
+    _phaseTimer = null;
+    _scheduledExtent = null;
+    _cycleActive = false;
+    _cycleToken++;
+  }
+}
+
 class _PaperTitleEditor extends StatefulWidget {
   const _PaperTitleEditor({
     required this.paper,
@@ -7910,13 +8085,13 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
                     onTap: widget.enabled ? _beginTitleEdit : null,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: RichText(
-                        key: ValueKey('${widget.paper.id}-title-display'),
-                        text: TextSpan(text: _displayTitle, style: titleStyle),
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
+                      child: _PaperTitleMarquee(
+                        text: _displayTitle,
+                        style: titleStyle,
                         textScaler: MediaQuery.textScalerOf(context),
+                        richTextKey: ValueKey(
+                          '${widget.paper.id}-title-display',
+                        ),
                       ),
                     ),
                   ),
@@ -7988,7 +8163,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
       return titleHostContent;
     }
     final titleMeasure = TextPainter(
-      text: TextSpan(text: _displayTitle, style: titleStyle),
+      text: TextSpan(text: _compactTitleMeasure, style: titleStyle),
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,
@@ -7999,7 +8174,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
     final metricScale = MediaQuery.sizeOf(context).width <= 280 ? 0.8 : 1.0;
     final compactWidth = (titleMeasure.width * metricScale + 9).clamp(
       41.0,
-      86.0,
+      180.0,
     );
     return SizedBox(width: compactWidth, child: titleHostContent);
   }
@@ -8107,12 +8282,13 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
   }
 
   String get _displayTitle {
-    // Keep board paper titles editable/readable in full.  Standalone paper
-    // windows use the configurable compact caption limit, matching the native
-    // PaperTodo capsule/title surface without truncating the stored value.
-    if (!widget.compact) {
-      return _editableTitle;
-    }
+    // Keep the complete title in the viewport. Standalone windows constrain
+    // the viewport using the configured title length and marquee the overflow
+    // instead of replacing the user's title with an ellipsis.
+    return _editableTitle;
+  }
+
+  String get _compactTitleMeasure {
     return PaperTitles.shorten(
       _editableTitle,
       PaperTitles.normalizeMaxTitleLength(widget.maxTitleLength),
@@ -10668,6 +10844,7 @@ class _TodoEditor extends StatefulWidget {
     required this.onItemDeleted,
     required this.onItemRestored,
     required this.onReminderReset,
+    this.todoUndoClock,
     this.standaloneSurface = false,
   });
 
@@ -10697,10 +10874,31 @@ class _TodoEditor extends StatefulWidget {
   final void Function(PaperData paper, PaperItem item) onItemDeleted;
   final void Function(PaperData paper, PaperItem item) onItemRestored;
   final void Function(PaperItem item) onReminderReset;
+  final Duration Function()? todoUndoClock;
   final bool standaloneSurface;
 
   @override
   State<_TodoEditor> createState() => _TodoEditorState();
+}
+
+class _TodoUndoSnapshot {
+  const _TodoUndoSnapshot({
+    required this.items,
+    required this.createdAt,
+  });
+
+  final List<Map<String, Object?>> items;
+  final Duration createdAt;
+}
+
+class _TodoTextUndoSnapshot {
+  const _TodoTextUndoSnapshot({
+    required this.text,
+    required this.createdAt,
+  });
+
+  final String text;
+  final Duration createdAt;
 }
 
 enum _TodoFocusPlacement { start, end }
@@ -10924,10 +11122,12 @@ class _TodoEditorState extends State<_TodoEditor> {
   final _todoExtraFieldFocusNodes = <String, FocusNode>{};
   final _todoColumnHitTestKeys = <String, GlobalKey>{};
   final _todoDropTargetKeys = <String, GlobalKey>{};
-  final _undoStack = <List<Map<String, Object?>>>[];
-  final _redoStack = <List<Map<String, Object?>>>[];
-  final _focusedTodoTextUndoStack = <String>[];
-  final _focusedTodoTextRedoStack = <String>[];
+  final _undoStack = <_TodoUndoSnapshot>[];
+  final _redoStack = <_TodoUndoSnapshot>[];
+  final _focusedTodoTextUndoStack = <_TodoTextUndoSnapshot>[];
+  final _focusedTodoTextRedoStack = <_TodoTextUndoSnapshot>[];
+  late final Stopwatch _todoHistoryStopwatch;
+  Timer? _todoUndoExpiryTimer;
   final _enteringTodoRows = <String, _EnteringTodoRow>{};
   final _departingTodoRows = <_DepartingTodoRow>[];
   final _multilineTodoItemIds = <String>{};
@@ -10955,6 +11155,12 @@ class _TodoEditorState extends State<_TodoEditor> {
   PaperTodoStrings get strings => PaperTodoStringsScope.of(context);
 
   @override
+  void initState() {
+    super.initState();
+    _todoHistoryStopwatch = Stopwatch()..start();
+  }
+
+  @override
   void didUpdateWidget(covariant _TodoEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.paper.id != widget.paper.id ||
@@ -10966,6 +11172,8 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   @override
   void dispose() {
+    _todoUndoExpiryTimer?.cancel();
+    _todoHistoryStopwatch.stop();
     _todoFocusNode.dispose();
     for (final focusNode in _todoMainFieldFocusNodes.values) {
       focusNode.dispose();
@@ -10978,6 +11186,7 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   @override
   Widget build(BuildContext context) {
+    _pruneExpiredTodoHistory();
     final theme = Theme.of(context);
     final visualSpec = _TodoVisualSpec.from(widget.visualSize);
     final dengXianMetrics =
@@ -11354,7 +11563,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       onWillAcceptWithDetails: (details) => _todoItemIndex(details.data) >= 0,
       onAcceptWithDetails: (details) {
         _setTodoItemDragging(false);
-        _deleteItem(context, details.data);
+        _deleteItem(details.data);
       },
       builder: (context, candidateData, rejectedData) {
         final highlighted = candidateData.whereType<PaperItem>().any(
@@ -12688,7 +12897,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           widget.enableToolTips,
           strings.get(PaperTodoStringKeys.actionDeleteItem),
         ),
-        onPressed: () => _deleteItem(context, item),
+        onPressed: () => _deleteItem(item),
         iconSize: visualSpec.iconSize,
         constraints: BoxConstraints.tightFor(
           width: visualSpec.controlExtent,
@@ -12918,7 +13127,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       case _compactTodoActionDelete:
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _deleteItem(context, item);
+            _deleteItem(item);
           }
         });
       case _compactTodoActionClearDone:
@@ -12933,15 +13142,77 @@ class _TodoEditorState extends State<_TodoEditor> {
     ];
   }
 
+  Duration _todoHistoryNow() =>
+      widget.todoUndoClock?.call() ?? _todoHistoryStopwatch.elapsed;
+
+  void _pruneExpiredTodoHistory() {
+    final cutoff = _todoHistoryNow() - _todoUndoRetention;
+    _undoStack.removeWhere((entry) => entry.createdAt.compareTo(cutoff) <= 0);
+    _redoStack.removeWhere((entry) => entry.createdAt.compareTo(cutoff) <= 0);
+    _focusedTodoTextUndoStack
+        .removeWhere((entry) => entry.createdAt.compareTo(cutoff) <= 0);
+    _focusedTodoTextRedoStack
+        .removeWhere((entry) => entry.createdAt.compareTo(cutoff) <= 0);
+  }
+
+  void _scheduleTodoUndoExpiry() {
+    _todoUndoExpiryTimer?.cancel();
+    _todoUndoExpiryTimer = null;
+    final oldest = <Duration>[
+      ..._undoStack.map((entry) => entry.createdAt),
+      ..._redoStack.map((entry) => entry.createdAt),
+      ..._focusedTodoTextUndoStack.map((entry) => entry.createdAt),
+      ..._focusedTodoTextRedoStack.map((entry) => entry.createdAt),
+    ].fold<Duration?>(null, (current, value) {
+      if (current == null || value.compareTo(current) < 0) {
+        return value;
+      }
+      return current;
+    });
+    if (oldest == null) {
+      return;
+    }
+    final delay = oldest + _todoUndoRetention - _todoHistoryNow();
+    if (delay <= Duration.zero) {
+      _pruneExpiredTodoHistory();
+      return;
+    }
+    _todoUndoExpiryTimer = Timer(delay, () {
+      if (!mounted) {
+        return;
+      }
+      final before = _undoStack.length +
+          _redoStack.length +
+          _focusedTodoTextUndoStack.length +
+          _focusedTodoTextRedoStack.length;
+      _pruneExpiredTodoHistory();
+      final after = _undoStack.length +
+          _redoStack.length +
+          _focusedTodoTextUndoStack.length +
+          _focusedTodoTextRedoStack.length;
+      if (before != after) {
+        setState(() {});
+      }
+      _scheduleTodoUndoExpiry();
+    });
+  }
+
   void _pushTodoUndoSnapshot({bool commitFocusedText = true}) {
+    _pruneExpiredTodoHistory();
     if (commitFocusedText) {
       _commitFocusedTodoTextIfNeeded();
     }
-    _undoStack.add(_snapshotTodoItems());
+    _undoStack.add(
+      _TodoUndoSnapshot(
+        items: _snapshotTodoItems(),
+        createdAt: _todoHistoryNow(),
+      ),
+    );
     if (_undoStack.length > _maxTodoUndoDepth) {
       _undoStack.removeAt(0);
     }
     _redoStack.clear();
+    _scheduleTodoUndoExpiry();
   }
 
   bool _commitFocusedTodoTextIfNeeded({bool clearRedo = false}) {
@@ -12970,7 +13241,12 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
 
     _setTodoColumnText(item, columnIndex, originalText);
-    _undoStack.add(_snapshotTodoItems());
+    _undoStack.add(
+      _TodoUndoSnapshot(
+        items: _snapshotTodoItems(),
+        createdAt: _todoHistoryNow(),
+      ),
+    );
     if (_undoStack.length > _maxTodoUndoDepth) {
       _undoStack.removeAt(0);
     }
@@ -12979,6 +13255,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (clearRedo) {
       _redoStack.clear();
     }
+    _scheduleTodoUndoExpiry();
     return true;
   }
 
@@ -13242,19 +13519,33 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _undoTodoChange() {
+    _pruneExpiredTodoHistory();
     if (_undoStack.isEmpty) {
       return;
     }
-    _redoStack.add(_snapshotTodoItems());
-    _restoreTodoSnapshot(_undoStack.removeLast());
+    _redoStack.add(
+      _TodoUndoSnapshot(
+        items: _snapshotTodoItems(),
+        createdAt: _todoHistoryNow(),
+      ),
+    );
+    _restoreTodoSnapshot(_undoStack.removeLast().items);
+    _scheduleTodoUndoExpiry();
   }
 
   void _redoTodoChange() {
+    _pruneExpiredTodoHistory();
     if (_redoStack.isEmpty) {
       return;
     }
-    _undoStack.add(_snapshotTodoItems());
-    _restoreTodoSnapshot(_redoStack.removeLast());
+    _undoStack.add(
+      _TodoUndoSnapshot(
+        items: _snapshotTodoItems(),
+        createdAt: _todoHistoryNow(),
+      ),
+    );
+    _restoreTodoSnapshot(_redoStack.removeLast().items);
+    _scheduleTodoUndoExpiry();
   }
 
   KeyEventResult _handleTodoKeyEvent(FocusNode node, KeyEvent event) {
@@ -13322,15 +13613,16 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   bool _shouldDeferToTodoTextUndo(KeyEvent event) {
+    _pruneExpiredTodoHistory();
     if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
       return false;
     }
     if (event.logicalKey == LogicalKeyboardKey.keyZ) {
-      return _focusedTodoTextUndoStack.isNotEmpty ||
+      return _focusedTodoTextUndoAvailable ||
           _focusedTodoTextHasUncommittedEdit;
     }
     if (event.logicalKey == LogicalKeyboardKey.keyY) {
-      return _focusedTodoTextRedoStack.isNotEmpty;
+      return _focusedTodoTextRedoAvailable;
     }
     return false;
   }
@@ -13339,6 +13631,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     FocusNode node,
     KeyEvent event,
   ) {
+    _pruneExpiredTodoHistory();
     if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
       return null;
     }
@@ -13369,9 +13662,10 @@ class _TodoEditorState extends State<_TodoEditor> {
 
   void _applyFocusedTodoTextHistory(
     FocusNode node, {
-    required List<String> source,
-    required List<String> target,
+    required List<_TodoTextUndoSnapshot> source,
+    required List<_TodoTextUndoSnapshot> target,
   }) {
+    _pruneExpiredTodoHistory();
     final itemId = _activeOriginalTodoItemId;
     final columnIndex = _activeOriginalTodoColumnIndex;
     if (itemId == null || source.isEmpty) {
@@ -13383,9 +13677,14 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
 
     final currentText = _todoColumnText(item, columnIndex) ?? '';
-    final nextText = source.removeLast();
+    final nextText = source.removeLast().text;
     if (currentText != nextText) {
-      target.add(currentText);
+      target.add(
+        _TodoTextUndoSnapshot(
+          text: currentText,
+          createdAt: _todoHistoryNow(),
+        ),
+      );
     }
     _applyingTodoTextHistory = true;
     try {
@@ -13408,6 +13707,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     } finally {
       _applyingTodoTextHistory = false;
     }
+    _scheduleTodoUndoExpiry();
     unawaited(widget.onChanged());
   }
 
@@ -13423,6 +13723,22 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
     final item = _todoItemById(itemId);
     return item != null && _todoColumnText(item, columnIndex) != originalText;
+  }
+
+  bool get _focusedTodoTextUndoAvailable {
+    final itemId = _activeOriginalTodoItemId;
+    if (_focusedTodoTextUndoStack.isEmpty || itemId == null) {
+      return false;
+    }
+    return _isTodoColumnFocused(itemId, _activeOriginalTodoColumnIndex);
+  }
+
+  bool get _focusedTodoTextRedoAvailable {
+    final itemId = _activeOriginalTodoItemId;
+    if (_focusedTodoTextRedoStack.isEmpty || itemId == null) {
+      return false;
+    }
+    return _isTodoColumnFocused(itemId, _activeOriginalTodoColumnIndex);
   }
 
   bool _isTodoColumnFocused(String itemId, int? columnIndex) {
@@ -13990,16 +14306,23 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _recordTodoTextInput(PaperItem item, int? columnIndex, String value) {
+    _pruneExpiredTodoHistory();
     final previousText = _todoColumnText(item, columnIndex) ?? '';
     if (!_applyingTodoTextHistory &&
         _activeOriginalTodoItemId == item.id &&
         _activeOriginalTodoColumnIndex == columnIndex &&
         previousText != value) {
-      _focusedTodoTextUndoStack.add(previousText);
+      _focusedTodoTextUndoStack.add(
+        _TodoTextUndoSnapshot(
+          text: previousText,
+          createdAt: _todoHistoryNow(),
+        ),
+      );
       if (_focusedTodoTextUndoStack.length > _maxTodoUndoDepth) {
         _focusedTodoTextUndoStack.removeAt(0);
       }
       _focusedTodoTextRedoStack.clear();
+      _scheduleTodoUndoExpiry();
     }
     _setTodoColumnText(item, columnIndex, value);
   }
@@ -14007,6 +14330,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   void _clearFocusedTodoTextHistory() {
     _focusedTodoTextUndoStack.clear();
     _focusedTodoTextRedoStack.clear();
+    _scheduleTodoUndoExpiry();
   }
 
   String? _todoColumnText(PaperItem item, int? extraColumnIndex) {
@@ -14402,7 +14726,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     unawaited(widget.onChanged());
   }
 
-  void _deleteItem(BuildContext context, PaperItem item) {
+  void _deleteItem(PaperItem item) {
     final removedIndex = widget.paper.items.indexWhere(
       (candidate) => candidate.id == item.id,
     );
@@ -14415,7 +14739,6 @@ class _TodoEditorState extends State<_TodoEditor> {
         ? widget.paper.items[removedIndex + 1]
         : null;
     var focusTargetId = previousItem?.id ?? nextItem?.id;
-    String? fallbackItemId;
 
     _pushTodoUndoSnapshot();
     _unfocusTodoItem(item);
@@ -14441,44 +14764,12 @@ class _TodoEditorState extends State<_TodoEditor> {
         final replacement = _newTodoItem();
         widget.paper.items.add(replacement);
         focusTargetId = replacement.id;
-        fallbackItemId = replacement.id;
       }
       widget.paper.normalize();
     });
     widget.onItemDeleted(widget.paper, item);
     _requestTodoItemFocus(focusTargetId);
     unawaited(widget.onChanged());
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 10),
-        content: Text(
-          strings.format(PaperTodoStringKeys.todoItemDeleted, [
-            _displayItemText(item),
-          ]),
-        ),
-        action: SnackBarAction(
-          label: strings.get(PaperTodoStringKeys.actionUndo),
-          onPressed: () {
-            setState(() {
-              _clearEnteringTodoRows();
-              _clearDepartingTodoRows();
-              if (fallbackItemId != null) {
-                widget.paper.items.removeWhere(
-                  (candidate) => candidate.id == fallbackItemId,
-                );
-              }
-              final targetIndex =
-                  removedIndex.clamp(0, widget.paper.items.length).toInt();
-              widget.paper.items.insert(targetIndex, item);
-              widget.paper.normalize();
-            });
-            widget.onItemRestored(widget.paper, item);
-            unawaited(widget.onChanged());
-          },
-        ),
-      ),
-    );
   }
 
   Future<void> _pickDueDate(BuildContext context, PaperItem item) async {

@@ -383,8 +383,11 @@ Windows paper title bars should keep PaperTodo's compact metrics and identity:
 the 23x24 leading control uses PaperTodo's `☑` Todo or `✎` Note symbol rather
 than a generic Material icon; inactive topmost state uses the weak color at
 0.58 opacity and becomes fully opaque on hover. The title host stays between
-38 and 86 pixels wide, keeps its 24px height, 4/5 horizontal padding, permanent
-bottom divider, and hover paper tint. Trailing controls retain a one-pixel
+38 and 180 pixels wide according to the configured title length, keeps its 24px
+height, 4/5 horizontal padding, permanent
+bottom divider, and hover paper tint.
+Titles that exceed the available viewport marquee horizontally and return to the
+start after a pause. Trailing controls retain a one-pixel
 outer gap and remain right-anchored while resizing. Desktop pin uses
 PaperTodo's original 15px `pin.png` / `unpin.png` assets inside its 28x24
 button, with 0.72 inactive opacity instead of a generic monitor icon. At the
@@ -393,7 +396,7 @@ button, with 0.72 inactive opacity instead of a generic monitor icon. At the
   returns at 180px of usable header width for Todo and 230px for Note; the
   RePaperTodo sync action is added to the left of that group at 210px for Todo
   and 280px for Note. This keeps the original actions right-anchored and leaves
-  the title between its measured 38px minimum and 86px maximum.
+  the title between its measured 38px minimum and 180px maximum.
   The default 280px Todo and 320px Note therefore show their full configured
   action sets.
 Windows title-bar buttons use PaperTodo's immediate pointer states: weak text
@@ -802,7 +805,7 @@ the upper or lower half of another row should insert before or after that row
 respectively, matching PaperTodo's boundary-based drag placement.
 Dragging a Todo row handle onto the bottom delete area should follow the same
 delete path as the explicit delete action, so PaperTodo tombstones, fallback
-row creation, focus recovery, snackbar undo, and sync-safe save behavior stay
+row creation, focus recovery, toolbar/keyboard undo, and sync-safe save behavior stay
 identical.
 The standalone Todo append area uses a 6px top and 2px bottom margin, Tint 12
 background, Tint 45 border and a 0.42-opacity plus glyph; hover changes these
@@ -827,8 +830,9 @@ loop.
 Deleting an individual Todo item should preserve PaperTodo's `RemoveItem`
 semantics: the delete action remains available for the last remaining row,
 deleting that row creates a blank fallback row, deleted-item tombstones are
-recorded, focus moves to the fallback or neighboring row, and snackbar undo
-removes any temporary fallback before restoring the original item.
+recorded, focus moves to the fallback or neighboring row, and the undo toolbar
+or `Ctrl+Z` restores the snapshot for up to 30 minutes, removing any temporary
+fallback before restoring the original item.
 Clearing completed Todo items should preserve PaperTodo's batch-delete
 semantics: no-op when nothing is done, push one todo undo snapshot, remove every
 completed row, create a blank fallback row when all rows were completed, record

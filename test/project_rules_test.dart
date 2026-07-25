@@ -2392,7 +2392,8 @@ void main() {
     expect(app, contains('_markTodoTextEditCommitted'));
     expect(app, contains('_shouldDeferToTodoTextUndo'));
     expect(app, contains('_focusedTodoTextHasUncommittedEdit'));
-    expect(app, contains('return _focusedTodoTextRedoStack.isNotEmpty;'));
+    expect(app, contains('_focusedTodoTextRedoAvailable'));
+    expect(app, contains('_pruneExpiredTodoHistory'));
     expect(app, contains('_commitFocusedTodoTextIfNeeded();'));
   });
 
@@ -2695,7 +2696,7 @@ void main() {
     expect(app, contains('width: highlighted ? 1.5 : 1'));
     expect(app, contains('opacity: highlighted ? 1 : 0.65'));
     expect(app, contains('_setTodoItemDragging(false);'));
-    expect(app, contains('_deleteItem(context, details.data)'));
+    expect(app, contains('_deleteItem(details.data)'));
     expect(widgetTest,
         contains('drags todo items to the bottom delete area like PaperTodo'));
     expect(widgetTest, contains('trashColors.danger.withValues'));
@@ -2749,13 +2750,22 @@ void main() {
     expect(design, contains("PaperTodo's `RemoveItem`"));
     expect(design, contains('last remaining row'));
     expect(design, contains('creates a blank fallback row'));
-    expect(design, contains('snackbar undo'));
+    expect(design, contains('toolbar/keyboard undo'));
+    expect(design, contains('up to 30 minutes'));
     expect(app, contains('_deleteItem'));
     expect(app, contains('final replacement = _newTodoItem()'));
-    expect(app, contains('fallbackItemId = replacement.id'));
-    expect(app, contains('candidate.id == fallbackItemId'));
+    expect(app, contains('_pushTodoUndoSnapshot()'));
+    expect(app, contains('_todoUndoRetention'));
     expect(app, contains('_requestTodoItemFocus(focusTargetId)'));
-    expect(app, contains('onPressed: () => _deleteItem(context, item)'));
+    expect(app, contains('onPressed: () => _deleteItem(item)'));
+    final deleteStart = app.indexOf('void _deleteItem(');
+    final deleteEnd = app.indexOf('Future<void> _pickDueDate', deleteStart);
+    expect(deleteStart, isNonNegative);
+    expect(deleteEnd, greaterThan(deleteStart));
+    expect(
+      app.substring(deleteStart, deleteEnd),
+      isNot(contains('SnackBar')),
+    );
     expect(app, isNot(contains('enabled: widget.paper.items.length > 1')));
   });
 
@@ -5147,11 +5157,14 @@ void main() {
     expect(design, contains('23x24 leading control'));
     expect(design, contains('generic Material icon'));
     expect(design, contains('0.58 opacity'));
-    expect(design, contains('38 and 86 pixels wide'));
+    expect(design, contains('38 and 180 pixels wide'));
     expect(design, contains('permanent\nbottom divider'));
     expect(design, contains('default 280px Todo and 320px Note'));
     expect(design, contains('structured window title updates'));
     expect(app, contains('class _PaperTitleEditor'));
+    expect(app, contains('class _PaperTitleMarquee'));
+    expect(app, contains('_todoUndoRetention'));
+    expect(app, contains('_scheduleTodoUndoExpiry'));
     expect(app, contains('readOnly: !_isEditingTitle'));
     expect(app, contains('LogicalKeyboardKey.escape'));
     expect(app, contains('_titleBeforeEdit'));
