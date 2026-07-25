@@ -3513,6 +3513,10 @@ void main() {
     expect(header, contains('bool script_capsule_ = false'));
     expect(header, contains('bool close_hovered_ = false'));
     expect(header, contains('bool close_pressed_ = false'));
+    expect(
+      header,
+      contains('void ResetHoverAnimationForHiddenState();'),
+    );
   });
 
   test('Windows tray icon primary click follows PaperTodo double-click model',
@@ -4518,8 +4522,35 @@ void main() {
     expect(paperWindowHeader,
         contains('bool capsule_animations_enabled_ = true;'));
     expect(
+      paperWindowHeader,
+      contains('void ResetCapsuleHoverAnimationForHiddenState();'),
+    );
+    expect(
+      paperWindow,
+      contains('ResetCapsuleHoverAnimationForHiddenState();'),
+    );
+    expect(paperWindow, contains('paper_surface_reveal_pending_'));
+    expect(
+      paperWindow,
+      contains(
+        'capsule_current_visible_width_ = capsule_resting_visible_width_',
+      ),
+    );
+    expect(
       nativeCapsule,
       contains('hovered_ || pointer_down_ || dragging_ ||'),
+    );
+    expect(nativeCapsule, contains('ResetHoverAnimationForHiddenState();'));
+    expect(nativeCapsule, contains('hidden_by_transition'));
+    expect(nativeCapsule, contains('tracking_mouse_leave_ = false'));
+    final nativeHoverReset = _sliceBetween(
+      nativeCapsule,
+      'void NativeCapsuleWindow::ResetHoverAnimationForHiddenState()',
+      'void NativeCapsuleWindow::StartDockAnimation(',
+    );
+    expect(
+      nativeHoverReset.indexOf('ReleaseCapture();'),
+      lessThan(nativeHoverReset.indexOf('dragging_ = false;')),
     );
     expect(nativeCapsule, contains('IsPointerOverWindow()'));
     expect(

@@ -46,6 +46,7 @@ class NativeCapsuleWindow : public Win32Window {
   void ApplyDockedPosition();
   void ApplyWindowRegion();
   void SetHovered(bool hovered);
+  void ResetHoverAnimationForHiddenState();
   void StartDockAnimation(int target_visible_width, int duration_ms);
   void UpdateDockAnimation();
   void StartMasterTransition(int target_top, bool target_hidden,

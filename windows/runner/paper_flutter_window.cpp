@@ -2723,10 +2723,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
     // A master toggle can arrive while the pointer is over a child capsule.
     // Clear the transient hover/animation state so revealing the queue starts
     // from the compact resting width instead of flashing its old hover width.
-    capsule_hovered_ = false;
-    capsule_animation_active_ = false;
-    capsule_current_visible_width_ = 0.0;
-    KillTimer(window, kCapsuleSlideTimerId);
+    ResetCapsuleHoverAnimationForHiddenState();
   }
   deep_capsule_mode_ =
       BoolValue(surface, "useDeepCapsuleMode", deep_capsule_mode_);
@@ -2740,10 +2737,7 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
     CompleteQueueDragAnimationAtTarget();
   }
   if (!collapsed_) {
-    capsule_hovered_ = false;
-    KillTimer(window, kCapsuleSlideTimerId);
-    capsule_animation_active_ = false;
-    capsule_current_visible_width_ = 0.0;
+    ResetCapsuleHoverAnimationForHiddenState();
     capsule_hidden_by_master_ = false;
     master_capsule_retracted_ = false;
     master_capsule_transition_active_ = false;
@@ -2756,6 +2750,11 @@ void PaperFlutterWindow::ApplySurface(const flutter::EncodableMap& surface,
     ApplyMasterCapsuleAlpha(255);
     KillTimer(window, kCapsuleMasterTransitionTimerId);
   } else if (!intended_visible_ && previous_intended_visible) {
+    // Hiding a collapsed Flutter paper must invalidate the child MouseRegion's
+    // last hover frame as well. The platform channel can deliver that frame
+    // after the HWND has been hidden; keeping its slide timer alive would make
+    // the next show start at a stale width and flash once.
+    ResetCapsuleHoverAnimationForHiddenState();
     master_capsule_transition_active_ = false;
     master_capsule_transition_initialized_ = false;
     master_capsule_retracted_ = false;
@@ -3176,15 +3175,47 @@ void PaperFlutterWindow::SetPaperTitle(const std::string& title) {
   SetWindowTextW(window, Utf8WindowTitle(title).c_str());
 }
 
+void PaperFlutterWindow::ResetCapsuleHoverAnimationForHiddenState() {
+  capsule_hovered_ = false;
+  capsule_animation_active_ = false;
+  capsule_animation_duration_ms_ = 0;
+  capsule_animation_start_width_ = 0.0;
+  capsule_animation_target_width_ = 0.0;
+  capsule_animation_started_at_ = 0;
+  capsule_current_visible_width_ = 0.0;
+  if (HWND window = GetHandle()) {
+    KillTimer(window, kCapsuleSlideTimerId);
+  }
+}
+
 void PaperFlutterWindow::SetCapsuleHovered(bool hovered) {
-  if (!collapsed_ || !deep_capsule_mode_ || capsule_hovered_ == hovered) {
+  if (!collapsed_ || !deep_capsule_mode_) {
+    return;
+  }
+  HWND window = GetHandle();
+  const bool hidden_by_transition =
+      capsule_hidden_by_master_ || master_capsule_retracted_ ||
+      (master_capsule_transition_active_ &&
+       master_capsule_transition_target_hidden_) ||
+      paper_surface_reveal_pending_;
+  if (!intended_visible_ || hidden_by_transition ||
+      (window && !IsWindowVisible(window))) {
+    // MouseRegion events are asynchronous relative to the native master
+    // transition. Ignore a delayed enter/exit while this surface is hidden so
+    // an old hover message cannot restart the edge reveal animation.
+    ResetCapsuleHoverAnimationForHiddenState();
+    return;
+  }
+  if (capsule_hovered_ == hovered) {
     return;
   }
   capsule_hovered_ = hovered;
   if (capsule_current_visible_width_ <= 0.0) {
-    capsule_current_visible_width_ =
-        hovered ? capsule_resting_visible_width_
-                : capsule_hover_visible_width_;
+    // A zero width means the surface was just initialized or deliberately
+    // reset by a master/visibility transition. Always use the stable resting
+    // frame as the animation origin; using the inverse target here causes a
+    // one-frame jump when the first queued hover event is an exit.
+    capsule_current_visible_width_ = capsule_resting_visible_width_;
   }
   StartCapsuleDockAnimation(
       hovered ? capsule_hover_visible_width_

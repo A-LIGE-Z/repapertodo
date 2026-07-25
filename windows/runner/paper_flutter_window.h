@@ -69,6 +69,7 @@ class PaperFlutterWindow : public Win32Window {
                                                  LPARAM lparam) noexcept;
   int ResizeBorderHitTest(LPARAM lparam) const;
   void SetCapsuleHovered(bool hovered);
+  void ResetCapsuleHoverAnimationForHiddenState();
   void StartCapsuleDockAnimation(double target_visible_width, int duration_ms);
   void UpdateCapsuleDockAnimation();
   void ApplyCapsuleHorizontalPosition();

@@ -364,30 +364,14 @@ void NativeCapsuleWindow::ApplySurface(
     // The pointer may still be logically hovering when the master starts to
     // retract this no-activate HWND. Clear the transient width/close state now
     // so the next expansion begins from one stable resting frame.
-    hovered_ = false;
-    close_hovered_ = false;
-    close_pressed_ = false;
-    pointer_down_ = false;
-    dock_animation_active_ = false;
-    current_visible_width_ = 0.0;
-    if (HWND window = GetHandle()) {
-      if (GetCapture() == window) {
-        ReleaseCapture();
-      }
-      KillTimer(window, kCapsuleSlideTimerId);
-    }
+    ResetHoverAnimationForHiddenState();
   }
 
   // A master collapse hides an existing proxy HWND instead of destroying it.
   // Reset transient hover/slide state while hidden so expansion starts from a
   // stable resting width and never paints one stale hover frame.
   if (!intended_visible_ && previous_intended_visible) {
-    hovered_ = false;
-    close_hovered_ = false;
-    close_pressed_ = false;
-    pointer_down_ = false;
-    dock_animation_active_ = false;
-    current_visible_width_ = 0.0;
+    ResetHoverAnimationForHiddenState();
     master_transition_active_ = false;
     master_transition_initialized_ = false;
     master_retracted_ = false;
@@ -974,7 +958,23 @@ void NativeCapsuleWindow::ResumeMasterTransitionAfterQueueDrag() {
 }
 
 void NativeCapsuleWindow::SetHovered(bool hovered) {
-  if (hovered_ == hovered || dragging_) return;
+  if (dragging_) return;
+  HWND window = GetHandle();
+  const bool hidden_by_transition =
+      !master_ &&
+      (capsule_hidden_by_master_ || master_retracted_ ||
+       (master_transition_active_ && master_transition_target_hidden_));
+  if (!master_ &&
+      (!intended_visible_ || hidden_by_transition ||
+       (window && !IsWindowVisible(window)))) {
+    // A Flutter/native hover message can remain queued after the master
+    // capsule has started retracting, or after this HWND was hidden by the
+    // fullscreen/covered policy. Never let that stale message restart the
+    // edge reveal timer while the capsule is not interactive.
+    ResetHoverAnimationForHiddenState();
+    return;
+  }
+  if (hovered_ == hovered) return;
   hovered_ = hovered;
   const int target = hovered_ ? hover_visible_width_ : resting_visible_width_;
   if (animations_enabled_ && !master_) {
@@ -989,7 +989,30 @@ void NativeCapsuleWindow::SetHovered(bool hovered) {
     current_visible_width_ = target;
     ApplyDockedPosition();
   }
-  if (HWND window = GetHandle()) InvalidateRect(window, nullptr, FALSE);
+  if (window) InvalidateRect(window, nullptr, FALSE);
+}
+
+void NativeCapsuleWindow::ResetHoverAnimationForHiddenState() {
+  hovered_ = false;
+  close_hovered_ = false;
+  close_pressed_ = false;
+  pointer_down_ = false;
+  tracking_mouse_leave_ = false;
+  dock_animation_active_ = false;
+  animation_duration_ms_ = 0;
+  animation_start_visible_width_ = 0.0;
+  animation_target_visible_width_ = 0.0;
+  current_visible_width_ = 0.0;
+  if (HWND window = GetHandle()) {
+    if (GetCapture() == window) {
+      // Keep dragging_ set until WM_CAPTURECHANGED has had a chance to emit a
+      // cancelled master-drag transaction. Clearing it before ReleaseCapture
+      // would strand the rest of the capsule queue at its live drag offset.
+      ReleaseCapture();
+    }
+    KillTimer(window, kCapsuleSlideTimerId);
+  }
+  dragging_ = false;
 }
 
 void NativeCapsuleWindow::StartDockAnimation(int target_visible_width,
