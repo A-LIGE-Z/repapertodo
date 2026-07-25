@@ -2196,7 +2196,12 @@ void main() {
     final scrollbar = tester.widget<Scrollbar>(scrollbarFinder);
     final list = tester.widget<ListView>(listFinder);
     expect(scrollbar.thumbVisibility, true);
+    expect(scrollbar.trackVisibility, true);
     expect(scrollbar.interactive, true);
+    expect(
+      scrollbar.scrollbarOrientation,
+      ScrollbarOrientation.right,
+    );
     expect(scrollbar.controller, same(list.controller));
     final visibleFontLabels = tester
         .widgetList<Text>(
@@ -5740,6 +5745,18 @@ void main() {
     expect(settingsScrollbarTheme.data.crossAxisMargin, 3);
     final settingsContentScroll = tester.widget<SingleChildScrollView>(
       find.byKey(const ValueKey('settings-content-scroll')),
+    );
+    final settingsScrollbar = tester.widget<Scrollbar>(
+      find.descendant(
+        of: find.byKey(const ValueKey('settings-scrollbar-theme')),
+        matching: find.byType(Scrollbar),
+      ),
+    );
+    expect(settingsScrollbar.interactive, true);
+    expect(settingsScrollbar.trackVisibility, true);
+    expect(
+      settingsScrollbar.scrollbarOrientation,
+      ScrollbarOrientation.right,
     );
     expect(
       settingsContentScroll.padding,

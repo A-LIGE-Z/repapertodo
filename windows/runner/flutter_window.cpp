@@ -976,7 +976,10 @@ bool AddDirectWriteFontFamilies(std::vector<std::wstring>* families) {
   }
 
   Microsoft::WRL::ComPtr<IDWriteFontCollection> collection;
-  if (FAILED(factory->GetSystemFontCollection(&collection, FALSE)) ||
+  // Settings can be opened immediately after a font is installed. Ask
+  // DirectWrite to refresh its system collection so the newly installed
+  // family is visible without restarting RePaperTodo.
+  if (FAILED(factory->GetSystemFontCollection(&collection, TRUE)) ||
       !collection) {
     return false;
   }

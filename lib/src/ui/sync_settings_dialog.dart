@@ -851,6 +851,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                         child: Scrollbar(
                           controller: _settingsContentScrollController,
                           thumbVisibility: desktopLayout,
+                          trackVisibility: desktopLayout,
+                          interactive: true,
+                          scrollbarOrientation: ScrollbarOrientation.right,
                           child: SingleChildScrollView(
                             key: const ValueKey('settings-content-scroll'),
                             controller: _settingsContentScrollController,
@@ -2723,7 +2726,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                           ),
                           controller: _fontOptionsScrollController,
                           thumbVisibility: true,
+                          trackVisibility: true,
                           interactive: true,
+                          scrollbarOrientation: ScrollbarOrientation.right,
                           child: ListView.builder(
                             key: const ValueKey('settings-font-options-list'),
                             controller: _fontOptionsScrollController,

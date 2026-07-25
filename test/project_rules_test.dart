@@ -2248,6 +2248,11 @@ void main() {
     expect(settingsDialog, contains('loadInstalledFontFamilies'));
     expect(windowsRunner, contains('InstalledFontFamilies'));
     expect(windowsRunner, contains('AddDirectWriteFontFamilies(&families);'));
+    expect(
+      windowsRunner,
+      contains('GetSystemFontCollection(&collection, TRUE)'),
+      reason: 'Opening settings must refresh DirectWrite after font installs.',
+    );
     expect(windowsRunner, contains('AddGdiFontFamilies(&families);'));
     expect(
       windowsRunner,

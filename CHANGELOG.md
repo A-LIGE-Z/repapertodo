@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Refreshed the Windows DirectWrite font collection whenever the settings page
+  enumerates installed families, and made the settings list's right scrollbar
+  explicitly visible and draggable so newly installed fonts appear without a
+  restart and long font lists remain easy to navigate.
 - Hardened the Windows pinned-paper capsule escape path: clicking a pinned
   paper's proxy now clears desktop pinning and explicitly activates the paper
   through the foreground input queue, so synthetic/native clicks cannot leave
