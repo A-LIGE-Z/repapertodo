@@ -2489,6 +2489,10 @@ void main() {
     expect(app, contains("'backgroundColor': colorScheme.surface.toARGB32()"));
     expect(paperWindow, contains('DATETIMEPICK_CLASSW'));
     expect(paperWindow, contains('ShowNativeDateTimePicker'));
+    expect(paperWindow, contains('RestoreNativeModalOwner'));
+    expect(paperWindow, contains('GetActiveWindow() == owner'));
+    expect(paperWindow, contains('SetActiveWindow(owner);'));
+    expect(paperWindow, isNot(contains('SetForegroundWindow(owner);')));
     expect(paperWindow, contains('ShowNativeReminderIntervalPicker'));
     expect(paperWindow, contains('MulDiv(354'));
     expect(paperWindow, contains('MulDiv(242'));

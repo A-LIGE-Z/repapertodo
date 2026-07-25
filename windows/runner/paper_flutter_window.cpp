@@ -563,6 +563,24 @@ struct DateTimePickerDialogState {
   bool clear = false;
 };
 
+void RestoreNativeModalOwner(HWND owner, bool restore_activation) {
+  if (!owner || !IsWindow(owner)) {
+    return;
+  }
+  EnableWindow(owner, TRUE);
+  if (!restore_activation || !IsWindowVisible(owner) ||
+      GetActiveWindow() == owner) {
+    return;
+  }
+
+  // The picker and its paper owner live on the same UI thread. SetActiveWindow
+  // is sufficient to hand keyboard focus back after the modal loop without
+  // forcing a second foreground/z-order transaction. SetForegroundWindow here
+  // made an already-restored paper briefly restack immediately before Dart
+  // applied the selected due/reminder value, which appeared as a card flash.
+  SetActiveWindow(owner);
+}
+
 constexpr int kDatePickerDateId = 1001;
 constexpr int kDatePickerHourId = 1002;
 constexpr int kDatePickerMinuteId = 1006;
@@ -1398,6 +1416,8 @@ std::optional<flutter::EncodableMap> ShowNativeDateTimePicker(
     top = std::clamp(top, work_top,
                      std::max(work_top, work_bottom - dialog_height));
   }
+  const bool restore_owner_activation =
+      owner && (GetForegroundWindow() == owner || GetActiveWindow() == owner);
   HWND dialog = CreateWindowExW(
       WS_EX_TOOLWINDOW, kDatePickerClass, state.title.c_str(),
       WS_POPUP | WS_CLIPCHILDREN, left, top, dialog_width, dialog_height, owner,
@@ -1426,10 +1446,7 @@ std::optional<flutter::EncodableMap> ShowNativeDateTimePicker(
       DispatchMessageW(&message);
     }
   }
-  if (owner) {
-    EnableWindow(owner, TRUE);
-    SetForegroundWindow(owner);
-  }
+  RestoreNativeModalOwner(owner, restore_owner_activation);
   if (!state.accepted) return std::nullopt;
   if (state.clear) {
     return flutter::EncodableMap{
@@ -2143,6 +2160,8 @@ std::optional<flutter::EncodableMap> ShowNativeReminderIntervalPicker(
                      std::max(work_top, work_bottom - dialog_height));
   }
 
+  const bool restore_owner_activation =
+      owner && (GetForegroundWindow() == owner || GetActiveWindow() == owner);
   HWND dialog = CreateWindowExW(
       WS_EX_TOOLWINDOW, kReminderIntervalClass, state.title.c_str(),
       WS_POPUP | WS_CLIPCHILDREN, left, top, dialog_width, dialog_height,
@@ -2166,10 +2185,7 @@ std::optional<flutter::EncodableMap> ShowNativeReminderIntervalPicker(
       DispatchMessageW(&message);
     }
   }
-  if (owner) {
-    EnableWindow(owner, TRUE);
-    SetForegroundWindow(owner);
-  }
+  RestoreNativeModalOwner(owner, restore_owner_activation);
   if (!state.accepted) return std::nullopt;
   if (state.clear) {
     return flutter::EncodableMap{
