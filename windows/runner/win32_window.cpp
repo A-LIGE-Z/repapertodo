@@ -195,7 +195,14 @@ Win32Window::MessageHandler(HWND hwnd,
       LONG newHeight = newRectSize->bottom - newRectSize->top;
 
       SetWindowPos(hwnd, nullptr, newRectSize->left, newRectSize->top, newWidth,
-                   newHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+                   newHeight,
+                   SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+                       SWP_NOREDRAW);
+      // DPI changes resize the hosted Flutter surface as well.  Avoid the
+      // default USER32 erase between the parent move and Flutter's next
+      // compositor frame, which otherwise appears as a black flash around
+      // the paper shadow on mixed-DPI desktops.
+      ResizeChildContent(false);
 
       return 0;
     }

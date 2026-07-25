@@ -103,6 +103,13 @@ class FlutterWindow : public Win32Window {
       HWND window, const std::string& paper_id) const;
   flutter::EncodableValue WindowEventArguments() const;
   void ApplyPaperWindowState(const flutter::EncodableValue& state);
+  // Surface registry updates arrive as three method-channel messages for
+  // backwards compatibility with older Flutter hosts.  Keep the first two
+  // messages pending and commit them together with the native capsule list so
+  // no observer can see a paper/capsule registry half-applied.
+  void CommitPendingSurfaceRegistry(
+      const flutter::EncodableList& native_capsules);
+  void ApplyPendingPaperWindowStateOnly();
   void ApplyPaperWindowUpdate(const flutter::EncodableValue& paper);
   void ReconcilePaperWindows(const flutter::EncodableList& papers);
   void ReconcileNativeCapsuleWindows(const flutter::EncodableList& surfaces);
@@ -192,6 +199,10 @@ class FlutterWindow : public Win32Window {
   std::map<std::string, PaperSurfaceState> paper_surfaces_;
   flutter::EncodableValue paper_window_state_;
   std::map<std::string, flutter::EncodableMap> paper_window_surfaces_;
+  flutter::EncodableValue pending_paper_window_state_;
+  flutter::EncodableList pending_paper_surfaces_;
+  bool has_pending_paper_window_state_ = false;
+  bool has_pending_paper_surfaces_ = false;
   std::map<std::string, std::unique_ptr<PaperFlutterWindow>> paper_windows_;
   std::map<std::string, std::unique_ptr<NativeCapsuleWindow>>
       native_capsule_windows_;

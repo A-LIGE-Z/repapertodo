@@ -1261,9 +1261,10 @@ void NativeCapsuleWindow::Paint(HWND window) {
   if (hovered_ && !close_hovered_) {
     background = BlendAlpha(background, palette.tint, dark ? 48 : 32);
   }
-  if (pointer_down_ && !close_pressed_) {
-    background = Mix(background, text, dark ? 9 : 6);
-  }
+  // A capsule is a no-activate proxy for another surface.  Painting a
+  // separate pressed background here makes the old frame and the following
+  // paper/capsule reconciliation compose as a visible flash on Windows 10.
+  // Keep click feedback to the stable hover/close affordance instead.
 
   HBRUSH background_brush = CreateSolidBrush(background);
   HPEN border_pen =

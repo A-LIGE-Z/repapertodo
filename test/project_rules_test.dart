@@ -3782,7 +3782,11 @@ void main() {
     expect(platform, contains("'normalizeQueueMonitorDeviceName'"));
     expect(runner, contains('RememberPaperCapsuleState'));
     expect(runner, contains('if (method == "setPaperSurfaces")'));
-    expect(runner, contains('ApplyPaperSurfaceRegistry(*papers, false)'));
+    expect(runner, contains('pending_paper_surfaces_ = *papers;'));
+    expect(
+      runner,
+      contains('ApplyPaperSurfaceRegistry(pending_paper_surfaces_, false)'),
+    );
     expect(runner, contains('ApplyPaperSurfaceRegistry(*papers, true)'));
     expect(runner, contains('struct PaperIdArgument'));
     expect(runner, contains('ValidatePaperIdArgumentValue'));
@@ -3934,7 +3938,25 @@ void main() {
     expect(runnerHeader,
         contains('std::map<std::string, std::unique_ptr<PaperFlutterWindow>>'));
     expect(runner, contains('ReconcilePaperWindows(*papers)'));
-    expect(runner, contains('ReconcileNativeCapsuleWindows(*surfaces)'));
+    expect(runner, contains('CommitPendingSurfaceRegistry(*surfaces)'));
+    expect(runner, contains('ReconcileNativeCapsuleWindows(native_capsules)'));
+    final capsuleReconcile = _sliceBetween(
+      runner,
+      'void FlutterWindow::ReconcileNativeCapsuleWindows(',
+      'PaperFlutterWindow* FlutterWindow::EnsurePaperWindow(',
+    );
+    final staleRemoval = capsuleReconcile.indexOf(
+      'iterator = native_capsule_windows_.erase(iterator);',
+    );
+    final proxyApply = capsuleReconcile.indexOf('apply_surfaces(false);');
+    final masterApply = capsuleReconcile.indexOf('apply_surfaces(true);');
+    final masterRefresh = capsuleReconcile.indexOf(
+      'entry.second->RefreshVisibility();',
+    );
+    expect(staleRemoval, isNonNegative);
+    expect(proxyApply, greaterThan(staleRemoval));
+    expect(masterApply, greaterThan(proxyApply));
+    expect(masterRefresh, greaterThan(masterApply));
     expect(runner, contains('child_project.set_dart_entrypoint_arguments'));
     expect(runner, contains('ShowWindow(GetHandle(), SW_HIDE)'));
     expect(paperWindowHeader, contains('class PaperFlutterWindow'));

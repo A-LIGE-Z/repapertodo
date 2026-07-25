@@ -1239,6 +1239,8 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             child: InkWell(
               key: ValueKey('${paper.id}-paper-window-master-capsule'),
               borderRadius: BorderRadius.circular(999),
+              splashFactory: NoSplash.splashFactory,
+              highlightColor: Colors.transparent,
               onTap: () => unawaited(toggle()),
               child: DecoratedBox(
                 key: ValueKey(
@@ -1374,10 +1376,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                             left: Radius.circular(capsuleRadius),
                           ),
                           hoverColor: paperColors.hover,
-                          highlightColor: paperColors.tint.withValues(
-                            alpha: paperColors.isDark ? 58 / 255 : 42 / 255,
-                          ),
+                          highlightColor: Colors.transparent,
                           splashColor: Colors.transparent,
+                          splashFactory: NoSplash.splashFactory,
                           onTap: scriptCapsuleSpec == null
                               ? expandForEditing
                               : () => unawaited(
@@ -1476,10 +1477,9 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                             right: Radius.circular(capsuleRadius),
                           ),
                           hoverColor: paperColors.hover,
-                          highlightColor: paperColors.tint.withValues(
-                            alpha: paperColors.isDark ? 58 / 255 : 42 / 255,
-                          ),
+                          highlightColor: Colors.transparent,
                           splashColor: Colors.transparent,
+                          splashFactory: NoSplash.splashFactory,
                           onTap: () => unawaited(_hidePaper(paper)),
                           child: Transform.translate(
                             offset: const Offset(-1, 0),
@@ -2325,6 +2325,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     _titleSurfaceDebounce?.cancel();
     _titleSurfaceDebounce = Timer(const Duration(milliseconds: 250), () {
       unawaited(controller.updatePaperSurface(paper));
+      // The native deep-capsule proxy owns its own title cache.  A plain
+      // paper-window update refreshes the child engine and tray title but does
+      // not rebuild that proxy, so a title edit could leave the capsule at its
+      // previous length until an unrelated state change.  Registry-only
+      // reconciliation updates the proxy without replaying paper geometry.
+      unawaited(controller.refreshSurfaceRegistry());
     });
     await _saveState();
   }
@@ -2864,6 +2870,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             previousPaper.capsuleSide != changedPaper.capsuleSide ||
             previousPaper.capsuleMonitorDeviceName !=
                 changedPaper.capsuleMonitorDeviceName;
+    final capsuleLabelChanged =
+        previousPaper.title != changedPaper.title ||
+        (previousPaper.isNote &&
+            changedPaper.isNote &&
+            ScriptCapsuleSpec.isScriptCapsuleContent(previousPaper.content) !=
+                ScriptCapsuleSpec.isScriptCapsuleContent(changedPaper.content));
     setState(() => controller.state.papers[paperIndex] = changedPaper);
     if (surfaceTopologyChanged) {
       // A child engine reports collapse/expand through `paperChanged`. That
@@ -2883,6 +2895,13 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       }());
     } else {
       unawaited(controller.updatePaperSurface(changedPaper));
+      if (capsuleLabelChanged) {
+        // A child paper engine sends title/content edits through
+        // `paperChanged`.  Keep the independent native proxy capsule's label
+        // and script glyph in sync without replaying paper geometry for every
+        // ordinary body edit.
+        unawaited(controller.refreshSurfaceRegistry());
+      }
     }
     unawaited(_rebuildTrayMenu());
     unawaited(_saveState(rebuildTrayMenu: false));

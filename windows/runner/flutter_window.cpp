@@ -3207,7 +3207,12 @@ bool FlutterWindow::OnCreate() {
         }
         if (method == "setPaperWindowState") {
           if (call.arguments()) {
-            ApplyPaperWindowState(*call.arguments());
+            // The following setPaperSurfaces/setNativeCapsuleSurfaces calls
+            // complete the same logical refresh.  Do not repaint existing
+            // paper HWNDs from this first message; committing all surfaces
+            // together avoids an observable half-updated frame.
+            pending_paper_window_state_ = *call.arguments();
+            has_pending_paper_window_state_ = true;
           }
           result->Success();
           return;
@@ -3223,8 +3228,11 @@ bool FlutterWindow::OnCreate() {
           if (call.arguments()) {
             if (const auto* papers =
                     std::get_if<flutter::EncodableList>(call.arguments())) {
-              ApplyPaperSurfaceRegistry(*papers, false);
-              ReconcilePaperWindows(*papers);
+              // Hold the paper list until the native capsule list arrives.
+              // The Dart host sends all three messages through one serialized
+              // surface operation, and the final message is our commit point.
+              pending_paper_surfaces_ = *papers;
+              has_pending_paper_surfaces_ = true;
             }
           }
           result->Success();
@@ -3234,7 +3242,7 @@ bool FlutterWindow::OnCreate() {
           if (call.arguments()) {
             if (const auto* surfaces =
                     std::get_if<flutter::EncodableList>(call.arguments())) {
-              ReconcileNativeCapsuleWindows(*surfaces);
+              CommitPendingSurfaceRegistry(*surfaces);
             }
           }
           result->Success();
@@ -3266,6 +3274,13 @@ bool FlutterWindow::OnCreate() {
             }
           }
           if (papers) {
+            // Tray rebuilds use the same state preamble as a regular surface
+            // refresh but do not send a capsule commit.  Apply only the
+            // pending coordinator state here, then reconcile the tray list in
+            // one pass.
+            ApplyPendingPaperWindowStateOnly();
+            has_pending_paper_surfaces_ = false;
+            pending_paper_surfaces_.clear();
             ApplyPaperSurfaceRegistry(*papers, true);
             ReconcilePaperWindows(*papers);
           } else {
@@ -4700,6 +4715,32 @@ void FlutterWindow::ApplyPaperWindowState(
   }
 }
 
+void FlutterWindow::ApplyPendingPaperWindowStateOnly() {
+  if (!has_pending_paper_window_state_) {
+    return;
+  }
+  ApplyPaperWindowState(pending_paper_window_state_);
+  pending_paper_window_state_ = flutter::EncodableValue();
+  has_pending_paper_window_state_ = false;
+}
+
+void FlutterWindow::CommitPendingSurfaceRegistry(
+    const flutter::EncodableList& native_capsules) {
+  // Keep this ordering deterministic: state is applied to existing child
+  // engines first, then the paper registry reconciles/creates paper HWNDs,
+  // and only after that are native capsule HWNDs updated.  All three steps
+  // run inside one method-channel dispatch, so USER32 cannot process a
+  // partially committed registry between them.
+  ApplyPendingPaperWindowStateOnly();
+  if (has_pending_paper_surfaces_) {
+    ApplyPaperSurfaceRegistry(pending_paper_surfaces_, false);
+    ReconcilePaperWindows(pending_paper_surfaces_);
+    pending_paper_surfaces_.clear();
+    has_pending_paper_surfaces_ = false;
+  }
+  ReconcileNativeCapsuleWindows(native_capsules);
+}
+
 void FlutterWindow::ApplyPaperWindowUpdate(
     const flutter::EncodableValue& paper) {
   const auto* map = std::get_if<flutter::EncodableMap>(&paper);
@@ -4844,7 +4885,25 @@ void FlutterWindow::ReconcileNativeCapsuleWindows(
       continue;
     }
     next_surfaces[*surface_id] = *surface;
-    auto existing = native_capsule_windows_.find(*surface_id);
+  }
+
+  // Remove stale HWNDs before applying the new queue.  Leaving an obsolete
+  // topmost proxy alive until after the active master has repainted can cover
+  // the master for one composition frame during rapid queue changes.
+  for (auto iterator = native_capsule_windows_.begin();
+       iterator != native_capsule_windows_.end();) {
+    if (next_surfaces.find(iterator->first) != next_surfaces.end()) {
+      ++iterator;
+      continue;
+    }
+    iterator->second->Destroy();
+    iterator = native_capsule_windows_.erase(iterator);
+  }
+
+  // Create all retained surfaces before applying any of them.  That keeps
+  // creation cost outside the visible proxy/master transition itself.
+  for (const auto& entry : next_surfaces) {
+    auto existing = native_capsule_windows_.find(entry.first);
     if (existing == native_capsule_windows_.end()) {
       auto capsule = std::make_unique<NativeCapsuleWindow>(
           [this](const std::string& method,
@@ -4858,12 +4917,30 @@ void FlutterWindow::ReconcileNativeCapsuleWindows(
       }
       capsule->SetQuitOnClose(false);
       capsule->SetAvoidFullscreenTopmost(avoid_fullscreen_topmost_);
-      existing = native_capsule_windows_
-                     .emplace(*surface_id, std::move(capsule))
-                     .first;
+      native_capsule_windows_.emplace(entry.first, std::move(capsule));
     }
-    existing->second->ApplySurface(*surface);
   }
+
+  const auto apply_surfaces = [this, &next_surfaces](bool masters) {
+    for (const auto& entry : next_surfaces) {
+      const bool is_master =
+          GetStringArgument(entry.second, "kind", "proxy") == "master";
+      if (is_master != masters) {
+        continue;
+      }
+      const auto window = native_capsule_windows_.find(entry.first);
+      if (window != native_capsule_windows_.end()) {
+        window->second->ApplySurface(entry.second);
+      }
+    }
+  };
+
+  // Start every child transition first, then repaint/reposition the master.
+  // DWM therefore receives one coherent queue state instead of a frame where
+  // the master arrow/count has changed but its children still show the old
+  // layout or alpha.
+  apply_surfaces(false);
+  apply_surfaces(true);
 
   // Re-assert the master HWND after all proxy HWNDs have been reconciled.
   // Each capsule is topmost within its queue, so a proxy created later in the
@@ -4873,16 +4950,6 @@ void FlutterWindow::ReconcileNativeCapsuleWindows(
     if (entry.second->is_master()) {
       entry.second->RefreshVisibility();
     }
-  }
-
-  for (auto iterator = native_capsule_windows_.begin();
-       iterator != native_capsule_windows_.end();) {
-    if (next_surfaces.find(iterator->first) != next_surfaces.end()) {
-      ++iterator;
-      continue;
-    }
-    iterator->second->Destroy();
-    iterator = native_capsule_windows_.erase(iterator);
   }
 }
 

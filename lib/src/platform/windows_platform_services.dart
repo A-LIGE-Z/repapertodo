@@ -935,13 +935,19 @@ class WindowsTrayHost implements TrayHost {
 
   @override
   Future<void> rebuildMenu(AppState state, {TrayMenuLabels? labels}) async {
-    await _paperWindows._normalizeStateForPlatform(state);
-    _paperWindows._syncKnownPapers(state);
-    await _channel.invokeMethod<void>('setPaperWindowState', state.toJson());
-    await _channel.invokeMethod<void>(
-      'setTrayMenu',
-      _trayMenuPayload(state, labels),
-    );
+    // Tray refreshes touch the same native paper/capsule registries as a
+    // surface refresh.  Serialize them with the host queue so a tray update
+    // cannot overwrite a pending three-message surface transaction midway
+    // through a master collapse/expand animation.
+    await _paperWindows._enqueueSurfaceOperation(() async {
+      await _paperWindows._normalizeStateForPlatform(state);
+      _paperWindows._syncKnownPapers(state);
+      await _channel.invokeMethod<void>('setPaperWindowState', state.toJson());
+      await _channel.invokeMethod<void>(
+        'setTrayMenu',
+        _trayMenuPayload(state, labels),
+      );
+    });
   }
 }
 
