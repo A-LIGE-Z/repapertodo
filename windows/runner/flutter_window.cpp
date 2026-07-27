@@ -91,6 +91,8 @@ constexpr wchar_t kSettingsPositionedProperty[] =
     L"RePaperTodo.SettingsPositioned";
 COLORREF g_settings_coordinator_background = RGB(255, 249, 234);
 
+HANDLE CreateKillOnCloseJob();
+
 double GetNumberArgument(const flutter::EncodableMap& map,
                          const std::string& key,
                          double fallback) {
