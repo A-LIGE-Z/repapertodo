@@ -1458,13 +1458,33 @@ void RunScriptCapsuleProcess(std::wstring executable,
     startup_info.wShowWindow = SW_HIDE;
   }
   PROCESS_INFORMATION process_information = {};
-  const DWORD creation_flags = hide_window ? CREATE_NO_WINDOW : 0;
+  // Assign the one-shot PowerShell process to a kill-on-close job so it can
+  // never outlive RePaperTodo.  If the app exits while the script is still
+  // running (tearing down this detached waiter thread before it returns),
+  // Windows closes this process's job handle and terminates the child, matching
+  // the persistent script capsule path instead of leaking an orphan process.
+  HANDLE process_job = CreateKillOnCloseJob();
+  const DWORD creation_flags =
+      (hide_window ? CREATE_NO_WINDOW : 0) | CREATE_SUSPENDED;
   if (CreateProcessW(nullptr, command_line.data(), nullptr, nullptr, FALSE,
                      creation_flags, nullptr, nullptr, &startup_info,
                      &process_information)) {
-    WaitForSingleObject(process_information.hProcess, INFINITE);
+    if (process_job &&
+        !AssignProcessToJobObject(process_job, process_information.hProcess)) {
+      CloseHandle(process_job);
+      process_job = nullptr;
+    }
+    if (ResumeThread(process_information.hThread) != static_cast<DWORD>(-1)) {
+      WaitForSingleObject(process_information.hProcess, INFINITE);
+    } else {
+      TerminateProcess(process_information.hProcess, 0);
+      WaitForSingleObject(process_information.hProcess, 1000);
+    }
     CloseHandle(process_information.hThread);
     CloseHandle(process_information.hProcess);
+  }
+  if (process_job) {
+    CloseHandle(process_job);
   }
   DeleteFileW(script_path.c_str());
 }
@@ -2839,6 +2859,15 @@ bool FlutterWindow::OnCreate() {
         }
 
         const std::string& method = call.method_name();
+        if (method == "startSettingsDrag") {
+          POINT cursor = {};
+          GetCursorPos(&cursor);
+          ReleaseCapture();
+          SendMessageW(window, WM_SYSCOMMAND, SC_MOVE | HTCAPTION,
+                       MAKELPARAM(cursor.x, cursor.y));
+          result->Success();
+          return;
+        }
         if (method == "getDataDirectory") {
           const std::filesystem::path directory = ResolveDataDirectory(window);
           const auto encoded = WideToUtf8Strict(directory.wstring());

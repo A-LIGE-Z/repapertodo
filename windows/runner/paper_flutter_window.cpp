@@ -1432,7 +1432,9 @@ std::optional<flutter::EncodableMap> ShowNativeDateTimePicker(
     PostMessageW(state.date, WM_KEYDOWN, VK_F4, 0);
   }
   MSG message = {};
-  while (IsWindow(dialog) && GetMessageW(&message, nullptr, 0, 0) > 0) {
+  BOOL message_result = 0;
+  while (IsWindow(dialog) &&
+         (message_result = GetMessageW(&message, nullptr, 0, 0)) > 0) {
     if (message.message == WM_KEYDOWN && message.wParam == VK_ESCAPE) {
       SendMessageW(dialog, WM_CLOSE, 0, 0);
       continue;
@@ -1445,6 +1447,15 @@ std::optional<flutter::EncodableMap> ShowNativeDateTimePicker(
       TranslateMessage(&message);
       DispatchMessageW(&message);
     }
+  }
+  if (message_result == 0) {
+    // This modal loop pumps thread-wide messages (hwnd == nullptr) and
+    // dispatches them to the coordinator window, so a WM_QUIT posted while the
+    // picker is open (tray "exit" or a forwarded exit startup command) is
+    // consumed here.  GetMessageW returning 0 means we just swallowed WM_QUIT;
+    // re-post it so the outer run loop in main.cpp can shut down instead of
+    // hanging the process (and leaking the single-instance mutex).
+    PostQuitMessage(static_cast<int>(message.wParam));
   }
   RestoreNativeModalOwner(owner, restore_owner_activation);
   if (!state.accepted) return std::nullopt;
@@ -2171,7 +2182,9 @@ std::optional<flutter::EncodableMap> ShowNativeReminderIntervalPicker(
   ShowWindow(dialog, SW_SHOW);
   UpdateWindow(dialog);
   MSG message = {};
-  while (IsWindow(dialog) && GetMessageW(&message, nullptr, 0, 0) > 0) {
+  BOOL message_result = 0;
+  while (IsWindow(dialog) &&
+         (message_result = GetMessageW(&message, nullptr, 0, 0)) > 0) {
     if (message.message == WM_KEYDOWN && message.wParam == VK_ESCAPE) {
       SendMessageW(dialog, WM_CLOSE, 0, 0);
       continue;
@@ -2184,6 +2197,13 @@ std::optional<flutter::EncodableMap> ShowNativeReminderIntervalPicker(
       TranslateMessage(&message);
       DispatchMessageW(&message);
     }
+  }
+  if (message_result == 0) {
+    // See the date picker loop above: this modal loop also pumps thread-wide
+    // messages, so a WM_QUIT posted while the reminder-interval picker is open
+    // is consumed here.  Re-post it so the outer run loop can shut down instead
+    // of hanging the process on exit.
+    PostQuitMessage(static_cast<int>(message.wParam));
   }
   RestoreNativeModalOwner(owner, restore_owner_activation);
   if (!state.accepted) return std::nullopt;

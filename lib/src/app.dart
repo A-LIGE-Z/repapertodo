@@ -304,6 +304,7 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
+          animationDuration: PaperTodoMotion.controlFeedback,
           minimumSize: const Size(34, 34),
           maximumSize: const Size(42, 42),
           padding: const EdgeInsets.all(7),
@@ -348,15 +349,15 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
           vertical: 10,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: colors.outlineVariant),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: colors.outlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: colors.primary, width: 1.5),
         ),
       ),
@@ -368,13 +369,15 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          animationDuration: PaperTodoMotion.controlFeedback,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
+          animationDuration: PaperTodoMotion.controlFeedback,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
@@ -448,11 +451,24 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: colors.onSurface.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(6),
+          color: colors.onSurface.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: colors.surface.withValues(alpha: 0.14),
+          ),
         ),
-        textStyle: TextStyle(color: colors.surface, fontSize: 12),
-        waitDuration: const Duration(milliseconds: 450),
+        textStyle: TextStyle(
+          color: colors.surface,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          height: 1,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        margin: const EdgeInsets.all(8),
+        verticalOffset: 10,
+        waitDuration: const Duration(milliseconds: 300),
+        showDuration: const Duration(seconds: 4),
+        exitDuration: PaperTodoMotion.controlFeedback,
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: colors.surface,
@@ -461,7 +477,10 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: colors.surface,
+        backgroundColor: Color.alphaBlend(
+          paperColors.tint.withValues(alpha: 0.035),
+          paperColors.paper,
+        ),
         contentTextStyle: TextStyle(
           color: colors.onSurface,
           fontSize: 13,
@@ -471,10 +490,14 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
         disabledActionTextColor: colors.onSurfaceVariant.withValues(
           alpha: 0.55,
         ),
-        elevation: 8,
-        insetPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        actionBackgroundColor: paperColors.tint.withValues(alpha: 0.055),
+        disabledActionBackgroundColor:
+            paperColors.tint.withValues(alpha: 0.025),
+        actionOverflowThreshold: 0.35,
+        elevation: 0,
+        insetPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           side: BorderSide(color: colors.outlineVariant),
         ),
       ),
@@ -664,6 +687,96 @@ bool _sameStringSet(Set<String> left, Set<String> right) {
 }
 
 String? _tooltipLabel(bool enabled, String label) => enabled ? label : null;
+
+class _PaperTodoSyncState extends StatelessWidget {
+  const _PaperTodoSyncState({
+    required this.stateKey,
+    required this.syncing,
+    required this.animationsEnabled,
+    required this.extent,
+    required this.indicatorDimension,
+    required this.indicatorStrokeWidth,
+    required this.idle,
+  });
+
+  final String stateKey;
+  final bool syncing;
+  final bool animationsEnabled;
+  final double extent;
+  final double indicatorDimension;
+  final double indicatorStrokeWidth;
+  final Widget idle;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration =
+        animationsEnabled ? PaperTodoMotion.controlFeedback : Duration.zero;
+    return SizedBox.square(
+      key: ValueKey(stateKey),
+      dimension: extent,
+      child: AnimatedSwitcher(
+        duration: duration,
+        reverseDuration: duration,
+        switchInCurve: PaperTodoMotion.quickCurve,
+        switchOutCurve: PaperTodoMotion.quickCurve,
+        layoutBuilder: (currentChild, previousChildren) => Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            ...previousChildren,
+            if (currentChild != null) currentChild,
+          ],
+        ),
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.88, end: 1).animate(animation),
+            child: child,
+          ),
+        ),
+        child: syncing
+            ? Center(
+                key: ValueKey('$stateKey-active'),
+                child: _PaperTodoSyncIndicator(
+                  key: ValueKey('$stateKey-indicator'),
+                  dimension: indicatorDimension,
+                  strokeWidth: indicatorStrokeWidth,
+                ),
+              )
+            : KeyedSubtree(
+                key: ValueKey('$stateKey-idle'),
+                child: idle,
+              ),
+      ),
+    );
+  }
+}
+
+class _PaperTodoSyncIndicator extends StatelessWidget {
+  const _PaperTodoSyncIndicator({
+    super.key,
+    required this.dimension,
+    required this.strokeWidth,
+  });
+
+  final double dimension;
+  final double strokeWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PaperTodoThemeColors.of(context);
+    return SizedBox.square(
+      dimension: dimension,
+      child: CircularProgressIndicator(
+        strokeWidth: strokeWidth,
+        strokeCap: StrokeCap.round,
+        color: colors.weakText,
+        backgroundColor: colors.tint.withValues(
+          alpha: colors.isDark ? 18 / 255 : 12 / 255,
+        ),
+      ),
+    );
+  }
+}
 
 Widget _conditionalTooltip({
   required bool enabled,
@@ -1392,23 +1505,20 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                                   clipBehavior: Clip.none,
                                   alignment: Alignment.centerLeft,
                                   children: [
-                                    Transform.translate(
-                                      offset: Offset(
-                                        0,
-                                        paper.isNote ? -1 : -1.25,
+                                    Text(
+                                      capsuleIcon,
+                                      key: ValueKey(
+                                        '${paper.id}-paper-window-capsule-icon',
                                       ),
-                                      child: Text(
-                                        capsuleIcon,
-                                        style: TextStyle(
-                                          color: paperColors.brightWeakText,
-                                          fontFamily: 'Segoe UI Symbol',
-                                          fontFamilyFallback: const <String>[
-                                            'Segoe UI Emoji',
-                                          ],
-                                          fontSize: capsuleIconSize,
-                                          fontWeight: FontWeight.w600,
-                                          height: 1,
-                                        ),
+                                      style: TextStyle(
+                                        color: paperColors.brightWeakText,
+                                        fontFamily: 'Segoe UI Symbol',
+                                        fontFamilyFallback: const <String>[
+                                          'Segoe UI Emoji',
+                                        ],
+                                        fontSize: capsuleIconSize,
+                                        fontWeight: FontWeight.w600,
+                                        height: 1,
                                       ),
                                     ),
                                     Positioned(
@@ -1435,26 +1545,22 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                                 ),
                                 const SizedBox(width: 4),
                                 Expanded(
-                                  child: Transform.translate(
-                                    offset: const Offset(-1, -1),
-                                    child: Transform.scale(
-                                      scaleX: paper.isNote ? 0.93 : 0.94,
-                                      scaleY: 1,
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        _displayTitle(paper),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                              fontSize: 11,
-                                            ),
-                                      ),
+                                  child: Text(
+                                    _displayTitle(paper),
+                                    key: ValueKey(
+                                      '${paper.id}-paper-window-capsule-title',
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: colorScheme.onSurfaceVariant,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.normal,
+                                          letterSpacing: 0,
+                                        ),
                                   ),
                                 ),
                               ],
@@ -1621,7 +1727,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
         bottom: 0,
         width: corner,
         height: corner,
-        child: CustomPaint(painter: const _PaperResizeGripPainter()),
+        child: const _PaperWindowResizeGrip(),
       ),
     ];
   }
@@ -1704,20 +1810,71 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
               padding: EdgeInsets.zero,
             )
           : null,
-      icon: _isSyncing
-          ? const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.sync_outlined),
+      icon: _PaperTodoSyncState(
+        stateKey: 'app-bar-sync-state',
+        syncing: _isSyncing,
+        animationsEnabled: controller.state.enableAnimations,
+        extent: 24,
+        indicatorDimension: 20,
+        indicatorStrokeWidth: 2,
+        idle: const Icon(Icons.sync_outlined),
+      ),
     );
     if (compact) {
+      final compactEntries = <PopupMenuEntry<String>>[
+        if (canOpenSurfaceMarkdown)
+          _compactMenuItem(
+            value: _CompactAppBarActions.openMarkdown,
+            icon: Icons.file_open_outlined,
+            label: openMarkdownEditorLabel,
+          ),
+        if (controller.state.showTopBarNewTodoButton)
+          _compactMenuItem(
+            value: _CompactAppBarActions.newTodo,
+            icon: Icons.add_task,
+            label: strings.get(PaperTodoStringKeys.actionNewTodo),
+          ),
+        if (controller.state.showTopBarNewNoteButton)
+          _compactMenuItem(
+            value: _CompactAppBarActions.newNote,
+            icon: Icons.note_add_outlined,
+            label: strings.get(PaperTodoStringKeys.actionNewNote),
+          ),
+        if (Platform.isWindows &&
+            controller.state.useCapsuleMode &&
+            controller.state.useCapsuleCollapseAll)
+          _compactMenuItem(
+            value: _CompactAppBarActions.toggleCollapseAll,
+            icon: collapseAllActive ? Icons.unfold_more : Icons.unfold_less,
+            label: collapseAllActive
+                ? strings.get(PaperTodoStringKeys.actionExpandAll)
+                : strings.get(PaperTodoStringKeys.actionCollapseAll),
+          ),
+        _compactMenuItem(
+          value: _CompactAppBarActions.recoverySnapshots,
+          icon: Icons.restore_outlined,
+          label: strings.get(PaperTodoStringKeys.actionRecoverySnapshots),
+          enabled: !_isSyncing,
+        ),
+        _compactMenuItem(
+          value: _CompactAppBarActions.showHidden,
+          icon: Icons.visibility_outlined,
+          label: strings.get(PaperTodoStringKeys.actionShowHidden),
+          enabled: hiddenPapers.isNotEmpty,
+        ),
+        _compactMenuItem(
+          value: _CompactAppBarActions.settings,
+          icon: Icons.settings_outlined,
+          label: strings.get(PaperTodoStringKeys.actionSettings),
+        ),
+      ];
       return [
         syncButton,
         SizedBox.square(
           key: const ValueKey('compact-app-bar-actions'),
           dimension: 48,
           child: PopupMenuButton<String>(
+            popUpAnimationStyle: _paperTodoPopupAnimationStyle,
             tooltip: _tooltipLabel(
               enableToolTips,
               strings.get(PaperTodoStringKeys.actionMore),
@@ -1730,54 +1887,11 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             padding: EdgeInsets.zero,
             onSelected: (value) =>
                 _handleCompactAppBarAction(value, surfacePaper),
-            itemBuilder: (context) => [
-              if (canOpenSurfaceMarkdown)
-                _compactMenuItem(
-                  value: _CompactAppBarActions.openMarkdown,
-                  icon: Icons.file_open_outlined,
-                  label: openMarkdownEditorLabel,
-                ),
-              if (controller.state.showTopBarNewTodoButton)
-                _compactMenuItem(
-                  value: _CompactAppBarActions.newTodo,
-                  icon: Icons.add_task,
-                  label: strings.get(PaperTodoStringKeys.actionNewTodo),
-                ),
-              if (controller.state.showTopBarNewNoteButton)
-                _compactMenuItem(
-                  value: _CompactAppBarActions.newNote,
-                  icon: Icons.note_add_outlined,
-                  label: strings.get(PaperTodoStringKeys.actionNewNote),
-                ),
-              if (Platform.isWindows &&
-                  controller.state.useCapsuleMode &&
-                  controller.state.useCapsuleCollapseAll)
-                _compactMenuItem(
-                  value: _CompactAppBarActions.toggleCollapseAll,
-                  icon:
-                      collapseAllActive ? Icons.unfold_more : Icons.unfold_less,
-                  label: collapseAllActive
-                      ? strings.get(PaperTodoStringKeys.actionExpandAll)
-                      : strings.get(PaperTodoStringKeys.actionCollapseAll),
-                ),
-              _compactMenuItem(
-                value: _CompactAppBarActions.recoverySnapshots,
-                icon: Icons.restore_outlined,
-                label: strings.get(PaperTodoStringKeys.actionRecoverySnapshots),
-                enabled: !_isSyncing,
-              ),
-              _compactMenuItem(
-                value: _CompactAppBarActions.showHidden,
-                icon: Icons.visibility_outlined,
-                label: strings.get(PaperTodoStringKeys.actionShowHidden),
-                enabled: hiddenPapers.isNotEmpty,
-              ),
-              _compactMenuItem(
-                value: _CompactAppBarActions.settings,
-                icon: Icons.settings_outlined,
-                label: strings.get(PaperTodoStringKeys.actionSettings),
-              ),
-            ],
+            constraints: _paperTodoTextMenuConstraints(
+              context,
+              compactEntries,
+            ),
+            itemBuilder: (context) => compactEntries,
           ),
         ),
       ];
@@ -1863,18 +1977,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
     required String label,
     bool enabled = true,
   }) {
-    return PopupMenuItem<String>(
+    return _PaperTodoPopupMenuItem<String>(
       value: value,
       enabled: enabled,
       height: _paperTodoPopupMenuHeight(),
       padding: _paperTodoPopupMenuItemPadding,
-      child: Row(
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Flexible(child: Text(label)),
-        ],
-      ),
+      child: Text(label),
     );
   }
 
@@ -3402,6 +3510,7 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
       context: context,
       builder: (context) {
         return _RecoverySnapshotsDialog(
+          enableAnimations: controller.state.enableAnimations,
           loadSnapshots: () => widget.syncService.listRecoverySnapshots(
             localState: controller.state,
             store: widget.store,
@@ -4361,11 +4470,18 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                       horizontal: 16,
                       vertical: 7,
                     ),
-                    backgroundColor: paperColors.danger,
                     foregroundColor: paperColors.paper,
                     textStyle: const TextStyle(fontSize: 13),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
+                    ),
+                  ).copyWith(
+                    backgroundColor: _paperDialogButtonBackground(
+                      normal: paperColors.danger,
+                      hover: paperColors.dangerHover,
+                    ),
+                    overlayColor: const WidgetStatePropertyAll(
+                      Colors.transparent,
                     ),
                   ),
                   child: Text(strings.get(PaperTodoStringKeys.actionDelete)),
@@ -4381,12 +4497,17 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                       vertical: 7,
                     ),
                     foregroundColor: paperColors.text,
-                    backgroundColor: paperColors.tint.withValues(
-                      alpha: 28 / 255,
-                    ),
                     textStyle: const TextStyle(fontSize: 13),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
+                    ),
+                  ).copyWith(
+                    backgroundColor: _paperDialogButtonBackground(
+                      normal: paperColors.tint.withValues(alpha: 28 / 255),
+                      hover: paperColors.tint.withValues(alpha: 46 / 255),
+                    ),
+                    overlayColor: const WidgetStatePropertyAll(
+                      Colors.transparent,
                     ),
                   ),
                   child: Text(strings.get(PaperTodoStringKeys.actionCancel)),
@@ -5021,15 +5142,15 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(8),
             borderSide: inputBorder,
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(8),
             borderSide: inputBorder,
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide(color: paperColors.active, width: 1.5),
           ),
         );
@@ -5046,6 +5167,7 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
           width: 326,
           height: 216,
           radius: 12,
+          shadowKind: _PaperDialogShadowKind.compact,
           padding: const EdgeInsets.all(16),
           contentSpacing: 8,
           actionSpacing: 16,
@@ -5091,6 +5213,9 @@ class _ReminderIntervalDialogState extends State<_ReminderIntervalDialog> {
                         child: _TodoDialogDropdown<String>(
                           dropdownKey: const ValueKey(
                             'todo-reminder-interval-unit',
+                          ),
+                          surfaceKey: const ValueKey(
+                            'todo-reminder-interval-unit-surface',
                           ),
                           value: _unit,
                           items: [
@@ -5320,6 +5445,22 @@ class _PaperDialog extends StatelessWidget {
   }
 }
 
+WidgetStateProperty<Color?> _paperDialogButtonBackground({
+  required Color normal,
+  required Color hover,
+}) {
+  return WidgetStateProperty.resolveWith((states) {
+    if (states.contains(WidgetState.disabled)) {
+      return normal.withValues(alpha: 0.38);
+    }
+    if (states.contains(WidgetState.hovered) ||
+        states.contains(WidgetState.pressed)) {
+      return hover;
+    }
+    return normal;
+  });
+}
+
 ButtonStyle _todoDialogActionStyle(
   BuildContext context, {
   bool primary = false,
@@ -5332,13 +5473,16 @@ ButtonStyle _todoDialogActionStyle(
     backgroundColor: primary ? colors.active : colors.hover,
     foregroundColor: primary ? colors.paper : colors.text,
     textStyle: const TextStyle(fontSize: 12),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(8),
+    ),
   );
 }
 
 class _TodoDialogDropdown<T> extends StatelessWidget {
   const _TodoDialogDropdown({
     required this.dropdownKey,
+    required this.surfaceKey,
     required this.value,
     required this.items,
     required this.onChanged,
@@ -5346,6 +5490,7 @@ class _TodoDialogDropdown<T> extends StatelessWidget {
   });
 
   final Key dropdownKey;
+  final Key surfaceKey;
   final T value;
   final List<DropdownMenuItem<T>> items;
   final ValueChanged<T> onChanged;
@@ -5354,32 +5499,43 @@ class _TodoDialogDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.tint.withValues(
-          alpha: colors.isDark ? 22 / 255 : 12 / 255,
+    final centeredItems = [
+      for (final item in items)
+        DropdownMenuItem<T>(
+          key: item.key,
+          value: item.value,
+          enabled: item.enabled,
+          onTap: item.onTap,
+          alignment: Alignment.center,
+          child: item.child,
         ),
-        border: Border.all(color: colors.tint.withValues(alpha: 80 / 255)),
-        borderRadius: BorderRadius.circular(4),
-      ),
+    ];
+    return _TodoDialogFieldChrome(
+      key: surfaceKey,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 7),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<T>(
             key: dropdownKey,
             value: value,
+            elevation: 0,
             isDense: true,
             isExpanded: true,
             menuMaxHeight: menuMaxHeight,
             borderRadius: BorderRadius.circular(8),
             dropdownColor: colors.paper,
+            focusColor: colors.hover,
+            alignment: Alignment.center,
+            enableFeedback: false,
+            mouseCursor: SystemMouseCursors.click,
+            dropdownMenuItemMouseCursor: SystemMouseCursors.click,
             icon: Icon(
               Icons.arrow_drop_down_rounded,
               size: 18,
               color: colors.weakText,
             ),
             style: TextStyle(color: colors.text, fontSize: 13, height: 1.15),
-            items: items,
+            items: centeredItems,
             onChanged: (next) {
               if (next != null) {
                 onChanged(next);
@@ -5392,12 +5548,67 @@ class _TodoDialogDropdown<T> extends StatelessWidget {
   }
 }
 
+class _TodoDialogFieldChrome extends StatefulWidget {
+  const _TodoDialogFieldChrome({
+    super.key,
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  State<_TodoDialogFieldChrome> createState() => _TodoDialogFieldChromeState();
+}
+
+class _TodoDialogFieldChromeState extends State<_TodoDialogFieldChrome> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PaperTodoThemeColors.of(context);
+    final emphasized = _hovered || _focused;
+    final backgroundAlpha = emphasized
+        ? (colors.isDark ? 36 / 255 : 22 / 255)
+        : (colors.isDark ? 22 / 255 : 12 / 255);
+    final borderColor = _focused
+        ? colors.active
+        : _hovered
+            ? colors.brightWeakText
+            : colors.tint.withValues(alpha: 80 / 255);
+    return Focus(
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          key: const ValueKey('todo-dialog-field-feedback'),
+          duration: Duration.zero,
+          curve: PaperTodoMotion.quickCurve,
+          decoration: BoxDecoration(
+            color: colors.tint.withValues(alpha: backgroundAlpha),
+            border: Border.all(
+              color: borderColor,
+              width: _focused ? 1.4 : 1,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
 class _RecoverySnapshotsDialog extends StatefulWidget {
   const _RecoverySnapshotsDialog({
+    required this.enableAnimations,
     required this.loadSnapshots,
     required this.onOpenSettings,
   });
 
+  final bool enableAnimations;
   final Future<List<WebDavSnapshotRecord>> Function() loadSnapshots;
   final VoidCallback onOpenSettings;
 
@@ -5433,103 +5644,137 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
           future: _snapshotsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const SizedBox(
-                height: 96,
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            if (snapshot.hasError) {
-              return ConstrainedBox(
-                constraints: const BoxConstraints(
-                  minHeight: 132,
-                  maxHeight: 240,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Text(
-                          strings.format(
-                            PaperTodoStringKeys.recoverySnapshotLoadFailed,
-                            [
-                              _readableFailureMessage(
-                                snapshot.error!,
-                                strings: strings,
-                              ),
-                            ],
-                          ),
+              final colors = PaperTodoThemeColors.of(context);
+              return _RecoverySnapshotStateTransition(
+                enableAnimations: widget.enableAnimations,
+                child: SizedBox(
+                  key: const ValueKey('recovery-snapshot-state-loading'),
+                  height: 96,
+                  child: Center(
+                    child: SizedBox.square(
+                      dimension: 22,
+                      child: CircularProgressIndicator(
+                        key: const ValueKey('recovery-snapshots-loading'),
+                        strokeWidth: 2,
+                        strokeCap: StrokeCap.round,
+                        color: colors.weakText,
+                        backgroundColor: colors.tint.withValues(
+                          alpha: colors.isDark ? 18 / 255 : 12 / 255,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      alignment: WrapAlignment.end,
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        TextButton.icon(
-                          key: const ValueKey('settings-recovery-snapshots'),
-                          onPressed: widget.onOpenSettings,
-                          icon: const Icon(Icons.settings_outlined),
-                          label: Text(
-                            strings.get(PaperTodoStringKeys.actionSettings),
+                  ),
+                ),
+              );
+            }
+            if (snapshot.hasError) {
+              return _RecoverySnapshotStateTransition(
+                enableAnimations: widget.enableAnimations,
+                child: ConstrainedBox(
+                  key: const ValueKey('recovery-snapshot-state-error'),
+                  constraints: const BoxConstraints(
+                    minHeight: 132,
+                    maxHeight: 240,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Text(
+                            strings.format(
+                              PaperTodoStringKeys.recoverySnapshotLoadFailed,
+                              [
+                                _readableFailureMessage(
+                                  snapshot.error!,
+                                  strings: strings,
+                                ),
+                              ],
+                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color:
+                                      PaperTodoThemeColors.of(context).weakText,
+                                  fontSize: 12.5,
+                                  height: 1.35,
+                                ),
                           ),
                         ),
-                        FilledButton.icon(
-                          key: const ValueKey('retry-recovery-snapshots'),
-                          onPressed: _retry,
-                          icon: const Icon(Icons.refresh_outlined),
-                          label: Text(
-                            strings.get(PaperTodoStringKeys.actionRetry),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          TextButton.icon(
+                            key: const ValueKey('settings-recovery-snapshots'),
+                            onPressed: widget.onOpenSettings,
+                            icon: const Icon(Icons.settings_outlined),
+                            label: Text(
+                              strings.get(PaperTodoStringKeys.actionSettings),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                          FilledButton.icon(
+                            key: const ValueKey('retry-recovery-snapshots'),
+                            onPressed: _retry,
+                            icon: const Icon(Icons.refresh_outlined),
+                            label: Text(
+                              strings.get(PaperTodoStringKeys.actionRetry),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               );
             }
             final snapshots = snapshot.data ?? const <WebDavSnapshotRecord>[];
             if (snapshots.isEmpty) {
-              return SizedBox(
-                height: 96,
-                child: Center(
-                  child: Text(
-                    strings.get(PaperTodoStringKeys.recoverySnapshotsEmpty),
+              return _RecoverySnapshotStateTransition(
+                enableAnimations: widget.enableAnimations,
+                child: SizedBox(
+                  key: const ValueKey('recovery-snapshot-state-empty'),
+                  height: 96,
+                  child: Center(
+                    child: Text(
+                      strings.get(PaperTodoStringKeys.recoverySnapshotsEmpty),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: PaperTodoThemeColors.of(context).weakText,
+                            fontSize: 12.5,
+                          ),
+                    ),
                   ),
                 ),
               );
             }
-            return DecoratedBox(
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.025),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-              ),
+            return _RecoverySnapshotStateTransition(
+              enableAnimations: widget.enableAnimations,
               child: ConstrainedBox(
+                key: const ValueKey('recovery-snapshot-list'),
                 constraints: const BoxConstraints(maxHeight: 360),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(11),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: snapshots.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final record = snapshots[index];
-                      return _RecoverySnapshotListItem(
-                        record: record,
-                        onRestore: () => Navigator.of(context).pop(record),
-                        strings: strings,
-                      );
-                    },
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  itemCount: snapshots.length,
+                  separatorBuilder: (context, index) => Divider(
+                    height: 1,
+                    indent: 29,
+                    color: PaperTodoThemeColors.of(
+                      context,
+                    ).paperBorder.withValues(alpha: 0.55),
                   ),
+                  itemBuilder: (context, index) {
+                    final record = snapshots[index];
+                    return _RecoverySnapshotListItem(
+                      record: record,
+                      onRestore: () => Navigator.of(context).pop(record),
+                      strings: strings,
+                    );
+                  },
                 ),
               ),
             );
@@ -5542,6 +5787,39 @@ class _RecoverySnapshotsDialogState extends State<_RecoverySnapshotsDialog> {
           child: Text(strings.get(PaperTodoStringKeys.actionClose)),
         ),
       ],
+    );
+  }
+}
+
+class _RecoverySnapshotStateTransition extends StatelessWidget {
+  const _RecoverySnapshotStateTransition({
+    required this.enableAnimations,
+    required this.child,
+  });
+
+  final bool enableAnimations;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final animationsEnabled =
+        enableAnimations && !MediaQuery.disableAnimationsOf(context);
+    return AnimatedSwitcher(
+      key: const ValueKey('recovery-snapshot-state-transition'),
+      duration:
+          animationsEnabled ? PaperTodoMotion.controlFeedback : Duration.zero,
+      reverseDuration:
+          animationsEnabled ? PaperTodoMotion.controlFeedback : Duration.zero,
+      switchInCurve: PaperTodoMotion.quickCurve,
+      switchOutCurve: PaperTodoMotion.quickCurve,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.98, end: 1).animate(animation),
+          child: child,
+        ),
+      ),
+      child: child,
     );
   }
 }
@@ -5603,6 +5881,7 @@ class _RecoverySnapshotListItem extends StatelessWidget {
             FilledButton.icon(
               key: ValueKey('restore-snapshot-${record.path}'),
               onPressed: onRestore,
+              style: _recoverySnapshotActionStyle(),
               icon: const Icon(Icons.restore_outlined),
               label: Text(strings.get(PaperTodoStringKeys.actionRestore)),
             ),
@@ -5656,6 +5935,7 @@ class _RecoverySnapshotListItem extends StatelessWidget {
           FilledButton.icon(
             key: ValueKey('restore-snapshot-${record.path}'),
             onPressed: onRestore,
+            style: _recoverySnapshotActionStyle(),
             icon: const Icon(Icons.restore_outlined, size: 16),
             label: Text(strings.get(PaperTodoStringKeys.actionRestore)),
           ),
@@ -5663,6 +5943,16 @@ class _RecoverySnapshotListItem extends StatelessWidget {
       ),
     );
   }
+}
+
+ButtonStyle _recoverySnapshotActionStyle() {
+  return FilledButton.styleFrom(
+    minimumSize: const Size(72, 30),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  );
 }
 
 String _snapshotSummary(WebDavSnapshotRecord snapshot) {
@@ -5731,6 +6021,31 @@ class _PaperTodoPopupMenuItem<T> extends PopupMenuItem<T> {
 
 class _PaperTodoPopupMenuItemState<T>
     extends PopupMenuItemState<T, _PaperTodoPopupMenuItem<T>> {
+  bool _hovered = false;
+  bool _focused = false;
+  bool _pressed = false;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) {
+      return;
+    }
+    setState(() => _hovered = value);
+  }
+
+  void _setFocused(bool value) {
+    if (_focused == value) {
+      return;
+    }
+    setState(() => _focused = value);
+  }
+
+  void _setPressed(bool value) {
+    if (_pressed == value) {
+      return;
+    }
+    setState(() => _pressed = value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -5745,15 +6060,25 @@ class _PaperTodoPopupMenuItemState<T>
             theme.textTheme.titleMedium!;
     final padding = widget.padding ??
         EdgeInsets.symmetric(horizontal: theme.useMaterial3 ? 12 : 16);
-    final item = DefaultTextStyle(
-      style: style,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: widget.height),
-        child: Padding(
-          padding: padding,
-          child: Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: buildChild(),
+    final highlighted = widget.enabled && (_hovered || _focused || _pressed);
+    final item = AnimatedContainer(
+      key: ValueKey('paper-todo-popup-menu-item-feedback-${widget.value}'),
+      duration: Duration.zero,
+      curve: PaperTodoMotion.quickCurve,
+      decoration: BoxDecoration(
+        color: highlighted ? theme.hoverColor : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: DefaultTextStyle(
+        style: style,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: widget.height),
+          child: Padding(
+            padding: padding,
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: buildChild(),
+            ),
           ),
         ),
       ),
@@ -5767,10 +6092,11 @@ class _PaperTodoPopupMenuItemState<T>
           mouseCursor:
               widget.mouseCursor ?? menuTheme.mouseCursor?.resolve(states),
           borderRadius: BorderRadius.circular(8),
-          hoverColor: theme.hoverColor,
-          focusColor: theme.focusColor,
-          // The pointer remains hovered while pressed; a second tint would
-          // darken PaperTodo's single IsHighlighted surface.
+          onHover: _setHovered,
+          onFocusChange: _setFocused,
+          onHighlightChanged: _setPressed,
+          hoverColor: Colors.transparent,
+          focusColor: Colors.transparent,
           highlightColor: Colors.transparent,
           splashColor: Colors.transparent,
           child: item,
@@ -5823,7 +6149,70 @@ const EdgeInsets _paperTodoStandalonePopupMenuItemPadding = EdgeInsets.fromLTRB(
   2,
 );
 
-BoxConstraints _paperTodoStandaloneMenuConstraints(
+PopupMenuItem<T> _paperTodoCheckedMenuItem<T>({
+  required T value,
+  required bool checked,
+  required Widget child,
+}) {
+  return _PaperTodoPopupMenuItem<T>(
+    value: value,
+    height: _paperTodoPopupMenuHeight(),
+    padding: _paperTodoPopupMenuItemPadding,
+    child: Semantics(
+      checked: checked,
+      child: Row(
+        children: [
+          SizedBox.square(
+            dimension: 18,
+            child: Center(
+              child: AnimatedOpacity(
+                key: const ValueKey('paper-todo-popup-menu-checkmark'),
+                duration: PaperTodoMotion.controlFeedback,
+                curve: PaperTodoMotion.quickCurve,
+                opacity: checked ? 1 : 0,
+                child: AnimatedScale(
+                  duration: PaperTodoMotion.controlFeedback,
+                  curve: PaperTodoMotion.quickCurve,
+                  scale: checked ? 1 : 0.72,
+                  child: const _PaperTodoPopupMenuCheckmark(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(child: child),
+        ],
+      ),
+    ),
+  );
+}
+
+class _PaperTodoPopupMenuCheckmark extends StatelessWidget {
+  const _PaperTodoPopupMenuCheckmark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      Icons.check_rounded,
+      size: 14,
+      color: PaperTodoThemeColors.of(context).active,
+    );
+  }
+}
+
+class _PaperTodoPopupMenuDivider extends PopupMenuDivider {
+  const _PaperTodoPopupMenuDivider({super.height})
+      : super(thickness: 1, indent: 8, endIndent: 8);
+}
+
+const AnimationStyle _paperTodoPopupAnimationStyle = AnimationStyle(
+  duration: PaperTodoMotion.quick,
+  reverseDuration: PaperTodoMotion.controlFeedback,
+  curve: PaperTodoMotion.enterCurve,
+  reverseCurve: PaperTodoMotion.exitCurve,
+);
+
+BoxConstraints _paperTodoTextMenuConstraints(
   BuildContext context,
   List<PopupMenuEntry<String>> entries,
 ) {
@@ -5865,7 +6254,9 @@ BoxConstraints _paperTodoStandaloneMenuConstraints(
   }
   // PaperTodo's menu is content-sized: 4 px menu padding, 8/10 px item
   // padding, and a 1 px border on both sides.
-  return BoxConstraints.tightFor(width: (widest + 28).ceilToDouble());
+  final availableWidth = math.max(96.0, MediaQuery.sizeOf(context).width - 16);
+  final width = (widest + 28).ceilToDouble().clamp(96.0, availableWidth);
+  return BoxConstraints.tightFor(width: width);
 }
 
 double _paperTodoPopupMenuHeight() {
@@ -6025,10 +6416,9 @@ class PaperPreview extends StatelessWidget {
                   : [
                       BoxShadow(
                         color: colorScheme.shadow.withValues(
-                          alpha: isDark ? 0.24 : 0.13,
+                          alpha: isDark ? 0.34 : 0.18,
                         ),
-                        blurRadius: 16,
-                        offset: const Offset(0, 5),
+                        blurRadius: isDark ? 24 : 22,
                       ),
                     ],
             ),
@@ -6156,7 +6546,7 @@ class PaperPreview extends StatelessWidget {
                                         constraints: BoxConstraints(
                                           minWidth: standaloneSurface ? 38 : 0,
                                           maxWidth: standaloneSurface
-                                              ? 180
+                                              ? 86
                                               : double.infinity,
                                         ),
                                         child: _PaperTitleEditor(
@@ -6169,6 +6559,7 @@ class PaperPreview extends StatelessWidget {
                                           fieldEnabled:
                                               !desktopInteractionLocked,
                                           enableToolTips: enableToolTips,
+                                          enableAnimations: enableAnimations,
                                           compact: standaloneSurface,
                                           onTitleChanged: onTitleChanged,
                                         ),
@@ -6451,6 +6842,7 @@ class PaperPreview extends StatelessWidget {
       lineSpacing: noteLineSpacing,
       textZoom: paper.textZoom,
       enableToolTips: enableToolTips,
+      enableAnimations: enableAnimations,
       onOpenUri: onOpenUri,
       onChanged: onChanged,
       onTextZoomChanged: _setTextZoom,
@@ -6552,6 +6944,7 @@ class PaperPreview extends StatelessWidget {
           key: ValueKey('${paper.id}-paper-actions'),
           dimension: 48,
           child: PopupMenuButton<String>(
+            popUpAnimationStyle: _paperTodoPopupAnimationStyle,
             tooltip: _tooltipLabel(
               enableToolTips,
               strings.get(PaperTodoStringKeys.actionPaperActions),
@@ -6575,20 +6968,18 @@ class PaperPreview extends StatelessWidget {
                   icon: Icons.file_open_outlined,
                   label: openMarkdownEditorLabel,
                 ),
-              const PopupMenuDivider(),
+              const _PaperTodoPopupMenuDivider(),
               for (final option in _TextZoomOption.values)
-                CheckedPopupMenuItem<String>(
+                _paperTodoCheckedMenuItem<String>(
                   value: '$_compactPaperZoomActionPrefix${option.value}',
                   checked: option.value == textZoom,
-                  height: _paperTodoPopupMenuHeight(),
-                  padding: _paperTodoPopupMenuItemPadding,
                   child: Text(
                     '${strings.get(PaperTodoStringKeys.zoom)} '
                     '${option.label}',
                   ),
                 ),
               if (Platform.isWindows) ...[
-                const PopupMenuDivider(),
+                const _PaperTodoPopupMenuDivider(),
                 _paperActionMenuItem(
                   value: _compactPaperActionToggleAlwaysOnTop,
                   icon: paper.alwaysOnTop
@@ -6617,7 +7008,7 @@ class PaperPreview extends StatelessWidget {
                   ),
                 ),
               ],
-              const PopupMenuDivider(),
+              const _PaperTodoPopupMenuDivider(),
               _paperActionMenuItem(
                 value: _compactPaperActionHide,
                 icon: Icons.visibility_off_outlined,
@@ -6650,6 +7041,7 @@ class PaperPreview extends StatelessWidget {
         ),
       if (useCapsuleMode) _collapseButton(context, isCollapsed),
       PopupMenuButton<double>(
+        popUpAnimationStyle: _paperTodoPopupAnimationStyle,
         tooltip: _tooltipLabel(
           enableToolTips,
           strings.get(PaperTodoStringKeys.actionPaperTextZoom),
@@ -6660,11 +7052,9 @@ class PaperPreview extends StatelessWidget {
         itemBuilder: (context) {
           return [
             for (final option in _TextZoomOption.values)
-              CheckedPopupMenuItem<double>(
+              _paperTodoCheckedMenuItem<double>(
                 value: option.value,
                 checked: option.value == textZoom,
-                height: _paperTodoPopupMenuHeight(),
-                padding: _paperTodoPopupMenuItemPadding,
                 child: Text(option.label),
               ),
           ];
@@ -6783,12 +7173,15 @@ class PaperPreview extends StatelessWidget {
           key: ValueKey('${paper.id}-sync-now'),
           tooltip: strings.get(PaperTodoStringKeys.actionSyncNow),
           onPressed: syncing ? null : () => unawaited(onSync()),
-          child: syncing
-              ? const SizedBox.square(
-                  dimension: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1.6),
-                )
-              : const Icon(Icons.sync_outlined, size: 15),
+          child: _PaperTodoSyncState(
+            stateKey: '${paper.id}-standalone-sync-state',
+            syncing: syncing,
+            animationsEnabled: enableAnimations,
+            extent: 16,
+            indicatorDimension: 12,
+            indicatorStrokeWidth: 1.6,
+            idle: const Icon(Icons.sync_outlined, size: 15),
+          ),
         ),
       if (showPrimaryActions)
         _standaloneHeaderButton(
@@ -6844,12 +7237,15 @@ class PaperPreview extends StatelessWidget {
           key: ValueKey('${paper.id}-sync-now'),
           tooltip: strings.get(PaperTodoStringKeys.actionSyncNow),
           onPressed: syncing ? null : () => unawaited(onSync()),
-          child: syncing
-              ? const SizedBox.square(
-                  dimension: 13,
-                  child: CircularProgressIndicator(strokeWidth: 1.6),
-                )
-              : const Icon(Icons.sync_rounded, size: 16),
+          child: _PaperTodoSyncState(
+            stateKey: '${paper.id}-paper-window-sync-state',
+            syncing: syncing,
+            animationsEnabled: enableAnimations,
+            extent: 16,
+            indicatorDimension: 13,
+            indicatorStrokeWidth: 1.6,
+            idle: const Icon(Icons.sync_rounded, size: 16),
+          ),
         ),
       if (showUtility && paper.isNote && enableTodoNoteLinks)
         SizedBox(
@@ -6892,16 +7288,16 @@ class PaperPreview extends StatelessWidget {
               unawaited(onCreatePaper(PaperTypes.todo, sourcePaper: paper)),
           child: Transform.translate(
             key: const ValueKey('paper-window-new-todo-glyph-metrics'),
-            offset: const Offset(-1, 1),
+            offset: Offset.zero,
             child: const Text(
               '\uFF0B\u2713',
               style: TextStyle(
                 fontFamily: 'Segoe UI Symbol',
                 fontFamilyFallback: <String>['Segoe UI Emoji'],
                 fontSize: 13,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w400,
                 height: 1,
-                letterSpacing: -0.5,
+                letterSpacing: 0,
               ),
             ),
           ),
@@ -6915,16 +7311,16 @@ class PaperPreview extends StatelessWidget {
               unawaited(onCreatePaper(PaperTypes.note, sourcePaper: paper)),
           child: Transform.translate(
             key: const ValueKey('paper-window-new-note-glyph-metrics'),
-            offset: const Offset(-1, 1),
+            offset: Offset.zero,
             child: const Text(
               '\uFF0B\u270E',
               style: TextStyle(
                 fontFamily: 'Segoe UI Symbol',
                 fontFamilyFallback: <String>['Segoe UI Emoji'],
                 fontSize: 13,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w400,
                 height: 1,
-                letterSpacing: -0.75,
+                letterSpacing: 0,
               ),
             ),
           ),
@@ -6939,7 +7335,7 @@ class PaperPreview extends StatelessWidget {
             useCapsuleMode ? _toggleCollapsed : () => unawaited(onHide(paper)),
         child: Transform.translate(
           key: const ValueKey('paper-window-close-glyph-metrics'),
-          offset: const Offset(-1, 1),
+          offset: Offset.zero,
           child: Text(
             useCapsuleMode ? '\u2500' : '\u00D7',
             style: const TextStyle(
@@ -6957,10 +7353,12 @@ class PaperPreview extends StatelessWidget {
   Widget _paperTodoDesktopPinGlyph({required bool pinned, double size = 15}) {
     return Transform.translate(
       key: const ValueKey('paper-window-desktop-pin-glyph-metrics'),
-      offset: const Offset(-2, 0),
-      child: Opacity(
+      offset: Offset.zero,
+      child: AnimatedOpacity(
         key: const ValueKey('paper-window-desktop-pin-glyph-opacity'),
         opacity: pinned ? 1 : 0.72,
+        duration: Duration.zero,
+        curve: PaperTodoMotion.quickCurve,
         child: Image.asset(
           pinned ? 'assets/icons/unpin.png' : 'assets/icons/pin.png',
           width: size,
@@ -7017,7 +7415,11 @@ class PaperPreview extends StatelessWidget {
         child: _conditionalTooltip(
           enabled: enableToolTips,
           message: tooltip,
-          child: _PaperWindowHeaderAction(onPressed: onPressed, child: child),
+          child: _PaperWindowHeaderAction(
+            onPressed: onPressed,
+            animationsEnabled: enableAnimations,
+            child: child,
+          ),
         ),
       ),
     );
@@ -7137,15 +7539,14 @@ class PaperPreview extends StatelessWidget {
     final entries = _paperContextMenuItems(context);
     final selected = await showMenu<String>(
       context: context,
+      popUpAnimationStyle: _paperTodoPopupAnimationStyle,
       requestFocus: false,
       position: RelativeRect.fromRect(
         Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
         Offset.zero & overlay.size,
       ),
       items: entries,
-      constraints: standaloneSurface
-          ? _paperTodoStandaloneMenuConstraints(context, entries)
-          : null,
+      constraints: _paperTodoTextMenuConstraints(context, entries),
     );
     if (!context.mounted || selected == null) {
       return;
@@ -7186,7 +7587,7 @@ class PaperPreview extends StatelessWidget {
         label: strings.get(PaperTodoStringKeys.actionNewNotePaper),
       ),
       if (paper.isTodo) ...[
-        const PopupMenuDivider(),
+        const _PaperTodoPopupMenuDivider(),
         _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuTodo)),
         _paperActionMenuItem(
           value: _compactPaperActionClearDone,
@@ -7196,7 +7597,7 @@ class PaperPreview extends StatelessWidget {
         ),
       ],
       if (_canAddCanvasBlockFromPaperMenu) ...[
-        const PopupMenuDivider(),
+        const _PaperTodoPopupMenuDivider(),
         _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuCanvas)),
         _paperActionMenuItem(
           value: _compactPaperActionAddCanvasBlock,
@@ -7204,7 +7605,7 @@ class PaperPreview extends StatelessWidget {
           label: strings.get(PaperTodoStringKeys.actionAddCanvasBlock),
         ),
       ],
-      const PopupMenuDivider(),
+      const _PaperTodoPopupMenuDivider(),
       _paperTodoMenuHeader(_displayPaperTitle()),
       _paperActionMenuItem(
         value: _compactPaperActionOpenSurface,
@@ -7217,20 +7618,18 @@ class PaperPreview extends StatelessWidget {
           icon: Icons.file_open_outlined,
           label: openMarkdownEditorLabel,
         ),
-      const PopupMenuDivider(),
+      const _PaperTodoPopupMenuDivider(),
       for (final option in _TextZoomOption.values)
-        CheckedPopupMenuItem<String>(
+        _paperTodoCheckedMenuItem<String>(
           value: '$_compactPaperZoomActionPrefix${option.value}',
           checked: option.value == textZoom,
-          height: _paperTodoPopupMenuHeight(),
-          padding: _paperTodoPopupMenuItemPadding,
           child: Text(
             '${strings.get(PaperTodoStringKeys.zoom)} '
             '${option.label}',
           ),
         ),
       if (Platform.isWindows) ...[
-        const PopupMenuDivider(),
+        const _PaperTodoPopupMenuDivider(),
         _paperTodoMenuHeader(strings.get(PaperTodoStringKeys.menuDesktopPin)),
         _paperActionMenuItem(
           value: _compactPaperActionToggleAlwaysOnTop,
@@ -7261,7 +7660,7 @@ class PaperPreview extends StatelessWidget {
           label: strings.get(PaperTodoStringKeys.actionSaveWindowBounds),
         ),
       ],
-      const PopupMenuDivider(),
+      const _PaperTodoPopupMenuDivider(),
       _paperActionMenuItem(
         value: _compactPaperActionHide,
         icon: Icons.visibility_off_outlined,
@@ -7291,7 +7690,7 @@ class PaperPreview extends StatelessWidget {
         label: strings.get(PaperTodoStringKeys.actionNewNotePaperCompact),
       ),
       if (paper.isTodo) ...[
-        const PopupMenuDivider(height: 7),
+        const _PaperTodoPopupMenuDivider(height: 7),
         _paperTodoDesktopMenuHeader(strings.get(PaperTodoStringKeys.menuTodo)),
         _paperTodoDesktopMenuItem(
           value: _compactPaperActionClearDone,
@@ -7299,7 +7698,7 @@ class PaperPreview extends StatelessWidget {
         ),
       ],
       if (_canAddCanvasBlockFromPaperMenu) ...[
-        const PopupMenuDivider(height: 7),
+        const _PaperTodoPopupMenuDivider(height: 7),
         _paperTodoDesktopMenuHeader(
           strings.get(PaperTodoStringKeys.menuCanvas),
         ),
@@ -7308,7 +7707,7 @@ class PaperPreview extends StatelessWidget {
           label: strings.get(PaperTodoStringKeys.actionAddCodeBlock),
         ),
       ],
-      const PopupMenuDivider(height: 7),
+      const _PaperTodoPopupMenuDivider(height: 7),
       _paperTodoDesktopMenuHeader(
         strings.get(PaperTodoStringKeys.menuDesktopPin),
       ),
@@ -7317,7 +7716,7 @@ class PaperPreview extends StatelessWidget {
           value: _compactPaperActionTogglePinned,
           label: strings.get(PaperTodoStringKeys.actionPinToDesktop),
         ),
-      const PopupMenuDivider(height: 7),
+      const _PaperTodoPopupMenuDivider(height: 7),
       _paperTodoDesktopMenuHeader(_displayPaperTitle()),
       if (useCapsuleMode)
         _paperTodoDesktopMenuItem(
@@ -7366,18 +7765,12 @@ class PaperPreview extends StatelessWidget {
     required String label,
     bool enabled = true,
   }) {
-    return PopupMenuItem<String>(
+    return _PaperTodoPopupMenuItem<String>(
       value: value,
       enabled: enabled,
       height: _paperTodoPopupMenuHeight(),
       padding: _paperTodoPopupMenuItemPadding,
-      child: Row(
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Flexible(child: Text(label)),
-        ],
-      ),
+      child: Text(label),
     );
   }
 
@@ -7586,10 +7979,12 @@ class _PaperWindowHeaderAction extends StatefulWidget {
   const _PaperWindowHeaderAction({
     required this.onPressed,
     required this.child,
+    required this.animationsEnabled,
   });
 
   final VoidCallback? onPressed;
   final Widget child;
+  final bool animationsEnabled;
 
   @override
   State<_PaperWindowHeaderAction> createState() =>
@@ -7614,6 +8009,7 @@ class _PaperWindowHeaderActionState extends State<_PaperWindowHeaderAction> {
     final colors = Theme.of(context).colorScheme;
     final paperColors = PaperTodoThemeColors.of(context);
     final enabled = widget.onPressed != null;
+    const feedbackDuration = Duration.zero;
     final disabledForeground = colors.onSurfaceVariant.withValues(alpha: 0.30);
     final foreground = enabled
         ? (_hovered || _pressed ? paperColors.text : paperColors.weakText)
@@ -7621,8 +8017,8 @@ class _PaperWindowHeaderActionState extends State<_PaperWindowHeaderAction> {
     final baseStyle = IconButton.styleFrom(
       foregroundColor: foreground,
       disabledForegroundColor: disabledForeground,
-      hoverColor: paperColors.hover,
-      highlightColor: paperColors.hover,
+      hoverColor: Colors.transparent,
+      highlightColor: Colors.transparent,
       splashFactory: NoSplash.splashFactory,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     );
@@ -7644,34 +8040,65 @@ class _PaperWindowHeaderActionState extends State<_PaperWindowHeaderAction> {
             : null,
         onPointerUp: enabled ? (_) => _clearPressed() : null,
         onPointerCancel: enabled ? (_) => _clearPressed() : null,
-        child: Opacity(
-          opacity: _pressed ? 0.7 : 1,
-          child: ExcludeFocus(
-            child: IconButton(
-              onPressed: widget.onPressed,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              style: baseStyle.copyWith(
-                foregroundColor: WidgetStateProperty.resolveWith<Color?>((
-                  states,
-                ) {
-                  if (!enabled || states.contains(WidgetState.disabled)) {
-                    return disabledForeground;
-                  }
-                  if (_hovered ||
-                      _pressed ||
-                      states.contains(WidgetState.hovered) ||
-                      states.contains(WidgetState.pressed)) {
-                    return paperColors.text;
-                  }
-                  return paperColors.weakText;
-                }),
+        child: AnimatedScale(
+          key: const ValueKey('paper-header-action-scale-feedback'),
+          scale: 1,
+          duration: feedbackDuration,
+          curve: PaperTodoMotion.quickCurve,
+          child: AnimatedOpacity(
+            key: const ValueKey('paper-header-action-opacity-feedback'),
+            opacity: _pressed ? 0.7 : 1,
+            duration: feedbackDuration,
+            curve: PaperTodoMotion.quickCurve,
+            child: AnimatedContainer(
+              key: const ValueKey('paper-header-action-surface-feedback'),
+              duration: feedbackDuration,
+              curve: PaperTodoMotion.quickCurve,
+              decoration: BoxDecoration(
+                color: enabled && (_hovered || _pressed)
+                    ? paperColors.hover
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
               ),
-              icon: IconTheme.merge(
-                data: IconThemeData(color: foreground),
-                child: DefaultTextStyle.merge(
-                  style: TextStyle(color: foreground),
-                  child: widget.child,
+              child: ExcludeFocus(
+                child: IconButton(
+                  onPressed: widget.onPressed,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  style: baseStyle.copyWith(
+                    foregroundColor: WidgetStateProperty.resolveWith<Color?>((
+                      states,
+                    ) {
+                      if (!enabled || states.contains(WidgetState.disabled)) {
+                        return disabledForeground;
+                      }
+                      if (_hovered ||
+                          _pressed ||
+                          states.contains(WidgetState.hovered) ||
+                          states.contains(WidgetState.pressed)) {
+                        return paperColors.text;
+                      }
+                      return paperColors.weakText;
+                    }),
+                  ),
+                  icon: TweenAnimationBuilder<Color?>(
+                    key: const ValueKey(
+                      'paper-header-action-foreground-feedback',
+                    ),
+                    tween: ColorTween(end: foreground),
+                    duration: feedbackDuration,
+                    curve: PaperTodoMotion.quickCurve,
+                    builder: (context, animatedForeground, child) {
+                      return IconTheme.merge(
+                        data: IconThemeData(color: animatedForeground),
+                        child: DefaultTextStyle.merge(
+                          style: TextStyle(color: animatedForeground),
+                          child: child!,
+                        ),
+                      );
+                    },
+                    child: widget.child,
+                  ),
                 ),
               ),
             ),
@@ -7732,12 +8159,14 @@ class _PaperWindowTopmostGlyphState extends State<_PaperWindowTopmostGlyph> {
     return MouseRegion(
       onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
       onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
-      child: Opacity(
+      child: AnimatedOpacity(
         key: const ValueKey('paper-window-topmost-glyph-opacity'),
         opacity: widget.active || _hovered ? 1 : 0.58,
+        duration: Duration.zero,
+        curve: PaperTodoMotion.quickCurve,
         child: Transform.translate(
           key: const ValueKey('paper-window-topmost-glyph-metrics'),
-          offset: const Offset(1, 1),
+          offset: Offset.zero,
           child: Text(
             widget.glyph,
             style: TextStyle(
@@ -7970,6 +8399,7 @@ class _PaperTitleEditor extends StatefulWidget {
     required this.enabled,
     required this.fieldEnabled,
     required this.enableToolTips,
+    required this.enableAnimations,
     this.compact = false,
     required this.onTitleChanged,
   });
@@ -7981,6 +8411,7 @@ class _PaperTitleEditor extends StatefulWidget {
   final bool enabled;
   final bool fieldEnabled;
   final bool enableToolTips;
+  final bool enableAnimations;
   final bool compact;
   final Future<void> Function(PaperData paper) onTitleChanged;
 
@@ -8037,6 +8468,9 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
     final strings = PaperTodoStringsScope.of(context);
     final editTitleLabel = strings.get(PaperTodoStringKeys.actionEditTitle);
     final emphasized = _isEditingTitle || _isHovered;
+    final transitionDuration = widget.enableAnimations
+        ? PaperTodoMotion.controlFeedback
+        : Duration.zero;
     final dividerColor = paperColors.tint.withValues(
       alpha: paperColors.isDark ? 34 / 255 : 28 / 255,
     );
@@ -8058,7 +8492,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
       duration: Duration.zero,
       height: widget.compact ? 24 : 28,
       padding: widget.compact
-          ? const EdgeInsets.fromLTRB(4, 0, 5, 0)
+          ? const EdgeInsets.fromLTRB(4, 1, 5, 1)
           : const EdgeInsets.symmetric(horizontal: 3),
       decoration: BoxDecoration(
         color: emphasized ? paperColors.hover : Colors.transparent,
@@ -8071,26 +8505,33 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
         onKeyEvent: _handleKeyEvent,
         child: Transform.translate(
           key: ValueKey('${widget.paper.id}-title-wpf-metrics'),
-          offset: widget.compact ? const Offset(1, 1) : Offset.zero,
+          // WPF centers both title layers inside the same host. Keeping this
+          // transform at the origin avoids a one-pixel jump between the paper
+          // chrome and the editable title.
+          offset: Offset.zero,
           child: Stack(
             alignment: Alignment.centerLeft,
             children: [
               Positioned.fill(
-                child: Visibility(
-                  key: ValueKey('${widget.paper.id}-title-display-layer'),
-                  visible: !_isEditingTitle,
-                  maintainState: true,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: widget.enabled ? _beginTitleEdit : null,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: _PaperTitleMarquee(
-                        text: _displayTitle,
-                        style: titleStyle,
-                        textScaler: MediaQuery.textScalerOf(context),
-                        richTextKey: ValueKey(
-                          '${widget.paper.id}-title-display',
+                child: IgnorePointer(
+                  ignoring: _isEditingTitle || !widget.enabled,
+                  child: AnimatedOpacity(
+                    key: ValueKey('${widget.paper.id}-title-display-layer'),
+                    opacity: _isEditingTitle ? 0 : 1,
+                    duration: transitionDuration,
+                    curve: PaperTodoMotion.quickCurve,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.enabled ? _beginTitleEdit : null,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _PaperTitleMarquee(
+                          text: _displayTitle,
+                          style: titleStyle,
+                          textScaler: MediaQuery.textScalerOf(context),
+                          richTextKey: ValueKey(
+                            '${widget.paper.id}-title-display',
+                          ),
                         ),
                       ),
                     ),
@@ -8098,9 +8539,12 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
                 ),
               ),
               IgnorePointer(
-                ignoring: !widget.enabled,
-                child: Opacity(
+                ignoring: !widget.enabled || !_isEditingTitle,
+                child: AnimatedOpacity(
+                  key: ValueKey('${widget.paper.id}-title-editor-layer'),
                   opacity: _isEditingTitle ? 1 : 0,
+                  duration: transitionDuration,
+                  curve: PaperTodoMotion.quickCurve,
                   child: TextFormField(
                     key: ValueKey('${widget.paper.id}-title'),
                     controller: _controller,
@@ -8169,12 +8613,12 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
       maxLines: 1,
     )..layout();
     // WPF's Segoe UI title metrics are narrower than Flutter's fallback at
-    // the narrow reference width. Wider paper windows restore the title's
-    // natural measured width just like the source title host.
+    // the narrow reference width. The source host remains within 38-86 px at
+    // every paper width; overflow belongs to the marquee, not the header row.
     final metricScale = MediaQuery.sizeOf(context).width <= 280 ? 0.8 : 1.0;
     final compactWidth = (titleMeasure.width * metricScale + 9).clamp(
-      41.0,
-      180.0,
+      38.0,
+      86.0,
     );
     return SizedBox(width: compactWidth, child: titleHostContent);
   }
@@ -8322,6 +8766,7 @@ class _NoteEditor extends StatefulWidget {
     required this.lineSpacing,
     required this.textZoom,
     required this.enableToolTips,
+    required this.enableAnimations,
     required this.onOpenUri,
     required this.onChanged,
     required this.onTextZoomChanged,
@@ -8334,6 +8779,7 @@ class _NoteEditor extends StatefulWidget {
   final double lineSpacing;
   final double textZoom;
   final bool enableToolTips;
+  final bool enableAnimations;
   final Future<void> Function(String uri) onOpenUri;
   final Future<void> Function() onChanged;
   final void Function(double value) onTextZoomChanged;
@@ -8350,8 +8796,7 @@ class _NotePaperGridPainter extends CustomPainter {
 
   final Color color;
   final double spacing = 24;
-  final double verticalLineOffset = 1;
-  final double horizontalLineOffset = -1;
+  final double lineOffset = 0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -8359,10 +8804,10 @@ class _NotePaperGridPainter extends CustomPainter {
       ..color = color
       ..strokeWidth = 1
       ..isAntiAlias = false;
-    for (var x = verticalLineOffset; x <= size.width; x += spacing) {
+    for (var x = lineOffset; x <= size.width; x += spacing) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
-    for (var y = horizontalLineOffset; y <= size.height; y += spacing) {
+    for (var y = lineOffset; y <= size.height; y += spacing) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
@@ -8492,6 +8937,7 @@ class _NoteEditorState extends State<_NoteEditor> {
     final colorScheme = Theme.of(context).colorScheme;
     final paperColors = PaperTodoThemeColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final countText = _noteCanvasElementCountText();
     return Container(
       key: const ValueKey('note-canvas-toolbar'),
       constraints: const BoxConstraints(minHeight: 31),
@@ -8513,7 +8959,7 @@ class _NoteEditorState extends State<_NoteEditor> {
               _addCanvasButton(),
               const Spacer(),
               Text(
-                _noteCanvasElementCountText(),
+                countText,
                 key: const ValueKey('note-canvas-element-count'),
                 maxLines: 1,
                 softWrap: false,
@@ -8555,7 +9001,7 @@ class _NoteEditorState extends State<_NoteEditor> {
           key: const ValueKey('note-paper-grid'),
           painter: _NotePaperGridPainter(
             color: paperColors.tint.withValues(
-              alpha: isDark ? 24 / 255 : 18 / 255,
+              alpha: isDark ? 38 / 255 : 28 / 255,
             ),
           ),
           child: Padding(
@@ -8581,7 +9027,9 @@ class _NoteEditorState extends State<_NoteEditor> {
                           width: 2,
                           decoration: BoxDecoration(
                             color: paperColors.tint.withValues(
-                              alpha: isDark ? 88 / 255 : 104 / 255,
+                              // PaperTodo applies 72% opacity to its binding
+                              // brush after resolving the theme tint.
+                              alpha: isDark ? 63 / 255 : 75 / 255,
                             ),
                             borderRadius: BorderRadius.circular(1),
                           ),
@@ -8625,7 +9073,10 @@ class _NoteEditorState extends State<_NoteEditor> {
               const TextStyle(fontSize: 14),
         )
         .apply(fontSizeFactor: widget.textZoom)
-        .copyWith(height: widget.lineSpacing);
+        .copyWith(
+          height: widget.lineSpacing,
+          letterSpacing: 0,
+        );
     final editor = TextFormField(
       key: ValueKey('${widget.paper.id}-content'),
       controller: _contentController,
@@ -8703,32 +9154,19 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   PopupMenuItem<String> _markdownMenuItem({
     required String value,
-    required IconData icon,
     required String label,
     bool enabled = true,
   }) {
     final compact = widget.standaloneSurface;
-    return compact
-        ? _PaperTodoPopupMenuItem<String>(
-            value: value,
-            enabled: enabled,
-            height: 21,
-            padding: _paperTodoStandalonePopupMenuItemPadding,
-            child: Text(label),
-          )
-        : PopupMenuItem<String>(
-            value: value,
-            enabled: enabled,
-            height: _paperTodoPopupMenuHeight(),
-            padding: _paperTodoPopupMenuItemPadding,
-            child: Row(
-              children: [
-                Icon(icon, size: 18),
-                const SizedBox(width: 8),
-                Flexible(child: Text(label)),
-              ],
-            ),
-          );
+    return _PaperTodoPopupMenuItem<String>(
+      value: value,
+      enabled: enabled,
+      height: compact ? 21 : _paperTodoPopupMenuHeight(),
+      padding: compact
+          ? _paperTodoStandalonePopupMenuItemPadding
+          : _paperTodoPopupMenuItemPadding,
+      child: Text(label),
+    );
   }
 
   PopupMenuItem<String> _markdownMenuHeader(String label) {
@@ -8744,7 +9182,9 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   PopupMenuDivider _markdownMenuDivider() {
-    return PopupMenuDivider(height: widget.standaloneSurface ? 7 : 16);
+    return _PaperTodoPopupMenuDivider(
+      height: widget.standaloneSurface ? 7 : 16,
+    );
   }
 
   void _handleMarkdownEditorContextMenuPointerDown(
@@ -8770,14 +9210,13 @@ class _NoteEditorState extends State<_NoteEditor> {
       final entries = _markdownEditorContextMenuItems();
       final selected = await showMenu<String>(
         context: context,
+        popUpAnimationStyle: _paperTodoPopupAnimationStyle,
         position: RelativeRect.fromRect(
           Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
           Offset.zero & overlay.size,
         ),
         items: entries,
-        constraints: widget.standaloneSurface
-            ? _paperTodoStandaloneMenuConstraints(context, entries)
-            : null,
+        constraints: _paperTodoTextMenuConstraints(context, entries),
       );
       if (!mounted || !context.mounted || selected == null) {
         return;
@@ -8796,60 +9235,49 @@ class _NoteEditorState extends State<_NoteEditor> {
       _markdownMenuHeader(strings.get(PaperTodoStringKeys.menuFormat)),
       _markdownMenuItem(
         value: _markdownActionBold,
-        icon: Icons.format_bold,
         label: strings.get(PaperTodoStringKeys.markdownActionBold),
       ),
       _markdownMenuItem(
         value: _markdownActionItalic,
-        icon: Icons.format_italic,
         label: strings.get(PaperTodoStringKeys.markdownActionItalic),
       ),
       _markdownMenuItem(
         value: _markdownActionStrikethrough,
-        icon: Icons.strikethrough_s,
         label: strings.get(PaperTodoStringKeys.markdownActionStrikethrough),
       ),
       _markdownMenuItem(
         value: _markdownActionHeading,
-        icon: Icons.title,
         label: strings.get(PaperTodoStringKeys.markdownActionHeading),
       ),
       _markdownMenuItem(
         value: _markdownActionQuote,
-        icon: Icons.format_quote,
         label: strings.get(PaperTodoStringKeys.markdownActionQuote),
       ),
       _markdownMenuItem(
         value: _markdownActionList,
-        icon: Icons.format_list_bulleted,
         label: strings.get(PaperTodoStringKeys.markdownActionList),
       ),
       _markdownMenuItem(
         value: _markdownActionCodeBlock,
-        icon: Icons.code,
         label: strings.get(PaperTodoStringKeys.markdownActionCodeBlock),
       ),
       _markdownMenuItem(
         value: _markdownActionInsertLink,
-        icon: Icons.link,
         label: strings.get(PaperTodoStringKeys.markdownActionInsertLink),
       ),
       _markdownMenuDivider(),
       _markdownMenuHeader(strings.get(PaperTodoStringKeys.menuText)),
       _markdownMenuItem(
         value: _markdownActionCopy,
-        icon: Icons.content_copy_outlined,
         label: strings.get(PaperTodoStringKeys.actionCopy),
         enabled: hasSelection,
       ),
       _markdownMenuItem(
         value: _markdownActionPaste,
-        icon: Icons.content_paste_outlined,
         label: strings.get(PaperTodoStringKeys.actionPaste),
       ),
       _markdownMenuItem(
         value: _markdownActionSelectAll,
-        icon: Icons.select_all,
         label: strings.get(PaperTodoStringKeys.actionSelectAll),
         enabled: hasText,
       ),
@@ -9092,7 +9520,34 @@ class _NoteEditorState extends State<_NoteEditor> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textStyle = Theme.of(
       context,
-    ).textTheme.labelSmall?.copyWith(color: colorScheme.onSurfaceVariant);
+    ).textTheme.labelSmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+          letterSpacing: 0,
+        );
+    final modeTextStyle = textStyle?.copyWith(
+          color: colorScheme.onSurface,
+          fontWeight: FontWeight.w600,
+        ) ??
+        TextStyle(
+          color: colorScheme.onSurface,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0,
+        );
+    final modePillWidth = <String>[
+      _viewEdit,
+      _viewPreview,
+      _viewSplit,
+    ].fold<double>(42, (width, candidate) {
+      final painter = TextPainter(
+        text: TextSpan(text: _noteViewLabel(candidate), style: modeTextStyle),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      return math.max(width, painter.width + 14);
+    });
+    final statsText = _noteStatsText();
     return DecoratedBox(
       key: const ValueKey('note-status-bar'),
       decoration: BoxDecoration(
@@ -9100,7 +9555,7 @@ class _NoteEditorState extends State<_NoteEditor> {
         border: Border(
           top: BorderSide(
             color: paperColors.tint.withValues(
-              alpha: isDark ? 34 / 255 : 25 / 255,
+              alpha: isDark ? 34 / 255 : 28 / 255,
             ),
           ),
         ),
@@ -9111,9 +9566,9 @@ class _NoteEditorState extends State<_NoteEditor> {
           padding: const EdgeInsets.fromLTRB(10, 3, 10, 4),
           child: Row(
             children: [
-              ConstrainedBox(
+              SizedBox(
                 key: const ValueKey('note-status-mode-pill'),
-                constraints: const BoxConstraints(minWidth: 42),
+                width: modePillWidth,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: paperColors.tint.withValues(
@@ -9127,27 +9582,23 @@ class _NoteEditorState extends State<_NoteEditor> {
                       _noteViewLabel(view),
                       key: const ValueKey('note-status-mode'),
                       textAlign: TextAlign.center,
-                      style: textStyle?.copyWith(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.7,
-                      ),
+                      style: modeTextStyle,
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Transform.translate(
+                child: Align(
                   key: const ValueKey('note-status-stats-metrics'),
-                  offset: const Offset(2, -2),
+                  alignment: Alignment.centerLeft,
                   child: Text(
-                    _noteStatsText(),
+                    statsText,
                     key: const ValueKey('note-status-stats'),
                     maxLines: 1,
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
-                    style: textStyle?.copyWith(letterSpacing: 0.05),
+                    style: textStyle,
                   ),
                 ),
               ),
@@ -9164,10 +9615,11 @@ class _NoteEditorState extends State<_NoteEditor> {
     return SizedBox(
       key: const ValueKey('note-status-zoom'),
       width: 38,
-      child: Transform.translate(
+      child: Align(
         key: const ValueKey('note-status-zoom-metrics'),
-        offset: const Offset(0, -1),
+        alignment: Alignment.centerRight,
         child: FittedBox(
+          key: const ValueKey('note-status-zoom-content'),
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerRight,
           child: Text(
@@ -9200,7 +9652,10 @@ class _NoteEditorState extends State<_NoteEditor> {
           key: const ValueKey('note-text-zoom-overlay'),
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? _resetTextZoom : null,
-          child: DecoratedBox(
+          child: AnimatedContainer(
+            key: const ValueKey('note-text-zoom-overlay-surface'),
+            duration: Duration.zero,
+            curve: PaperTodoMotion.quickCurve,
             decoration: BoxDecoration(
               color: _zoomOverlayHovered
                   ? paperColors.tint.withValues(
@@ -9211,8 +9666,10 @@ class _NoteEditorState extends State<_NoteEditor> {
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              child: Opacity(
+              child: AnimatedOpacity(
                 opacity: _zoomOverlayHovered ? 1 : 0.55,
+                duration: Duration.zero,
+                curve: PaperTodoMotion.quickCurve,
                 child: Text(
                   '${(widget.textZoom * 100).round()}%',
                   style: TextStyle(
@@ -9436,6 +9893,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       selectedElementId: _selectedCanvasElementId,
       geometryGesturesEnabled: !widget.paper.isPinnedToDesktop,
       enableToolTips: widget.enableToolTips,
+      enableAnimations: widget.enableAnimations,
       embedded: embedded,
       textZoom: widget.textZoom,
       onChanged: widget.onChanged,
@@ -9466,8 +9924,10 @@ class _NoteEditorState extends State<_NoteEditor> {
       message: strings.get(PaperTodoStringKeys.actionAddCanvasBlock),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1),
-        child: Opacity(
+        child: AnimatedOpacity(
           opacity: enabled ? (_canvasAddButtonPressed ? 0.7 : 1) : 0.72,
+          duration: Duration.zero,
+          curve: PaperTodoMotion.quickCurve,
           child: MouseRegion(
             cursor:
                 enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -9493,8 +9953,10 @@ class _NoteEditorState extends State<_NoteEditor> {
               onPointerCancel: enabled
                   ? (_) => setState(() => _canvasAddButtonPressed = false)
                   : null,
-              child: DecoratedBox(
+              child: AnimatedContainer(
                 key: const ValueKey('note-add-canvas-block-surface'),
+                duration: Duration.zero,
+                curve: PaperTodoMotion.quickCurve,
                 decoration: BoxDecoration(
                   color: _canvasAddButtonHovered
                       ? paperColors.hover
@@ -9787,6 +10249,7 @@ class _NoteCanvasPreview extends StatelessWidget {
     required this.selectedElementId,
     required this.geometryGesturesEnabled,
     required this.enableToolTips,
+    required this.enableAnimations,
     required this.embedded,
     required this.textZoom,
     required this.onChanged,
@@ -9802,6 +10265,7 @@ class _NoteCanvasPreview extends StatelessWidget {
   final String? selectedElementId;
   final bool geometryGesturesEnabled;
   final bool enableToolTips;
+  final bool enableAnimations;
   final bool embedded;
   final double textZoom;
   final Future<void> Function() onChanged;
@@ -9864,6 +10328,7 @@ class _NoteCanvasPreview extends StatelessWidget {
                     isSelected: sortedElements[index].id == selectedElementId,
                     geometryGesturesEnabled: geometryGesturesEnabled,
                     enableToolTips: enableToolTips,
+                    enableAnimations: enableAnimations,
                     strings: strings,
                     scale: scale,
                     canvasWidth: canvasWidth,
@@ -9916,6 +10381,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
     required this.isSelected,
     required this.geometryGesturesEnabled,
     required this.enableToolTips,
+    required this.enableAnimations,
     required this.strings,
     required this.scale,
     required this.canvasWidth,
@@ -9937,6 +10403,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
   final bool isSelected;
   final bool geometryGesturesEnabled;
   final bool enableToolTips;
+  final bool enableAnimations;
   final PaperTodoStrings strings;
   final double scale;
   final double canvasWidth;
@@ -9969,11 +10436,13 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   int? _geometryPointer;
   _CanvasGeometryDragMode? _geometryDragMode;
   late final TextEditingController _textController;
+  late final ScrollController _textScrollController;
 
   @override
   void initState() {
     super.initState();
     _textController = TextEditingController(text: widget.element.text);
+    _textScrollController = ScrollController();
   }
 
   @override
@@ -9994,6 +10463,7 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   @override
   void dispose() {
     _textController.dispose();
+    _textScrollController.dispose();
     super.dispose();
   }
 
@@ -10013,7 +10483,10 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                     fontFamilyFallback: _paperTodoCodeFontFamilyFallback,
                   )
                 : PaperTodoTypography.of(context).contentStyle(baseStyle))
-            .copyWith(fontSize: (isCode ? 13 : 14) * widget.scale);
+            .copyWith(
+            fontSize: (isCode ? 13 : 14) * widget.scale,
+            letterSpacing: 0,
+          );
     final typeLabel = _noteCanvasElementTypeLabel(element.type);
     final layerLabel = _noteCanvasLayerLabel(
       widget.layerRank,
@@ -10037,8 +10510,10 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _handleCanvasContextMenuPointerDown,
-      child: DecoratedBox(
+      child: AnimatedContainer(
         key: ValueKey('note-canvas-element-chrome-${element.id}'),
+        duration: Duration.zero,
+        curve: PaperTodoMotion.quickCurve,
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerHigh,
           border: Border.all(
@@ -10090,8 +10565,13 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                         onPointerMove: _updateGeometryGesture,
                         onPointerUp: _endGeometryGesture,
                         onPointerCancel: _endGeometryGesture,
-                        child: Container(
+                        child: AnimatedContainer(
+                          key: ValueKey(
+                            'note-canvas-header-surface-${element.id}',
+                          ),
                           height: headerHeight,
+                          duration: Duration.zero,
+                          curve: PaperTodoMotion.quickCurve,
                           padding: EdgeInsets.fromLTRB(
                             headerLeftPadding,
                             2,
@@ -10122,10 +10602,12 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                                       ),
                                 ),
                               ),
-                              Container(
+                              AnimatedContainer(
                                 key: ValueKey(
                                   'note-canvas-layer-badge-${element.id}',
                                 ),
+                                duration: Duration.zero,
+                                curve: PaperTodoMotion.quickCurve,
                                 constraints: BoxConstraints(
                                   minWidth: math.min(32, layerBadgeMaxWidth),
                                   maxWidth: layerBadgeMaxWidth,
@@ -10183,30 +10665,38 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                         absorbing: !widget.geometryGesturesEnabled,
                         child: Focus(
                           onKeyEvent: _handleCanvasTextKeyEvent,
-                          child: TextFormField(
+                          child: Scrollbar(
                             key: ValueKey(
-                              'note-canvas-element-text-${element.id}',
+                              'note-canvas-element-scrollbar-${element.id}',
                             ),
-                            controller: _textController,
-                            readOnly: !widget.geometryGesturesEnabled,
-                            enableInteractiveSelection:
-                                widget.geometryGesturesEnabled,
-                            expands: true,
-                            maxLines: null,
-                            minLines: null,
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              filled: false,
-                              isDense: true,
-                              contentPadding: EdgeInsets.zero,
+                            controller: _textScrollController,
+                            thumbVisibility: true,
+                            child: TextFormField(
+                              key: ValueKey(
+                                'note-canvas-element-text-${element.id}',
+                              ),
+                              controller: _textController,
+                              scrollController: _textScrollController,
+                              readOnly: !widget.geometryGesturesEnabled,
+                              enableInteractiveSelection:
+                                  widget.geometryGesturesEnabled,
+                              expands: true,
+                              maxLines: null,
+                              minLines: null,
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                filled: false,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              style: style?.copyWith(
+                                color: colorScheme.onSurface,
+                              ),
+                              onTap: () => widget.onSelect(element),
+                              onChanged: _commitCanvasText,
                             ),
-                            style: style?.copyWith(
-                              color: colorScheme.onSurface,
-                            ),
-                            onTap: () => widget.onSelect(element),
-                            onChanged: _commitCanvasText,
                           ),
                         ),
                       ),
@@ -10236,7 +10726,12 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                       onPointerMove: _updateGeometryGesture,
                       onPointerUp: _endGeometryGesture,
                       onPointerCancel: _endGeometryGesture,
-                      child: DecoratedBox(
+                      child: AnimatedContainer(
+                        key: ValueKey(
+                          'note-canvas-resize-surface-${element.id}',
+                        ),
+                        duration: Duration.zero,
+                        curve: PaperTodoMotion.quickCurve,
                         decoration: BoxDecoration(
                           color: paperColors.tint.withValues(
                             alpha: isDark ? 72 / 255 : 58 / 255,
@@ -10297,12 +10792,13 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
     final entries = _canvasElementContextMenuItems();
     final selected = await showMenu<String>(
       context: context,
+      popUpAnimationStyle: _paperTodoPopupAnimationStyle,
       position: RelativeRect.fromRect(
         Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
         Offset.zero & overlay.size,
       ),
       items: entries,
-      constraints: _paperTodoStandaloneMenuConstraints(context, entries),
+      constraints: _paperTodoTextMenuConstraints(context, entries),
     );
     if (!mounted || selected == null) {
       return;
@@ -10341,7 +10837,7 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
         value: _compactCanvasActionDuplicate,
         label: widget.strings.get(PaperTodoStringKeys.canvasDuplicateBlock),
       ),
-      const PopupMenuDivider(height: 7),
+      const _PaperTodoPopupMenuDivider(height: 7),
       _canvasElementContextMenuItem(
         value: _compactCanvasActionDelete,
         label: widget.strings.get(PaperTodoStringKeys.actionDelete),
@@ -10724,6 +11220,7 @@ class _PaperTodoTodoCheckBoxState extends State<_PaperTodoTodoCheckBox> {
               painter: _PaperTodoTodoCheckBoxPainter(
                 value: widget.value,
                 hovered: _hovered,
+                selectionProgress: widget.value ? 1 : 0,
                 colors: colors,
               ),
             ),
@@ -10738,11 +11235,13 @@ class _PaperTodoTodoCheckBoxPainter extends CustomPainter {
   const _PaperTodoTodoCheckBoxPainter({
     required this.value,
     required this.hovered,
+    required this.selectionProgress,
     required this.colors,
   });
 
   final bool value;
   final bool hovered;
+  final double selectionProgress;
   final PaperTodoThemeColors colors;
 
   static const double borderWidth = 1.5;
@@ -10755,32 +11254,9 @@ class _PaperTodoTodoCheckBoxPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final scaleX = size.width / 16;
     final scaleY = size.height / 16;
-    if (value) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Offset.zero & size,
-          Radius.circular(radius * math.min(scaleX, scaleY)),
-        ),
-        Paint()
-          ..color = hovered ? colors.checkBoxActiveHover : colors.active
-          ..style = PaintingStyle.fill,
-      );
-      final check = Path()
-        ..moveTo(3 * scaleX, 7.5 * scaleY)
-        ..lineTo(6.5 * scaleX, 11 * scaleY)
-        ..lineTo(13 * scaleX, 4 * scaleY);
-      canvas.drawPath(
-        check,
-        Paint()
-          ..color = colors.paper
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = checkStrokeWidth * math.min(scaleX, scaleY)
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-      return;
-    }
-
+    final progress = selectionProgress.clamp(0.0, 1.0);
+    final uncheckedOpacity = 1 - progress;
+    final scale = math.min(scaleX, scaleY);
     final inset = borderWidth / 2;
     final borderRect = Rect.fromLTWH(
       inset,
@@ -10792,27 +11268,67 @@ class _PaperTodoTodoCheckBoxPainter extends CustomPainter {
     // a centered stroke on the inset path, so add the half-stroke inset back
     // to preserve the same outer radius instead of squaring the corners.
     final borderRadius = radius + inset;
-    if (hovered) {
+
+    if (uncheckedOpacity > 0) {
+      if (hovered) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(borderRect, Radius.circular(borderRadius)),
+          Paint()
+            ..color = colors.checkBoxUncheckedHover.withValues(
+              alpha: colors.checkBoxUncheckedHover.a * uncheckedOpacity,
+            )
+            ..style = PaintingStyle.fill,
+        );
+      }
+      final borderColor =
+          hovered ? colors.checkBoxHoverBorder : colors.checkBox;
       canvas.drawRRect(
         RRect.fromRectAndRadius(borderRect, Radius.circular(borderRadius)),
         Paint()
-          ..color = colors.checkBoxUncheckedHover
-          ..style = PaintingStyle.fill,
+          ..color = borderColor.withValues(
+            alpha: borderColor.a * uncheckedOpacity,
+          )
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = borderWidth,
       );
     }
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(borderRect, Radius.circular(borderRadius)),
-      Paint()
-        ..color = hovered ? colors.checkBoxHoverBorder : colors.checkBox
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = borderWidth,
-    );
+
+    if (progress > 0) {
+      final activeColor = hovered ? colors.checkBoxActiveHover : colors.active;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(radius * scale),
+        ),
+        Paint()
+          ..color = activeColor.withValues(
+            alpha: activeColor.a * progress,
+          )
+          ..style = PaintingStyle.fill,
+      );
+      final check = Path()
+        ..moveTo(3 * scaleX, 7.5 * scaleY)
+        ..lineTo(6.5 * scaleX, 11 * scaleY)
+        ..lineTo(13 * scaleX, 4 * scaleY);
+      for (final metric in check.computeMetrics()) {
+        canvas.drawPath(
+          metric.extractPath(0, metric.length * progress),
+          Paint()
+            ..color = colors.paper
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = checkStrokeWidth * scale
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round,
+        );
+      }
+    }
   }
 
   @override
   bool shouldRepaint(covariant _PaperTodoTodoCheckBoxPainter oldDelegate) {
     return oldDelegate.value != value ||
         oldDelegate.hovered != hovered ||
+        oldDelegate.selectionProgress != selectionProgress ||
         oldDelegate.colors != colors;
   }
 }
@@ -10931,6 +11447,8 @@ class _EnteringTodoRow {
     required this.slideDuration,
     required this.slideDistance,
     required this.slideCurve,
+    this.expandSize = false,
+    this.departureGroupToken,
   });
 
   final String itemId;
@@ -10939,6 +11457,12 @@ class _EnteringTodoRow {
   final Duration slideDuration;
   final double slideDistance;
   final Curve slideCurve;
+  // A completion reorder uses the same entrance surface as ordinary new-row
+  // animations, but expands into the destination slot while the old snapshot
+  // collapses. Keeping the two slots in the same motion group prevents a
+  // one-frame gap (or a late layout jump) at the hand-off.
+  final bool expandSize;
+  final Object? departureGroupToken;
 }
 
 class _TodoEntranceAnimation extends StatefulWidget {
@@ -10950,6 +11474,7 @@ class _TodoEntranceAnimation extends StatefulWidget {
     required this.slideCurve,
     required this.onFinished,
     required this.child,
+    this.expandSize = false,
     super.key,
   });
 
@@ -10960,6 +11485,7 @@ class _TodoEntranceAnimation extends StatefulWidget {
   final Curve slideCurve;
   final VoidCallback onFinished;
   final Widget child;
+  final bool expandSize;
 
   @override
   State<_TodoEntranceAnimation> createState() => _TodoEntranceAnimationState();
@@ -11011,11 +11537,23 @@ class _TodoEntranceAnimationState extends State<_TodoEntranceAnimation>
         final opacityProgress = PaperTodoMotion.quickCurve.transform(
           (_controller.value * opacityScale).clamp(0.0, 1.0),
         );
-        return Opacity(
+        final content = Opacity(
           opacity: opacityProgress,
           child: Transform.translate(
             offset: Offset(0, -widget.slideDistance * (1 - slideProgress)),
             child: child,
+          ),
+        );
+        if (!widget.expandSize) {
+          return content;
+        }
+        return ClipRect(
+          child: Align(
+            alignment: Alignment.topCenter,
+            heightFactor: PaperTodoMotion.enterCurve.transform(
+              _controller.value,
+            ),
+            child: content,
           ),
         );
       },
@@ -11111,6 +11649,248 @@ class _TodoDepartureAnimationState extends State<_TodoDepartureAnimation>
   }
 }
 
+class _TodoFooterActionSurface extends StatefulWidget {
+  const _TodoFooterActionSurface({
+    required this.enabled,
+    required this.animationsEnabled,
+    required this.child,
+    super.key,
+  });
+
+  final bool enabled;
+  final bool animationsEnabled;
+  final Widget child;
+
+  @override
+  State<_TodoFooterActionSurface> createState() =>
+      _TodoFooterActionSurfaceState();
+}
+
+class _TodoFooterActionSurfaceState extends State<_TodoFooterActionSurface> {
+  bool _hovered = false;
+
+  @override
+  void didUpdateWidget(covariant _TodoFooterActionSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled && _hovered) {
+      _hovered = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PaperTodoThemeColors.of(context);
+    final duration =
+        widget.animationsEnabled && !MediaQuery.disableAnimationsOf(context)
+            ? PaperTodoMotion.controlFeedback
+            : Duration.zero;
+    return Opacity(
+      opacity: widget.enabled ? 1 : 0.44,
+      child: MouseRegion(
+        onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
+        child: AnimatedContainer(
+          duration: duration,
+          curve: PaperTodoMotion.quickCurve,
+          decoration: BoxDecoration(
+            color: _hovered ? colors.hover : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+class _TodoRowIconAction extends StatefulWidget {
+  const _TodoRowIconAction({
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+    required this.extent,
+    required this.iconSize,
+    required this.animationsEnabled,
+    super.key,
+  });
+
+  final String? tooltip;
+  final VoidCallback? onPressed;
+  final Widget icon;
+  final double extent;
+  final double iconSize;
+  final bool animationsEnabled;
+
+  @override
+  State<_TodoRowIconAction> createState() => _TodoRowIconActionState();
+}
+
+class _TodoRowIconActionState extends State<_TodoRowIconAction> {
+  bool _hovered = false;
+
+  @override
+  void didUpdateWidget(covariant _TodoRowIconAction oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onPressed == null && _hovered) {
+      _hovered = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PaperTodoThemeColors.of(context);
+    final enabled = widget.onPressed != null;
+    final duration =
+        widget.animationsEnabled && !MediaQuery.disableAnimationsOf(context)
+            ? PaperTodoMotion.controlFeedback
+            : Duration.zero;
+    final pressedOverlay = WidgetStateProperty.resolveWith<Color?>((states) {
+      return states.contains(WidgetState.pressed)
+          ? colors.tintAt(colors.isDark ? 54 : 42)
+          : Colors.transparent;
+    });
+    return Opacity(
+      opacity: enabled ? 1 : 0.38,
+      child: AnimatedContainer(
+        width: widget.extent,
+        height: widget.extent,
+        duration: duration,
+        curve: PaperTodoMotion.quickCurve,
+        decoration: BoxDecoration(
+          color: _hovered ? colors.hover : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: IconButton(
+          tooltip: widget.tooltip,
+          onHover: enabled ? (value) => setState(() => _hovered = value) : null,
+          onPressed: widget.onPressed,
+          iconSize: widget.iconSize,
+          constraints: BoxConstraints.tightFor(
+            width: widget.extent,
+            height: widget.extent,
+          ),
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(
+            animationDuration: duration,
+            backgroundColor: Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            hoverColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            foregroundColor: colors.weakText,
+            disabledForegroundColor: colors.weakText,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ).copyWith(
+            foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+              return enabled &&
+                      (_hovered || states.contains(WidgetState.pressed))
+                  ? colors.text
+                  : colors.weakText;
+            }),
+            overlayColor: pressedOverlay,
+          ),
+          icon: widget.icon,
+        ),
+      ),
+    );
+  }
+}
+
+class _TodoRowPopupAction extends StatefulWidget {
+  const _TodoRowPopupAction({
+    required this.tooltip,
+    required this.enabled,
+    required this.icon,
+    required this.extent,
+    required this.iconSize,
+    required this.animationsEnabled,
+    required this.onSelected,
+    required this.itemBuilder,
+    super.key,
+  });
+
+  final String? tooltip;
+  final bool enabled;
+  final Widget icon;
+  final double extent;
+  final double iconSize;
+  final bool animationsEnabled;
+  final ValueChanged<String> onSelected;
+  final PopupMenuItemBuilder<String> itemBuilder;
+
+  @override
+  State<_TodoRowPopupAction> createState() => _TodoRowPopupActionState();
+}
+
+class _TodoRowPopupActionState extends State<_TodoRowPopupAction> {
+  bool _hovered = false;
+  bool _open = false;
+
+  @override
+  void didUpdateWidget(covariant _TodoRowPopupAction oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled && (_hovered || _open)) {
+      _hovered = false;
+      _open = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PaperTodoThemeColors.of(context);
+    final duration =
+        widget.animationsEnabled && !MediaQuery.disableAnimationsOf(context)
+            ? PaperTodoMotion.controlFeedback
+            : Duration.zero;
+    final emphasized = widget.enabled && (_hovered || _open);
+    return Opacity(
+      opacity: widget.enabled ? 1 : 0.38,
+      child: MouseRegion(
+        onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
+        child: AnimatedContainer(
+          width: widget.extent,
+          height: widget.extent,
+          duration: duration,
+          curve: PaperTodoMotion.quickCurve,
+          decoration: BoxDecoration(
+            color: emphasized ? colors.hover : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: PopupMenuButton<String>(
+            popUpAnimationStyle: _paperTodoPopupAnimationStyle,
+            tooltip: widget.tooltip,
+            enabled: widget.enabled,
+            iconSize: widget.iconSize,
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              animationDuration: duration,
+              backgroundColor: Colors.transparent,
+              disabledBackgroundColor: Colors.transparent,
+              hoverColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              foregroundColor: emphasized ? colors.text : colors.weakText,
+              disabledForegroundColor: colors.weakText,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            icon: widget.icon,
+            onOpened: () => setState(() => _open = true),
+            onCanceled: () => setState(() => _open = false),
+            onSelected: (value) {
+              setState(() => _open = false);
+              widget.onSelected(value);
+            },
+            itemBuilder: widget.itemBuilder,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _TodoEditorState extends State<_TodoEditor> {
   static const _maxTodoUndoDepth = 100;
   static const _todoColumnSplitterWidth = 8.0;
@@ -11200,7 +11980,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         )
         .copyWith(
           height: widget.lineSpacing / textMetricScale,
-          letterSpacing: dengXianMetrics ? null : -0.0625,
+          letterSpacing: dengXianMetrics ? null : 0,
         );
     return Focus(
       focusNode: _todoFocusNode,
@@ -11245,7 +12025,10 @@ class _TodoEditorState extends State<_TodoEditor> {
     final departingItemIds =
         _departingTodoRows.map((departure) => departure.item.id).toSet();
     for (final item in widget.paper.items) {
-      if (departingItemIds.contains(item.id)) {
+      final entrance = _enteringTodoRows[item.id];
+      final isReorderHandoff = entrance?.departureGroupToken != null &&
+          departingItemIds.contains(item.id);
+      if (departingItemIds.contains(item.id) && !isReorderHandoff) {
         continue;
       }
       Widget row = _todoReorderDropTarget(
@@ -11258,18 +12041,24 @@ class _TodoEditorState extends State<_TodoEditor> {
           compactActions: compactActions,
         ),
       );
-      final entrance = _enteringTodoRows[item.id];
       if (entrance != null) {
-        row = _TodoEntranceAnimation(
+        final animatedRow = _TodoEntranceAnimation(
           key: ValueKey('${widget.paper.id}-${item.id}-entrance'),
           delay: entrance.delay,
           opacityDuration: entrance.opacityDuration,
           slideDuration: entrance.slideDuration,
           slideDistance: entrance.slideDistance,
           slideCurve: entrance.slideCurve,
+          expandSize: entrance.expandSize,
           onFinished: () => _finishEnteringTodoRow(entrance),
           child: row,
         );
+        row = isReorderHandoff
+            ? ExcludeFocus(
+                excluding: true,
+                child: IgnorePointer(child: animatedRow),
+              )
+            : animatedRow;
       }
       rows.add(row);
     }
@@ -11399,10 +12188,21 @@ class _TodoEditorState extends State<_TodoEditor> {
               SizedBox.square(
                 dimension: leadingExtent,
                 child: Center(
-                  child: Transform.scale(
-                    scale: 16 / 18,
-                    child: Checkbox(value: item.done, onChanged: null),
-                  ),
+                  child: mobileBoard
+                      ? Transform.scale(
+                          key: ValueKey(
+                            '${widget.paper.id}-${item.id}-checkbox',
+                          ),
+                          scale: 16 / 18,
+                          child: Checkbox(value: item.done, onChanged: null),
+                        )
+                      : _PaperTodoTodoCheckBox(
+                          key: ValueKey(
+                            '${widget.paper.id}-${item.id}-checkbox',
+                          ),
+                          value: item.done,
+                          onChanged: null,
+                        ),
                 ),
               ),
               Expanded(child: columns),
@@ -11430,9 +12230,15 @@ class _TodoEditorState extends State<_TodoEditor> {
     final focusItemId =
         _todoItemById(departure.item.id) == null ? null : departure.item.id;
     setState(
-      () => _departingTodoRows.removeWhere(
-        (candidate) => identical(candidate.groupToken, departure.groupToken),
-      ),
+      () {
+        _departingTodoRows.removeWhere(
+          (candidate) => identical(candidate.groupToken, departure.groupToken),
+        );
+        _enteringTodoRows.removeWhere(
+          (_, entrance) =>
+              identical(entrance.departureGroupToken, departure.groupToken),
+        );
+      },
     );
     if (focusItemId != null) {
       _requestTodoItemFocus(focusItemId);
@@ -11440,11 +12246,22 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   void _clearDepartingTodoRows() {
+    final groupTokens =
+        _departingTodoRows.map((departure) => departure.groupToken).toSet();
+    _enteringTodoRows.removeWhere(
+      (_, entrance) => groupTokens.contains(entrance.departureGroupToken),
+    );
     _departingTodoRows.clear();
   }
 
   void _finishEnteringTodoRow(_EnteringTodoRow entrance) {
     if (!mounted || !identical(_enteringTodoRows[entrance.itemId], entrance)) {
+      return;
+    }
+    // Reorder hand-offs are removed together with their departure snapshot.
+    // Removing the arrival early would expose a transient empty destination
+    // slot if the two animation status callbacks land on adjacent frames.
+    if (entrance.departureGroupToken != null) {
       return;
     }
     setState(() => _enteringTodoRows.remove(entrance.itemId));
@@ -11513,13 +12330,19 @@ class _TodoEditorState extends State<_TodoEditor> {
           clipBehavior: Clip.none,
           children: [
             child,
-            if (highlighted)
-              Positioned(
-                left: 4,
-                right: 4,
-                top: showAfter ? null : -1.5,
-                bottom: showAfter ? -1.5 : null,
-                child: IgnorePointer(
+            Positioned(
+              left: 4,
+              right: 4,
+              top: showAfter ? null : -1.5,
+              bottom: showAfter ? -1.5 : null,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  key: ValueKey(
+                    '${widget.paper.id}-${item.id}-reorder-indicator',
+                  ),
+                  opacity: highlighted ? 1 : 0,
+                  duration: Duration.zero,
+                  curve: PaperTodoMotion.quickCurve,
                   child: Container(
                     height: 3,
                     decoration: BoxDecoration(
@@ -11529,6 +12352,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                   ),
                 ),
               ),
+            ),
           ],
         );
       },
@@ -11588,8 +12412,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         return SizedBox(
           key: ValueKey('${widget.paper.id}-todo-delete-drop-target'),
           height: targetHeight,
-          child: Container(
+          child: AnimatedContainer(
             key: ValueKey('${widget.paper.id}-todo-trash-area'),
+            duration: Duration.zero,
+            curve: PaperTodoMotion.quickCurve,
             margin: const EdgeInsets.only(top: 6, bottom: 2),
             height: visualSpec.controlExtent,
             decoration: BoxDecoration(
@@ -11607,8 +12433,10 @@ class _TodoEditorState extends State<_TodoEditor> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(
-              child: Opacity(
+              child: AnimatedOpacity(
                 opacity: highlighted ? 1 : 0.65,
+                duration: Duration.zero,
+                curve: PaperTodoMotion.quickCurve,
                 child: Text(
                   '\u{1F5D1}',
                   style: TextStyle(
@@ -11642,8 +12470,10 @@ class _TodoEditorState extends State<_TodoEditor> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: _addItem,
-            child: Container(
+            child: AnimatedContainer(
               key: ValueKey('${widget.paper.id}-todo-append-area'),
+              duration: Duration.zero,
+              curve: PaperTodoMotion.quickCurve,
               margin: const EdgeInsets.only(top: 6, bottom: 2),
               height: visualSpec.controlExtent,
               decoration: BoxDecoration(
@@ -11656,8 +12486,10 @@ class _TodoEditorState extends State<_TodoEditor> {
                 borderRadius: BorderRadius.circular(8),
               ),
               alignment: Alignment.center,
-              child: Opacity(
+              child: AnimatedOpacity(
                 opacity: _todoAppendHovered ? 0.7 : 0.42,
+                duration: Duration.zero,
+                curve: PaperTodoMotion.quickCurve,
                 child: Text(
                   '\uFF0B',
                   style: TextStyle(
@@ -11757,47 +12589,100 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
       );
     }
+    final footerPressedOverlay = WidgetStateProperty.resolveWith<Color?>((
+      states,
+    ) {
+      if (states.contains(WidgetState.pressed)) {
+        return paperColors.tintAt(paperColors.isDark ? 52 : 38);
+      }
+      return Colors.transparent;
+    });
     return Container(
       margin: const EdgeInsets.only(top: 5),
       decoration: BoxDecoration(
-        color: paperColors.tint.withValues(alpha: 12 / 255),
+        color: paperColors.tintAt(paperColors.isDark ? 18 : 10),
         border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+          color: paperColors.tintAt(paperColors.isDark ? 34 : 24),
         ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
           Expanded(
-            child: TextButton.icon(
-              onPressed: _addItem,
-              icon: Icon(Icons.add, size: 17, color: colorScheme.primary),
-              label: Text(strings.get(PaperTodoStringKeys.actionAddItem)),
-              style: TextButton.styleFrom(
-                foregroundColor: colorScheme.onSurfaceVariant,
-                alignment: Alignment.center,
-                minimumSize: const Size.fromHeight(36),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            child: _TodoFooterActionSurface(
+              key: ValueKey('${widget.paper.id}-todo-footer-add'),
+              enabled: true,
+              animationsEnabled: widget.enableAnimations,
+              child: TextButton.icon(
+                onPressed: _addItem,
+                icon: Icon(Icons.add, size: 17, color: colorScheme.primary),
+                label: Text(strings.get(PaperTodoStringKeys.actionAddItem)),
+                style: TextButton.styleFrom(
+                  foregroundColor: colorScheme.onSurfaceVariant,
+                  backgroundColor: Colors.transparent,
+                  overlayColor: Colors.transparent,
+                  alignment: Alignment.center,
+                  minimumSize: const Size.fromHeight(36),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ).copyWith(
+                  overlayColor: footerPressedOverlay,
                 ),
               ),
             ),
           ),
-          IconButton(
-            tooltip: _tooltipLabel(
-              widget.enableToolTips,
-              strings.get(PaperTodoStringKeys.actionUndoTodoChange),
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: _TodoFooterActionSurface(
+              key: ValueKey('${widget.paper.id}-todo-footer-undo'),
+              enabled: _undoStack.isNotEmpty,
+              animationsEnabled: widget.enableAnimations,
+              child: IconButton(
+                tooltip: _tooltipLabel(
+                  widget.enableToolTips,
+                  strings.get(PaperTodoStringKeys.actionUndoTodoChange),
+                ),
+                onPressed: _undoStack.isEmpty ? null : _undoTodoChange,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  disabledBackgroundColor: Colors.transparent,
+                  hoverColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ).copyWith(overlayColor: footerPressedOverlay),
+                icon: const Icon(Icons.undo, size: 17),
+              ),
             ),
-            onPressed: _undoStack.isEmpty ? null : _undoTodoChange,
-            icon: const Icon(Icons.undo, size: 17),
           ),
-          IconButton(
-            tooltip: _tooltipLabel(
-              widget.enableToolTips,
-              strings.get(PaperTodoStringKeys.actionRedoTodoChange),
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: _TodoFooterActionSurface(
+              key: ValueKey('${widget.paper.id}-todo-footer-redo'),
+              enabled: _redoStack.isNotEmpty,
+              animationsEnabled: widget.enableAnimations,
+              child: IconButton(
+                tooltip: _tooltipLabel(
+                  widget.enableToolTips,
+                  strings.get(PaperTodoStringKeys.actionRedoTodoChange),
+                ),
+                onPressed: _redoStack.isEmpty ? null : _redoTodoChange,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  disabledBackgroundColor: Colors.transparent,
+                  hoverColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ).copyWith(overlayColor: footerPressedOverlay),
+                icon: const Icon(Icons.redo, size: 17),
+              ),
             ),
-            onPressed: _redoStack.isEmpty ? null : _redoTodoChange,
-            icon: const Icon(Icons.redo, size: 17),
           ),
         ],
       ),
@@ -11899,19 +12784,22 @@ class _TodoEditorState extends State<_TodoEditor> {
         SizedBox.square(
           dimension: leadingExtent,
           child: Center(
-            child: widget.standaloneSurface
-                ? _PaperTodoTodoCheckBox(
-                    key: ValueKey('${widget.paper.id}-${item.id}-checkbox'),
-                    value: item.done,
-                    onChanged: (value) => _setTodoItemDone(item, value),
-                  )
-                : Transform.scale(
+            child: mobileBoard
+                ? Transform.scale(
+                    key: ValueKey(
+                      '${widget.paper.id}-${item.id}-checkbox',
+                    ),
                     scale: 16 / 18,
                     child: Checkbox(
                       value: item.done,
                       onChanged: (value) =>
                           _setTodoItemDone(item, value ?? false),
                     ),
+                  )
+                : _PaperTodoTodoCheckBox(
+                    key: ValueKey('${widget.paper.id}-${item.id}-checkbox'),
+                    value: item.done,
+                    onChanged: (value) => _setTodoItemDone(item, value),
                   ),
           ),
         ),
@@ -11951,6 +12839,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           }
         },
         child: AnimatedContainer(
+          key: ValueKey('${widget.paper.id}-${item.id}-row-surface'),
           duration: hoverDuration,
           curve: PaperTodoMotion.enterCurve,
           padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
@@ -12030,11 +12919,13 @@ class _TodoEditorState extends State<_TodoEditor> {
             _queueTodoEntrance(
               _EnteringTodoRow(
                 itemId: item.id,
-                delay: PaperTodoMotion.todoTransitionDelay,
+                delay: Duration.zero,
                 opacityDuration: PaperTodoMotion.fadeIn,
                 slideDuration: PaperTodoMotion.move,
                 slideDistance: 18,
                 slideCurve: PaperTodoMotion.enterCurve,
+                expandSize: true,
+                departureGroupToken: groupToken,
               ),
             );
           }
@@ -12081,14 +12972,13 @@ class _TodoEditorState extends State<_TodoEditor> {
     final entries = _todoItemContextMenuItems(item, columnIndex);
     final selected = await showMenu<String>(
       context: context,
+      popUpAnimationStyle: _paperTodoPopupAnimationStyle,
       position: RelativeRect.fromRect(
         Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
         Offset.zero & overlay.size,
       ),
       items: entries,
-      constraints: widget.standaloneSurface
-          ? _paperTodoStandaloneMenuConstraints(context, entries)
-          : null,
+      constraints: _paperTodoTextMenuConstraints(context, entries),
     );
     if (!mounted || !context.mounted) {
       return;
@@ -12263,7 +13153,9 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   PopupMenuDivider _todoItemMenuDivider() {
-    return PopupMenuDivider(height: widget.standaloneSurface ? 7 : 16);
+    return _PaperTodoPopupMenuDivider(
+      height: widget.standaloneSurface ? 7 : 16,
+    );
   }
 
   int _todoContextColumnIndexForPosition(
@@ -12362,20 +13254,17 @@ class _TodoEditorState extends State<_TodoEditor> {
               child: Center(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Transform.translate(
-                    offset: const Offset(0, 1),
-                    child: Text(
-                      relative,
-                      key: ValueKey(
-                        '${widget.paper.id}-${item.id}-due-relative',
-                      ),
-                      maxLines: 1,
-                      softWrap: false,
-                      style: _todoChipTextStyle(visualSpec)?.copyWith(
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.04,
-                      ),
+                  child: Text(
+                    relative,
+                    key: ValueKey(
+                      '${widget.paper.id}-${item.id}-due-relative',
+                    ),
+                    maxLines: 1,
+                    softWrap: false,
+                    style: _todoChipTextStyle(visualSpec)?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
                     ),
                   ),
                 ),
@@ -12384,11 +13273,13 @@ class _TodoEditorState extends State<_TodoEditor> {
           ],
           Padding(
             padding: const EdgeInsets.only(left: 1),
-            child: Opacity(
+            child: AnimatedOpacity(
               key: ValueKey(
                 '${widget.paper.id}-${item.id}-due-absolute-opacity',
               ),
               opacity: pressed ? 0.72 : 1,
+              duration: Duration.zero,
+              curve: PaperTodoMotion.quickCurve,
               child: Material(
                 key: ValueKey(
                   '${widget.paper.id}-${item.id}-due-absolute-surface',
@@ -12396,6 +13287,7 @@ class _TodoEditorState extends State<_TodoEditor> {
                 color: hovered ? hoveredBackground : statusBackground,
                 borderRadius: BorderRadius.circular(8),
                 clipBehavior: Clip.antiAlias,
+                animationDuration: Duration.zero,
                 child: InkWell(
                   key: ValueKey('${widget.paper.id}-${item.id}-due-absolute'),
                   borderRadius: BorderRadius.circular(8),
@@ -12439,14 +13331,25 @@ class _TodoEditorState extends State<_TodoEditor> {
                       child: Center(
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
-                          child: Text(
-                            absolute,
-                            maxLines: 1,
-                            softWrap: false,
-                            style: _todoChipTextStyle(visualSpec)?.copyWith(
-                              color: hovered ? paperColors.text : statusColor,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.04,
+                          child: TweenAnimationBuilder<Color?>(
+                            key: ValueKey(
+                              '${widget.paper.id}-${item.id}-due-absolute-foreground',
+                            ),
+                            tween: ColorTween(
+                              begin: hovered ? paperColors.text : statusColor,
+                              end: hovered ? paperColors.text : statusColor,
+                            ),
+                            duration: Duration.zero,
+                            curve: PaperTodoMotion.quickCurve,
+                            builder: (context, foreground, child) => Text(
+                              absolute,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: _todoChipTextStyle(visualSpec)?.copyWith(
+                                color: foreground,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0,
+                              ),
                             ),
                           ),
                         ),
@@ -12473,19 +13376,28 @@ class _TodoEditorState extends State<_TodoEditor> {
         final highlighted = candidateData.whereType<String>().any(
               _canAcceptNoteLinkDrop,
             );
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            color: highlighted
-                ? paperColors.tint.withValues(
-                    alpha: isDark ? 36 / 255 : 28 / 255,
-                  )
-                : Colors.transparent,
-            border: Border.all(
-              color: highlighted
-                  ? paperColors.tint.withValues(alpha: 150 / 255)
-                  : Colors.transparent,
+        return TweenAnimationBuilder<double>(
+          key: ValueKey(
+            '${widget.paper.id}-${item.id}-note-link-drop-surface',
+          ),
+          tween: Tween<double>(end: highlighted ? 1 : 0),
+          duration: widget.enableAnimations
+              ? PaperTodoMotion.controlFeedback
+              : Duration.zero,
+          curve: PaperTodoMotion.quickCurve,
+          builder: (context, progress, child) => DecoratedBox(
+            decoration: BoxDecoration(
+              color: paperColors.tint.withValues(
+                alpha: progress * (isDark ? 36 / 255 : 28 / 255),
+              ),
+              border: Border.all(
+                color: paperColors.tint.withValues(
+                  alpha: progress * 150 / 255,
+                ),
+              ),
+              borderRadius: BorderRadius.circular(8),
             ),
-            borderRadius: BorderRadius.circular(8),
+            child: child,
           ),
           child: row,
         );
@@ -12555,179 +13467,175 @@ class _TodoEditorState extends State<_TodoEditor> {
       final actionExtent =
           widget.standaloneSurface ? visualSpec.controlExtent : 48.0;
       return [
-        SizedBox(
+        _TodoRowPopupAction(
           key: ValueKey('${widget.paper.id}-${item.id}-actions'),
-          width: actionExtent,
-          height: actionExtent,
-          child: PopupMenuButton<String>(
-            tooltip: _tooltipLabel(
-              widget.enableToolTips,
-              strings.get(PaperTodoStringKeys.actionTodoItemActions),
+          tooltip: _tooltipLabel(
+            widget.enableToolTips,
+            strings.get(PaperTodoStringKeys.actionTodoItemActions),
+          ),
+          enabled: true,
+          extent: actionExtent,
+          iconSize: visualSpec.iconSize,
+          animationsEnabled: widget.enableAnimations,
+          icon: const Icon(Icons.more_vert),
+          onSelected: (value) => _handleCompactTodoAction(
+            context: context,
+            item: item,
+            value: value,
+          ),
+          itemBuilder: (context) => [
+            _todoActionMenuItem(
+              value: _compactTodoActionDueDate,
+              icon: Icons.event_outlined,
+              label: _hasDueDate(item)
+                  ? strings.get(PaperTodoStringKeys.actionChangeDueDate)
+                  : strings.get(PaperTodoStringKeys.actionSetDueDate),
             ),
-            iconSize: visualSpec.iconSize,
-            padding: EdgeInsets.zero,
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) => _handleCompactTodoAction(
-              context: context,
-              item: item,
-              value: value,
+            if (_hasDueDate(item))
+              _todoActionMenuItem(
+                value: _compactTodoActionClearDueDate,
+                icon: Icons.event_busy_outlined,
+                label: strings.get(PaperTodoStringKeys.actionClearDueDate),
+              ),
+            _todoActionMenuItem(
+              value: _compactTodoActionReminder,
+              icon: Icons.notifications_none_outlined,
+              label: _hasReminderInterval(item)
+                  ? strings.get(PaperTodoStringKeys.actionChangeReminder)
+                  : strings.get(PaperTodoStringKeys.actionSetReminder),
             ),
-            itemBuilder: (context) => [
+            if (_hasReminderInterval(item))
               _todoActionMenuItem(
-                value: _compactTodoActionDueDate,
-                icon: Icons.event_outlined,
-                label: _hasDueDate(item)
-                    ? strings.get(PaperTodoStringKeys.actionChangeDueDate)
-                    : strings.get(PaperTodoStringKeys.actionSetDueDate),
+                value: _compactTodoActionClearReminder,
+                icon: Icons.notifications_off_outlined,
+                label: strings.get(PaperTodoStringKeys.actionClearReminder),
               ),
-              if (_hasDueDate(item))
+            if (widget.enableTodoNoteLinks && hasLinkedNote) ...[
+              const _PaperTodoPopupMenuDivider(),
+              if (_linkedNoteFor(item) case final PaperData linkedNote)
                 _todoActionMenuItem(
-                  value: _compactTodoActionClearDueDate,
-                  icon: Icons.event_busy_outlined,
-                  label: strings.get(PaperTodoStringKeys.actionClearDueDate),
+                  value: _compactTodoActionOpenLinkedNote,
+                  icon: Icons.open_in_new,
+                  label: widget.runLinkedScriptCapsulesOnClick &&
+                          ScriptCapsuleSpec.tryParse(linkedNote.content) != null
+                      ? strings.format(
+                          PaperTodoStringKeys.menuEditLinkedScriptCapsule,
+                          [_displayPaperTitle(linkedNote)],
+                        )
+                      : strings.format(
+                          PaperTodoStringKeys.menuOpenLinkedNote,
+                          [_displayPaperTitle(linkedNote)],
+                        ),
                 ),
               _todoActionMenuItem(
-                value: _compactTodoActionReminder,
-                icon: Icons.notifications_none_outlined,
-                label: _hasReminderInterval(item)
-                    ? strings.get(PaperTodoStringKeys.actionChangeReminder)
-                    : strings.get(PaperTodoStringKeys.actionSetReminder),
+                value: _compactTodoActionUnlinkNote,
+                icon: Icons.link_off_outlined,
+                label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
               ),
-              if (_hasReminderInterval(item))
+            ],
+            if (widget.enableTodoNoteLinks &&
+                widget.notePapers.isNotEmpty &&
+                !hasLinkedNote) ...[
+              const _PaperTodoPopupMenuDivider(),
+              for (final note in widget.notePapers)
                 _todoActionMenuItem(
-                  value: _compactTodoActionClearReminder,
-                  icon: Icons.notifications_off_outlined,
-                  label: strings.get(PaperTodoStringKeys.actionClearReminder),
+                  value: '$_compactTodoLinkActionPrefix${note.id}',
+                  icon: item.linkedNoteId == note.id
+                      ? Icons.link_outlined
+                      : Icons.notes_outlined,
+                  label: _displayPaperTitle(note),
                 ),
-              if (widget.enableTodoNoteLinks && hasLinkedNote) ...[
-                const PopupMenuDivider(),
-                if (_linkedNoteFor(item) case final PaperData linkedNote)
-                  _todoActionMenuItem(
-                    value: _compactTodoActionOpenLinkedNote,
-                    icon: Icons.open_in_new,
-                    label: widget.runLinkedScriptCapsulesOnClick &&
-                            ScriptCapsuleSpec.tryParse(linkedNote.content) !=
-                                null
-                        ? strings.format(
-                            PaperTodoStringKeys.menuEditLinkedScriptCapsule,
-                            [_displayPaperTitle(linkedNote)],
-                          )
-                        : strings.format(
-                            PaperTodoStringKeys.menuOpenLinkedNote,
-                            [_displayPaperTitle(linkedNote)],
-                          ),
-                  ),
-                _todoActionMenuItem(
-                  value: _compactTodoActionUnlinkNote,
-                  icon: Icons.link_off_outlined,
-                  label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
-                ),
-              ],
-              if (widget.enableTodoNoteLinks &&
-                  widget.notePapers.isNotEmpty &&
-                  !hasLinkedNote) ...[
-                const PopupMenuDivider(),
-                for (final note in widget.notePapers)
-                  _todoActionMenuItem(
-                    value: '$_compactTodoLinkActionPrefix${note.id}',
-                    icon: item.linkedNoteId == note.id
-                        ? Icons.link_outlined
-                        : Icons.notes_outlined,
-                    label: _displayPaperTitle(note),
-                  ),
-              ],
-              const PopupMenuDivider(),
-              _todoActionMenuItem(
-                value: _compactTodoActionDelete,
-                icon: Icons.delete_outline,
-                label: strings.get(PaperTodoStringKeys.actionDeleteItem),
-              ),
-              _todoActionMenuItem(
-                value: _compactTodoActionClearDone,
-                icon: Icons.delete_sweep_outlined,
-                label: strings.get(PaperTodoStringKeys.actionClearCompleted),
-                enabled: _hasDoneTodoItems,
-              ),
-              const PopupMenuDivider(),
-              _todoActionMenuItem(
-                value: _compactTodoActionMoveUp,
-                icon: Icons.keyboard_arrow_up,
-                label: strings.get(PaperTodoStringKeys.actionMoveItemUp),
-                enabled: _canMoveTodoItem(item, -1),
-              ),
-              _todoActionMenuItem(
-                value: _compactTodoActionMoveDown,
-                icon: Icons.keyboard_arrow_down,
-                label: strings.get(PaperTodoStringKeys.actionMoveItemDown),
-                enabled: _canMoveTodoItem(item, 1),
-              ),
-              const PopupMenuDivider(),
-              _todoActionMenuItem(
-                value: '$_compactTodoColumnActionPrefix$_columnActionAdd',
-                icon: Icons.add,
-                label: strings.get(PaperTodoStringKeys.actionAddColumn),
-                enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
-              ),
-              _todoActionMenuItem(
-                value: '$_compactTodoColumnActionPrefix$_columnActionRemove',
-                icon: Icons.remove,
-                label: strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
-                enabled: item.todoColumnCount > 1,
-              ),
-              for (var columnIndex = 0;
-                  columnIndex < item.todoColumnCount;
-                  columnIndex++)
-                _todoActionMenuItem(
-                  value:
-                      '$_compactTodoColumnActionPrefix$_columnActionInsertBeforePrefix$columnIndex',
-                  icon: Icons.add_box_outlined,
-                  label: strings.format(
-                    PaperTodoStringKeys.actionInsertBeforeColumn,
-                    [columnIndex + 1],
-                  ),
-                  enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
-                ),
-              for (var columnIndex = 0;
-                  columnIndex < item.todoColumnCount;
-                  columnIndex++)
-                _todoActionMenuItem(
-                  value:
-                      '$_compactTodoColumnActionPrefix$_columnActionDeletePrefix$columnIndex',
-                  icon: Icons.delete_sweep_outlined,
-                  label: strings.format(
-                    PaperTodoStringKeys.actionDeleteColumn,
-                    [columnIndex + 1],
-                  ),
-                  enabled: item.todoColumnCount > 1,
-                ),
+            ],
+            const _PaperTodoPopupMenuDivider(),
+            _todoActionMenuItem(
+              value: _compactTodoActionDelete,
+              icon: Icons.delete_outline,
+              label: strings.get(PaperTodoStringKeys.actionDeleteItem),
+            ),
+            _todoActionMenuItem(
+              value: _compactTodoActionClearDone,
+              icon: Icons.delete_sweep_outlined,
+              label: strings.get(PaperTodoStringKeys.actionClearCompleted),
+              enabled: _hasDoneTodoItems,
+            ),
+            const _PaperTodoPopupMenuDivider(),
+            _todoActionMenuItem(
+              value: _compactTodoActionMoveUp,
+              icon: Icons.keyboard_arrow_up,
+              label: strings.get(PaperTodoStringKeys.actionMoveItemUp),
+              enabled: _canMoveTodoItem(item, -1),
+            ),
+            _todoActionMenuItem(
+              value: _compactTodoActionMoveDown,
+              icon: Icons.keyboard_arrow_down,
+              label: strings.get(PaperTodoStringKeys.actionMoveItemDown),
+              enabled: _canMoveTodoItem(item, 1),
+            ),
+            const _PaperTodoPopupMenuDivider(),
+            _todoActionMenuItem(
+              value: '$_compactTodoColumnActionPrefix$_columnActionAdd',
+              icon: Icons.add,
+              label: strings.get(PaperTodoStringKeys.actionAddColumn),
+              enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
+            ),
+            _todoActionMenuItem(
+              value: '$_compactTodoColumnActionPrefix$_columnActionRemove',
+              icon: Icons.remove,
+              label: strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
+              enabled: item.todoColumnCount > 1,
+            ),
+            for (var columnIndex = 0;
+                columnIndex < item.todoColumnCount;
+                columnIndex++)
               _todoActionMenuItem(
                 value:
-                    '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
-                icon: Icons.view_column_outlined,
-                label: strings.get(PaperTodoStringKeys.actionEqualWidths),
-                enabled: item.todoColumnCount > 1,
+                    '$_compactTodoColumnActionPrefix$_columnActionInsertBeforePrefix$columnIndex',
+                icon: Icons.add_box_outlined,
+                label: strings.format(
+                  PaperTodoStringKeys.actionInsertBeforeColumn,
+                  [columnIndex + 1],
+                ),
+                enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
               ),
+            for (var columnIndex = 0;
+                columnIndex < item.todoColumnCount;
+                columnIndex++)
               _todoActionMenuItem(
-                value: '$_compactTodoColumnActionPrefix$_columnActionWideFirst',
-                icon: Icons.view_week_outlined,
-                label: strings.get(PaperTodoStringKeys.actionWideFirstColumn),
+                value:
+                    '$_compactTodoColumnActionPrefix$_columnActionDeletePrefix$columnIndex',
+                icon: Icons.delete_sweep_outlined,
+                label: strings.format(
+                  PaperTodoStringKeys.actionDeleteColumn,
+                  [columnIndex + 1],
+                ),
                 enabled: item.todoColumnCount > 1,
               ),
-              if (widget.enableTodoNoteLinks &&
-                  widget.notePapers.isNotEmpty &&
-                  hasLinkedNote) ...[
-                const PopupMenuDivider(),
-                for (final note in widget.notePapers)
-                  _todoActionMenuItem(
-                    value: '$_compactTodoLinkActionPrefix${note.id}',
-                    icon: item.linkedNoteId == note.id
-                        ? Icons.link_outlined
-                        : Icons.notes_outlined,
-                    label: _displayPaperTitle(note),
-                  ),
-              ],
+            _todoActionMenuItem(
+              value: '$_compactTodoColumnActionPrefix$_columnActionEqualWidths',
+              icon: Icons.view_column_outlined,
+              label: strings.get(PaperTodoStringKeys.actionEqualWidths),
+              enabled: item.todoColumnCount > 1,
+            ),
+            _todoActionMenuItem(
+              value: '$_compactTodoColumnActionPrefix$_columnActionWideFirst',
+              icon: Icons.view_week_outlined,
+              label: strings.get(PaperTodoStringKeys.actionWideFirstColumn),
+              enabled: item.todoColumnCount > 1,
+            ),
+            if (widget.enableTodoNoteLinks &&
+                widget.notePapers.isNotEmpty &&
+                hasLinkedNote) ...[
+              const _PaperTodoPopupMenuDivider(),
+              for (final note in widget.notePapers)
+                _todoActionMenuItem(
+                  value: '$_compactTodoLinkActionPrefix${note.id}',
+                  icon: item.linkedNoteId == note.id
+                      ? Icons.link_outlined
+                      : Icons.notes_outlined,
+                  label: _displayPaperTitle(note),
+                ),
             ],
-          ),
+          ],
         ),
       ];
     }
@@ -12751,199 +13659,191 @@ class _TodoEditorState extends State<_TodoEditor> {
           child: _todoDragHandle(visualSpec),
         ),
       ),
-      IconButton(
+      _TodoRowIconAction(
+        key: ValueKey('${widget.paper.id}-${item.id}-due-action'),
         tooltip: _tooltipLabel(
           widget.enableToolTips,
           strings.get(PaperTodoStringKeys.actionSetDueDate),
         ),
         onPressed: () => unawaited(_pickDueDate(context, item)),
+        extent: visualSpec.controlExtent,
         iconSize: visualSpec.iconSize,
-        constraints: BoxConstraints.tightFor(
-          width: visualSpec.controlExtent,
-          height: visualSpec.controlExtent,
-        ),
+        animationsEnabled: widget.enableAnimations,
         icon: const Icon(Icons.event_outlined),
       ),
-      IconButton(
+      _TodoRowIconAction(
+        key: ValueKey('${widget.paper.id}-${item.id}-reminder-action'),
         tooltip: _tooltipLabel(
           widget.enableToolTips,
           strings.get(PaperTodoStringKeys.actionSetReminderInterval),
         ),
         onPressed: () => unawaited(_pickReminderInterval(context, item)),
+        extent: visualSpec.controlExtent,
         iconSize: visualSpec.iconSize,
-        constraints: BoxConstraints.tightFor(
-          width: visualSpec.controlExtent,
-          height: visualSpec.controlExtent,
-        ),
+        animationsEnabled: widget.enableAnimations,
         icon: const Icon(Icons.notifications_none_outlined),
       ),
-      SizedBox(
-        width: visualSpec.controlExtent,
-        height: visualSpec.controlExtent,
-        child: PopupMenuButton<String>(
-          tooltip: _tooltipLabel(
-            widget.enableToolTips,
-            strings.get(PaperTodoStringKeys.actionTodoColumns),
-          ),
-          iconSize: visualSpec.iconSize,
-          padding: EdgeInsets.zero,
-          icon: const Icon(Icons.table_chart_outlined),
-          onSelected: (value) => _updateColumns(item, value),
-          itemBuilder: (context) {
-            return [
+      _TodoRowPopupAction(
+        key: ValueKey('${widget.paper.id}-${item.id}-columns-action'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionTodoColumns),
+        ),
+        enabled: true,
+        extent: visualSpec.controlExtent,
+        iconSize: visualSpec.iconSize,
+        animationsEnabled: widget.enableAnimations,
+        icon: const Icon(Icons.table_chart_outlined),
+        onSelected: (value) => _updateColumns(item, value),
+        itemBuilder: (context) {
+          return [
+            _todoActionMenuItem(
+              value: _columnActionAdd,
+              enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
+              icon: Icons.add,
+              label: strings.get(PaperTodoStringKeys.actionAddColumn),
+            ),
+            _todoActionMenuItem(
+              value: _columnActionRemove,
+              enabled: item.todoColumnCount > 1,
+              icon: Icons.remove,
+              label: strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
+            ),
+            const _PaperTodoPopupMenuDivider(),
+            for (var columnIndex = 0;
+                columnIndex < item.todoColumnCount;
+                columnIndex++)
               _todoActionMenuItem(
-                value: _columnActionAdd,
+                value: '$_columnActionInsertBeforePrefix$columnIndex',
                 enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
-                icon: Icons.add,
-                label: strings.get(PaperTodoStringKeys.actionAddColumn),
-              ),
-              _todoActionMenuItem(
-                value: _columnActionRemove,
-                enabled: item.todoColumnCount > 1,
-                icon: Icons.remove,
-                label: strings.get(PaperTodoStringKeys.actionRemoveLastColumn),
-              ),
-              const PopupMenuDivider(),
-              for (var columnIndex = 0;
-                  columnIndex < item.todoColumnCount;
-                  columnIndex++)
-                _todoActionMenuItem(
-                  value: '$_columnActionInsertBeforePrefix$columnIndex',
-                  enabled: item.todoColumnCount < TodoColumnLimits.maxCount,
-                  icon: Icons.add_box_outlined,
-                  label: strings.format(
-                    PaperTodoStringKeys.actionInsertBeforeColumn,
-                    [columnIndex + 1],
-                  ),
+                icon: Icons.add_box_outlined,
+                label: strings.format(
+                  PaperTodoStringKeys.actionInsertBeforeColumn,
+                  [columnIndex + 1],
                 ),
-              for (var columnIndex = 0;
-                  columnIndex < item.todoColumnCount;
-                  columnIndex++)
-                _todoActionMenuItem(
-                  value: '$_columnActionDeletePrefix$columnIndex',
-                  enabled: item.todoColumnCount > 1,
-                  icon: Icons.delete_sweep_outlined,
-                  label: strings.format(
-                    PaperTodoStringKeys.actionDeleteColumn,
-                    [columnIndex + 1],
-                  ),
+              ),
+            for (var columnIndex = 0;
+                columnIndex < item.todoColumnCount;
+                columnIndex++)
+              _todoActionMenuItem(
+                value: '$_columnActionDeletePrefix$columnIndex',
+                enabled: item.todoColumnCount > 1,
+                icon: Icons.delete_sweep_outlined,
+                label: strings.format(
+                  PaperTodoStringKeys.actionDeleteColumn,
+                  [columnIndex + 1],
                 ),
-              const PopupMenuDivider(),
-              _todoActionMenuItem(
-                value: _columnActionEqualWidths,
-                enabled: item.todoColumnCount > 1,
-                icon: Icons.view_column_outlined,
-                label: strings.get(PaperTodoStringKeys.actionEqualWidths),
               ),
-              _todoActionMenuItem(
-                value: _columnActionWideFirst,
-                enabled: item.todoColumnCount > 1,
-                icon: Icons.view_week_outlined,
-                label: strings.get(PaperTodoStringKeys.actionWideFirstColumn),
-              ),
-            ];
-          },
-        ),
+            const _PaperTodoPopupMenuDivider(),
+            _todoActionMenuItem(
+              value: _columnActionEqualWidths,
+              enabled: item.todoColumnCount > 1,
+              icon: Icons.view_column_outlined,
+              label: strings.get(PaperTodoStringKeys.actionEqualWidths),
+            ),
+            _todoActionMenuItem(
+              value: _columnActionWideFirst,
+              enabled: item.todoColumnCount > 1,
+              icon: Icons.view_week_outlined,
+              label: strings.get(PaperTodoStringKeys.actionWideFirstColumn),
+            ),
+          ];
+        },
       ),
-      SizedBox(
-        width: visualSpec.controlExtent,
-        height: visualSpec.controlExtent,
-        child: PopupMenuButton<String>(
-          tooltip: _tooltipLabel(
-            widget.enableToolTips,
-            strings.get(PaperTodoStringKeys.actionLinkNote),
-          ),
-          enabled: widget.enableTodoNoteLinks &&
-              (widget.notePapers.isNotEmpty ||
-                  (item.linkedNoteId?.trim().isNotEmpty ?? false)),
-          iconSize: visualSpec.iconSize,
-          padding: EdgeInsets.zero,
-          icon: Icon(
-            item.linkedNoteId == null
-                ? Icons.note_add_outlined
-                : Icons.link_outlined,
-          ),
-          onSelected: (value) {
-            if (value == _todoLinkActionUnlink) {
-              _clearLinkedNote(item);
-              return;
-            }
-            _linkNote(item, value);
-          },
-          itemBuilder: (context) {
-            return [
-              if (item.linkedNoteId?.trim().isNotEmpty ?? false) ...[
-                _todoActionMenuItem(
-                  value: _todoLinkActionUnlink,
-                  icon: Icons.link_off_outlined,
-                  label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
-                ),
-                if (widget.notePapers.isNotEmpty) const PopupMenuDivider(),
-              ],
-              for (final note in widget.notePapers)
-                _todoActionMenuItem(
-                  value: note.id,
-                  icon: item.linkedNoteId == note.id
-                      ? Icons.link_outlined
-                      : Icons.notes_outlined,
-                  label: _displayPaperTitle(note),
-                ),
-            ];
-          },
+      _TodoRowPopupAction(
+        key: ValueKey('${widget.paper.id}-${item.id}-link-action'),
+        tooltip: _tooltipLabel(
+          widget.enableToolTips,
+          strings.get(PaperTodoStringKeys.actionLinkNote),
         ),
+        enabled: widget.enableTodoNoteLinks &&
+            (widget.notePapers.isNotEmpty ||
+                (item.linkedNoteId?.trim().isNotEmpty ?? false)),
+        extent: visualSpec.controlExtent,
+        iconSize: visualSpec.iconSize,
+        animationsEnabled: widget.enableAnimations,
+        icon: Icon(
+          item.linkedNoteId == null
+              ? Icons.note_add_outlined
+              : Icons.link_outlined,
+        ),
+        onSelected: (value) {
+          if (value == _todoLinkActionUnlink) {
+            _clearLinkedNote(item);
+            return;
+          }
+          _linkNote(item, value);
+        },
+        itemBuilder: (context) {
+          return [
+            if (item.linkedNoteId?.trim().isNotEmpty ?? false) ...[
+              _todoActionMenuItem(
+                value: _todoLinkActionUnlink,
+                icon: Icons.link_off_outlined,
+                label: strings.get(PaperTodoStringKeys.actionUnlinkNote),
+              ),
+              if (widget.notePapers.isNotEmpty)
+                const _PaperTodoPopupMenuDivider(),
+            ],
+            for (final note in widget.notePapers)
+              _todoActionMenuItem(
+                value: note.id,
+                icon: item.linkedNoteId == note.id
+                    ? Icons.link_outlined
+                    : Icons.notes_outlined,
+                label: _displayPaperTitle(note),
+              ),
+          ];
+        },
       ),
-      IconButton(
+      _TodoRowIconAction(
+        key: ValueKey('${widget.paper.id}-${item.id}-delete-action'),
         tooltip: _tooltipLabel(
           widget.enableToolTips,
           strings.get(PaperTodoStringKeys.actionDeleteItem),
         ),
         onPressed: () => _deleteItem(item),
+        extent: visualSpec.controlExtent,
         iconSize: visualSpec.iconSize,
-        constraints: BoxConstraints.tightFor(
-          width: visualSpec.controlExtent,
-          height: visualSpec.controlExtent,
-        ),
+        animationsEnabled: widget.enableAnimations,
         icon: const Icon(Icons.delete_outline),
       ),
-      IconButton(
+      _TodoRowIconAction(
+        key: ValueKey('${widget.paper.id}-${item.id}-clear-done-action'),
         tooltip: _tooltipLabel(
           widget.enableToolTips,
           strings.get(PaperTodoStringKeys.actionClearCompletedItems),
         ),
         onPressed: _hasDoneTodoItems ? _clearDoneItems : null,
+        extent: visualSpec.controlExtent,
         iconSize: visualSpec.iconSize,
-        constraints: BoxConstraints.tightFor(
-          width: visualSpec.controlExtent,
-          height: visualSpec.controlExtent,
-        ),
+        animationsEnabled: widget.enableAnimations,
         icon: const Icon(Icons.delete_sweep_outlined),
       ),
-      IconButton(
+      _TodoRowIconAction(
+        key: ValueKey('${widget.paper.id}-${item.id}-move-up-action'),
         tooltip: _tooltipLabel(
           widget.enableToolTips,
           strings.get(PaperTodoStringKeys.actionMoveItemUp),
         ),
         onPressed:
             _canMoveTodoItem(item, -1) ? () => _moveTodoItem(item, -1) : null,
+        extent: visualSpec.controlExtent,
         iconSize: visualSpec.iconSize,
-        constraints: BoxConstraints.tightFor(
-          width: visualSpec.controlExtent,
-          height: visualSpec.controlExtent,
-        ),
+        animationsEnabled: widget.enableAnimations,
         icon: const Icon(Icons.keyboard_arrow_up),
       ),
-      IconButton(
+      _TodoRowIconAction(
+        key: ValueKey('${widget.paper.id}-${item.id}-move-down-action'),
         tooltip: _tooltipLabel(
           widget.enableToolTips,
           strings.get(PaperTodoStringKeys.actionMoveItemDown),
         ),
         onPressed:
             _canMoveTodoItem(item, 1) ? () => _moveTodoItem(item, 1) : null,
+        extent: visualSpec.controlExtent,
         iconSize: visualSpec.iconSize,
-        constraints: BoxConstraints.tightFor(
-          width: visualSpec.controlExtent,
-          height: visualSpec.controlExtent,
-        ),
+        animationsEnabled: widget.enableAnimations,
         icon: const Icon(Icons.keyboard_arrow_down),
       ),
     ];
@@ -12975,8 +13875,10 @@ class _TodoEditorState extends State<_TodoEditor> {
           width: visualSpec.dragHandleWidth,
           height: visualSpec.rowMinHeight,
           child: Center(
-            child: Opacity(
+            child: AnimatedOpacity(
               opacity: dragging ? 0.9 : (hovered ? 0.78 : 0.48),
+              duration: Duration.zero,
+              curve: PaperTodoMotion.quickCurve,
               child: Text(
                 '\u2261',
                 style: TextStyle(
@@ -13003,42 +13905,49 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   Widget _todoDragFeedback(PaperItem item, _TodoVisualSpec visualSpec) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final paperColors = PaperTodoThemeColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: Colors.transparent,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 260),
         child: DecoratedBox(
+          key: ValueKey('${widget.paper.id}-${item.id}-drag-feedback'),
           decoration: BoxDecoration(
-            color: colorScheme.surface,
-            border: Border.all(color: colorScheme.outlineVariant),
-            borderRadius: BorderRadius.circular(6),
+            color: paperColors.paper,
+            border: Border.all(color: paperColors.paperBorder),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: [
               BoxShadow(
-                color: colorScheme.shadow.withValues(alpha: 0.18),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
+                color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.14),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.drag_handle,
-                  size: visualSpec.iconSize,
-                  color: colorScheme.onSurfaceVariant,
+                Text(
+                  '\u2261',
+                  style: TextStyle(
+                    color: paperColors.weakText,
+                    fontFamily: 'Segoe UI Symbol',
+                    fontFamilyFallback: const <String>['Segoe UI Emoji'],
+                    fontSize: visualSpec.dragGlyphSize,
+                    height: 1,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 7),
                 Flexible(
                   child: Text(
                     _displayItemText(item),
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface,
-                          fontWeight: FontWeight.w600,
+                          color: paperColors.text,
+                          fontWeight: FontWeight.w500,
                         ),
                   ),
                 ),
@@ -13056,27 +13965,15 @@ class _TodoEditorState extends State<_TodoEditor> {
     required String label,
     bool enabled = true,
   }) {
-    if (widget.standaloneSurface) {
-      return _PaperTodoPopupMenuItem<String>(
-        value: value,
-        enabled: enabled,
-        height: 21,
-        padding: _paperTodoStandalonePopupMenuItemPadding,
-        child: Text(label),
-      );
-    }
-    return PopupMenuItem<String>(
+    final compact = widget.standaloneSurface;
+    return _PaperTodoPopupMenuItem<String>(
       value: value,
       enabled: enabled,
-      height: _paperTodoPopupMenuHeight(),
-      padding: _paperTodoPopupMenuItemPadding,
-      child: Row(
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Flexible(child: Text(label)),
-        ],
-      ),
+      height: compact ? 21 : _paperTodoPopupMenuHeight(),
+      padding: compact
+          ? _paperTodoStandalonePopupMenuItemPadding
+          : _paperTodoPopupMenuItemPadding,
+      child: Text(label),
     );
   }
 
@@ -14791,7 +15688,9 @@ class _TodoEditorState extends State<_TodoEditor> {
     }
     final result = await showDialog<_TodoDueSelection>(
       context: context,
-      builder: (context) => _TodoDueSelectionDialog(initialDate: initialDate),
+      builder: (context) => _TodoDueSelectionDialog(
+        initialDate: initialDate,
+      ),
     );
     if (result == null) {
       return;
@@ -15107,8 +16006,13 @@ class _TodoEditorState extends State<_TodoEditor> {
     final tooltip = isScriptCapsule
         ? strings.get(PaperTodoStringKeys.actionRunLinkedScriptCapsule)
         : strings.get(PaperTodoStringKeys.actionOpenLinkedNote);
-    final button = Opacity(
+    final foregroundColor = hovered
+        ? paperColors.text
+        : paperColors.weakText.withValues(alpha: 0.72);
+    final button = AnimatedOpacity(
       opacity: pressed ? 0.72 : 1,
+      duration: Duration.zero,
+      curve: PaperTodoMotion.quickCurve,
       child: Material(
         key: ValueKey('${widget.paper.id}-${item.id}-linked-note-button'),
         color: paperColors.tint.withValues(
@@ -15118,6 +16022,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         ),
         borderRadius: BorderRadius.circular(8),
         clipBehavior: Clip.antiAlias,
+        animationDuration: Duration.zero,
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           hoverColor: Colors.transparent,
@@ -15154,51 +16059,54 @@ class _TodoEditorState extends State<_TodoEditor> {
             width: buttonWidth,
             height: math.max(22, visualSpec.rowMinHeight - 2),
             child: Center(
-              child: showName
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 3,
-                        vertical: 1,
-                      ),
-                      child: Text(
-                        label,
-                        maxLines: multiline ? 2 : 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: labelStyle?.copyWith(
-                          color: hovered
-                              ? paperColors.text
-                              : paperColors.weakText.withValues(alpha: 0.72),
+              child: TweenAnimationBuilder<Color?>(
+                key: ValueKey(
+                  '${widget.paper.id}-${item.id}-linked-note-foreground',
+                ),
+                tween: ColorTween(
+                  begin: foregroundColor,
+                  end: foregroundColor,
+                ),
+                duration: Duration.zero,
+                curve: PaperTodoMotion.quickCurve,
+                builder: (context, foreground, child) => showName
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 3,
+                          vertical: 1,
                         ),
-                      ),
-                    )
-                  : widget.standaloneSurface
-                      ? Text(
-                          isScriptCapsule ? '⚡' : '\uE71B',
-                          style: TextStyle(
-                            fontFamily: isScriptCapsule
-                                ? 'Segoe UI Symbol'
-                                : 'Segoe MDL2 Assets',
-                            fontFamilyFallback: const <String>[
-                              'Segoe UI Emoji'
-                            ],
-                            fontSize: visualSpec.chipIconSize +
+                        child: Text(
+                          label,
+                          maxLines: multiline ? 2 : 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: labelStyle?.copyWith(color: foreground),
+                        ),
+                      )
+                    : widget.standaloneSurface
+                        ? Text(
+                            isScriptCapsule ? '⚡' : '\uE71B',
+                            style: TextStyle(
+                              fontFamily: isScriptCapsule
+                                  ? 'Segoe UI Symbol'
+                                  : 'Segoe MDL2 Assets',
+                              fontFamilyFallback: const <String>[
+                                'Segoe UI Emoji'
+                              ],
+                              fontSize: visualSpec.chipIconSize +
+                                  (isScriptCapsule ? 1 : 0),
+                              fontWeight: FontWeight.w600,
+                              color: foreground,
+                              height: 1,
+                            ),
+                          )
+                        : Icon(
+                            isScriptCapsule ? Icons.bolt : Icons.notes_outlined,
+                            size: visualSpec.chipIconSize +
                                 (isScriptCapsule ? 1 : 0),
-                            fontWeight: FontWeight.w600,
-                            color: hovered
-                                ? paperColors.text
-                                : paperColors.weakText.withValues(alpha: 0.72),
-                            height: 1,
+                            color: foreground,
                           ),
-                        )
-                      : Icon(
-                          isScriptCapsule ? Icons.bolt : Icons.notes_outlined,
-                          size: visualSpec.chipIconSize +
-                              (isScriptCapsule ? 1 : 0),
-                          color: hovered
-                              ? paperColors.text
-                              : paperColors.weakText.withValues(alpha: 0.72),
-                        ),
+              ),
             ),
           ),
         ),
@@ -15430,7 +16338,9 @@ class _TodoDueSelection {
 }
 
 class _TodoDueSelectionDialog extends StatefulWidget {
-  const _TodoDueSelectionDialog({required this.initialDate});
+  const _TodoDueSelectionDialog({
+    required this.initialDate,
+  });
 
   final DateTime initialDate;
 
@@ -15473,6 +16383,7 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
           width: 354,
           height: 242,
           radius: 12,
+          shadowKind: _PaperDialogShadowKind.compact,
           padding: const EdgeInsets.all(16),
           contentSpacing: 8,
           actionSpacing: 16,
@@ -15497,20 +16408,14 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: InkWell(
+                        child: _TodoDialogFieldChrome(
                           key: const ValueKey('todo-due-date'),
-                          borderRadius: BorderRadius.circular(4),
-                          onTap: _pickDate,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: colors.tint.withValues(
-                                alpha: colors.isDark ? 22 / 255 : 12 / 255,
-                              ),
-                              border: Border.all(
-                                color: colors.tint.withValues(alpha: 80 / 255),
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            hoverColor: Colors.transparent,
+                            focusColor: Colors.transparent,
+                            highlightColor: Colors.transparent,
+                            onTap: _pickDate,
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 7,
@@ -15544,16 +16449,32 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
                         width: 74,
                         child: _TodoDialogDropdown<int>(
                           dropdownKey: const ValueKey('todo-due-hour'),
+                          surfaceKey: const ValueKey('todo-due-hour-surface'),
                           value: _hour,
                           items: _timeItems(24),
                           onChanged: (value) => setState(() => _hour = value),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      SizedBox(
+                        key: const ValueKey('todo-due-time-separator'),
+                        width: 8,
+                        child: Center(
+                          child: Text(
+                            ':',
+                            style: TextStyle(
+                              color: colors.weakText,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                      ),
                       SizedBox(
                         width: 74,
                         child: _TodoDialogDropdown<int>(
                           dropdownKey: const ValueKey('todo-due-minute'),
+                          surfaceKey: const ValueKey('todo-due-minute-surface'),
                           value: _minute,
                           items: _timeItems(60),
                           onChanged: (value) => setState(() => _minute = value),
@@ -15617,10 +16538,93 @@ class _TodoDueSelectionDialogState extends State<_TodoDueSelectionDialog> {
         context,
       ).get(PaperTodoStringKeys.dialogDueDate),
       initialEntryMode: DatePickerEntryMode.calendarOnly,
+      builder: (context, child) {
+        return DatePickerTheme(
+          data: _paperTodoDatePickerTheme(context),
+          child: child!,
+        );
+      },
     );
     if (selected != null && mounted) {
       setState(() => _selectedDate = selected);
     }
+  }
+
+  DatePickerThemeData _paperTodoDatePickerTheme(BuildContext context) {
+    final colors = PaperTodoThemeColors.of(context);
+    final normalAction = _todoDialogActionStyle(context);
+    final primaryAction = _todoDialogActionStyle(context, primary: true);
+    return DatePickerThemeData(
+      backgroundColor: colors.paper,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: colors.paperBorder),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      headerBackgroundColor: colors.tint.withValues(
+        alpha: colors.isDark ? 22 / 255 : 12 / 255,
+      ),
+      headerForegroundColor: colors.text,
+      headerHeadlineStyle: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        height: 1.15,
+      ),
+      headerHelpStyle: TextStyle(
+        color: colors.weakText,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        height: 1,
+      ),
+      weekdayStyle: TextStyle(
+        color: colors.weakText,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        height: 1,
+      ),
+      dayStyle: const TextStyle(fontSize: 12.5, height: 1),
+      dayForegroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return colors.weakText.withValues(alpha: 0.45);
+        }
+        if (states.contains(WidgetState.selected)) {
+          return colors.paper;
+        }
+        return colors.text;
+      }),
+      dayBackgroundColor: WidgetStateProperty.resolveWith(
+        (states) =>
+            states.contains(WidgetState.selected) ? colors.active : null,
+      ),
+      dayOverlayColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.pressed)) {
+          return colors.tint.withValues(
+            alpha: colors.isDark ? 58 / 255 : 42 / 255,
+          );
+        }
+        if (states.contains(WidgetState.hovered) ||
+            states.contains(WidgetState.focused)) {
+          return colors.hover;
+        }
+        return null;
+      }),
+      dayShape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      todayForegroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? colors.paper
+            : colors.active,
+      ),
+      todayBackgroundColor:
+          const WidgetStatePropertyAll<Color?>(Colors.transparent),
+      todayBorder: BorderSide(color: colors.active),
+      dividerColor: colors.paperBorder.withValues(alpha: 0.55),
+      cancelButtonStyle: normalAction,
+      confirmButtonStyle: primaryAction,
+    );
   }
 
   KeyEventResult _handleDialogKeyEvent(FocusNode node, KeyEvent event) {
@@ -15928,6 +16932,34 @@ class _PaperResizeGripPainter extends CustomPainter {
   }
 }
 
+class _PaperWindowResizeGrip extends StatefulWidget {
+  const _PaperWindowResizeGrip();
+
+  @override
+  State<_PaperWindowResizeGrip> createState() => _PaperWindowResizeGripState();
+}
+
+class _PaperWindowResizeGripState extends State<_PaperWindowResizeGrip> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      key: const ValueKey('paper-window-resize-grip-hover'),
+      cursor: SystemMouseCursors.resizeUpLeftDownRight,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedOpacity(
+        key: const ValueKey('paper-window-resize-grip-opacity'),
+        opacity: _hovered ? 0.92 : 0.46,
+        duration: Duration.zero,
+        curve: PaperTodoMotion.quickCurve,
+        child: CustomPaint(painter: const _PaperResizeGripPainter()),
+      ),
+    );
+  }
+}
+
 class _TodoVisualSpec {
   const _TodoVisualSpec({
     required this.textScale,
@@ -15986,17 +17018,17 @@ class _TodoVisualSpec {
       };
 
   EdgeInsets get mainContentPadding => EdgeInsets.fromLTRB(
-        4,
-        textVerticalPadding + 1,
-        0,
-        math.max(0, textVerticalPadding - 1),
+        2,
+        textVerticalPadding,
+        2,
+        textVerticalPadding,
       );
 
   EdgeInsets get extraContentPadding => EdgeInsets.fromLTRB(
-        10,
-        textVerticalPadding + 1,
-        2,
-        math.max(0, textVerticalPadding - 1),
+        8,
+        textVerticalPadding,
+        4,
+        textVerticalPadding,
       );
 
   static _TodoVisualSpec from(String value) {

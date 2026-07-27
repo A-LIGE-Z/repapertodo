@@ -330,6 +330,9 @@ void NativeCapsuleWindow::ApplySurface(
       capsule_master_top_is_work_area_relative_);
   hide_when_covered_ =
       BoolValue(surface, "hideWhenCovered", hide_when_covered_);
+  if (!hide_when_covered_) {
+    covering_window_ = nullptr;
+  }
   hide_when_fullscreen_ =
       BoolValue(surface, "hideWhenFullscreen", hide_when_fullscreen_);
   animations_enabled_ =
@@ -1444,8 +1447,8 @@ bool NativeCapsuleWindow::IsExternalFullscreenWindow() const {
          bounds.bottom >= info.rcMonitor.bottom - tolerance;
 }
 
-bool NativeCapsuleWindow::IsCoveredByHigherWindow() const {
-  HWND window = const_cast<NativeCapsuleWindow*>(this)->GetHandle();
+bool NativeCapsuleWindow::IsCoveredByHigherWindow() {
+  HWND window = GetHandle();
   if (!window) return false;
   RECT visible = {};
   if (!GetWindowRect(window, &visible)) return false;
@@ -1458,16 +1461,42 @@ bool NativeCapsuleWindow::IsCoveredByHigherWindow() const {
   }
   DWORD own_process = 0;
   GetWindowThreadProcessId(window, &own_process);
-  for (HWND candidate = GetWindow(window, GW_HWNDPREV); candidate;
-       candidate = GetWindow(candidate, GW_HWNDPREV)) {
-    if (!IsWindowVisible(candidate) || IsIconic(candidate)) continue;
+
+  const auto still_covers = [&](HWND candidate) {
+    if (!candidate || !IsWindow(candidate) || !IsWindowVisible(candidate) ||
+        IsIconic(candidate)) {
+      return false;
+    }
     DWORD process = 0;
     GetWindowThreadProcessId(candidate, &process);
-    if (process == own_process) continue;
+    if (process == own_process) return false;
     RECT candidate_bounds = {};
     RECT intersection = {};
-    if (GetWindowRect(candidate, &candidate_bounds) &&
-        IntersectRect(&intersection, &visible, &candidate_bounds)) {
+    return GetWindowRect(candidate, &candidate_bounds) &&
+           IntersectRect(&intersection, &visible, &candidate_bounds);
+  };
+
+  // A hidden capsule no longer has a meaningful place in the visible Z-order.
+  // Validate the latched blocker geometrically so a continuously overlapping
+  // window keeps the capsule hidden instead of letting it flash back each tick.
+  if (covering_window_) {
+    if (still_covers(covering_window_)) return true;
+    covering_window_ = nullptr;
+  }
+
+  // Prefer the active application as a recovery source. When this capsule was
+  // hidden on the preceding timer tick, its own HWND no longer has a stable
+  // position in the visible Z order, but the window the user is working in
+  // remains a reliable blocker.
+  HWND foreground = GetForegroundWindow();
+  if (foreground != window && still_covers(foreground)) {
+    covering_window_ = foreground;
+    return true;
+  }
+  for (HWND candidate = GetWindow(window, GW_HWNDPREV); candidate;
+       candidate = GetWindow(candidate, GW_HWNDPREV)) {
+    if (still_covers(candidate)) {
+      covering_window_ = candidate;
       return true;
     }
   }
@@ -1479,8 +1508,15 @@ bool NativeCapsuleWindow::IsPointerOverWindow() const {
   if (!window || !IsWindowVisible(window)) return false;
   POINT cursor = {};
   RECT bounds = {};
-  return GetCursorPos(&cursor) && GetWindowRect(window, &bounds) &&
-         PtInRect(&bounds, cursor) == TRUE;
+  if (!GetCursorPos(&cursor) || !GetWindowRect(window, &bounds) ||
+      PtInRect(&bounds, cursor) != TRUE) {
+    return false;
+  }
+  // Geometry alone is insufficient: while another app covers the capsule,
+  // the cursor can be inside these stale bounds but actually belong to that
+  // app. Only exempt the capsule from hiding when it is the real hit target.
+  HWND hit = WindowFromPoint(cursor);
+  return hit == window || (hit && IsChild(window, hit));
 }
 
 void NativeCapsuleWindow::RefreshVisibility(bool force_master_z_order) {
@@ -1491,8 +1527,7 @@ void NativeCapsuleWindow::RefreshVisibility(bool force_master_z_order) {
   // capsule HWNDs are no-activate windows, the previously focused fullscreen
   // or overlapping app can otherwise remain foreground and make the capsule
   // disappear directly under the cursor.
-  const bool pointer_over = hovered_ || pointer_down_ || dragging_ ||
-                            IsPointerOverWindow();
+  const bool pointer_over = pointer_down_ || dragging_ || IsPointerOverWindow();
   const bool policy_hidden = !pointer_over &&
                              ((hide_when_fullscreen_ && fullscreen) ||
                               (hide_when_covered_ &&

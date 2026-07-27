@@ -283,10 +283,12 @@ void main() {
     expect(settings, contains('class _SettingsCheckMarkPainter'));
     expect(settings, contains('dimension: 16'));
     expect(settings, contains('static const double borderWidth = 1.5'));
+    expect(settings, contains('double get checkedInset => 0'));
     expect(settings, contains('..moveTo(4, 8.1)'));
     expect(settings, contains('..lineTo(7, 11)'));
     expect(settings, contains('..lineTo(12, 5)'));
     expect(settings, contains('opacity: enabled ? 1 : 0.55'));
+    expect(design, contains('full 16px Active checked fill'));
     expect(settings, isNot(contains('CheckboxListTile(')));
     expect(settings, contains('class _SettingsCloseButton'));
     expect(settings, contains("ValueKey('settings-close-button-surface')"));
@@ -300,6 +302,11 @@ void main() {
     final strings = _readProjectText('lib/src/ui/papertodo_strings.dart');
     final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
     final widgetTest = _readProjectText('test/widget_test.dart');
+    final hint = _sliceBetween(
+      settings,
+      'class _SettingsHelpIcon extends StatefulWidget',
+      'class _SettingsStepper extends StatelessWidget',
+    );
     const tipKeys = <String>{
       'tipAllowLongLinkedNoteTitles',
       'tipCapsuleCollapseAll',
@@ -358,11 +365,21 @@ void main() {
       );
     }
     expect(design, contains('40 source `WrapWithHint` options'));
-    expect(settings, contains("'\\u24D8'"));
-    expect(settings, contains('dimension: 18'));
-    expect(settings, contains('Duration(milliseconds: 200)'));
-    expect(settings, contains('Duration(seconds: 20)'));
-    expect(settings, contains('SystemMouseCursors.help'));
+    expect(design, contains('240px maximum text width'));
+    expect(hint, contains("'\\u24D8'"));
+    expect(hint, contains('dimension: 18'));
+    expect(hint, contains('Duration(milliseconds: 200)'));
+    expect(hint, contains('Duration(seconds: 20)'));
+    expect(hint, contains('BoxConstraints(maxWidth: 240)'));
+    expect(
+      hint,
+      contains('EdgeInsets.symmetric(horizontal: 10, vertical: 7)'),
+    );
+    expect(hint, contains('SystemMouseCursors.help'));
+    expect(hint, contains('alpha: isDark ? 0.36 : 0.22'));
+    expect(hint, contains('blurRadius: isDark ? 26 : 24'));
+    expect(hint, contains('offset: const Offset(0, 2)'));
+    expect(design, contains('source `HasDropShadow` treatment'));
     expect(widgetTest, contains('expect(tester.getSize(capsuleHelp),'));
   });
 
@@ -407,8 +424,25 @@ void main() {
         strings, contains("settingsSectionTopBarButtons: 'Top-bar buttons'"));
     expect(settings, contains('Widget _settingsGroupLabel'));
     expect(settings, contains('EdgeInsets.only(top: 12, bottom: 3)'));
+    expect(
+      settings,
+      matches(
+        RegExp(r'_pressedSettingsSection\s*=\s*value && !selected'),
+      ),
+    );
+    expect(
+      design,
+      contains('current category keeps its selected tint and geometry'),
+    );
     expect(settings, contains('class _SettingsSegmentSelector'));
+    expect(settings, contains('child: AnimatedContainer('));
+    expect(settings, contains('? PaperTodoMotion.controlFeedback'));
     expect(settings, contains('class _SettingsSegmentButton'));
+    expect(
+      settings,
+      contains('final pressable = widget.enabled && !widget.selected'),
+    );
+    expect(design, contains('already-selected choice is a visual and state'));
     expect(adaptiveSelector, contains('_SettingsSegmentSelector('));
     expect(adaptiveSelector, isNot(contains('SegmentedButton<String>(')));
     expect(settings, contains('padding: const EdgeInsets.all(1)'));
@@ -418,9 +452,18 @@ void main() {
     expect(sourceStepper, contains('height: 28'));
     expect(sourceStepper, contains('width: 34'));
     expect(sourceStepper, contains("fontFamily: 'Segoe UI Symbol'"));
-    expect(sourceStepper, contains('onTapDown: (_) => widget.onPressed()'));
+    expect(sourceStepper, contains('onTapDown: (_) {'));
+    expect(sourceStepper, contains('widget.onPressed();'));
+    expect(sourceStepper, contains('child: AnimatedSwitcher('));
+    expect(sourceStepper, contains('child: AnimatedScale('));
+    expect(sourceStepper, contains('PaperTodoMotion.controlFeedback'));
     expect(sourceStepper, isNot(contains('Tooltip(')));
-    expect(settings, contains('BoxConstraints.tightFor(height: height)'));
+    expect(settings, contains('height: widget.height'));
+    expect(settings, contains("'settings-theme-color-preview'"));
+    expect(settings, contains('height: 52'));
+    expect(settings, contains('trackHeight: 3'));
+    expect(settings, contains('enabledThumbRadius: 6'));
+    expect(settings, contains('overlayRadius: 12'));
     expect(settings, contains("'settings-reminder-interval'"));
     expect(settings, contains("'settings-reminder-duration'"));
     expect(settings, contains("'settings-pinned-todo-hotkey'"));
@@ -438,6 +481,25 @@ void main() {
     );
     expect(widgetTest, contains('expect(tester.getSize(swatch),'));
     expect(design, contains('28px source segment selectors'));
+  });
+
+  test('Settings font options use compact PaperTodo combo chrome', () {
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final fontOptions = _sliceBetween(
+      settings,
+      'optionsViewBuilder: (context, onSelected, options)',
+      'Widget _hotKeyCaptureField',
+    );
+
+    expect(settings, contains('class _SettingsFontOptionRow'));
+    expect(fontOptions, isNot(contains('ListTile(')));
+    expect(fontOptions, contains('elevation: 0'));
+    expect(fontOptions, contains('shadowColor: Colors.transparent'));
+    expect(fontOptions, contains('borderRadius: BorderRadius.circular(12)'));
+    expect(fontOptions, contains('itemExtent: 30'));
+    expect(settings, contains('PaperTodoMotion.controlFeedback'));
+    expect(settings, contains('widget.fontFamily.isEmpty ? null'));
+    expect(settings, contains('borderRadius: BorderRadius.circular(8)'));
   });
 
   test('runtime localization maps cover every declared string key', () {
@@ -2498,6 +2560,17 @@ void main() {
     expect(app, contains('PaperTodoStringKeys.dialogDueDateMessage'));
     expect(app, contains('PaperTodoStringKeys.reminderIntervalMessage'));
     expect(app, contains('PaperTodoStringKeys.reminderIntervalGlobal'));
+    expect(app, contains('DatePickerTheme('));
+    expect(app, contains('_paperTodoDatePickerTheme(context)'));
+    expect(app, contains('dayShape: WidgetStatePropertyAll('));
+    expect(app, contains('cancelButtonStyle: normalAction'));
+    expect(app, contains('confirmButtonStyle: primaryAction'));
+    expect(app, contains('elevation: 0'));
+    expect(app, contains('alignment: Alignment.center'));
+    expect(
+      app,
+      contains('dropdownMenuItemMouseCursor: SystemMouseCursors.click'),
+    );
     expect(app, contains("'openCalendar': openCalendar"));
     expect(app, contains("'backgroundColor': colorScheme.surface.toARGB32()"));
     expect(paperWindow, contains('DATETIMEPICK_CLASSW'));
@@ -2660,6 +2733,16 @@ void main() {
   test('PaperTodo todo reorder data semantics are preserved', () {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final app = _readProjectText('lib/src/app.dart');
+    final reorderTarget = _sliceBetween(
+      app,
+      'Widget _todoReorderDropTarget(',
+      'GlobalKey _todoDropTargetKey(',
+    );
+    final dragHandle = _sliceBetween(
+      app,
+      'Widget _standaloneTodoDragHandle(',
+      'Widget _todoDragHandle(',
+    );
 
     expect(design, contains('Todo ordering should preserve PaperTodo'));
     expect(design, contains('push a todo undo snapshot'));
@@ -2667,6 +2750,7 @@ void main() {
     expect(design, contains('visible drag handle'));
     expect(design, contains('upper or lower half'));
     expect(design, contains('boundary-based drag placement'));
+    expect(design, contains('reorder insertion line'));
     expect(app, contains('_moveTodoItem'));
     expect(app, contains('_reorderTodoItemToTarget'));
     expect(app, contains('_todoReorderDropTarget'));
@@ -2675,6 +2759,10 @@ void main() {
     expect(app, contains('Draggable<PaperItem>'));
     expect(app, contains('DragTarget<PaperItem>'));
     expect(app, contains('_canAcceptTodoItemDrop'));
+    expect(reorderTarget, contains('duration: Duration.zero'));
+    expect(reorderTarget, isNot(contains('PaperTodoMotion.controlFeedback')));
+    expect(dragHandle, contains('duration: Duration.zero'));
+    expect(dragHandle, isNot(contains('PaperTodoMotion.controlFeedback')));
     expect(app, isNot(contains('ReorderableListView.builder')));
     expect(app, isNot(contains('ReorderableDragStartListener')));
     expect(app, contains('_compactTodoActionMoveUp'));
@@ -2689,10 +2777,26 @@ void main() {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final app = _readProjectText('lib/src/app.dart');
     final widgetTest = _readProjectText('test/widget_test.dart');
+    final deleteTarget = _sliceBetween(
+      app,
+      'Widget _todoDeleteDropTarget(',
+      'Widget _todoFooterActions(',
+    );
+    final footerActions = _sliceBetween(
+      app,
+      'Widget _todoFooterActions(',
+      'Widget _todoRow(',
+    );
+    final appendArea = _sliceBetween(
+      footerActions,
+      'if (widget.standaloneSurface)',
+      'final mobileBoard',
+    );
 
     expect(design, contains('Dragging a Todo row handle'));
     expect(design, contains('bottom delete area'));
     expect(design, contains('PaperTodo tombstones'));
+    expect(design, contains('append area, and drag-to-delete'));
     expect(app, contains('_todoDeleteDropTarget'));
     expect(app,
         contains("ValueKey('\${widget.paper.id}-todo-delete-drop-target')"));
@@ -2702,6 +2806,16 @@ void main() {
     expect(app, contains('opacity: highlighted ? 1 : 0.65'));
     expect(app, contains('_setTodoItemDragging(false);'));
     expect(app, contains('_deleteItem(details.data)'));
+    expect(deleteTarget, isNot(contains('PaperTodoMotion.controlFeedback')));
+    expect(appendArea, isNot(contains('PaperTodoMotion.controlFeedback')));
+    expect(
+      RegExp('duration: Duration.zero').allMatches(deleteTarget).length,
+      2,
+    );
+    expect(
+      RegExp('duration: Duration.zero').allMatches(appendArea).length,
+      greaterThanOrEqualTo(2),
+    );
     expect(widgetTest,
         contains('drags todo items to the bottom delete area like PaperTodo'));
     expect(widgetTest, contains('trashColors.danger.withValues'));
@@ -2711,16 +2825,32 @@ void main() {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final app = _readProjectText('lib/src/app.dart');
     final widgetTest = _readProjectText('test/widget_test.dart');
+    final dueIndicator = _sliceBetween(
+      app,
+      'Widget? _todoDueIndicator(',
+      'Widget _noteLinkDropTarget(',
+    );
+    final linkedNoteButton = _sliceBetween(
+      app,
+      'Widget _linkedNoteButton(',
+      'String _compactLinkedNoteTitle(',
+    );
 
     expect(design, contains('Completed rows animate to 0.75'));
     expect(design, contains('1.35px BrightWeakText rule'));
     expect(design, contains('due urgency begins ten minutes'));
+    expect(design, contains("linked-note badges use PaperTodo's immediate"));
     expect(app, contains('opacity: dragging ? 0.25 : (item.done ? 0.75 : 1)'));
     expect(app, contains('class _TodoCompletionLinePainter'));
     expect(app, contains('final double strokeWidth = 1.35'));
     expect(app, contains('difference <= const Duration(minutes: 10)'));
     expect(app, contains('padding: const EdgeInsets.only(left: 1)'));
     expect(app, contains('class _PaperTodoTodoCheckBox'));
+    expect(app, contains('child: mobileBoard'));
+    expect(
+      app,
+      contains('enableAnimations: widget.enableAnimations'),
+    );
     expect(app, contains('dimension: 16'));
     expect(app, contains('static const double borderWidth = 1.5'));
     expect(app, contains('static const double radius = 4'));
@@ -2732,6 +2862,21 @@ void main() {
     expect(app, contains('opacity: dragging ? 0.25'));
     expect(app, contains('SizeChangedLayoutNotifier'));
     expect(app, contains('firstLine.end < item.text.length'));
+    expect(
+      RegExp('duration: Duration.zero').allMatches(dueIndicator).length,
+      2,
+    );
+    expect(dueIndicator, contains('animationDuration: Duration.zero'));
+    expect(dueIndicator, isNot(contains('PaperTodoMotion.controlFeedback')));
+    expect(dueIndicator, isNot(contains('Transform.translate(')));
+    expect(
+      RegExp('duration: Duration.zero').allMatches(linkedNoteButton).length,
+      2,
+    );
+    expect(linkedNoteButton, contains('animationDuration: Duration.zero'));
+    expect(
+        linkedNoteButton, isNot(contains('PaperTodoMotion.controlFeedback')));
+    expect(linkedNoteButton, contains('opacity: pressed ? 0.72 : 1'));
     expect(widgetTest,
         contains('todo due badges match PaperTodo timing and visual metrics'));
     expect(
@@ -3113,6 +3258,11 @@ void main() {
   test('PaperTodo note canvas geometry gestures are preserved', () {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final app = _readProjectText('lib/src/app.dart');
+    final canvasElementChrome = _sliceBetween(
+      app,
+      'class _NoteCanvasElementPreviewState',
+      'enum _CanvasGeometryDragMode',
+    );
 
     expect(design, contains('Note canvas element geometry should preserve'));
     expect(design, contains('dragging the element header moves the block'));
@@ -3121,8 +3271,10 @@ void main() {
     expect(design, contains('Pinned'));
     expect(design, contains('ignore canvas move, resize, and add-block'));
     expect(design, contains('edit, duplicate, layer, delete, and text-edit'));
+    expect(design, contains('state-driven rather than hover-animated'));
     expect(app, contains('note-canvas-drag-handle-'));
     expect(app, contains('note-canvas-resize-handle-'));
+    expect(app, contains('note-canvas-element-scrollbar-'));
     expect(app, contains('geometryGesturesEnabled'));
     expect(app, contains('!widget.paper.isPinnedToDesktop'));
     expect(app, contains('if (widget.paper.isPinnedToDesktop)'));
@@ -3130,15 +3282,77 @@ void main() {
     expect(app, contains('_resizeElement'));
     expect(app, contains('clamp(72, maxWidth)'));
     expect(app, contains('clamp(48, maxHeight)'));
+    expect(
+      RegExp('duration: Duration.zero').allMatches(canvasElementChrome).length,
+      4,
+    );
+    expect(canvasElementChrome, isNot(contains('_dragHandleHovered')));
+    expect(canvasElementChrome, isNot(contains('_resizeHandleHovered')));
+    expect(canvasElementChrome, contains('Scrollbar('));
+    expect(canvasElementChrome, contains('thumbVisibility: true'));
+    expect(
+      canvasElementChrome,
+      contains('controller: _textScrollController'),
+    );
+    expect(
+      canvasElementChrome,
+      contains('scrollController: _textScrollController'),
+    );
+    expect(
+      canvasElementChrome,
+      isNot(contains('PaperTodoMotion.controlFeedback')),
+    );
   });
 
   test('PaperTodo note status and canvas chrome metrics are preserved', () {
     final app = _readProjectText('lib/src/app.dart');
+    final canvasToolbar = _sliceBetween(
+      app,
+      'Widget _noteCanvasToolbar()',
+      'Widget _notePaperSurface(',
+    );
+    final addCanvasButton = _sliceBetween(
+      app,
+      'Widget _addCanvasButton()',
+      'void _addCanvasElement(',
+    );
+    final noteStatusBar = _sliceBetween(
+      app,
+      'Widget _noteStatusBar(',
+      'Widget _noteZoomStatus(',
+    );
+    final noteZoomStatus = _sliceBetween(
+      app,
+      'Widget _noteZoomStatus(',
+      'Widget _noteTextZoomOverlay()',
+    );
+    final noteZoomOverlay = _sliceBetween(
+      app,
+      'Widget _noteTextZoomOverlay()',
+      'void _resetTextZoom()',
+    );
 
     expect(app, contains("ValueKey('note-canvas-toolbar')"));
-    expect(app, contains('constraints: const BoxConstraints(minHeight: 31)'));
+    expect(
+      canvasToolbar,
+      contains('constraints: const BoxConstraints(minHeight: 31)'),
+    );
     expect(app, contains("ValueKey('note-add-canvas-block')"));
     expect(app, contains("ValueKey('note-add-canvas-block-surface')"));
+    expect(app, contains('PaperTodoMotion.controlFeedback'));
+    expect(canvasToolbar, isNot(contains('AnimatedSwitcher(')));
+    expect(canvasToolbar, isNot(contains('ScaleTransition(')));
+    expect(addCanvasButton, isNot(contains('AnimatedScale(')));
+    expect(addCanvasButton, isNot(contains('scale: _canvasAddButtonPressed')));
+    expect(
+      RegExp('duration: Duration.zero').allMatches(addCanvasButton).length,
+      2,
+    );
+    expect(
+      addCanvasButton,
+      isNot(contains('PaperTodoMotion.controlFeedback')),
+    );
+    expect(app, contains('alpha: isDark ? 63 / 255 : 75 / 255'));
     expect(app, contains('width: 28'));
     expect(app, contains('height: 24'));
     expect(app, contains('fontSize: 13'));
@@ -3149,23 +3363,51 @@ void main() {
     expect(app, contains('maxLines: 1'));
     expect(app, contains('fit: BoxFit.scaleDown'));
     expect(app, contains("ValueKey('note-status-mode-pill')"));
-    expect(app, contains('constraints: const BoxConstraints(minWidth: 42)'));
+    expect(app, contains('].fold<double>(42'));
+    expect(app, contains('painter.width + 14'));
+    expect(noteStatusBar, isNot(contains('AnimatedSwitcher(')));
+    expect(noteStatusBar, isNot(contains('ScaleTransition(')));
+    expect(noteStatusBar, isNot(contains('Transform.translate(')));
+    expect(noteStatusBar, contains('letterSpacing: 0'));
+    expect(
+      noteStatusBar,
+      contains('alpha: isDark ? 34 / 255 : 28 / 255'),
+    );
+    expect(noteZoomStatus, isNot(contains('AnimatedSwitcher(')));
+    expect(noteZoomStatus, isNot(contains('ScaleTransition(')));
+    expect(noteZoomStatus, isNot(contains('Transform.translate(')));
     expect(app, contains("ValueKey('note-status-zoom')"));
+    expect(app, contains("ValueKey('note-status-zoom-content')"));
     expect(app, contains('width: 38'));
     expect(app, contains("ValueKey('note-text-zoom-overlay')"));
+    expect(app, contains("ValueKey('note-text-zoom-overlay-surface')"));
+    expect(
+      RegExp('duration: Duration.zero').allMatches(noteZoomOverlay).length,
+      2,
+    );
+    expect(
+      noteZoomOverlay,
+      isNot(contains('PaperTodoMotion.controlFeedback')),
+    );
     expect(app, contains("(widget.textZoom - 1).abs() < 0.001"));
     expect(app, contains('right: 12'));
     expect(app, contains('bottom: 7'));
     expect(app, contains('opacity: _zoomOverlayHovered ? 1 : 0.55'));
     expect(app, contains('fontSize: 10.5'));
     expect(app, contains('EdgeInsets.fromLTRB(26, 12, 14, 12)'));
-    expect(app, contains('alpha: isDark ? 88 / 255 : 104 / 255'));
+    expect(app, contains('alpha: isDark ? 63 / 255 : 75 / 255'));
     expect(app, contains('alpha: isDark ? 34 / 255 : 28 / 255'));
+    expect(app, contains('alpha: isDark ? 38 / 255 : 28 / 255'));
+    expect(app, contains('final double lineOffset = 0'));
+    expect(app, isNot(contains('verticalLineOffset')));
+    expect(app, isNot(contains('horizontalLineOffset')));
     expect(app, contains("ValueKey('note-preview-scroll')"));
     expect(app, contains('padding: EdgeInsets.zero'));
     expect(app, isNot(contains('final compactContent =')));
     expect(app, isNot(contains('final compactHeader =')));
     expect(app, contains('fontSize: (isCode ? 13 : 14) * widget.scale'));
+    expect(app, contains('height: widget.lineSpacing'));
+    expect(app, contains('letterSpacing: 0'));
     expect(app, contains('fontFamily: _paperTodoCodeFontFamily'));
     expect(app, contains('PaperTodoTypography.of(context).contentStyle'));
     expect(app, contains("const _paperTodoCodeFontFamily = 'Cascadia Mono'"));
@@ -3361,6 +3603,12 @@ void main() {
 
   test('Paper menus use the original hover tint strengths', () {
     final app = _readProjectText('lib/src/app.dart');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final menuItem = _sliceBetween(
+      app,
+      'class _PaperTodoPopupMenuItemState<T>',
+      'class _PaperTodoPopupMenuHeaderLabel extends StatelessWidget',
+    );
 
     expect(app, contains('elevation: 0'));
     expect(
@@ -3373,13 +3621,422 @@ void main() {
     expect(app, contains('highlightColor: hoverTint'));
     expect(app, contains('class _PaperTodoPopupMenuItem<T>'));
     expect(app, contains('borderRadius: BorderRadius.circular(8)'));
+    expect(menuItem, contains('duration: Duration.zero'));
+    expect(menuItem, isNot(contains('AnimatedOpacity(')));
+    expect(menuItem, isNot(contains('opacity: _pressed')));
+    expect(app, contains('onHover: _setHovered'));
+    expect(app, contains('onHighlightChanged: _setPressed'));
     expect(app, contains('highlightColor: Colors.transparent'));
+    expect(app, contains('_paperTodoCheckedMenuItem<T>'));
+    expect(app, contains("dimension: 18"));
+    expect(app, contains("Icons.check_rounded"));
+    expect(app, isNot(contains('CheckedPopupMenuItem<')));
+    expect(app, contains('class _PaperTodoPopupMenuDivider'));
+    expect(app, contains('super(thickness: 1, indent: 8, endIndent: 8)'));
+    expect(app, contains('const AnimationStyle _paperTodoPopupAnimationStyle'));
+    expect(
+      RegExp('popUpAnimationStyle: _paperTodoPopupAnimationStyle')
+          .allMatches(app)
+          .length,
+      8,
+    );
+    expect(app, contains('waitDuration: const Duration(milliseconds: 300)'));
+    expect(app, contains('exitDuration: PaperTodoMotion.controlFeedback'));
     expect(app, contains('class _PaperTodoPopupMenuHeaderLabel'));
     expect(app, contains('colors.weakText.withValues(alpha: 0.72)'));
     expect(app, contains('colors.onSurface.withValues(alpha: 0.72)'));
-    expect(app, contains('? _PaperTodoPopupMenuItem<String>('));
+    expect(app, contains('return _PaperTodoPopupMenuItem<String>('));
     expect(app, contains('height: 21'));
     expect(app, contains('widget.standaloneSurface ? 7 : 16'));
+    expect(
+      app,
+      contains('animationDuration: PaperTodoMotion.controlFeedback'),
+    );
+    expect(
+      settings,
+      contains('animationDuration: PaperTodoMotion.controlFeedback'),
+    );
+    expect(
+      settings,
+      contains('waitDuration: const Duration(milliseconds: 300)'),
+    );
+    expect(settings, contains('exitDuration: duration'));
+    expect(
+      settings,
+      contains(
+          'padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7)'),
+    );
+  });
+
+  test('Sync actions share compact PaperTodo animated progress feedback', () {
+    final app = _readProjectText('lib/src/app.dart');
+
+    expect(app, contains('class _PaperTodoSyncState extends StatelessWidget'));
+    expect(
+      app,
+      contains('class _PaperTodoSyncIndicator extends StatelessWidget'),
+    );
+    expect(app, contains('strokeCap: StrokeCap.round'));
+    expect(app, contains('? PaperTodoMotion.controlFeedback'));
+    expect(app, contains("stateKey: 'app-bar-sync-state'"));
+    expect(app, contains(r"stateKey: '${paper.id}-standalone-sync-state'"));
+    expect(app, contains(r"stateKey: '${paper.id}-paper-window-sync-state'"));
+  });
+
+  test('Settings font loading keeps compact PaperTodo field feedback', () {
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+
+    expect(
+      settings,
+      contains('class _SettingsFontLoadState extends StatelessWidget'),
+    );
+    expect(settings, contains("'settings-font-load-state'"));
+    expect(settings, contains("'settings-font-load-indicator'"));
+    expect(settings, contains('strokeCap: StrokeCap.round'));
+    expect(settings, contains('? PaperTodoMotion.controlFeedback'));
+    expect(settings, contains('dimension: 30'));
+  });
+
+  test('Settings text fields share animated PaperTodo chrome', () {
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final chrome = _sliceBetween(
+      settings,
+      'class _SettingsTextFieldChrome extends StatefulWidget',
+      'class _SettingsCheckboxTile extends StatefulWidget',
+    );
+
+    expect(settings, contains('return _SettingsTextFieldChrome('));
+    expect(settings, contains('child: _SettingsTextFieldChrome('));
+    expect(chrome, contains('MouseRegion('));
+    expect(chrome, contains('AnimatedContainer('));
+    expect(chrome, contains('this.height = 28'));
+    expect(chrome, contains('height: widget.height'));
+    expect(chrome, contains('PaperTodoMotion.controlFeedback'));
+    expect(chrome, contains('MediaQuery.disableAnimationsOf(context)'));
+    expect(chrome, contains('colors.brightWeakText'));
+    expect(chrome, contains('colors.danger'));
+    expect(
+      settings,
+      contains("'settings-custom-font-family-surface'"),
+    );
+  });
+
+  test('Settings dropdowns preserve PaperTodo field and popup chrome', () {
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+
+    expect(design, contains('opened option surface uses the source 12px'));
+    expect(design, contains('10x5 chevron'));
+    expect(settings, contains('borderRadius: BorderRadius.circular(12)'));
+    expect(settings, contains('class _SettingsDropdownChrome'));
+    expect(settings, contains('final indicatorColor = _focused'));
+    expect(settings, contains('? colors.active'));
+    expect(settings, contains('? colors.text'));
+    expect(settings, contains('_SettingsDropChevron(color: indicatorColor)'));
+  });
+
+  test('Settings compact actions share PaperTodo press feedback', () {
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final button = _sliceBetween(
+      settings,
+      'class _SettingsCompactActionButton extends StatefulWidget',
+      'class _SettingsCheckboxTile extends StatefulWidget',
+    );
+
+    expect(button, contains('MouseRegion('));
+    expect(button, contains('AnimatedScale('));
+    expect(button, contains('AnimatedContainer('));
+    expect(button, contains('AnimatedOpacity('));
+    expect(button, contains('PaperTodoMotion.controlFeedback'));
+    expect(button, contains('MediaQuery.disableAnimationsOf(context)'));
+    expect(button, contains('borderRadius: BorderRadius.circular(8)'));
+  });
+
+  test('Settings dialog actions replace Material ripples with paper feedback',
+      () {
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final button = _sliceBetween(
+      settings,
+      'class _SettingsDialogActionButton extends StatefulWidget',
+      'class _SettingsCheckboxTile extends StatefulWidget',
+    );
+
+    expect(settings, contains("key: const ValueKey('settings-cancel-button')"));
+    expect(
+      settings,
+      contains("key: const ValueKey('settings-confirm-button')"),
+    );
+    expect(button, contains('AnimatedContainer('));
+    expect(button, contains('onHover: enabled'));
+    expect(button, contains('overlayColor: pressedOverlay'));
+    expect(button, contains('PaperTodoMotion.controlFeedback'));
+    expect(button, contains('MediaQuery.disableAnimationsOf(context)'));
+  });
+
+  test('Settings theme swatch uses PaperTodo feedback without ripples', () {
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final swatch = _sliceBetween(
+      settings,
+      'class _SettingsColorSwatchButton extends StatefulWidget',
+      'class _SettingsCheckboxTile extends StatefulWidget',
+    );
+
+    expect(swatch, contains('AnimatedScale('));
+    expect(swatch, contains('AnimatedOpacity('));
+    expect(swatch, contains('AnimatedContainer('));
+    expect(swatch, contains('width: 58'));
+    expect(swatch, contains('height: 42'));
+    expect(swatch, contains('colors.brightWeakText'));
+    expect(swatch, isNot(contains('InkWell(')));
+  });
+
+  test('Settings secret toggles use compact animated paper feedback', () {
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final toggle = _sliceBetween(
+      settings,
+      'class _SettingsSecretToggleButton extends StatefulWidget',
+      'class _SettingsCheckboxTile extends StatefulWidget',
+    );
+
+    expect(settings, contains("'settings-webdav-password-toggle'"));
+    expect(settings, contains("'settings-webdav-passphrase-toggle'"));
+    expect(toggle, contains('AnimatedScale('));
+    expect(toggle, contains('AnimatedContainer('));
+    expect(toggle, contains('AnimatedSwitcher('));
+    expect(toggle, contains('width: 34'));
+    expect(toggle, contains('height: 26'));
+    expect(toggle, isNot(contains('IconButton(')));
+  });
+
+  test('Settings fallback color sliders animate live PaperTodo feedback', () {
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final slider = _sliceBetween(
+      settings,
+      'class _SettingsColorChannelSlider extends StatefulWidget',
+      'class _SettingsCheckboxTile extends StatefulWidget',
+    );
+
+    expect(settings, contains('AnimatedContainer('));
+    expect(settings, contains("'settings-theme-color-preview'"));
+    expect(slider, contains('TweenAnimationBuilder<double>('));
+    expect(slider, contains('activeTrackColor: widget.color'));
+    expect(slider, contains('thumbColor: widget.color'));
+    expect(slider, contains('trackHeight: 3 + (0.5 * emphasis)'));
+    expect(slider, contains('enabledThumbRadius: 6 + emphasis'));
+    expect(slider, contains('overlayRadius: 12 + (2 * emphasis)'));
+  });
+
+  test('Todo time fields share immediate PaperTodo interaction chrome', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final chrome = _sliceBetween(
+      app,
+      'class _TodoDialogFieldChrome extends StatefulWidget',
+      'class _RecoverySnapshotsDialog extends StatefulWidget',
+    );
+
+    expect(
+      app,
+      contains('class _TodoDialogFieldChrome extends StatefulWidget'),
+    );
+    expect(app, contains("'todo-dialog-field-feedback'"));
+    expect(app, contains("'todo-due-hour-surface'"));
+    expect(app, contains("'todo-due-minute-surface'"));
+    expect(app, contains("'todo-reminder-interval-unit-surface'"));
+    expect(chrome, contains('duration: Duration.zero'));
+    expect(chrome, isNot(contains('PaperTodoMotion.controlFeedback')));
+    expect(chrome, isNot(contains('enableAnimations')));
+    expect(app, contains('colors.brightWeakText'));
+  });
+
+  test('Desktop todo footer actions use lightweight paper feedback', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final surface = _sliceBetween(
+      app,
+      'class _TodoFooterActionSurface extends StatefulWidget',
+      'class _TodoEditorState extends State<_TodoEditor>',
+    );
+
+    expect(surface, contains('AnimatedContainer('));
+    expect(surface, contains('PaperTodoMotion.controlFeedback'));
+    expect(surface, contains('MediaQuery.disableAnimationsOf(context)'));
+    expect(surface, contains('colors.hover'));
+    expect(app, contains('-todo-footer-add'));
+    expect(app, contains('-todo-footer-undo'));
+    expect(app, contains('-todo-footer-redo'));
+    expect(app, contains('width: 36'));
+    expect(app, contains('footerPressedOverlay'));
+  });
+
+  test('Wide todo row icon actions share compact paper feedback', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final action = _sliceBetween(
+      app,
+      'class _TodoRowIconAction extends StatefulWidget',
+      'class _TodoEditorState extends State<_TodoEditor>',
+    );
+
+    expect(action, contains('AnimatedContainer('));
+    expect(action, contains('PaperTodoMotion.controlFeedback'));
+    expect(action, contains('MediaQuery.disableAnimationsOf(context)'));
+    expect(action, contains('onHover: enabled'));
+    expect(action, contains('overlayColor: pressedOverlay'));
+    for (final suffix in const [
+      '-due-action',
+      '-reminder-action',
+      '-delete-action',
+      '-clear-done-action',
+      '-move-up-action',
+      '-move-down-action',
+    ]) {
+      expect(app, contains(suffix));
+    }
+  });
+
+  test('Todo row popup actions stay highlighted while menus are open', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final action = _sliceBetween(
+      app,
+      'class _TodoRowPopupAction extends StatefulWidget',
+      'class _TodoEditorState extends State<_TodoEditor>',
+    );
+
+    expect(action, contains('AnimatedContainer('));
+    expect(action, contains('PaperTodoMotion.controlFeedback'));
+    expect(action, contains('MediaQuery.disableAnimationsOf(context)'));
+    expect(action, contains('_hovered || _open'));
+    expect(action, contains('onOpened:'));
+    expect(action, contains('onCanceled:'));
+    expect(action, contains('style: IconButton.styleFrom('));
+    expect(app, contains('-columns-action'));
+    expect(app, contains('-link-action'));
+    expect(app, contains(r'${item.id}-actions'));
+  });
+
+  test('Markdown context menus keep PaperTodo compact text-only commands', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final menuItem = _sliceBetween(
+      app,
+      'PopupMenuItem<String> _markdownMenuItem({',
+      'PopupMenuItem<String> _markdownMenuHeader',
+    );
+    final menuEntries = _sliceBetween(
+      app,
+      'List<PopupMenuEntry<String>> _markdownEditorContextMenuItems()',
+      'void _formatBold()',
+    );
+
+    expect(menuItem, contains('child: Text(label)'));
+    expect(menuItem, contains('height: compact ? 21'));
+    expect(menuItem, isNot(contains('Icon(')));
+    expect(menuEntries, isNot(contains('icon: Icons.')));
+    expect(
+      app,
+      contains('constraints: _paperTodoTextMenuConstraints(context, entries)'),
+    );
+    expect(app, contains('MediaQuery.sizeOf(context).width - 16'));
+    expect(app, contains('clamp(96.0, availableWidth)'));
+  });
+
+  test('Todo command menus keep PaperTodo text-only measured rows', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final menuItem = _sliceBetween(
+      app,
+      'PopupMenuItem<String> _todoActionMenuItem({',
+      'Widget _maybeTooltip({',
+    );
+    final contextMenu = _sliceBetween(
+      app,
+      'Future<void> _showTodoItemContextMenu(',
+      'List<PopupMenuEntry<String>> _todoItemContextMenuItems(',
+    );
+
+    expect(menuItem, contains('child: Text(label)'));
+    expect(menuItem, contains('height: compact ? 21'));
+    expect(menuItem, isNot(contains('child: Row(')));
+    expect(menuItem, isNot(contains('Icon(icon')));
+    expect(
+      contextMenu,
+      contains('constraints: _paperTodoTextMenuConstraints(context, entries)'),
+    );
+  });
+
+  test('Paper context menus keep text commands and measured width', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final menuItem = _sliceBetween(
+      app,
+      'PopupMenuItem<String> _paperActionMenuItem({',
+      'void _handleCompactPaperAction(String value)',
+    );
+    final contextMenu = _sliceBetween(
+      app,
+      'Future<void> _showPaperContextMenu(',
+      'List<PopupMenuEntry<String>> _paperContextMenuItems(',
+    );
+
+    expect(menuItem, contains('child: Text(label)'));
+    expect(menuItem, isNot(contains('child: Row(')));
+    expect(menuItem, isNot(contains('Icon(icon')));
+    expect(
+      contextMenu,
+      contains('constraints: _paperTodoTextMenuConstraints(context, entries)'),
+    );
+    expect(app, contains("'paper-todo-popup-menu-checkmark'"));
+  });
+
+  test('Compact app bar menu uses measured PaperTodo text commands', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final menuItem = _sliceBetween(
+      app,
+      'PopupMenuItem<String> _compactMenuItem({',
+      'void _handleCompactAppBarAction(',
+    );
+    final appBarActions = _sliceBetween(
+      app,
+      'List<Widget> _appBarActions({',
+      'PopupMenuItem<String> _compactMenuItem({',
+    );
+
+    expect(menuItem, contains('child: Text(label)'));
+    expect(menuItem, isNot(contains('child: Row(')));
+    expect(menuItem, isNot(contains('Icon(icon')));
+    expect(appBarActions, contains('final compactEntries ='));
+    expect(
+      appBarActions,
+      contains('_paperTodoTextMenuConstraints('),
+    );
+    expect(appBarActions, contains('itemBuilder: (context) => compactEntries'));
+  });
+
+  test('Recovery snapshots use an unframed compact paper list', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final recoveryDialog = _sliceBetween(
+      app,
+      'class _RecoverySnapshotsDialog extends',
+      'String _snapshotSummary',
+    );
+
+    expect(recoveryDialog, contains("'recovery-snapshots-loading'"));
+    expect(recoveryDialog, contains('dimension: 22'));
+    expect(recoveryDialog, contains('strokeWidth: 2'));
+    expect(recoveryDialog, contains('strokeCap: StrokeCap.round'));
+    expect(recoveryDialog, contains('colors.weakText'));
+    expect(
+      recoveryDialog,
+      contains('class _RecoverySnapshotStateTransition'),
+    );
+    expect(
+      recoveryDialog,
+      contains("'recovery-snapshot-state-transition'"),
+    );
+    expect(recoveryDialog, contains('PaperTodoMotion.controlFeedback'));
+    expect(recoveryDialog, contains("'recovery-snapshot-list'"));
+    expect(
+      recoveryDialog,
+      contains('padding: const EdgeInsets.symmetric(horizontal: 2)'),
+    );
+    expect(recoveryDialog, contains('indent: 29'));
+    expect(recoveryDialog, contains('_recoverySnapshotActionStyle()'));
+    expect(recoveryDialog, contains('minimumSize: const Size(72, 30)'));
   });
 
   test('Todo removals preserve PaperTodo fade and stagger timing', () {
@@ -3445,6 +4102,11 @@ void main() {
 
   test('Windows paper HWNDs preserve PaperTodo transparent shadow chrome', () {
     final app = _readProjectText('lib/src/app.dart');
+    final resizeGrip = _sliceBetween(
+      app,
+      'class _PaperWindowResizeGrip extends StatefulWidget',
+      'class _TodoVisualSpec',
+    );
 
     expect(app, contains('const _paperWindowChromeMargin = 8.0'));
     expect(app, contains('EdgeInsets.all(_paperWindowChromeMargin)'));
@@ -3454,9 +4116,16 @@ void main() {
     expect(app, contains('paper-window-transparency-guard-left'));
     expect(app, contains('clipBehavior: standaloneSurface ? Clip.hardEdge'));
     expect(app, contains('paper-window-capsule-surface'));
-    expect(app, contains('scaleX: paper.isNote ? 0.93 : 0.94'));
-    expect(app, contains('offset: const Offset(-1, -1)'));
-    expect(app, contains('paper.isNote ? -1 : -1.25'));
+    expect(app, contains('paper-window-capsule-title'));
+    expect(app, isNot(contains('scaleX: paper.isNote ? 0.93 : 0.94')));
+    expect(app, isNot(contains('offset: const Offset(-1, -1)')));
+    expect(app, contains('fontWeight: FontWeight.normal'));
+    expect(app, contains('letterSpacing: 0'));
+    expect(app, contains('paper-window-capsule-icon'));
+    expect(app, isNot(contains('paper.isNote ? -1 : -1.25')));
+    expect(resizeGrip, contains('duration: Duration.zero'));
+    expect(resizeGrip, isNot(contains('PaperTodoMotion.controlFeedback')));
+    expect(resizeGrip, isNot(contains('enableAnimations')));
   });
 
   test('pinned capsule activation clears pin and restores foreground focus',
@@ -3610,6 +4279,12 @@ void main() {
     );
     expect(runner, contains('if (message == WM_NCHITTEST)'));
     expect(runner, contains('return SettingsCoordinatorHitTest(hwnd, lparam)'));
+    expect(settings, contains("invokeMethod<void>('startSettingsDrag')"));
+    expect(settings, contains("ValueKey('settings-window-drag-handle')"));
+    expect(settings, contains('onPointerDown: (_)'));
+    expect(settings, isNot(contains('onPanStart: (_)')));
+    expect(runner, contains('if (method == "startSettingsDrag")'));
+    expect(runner, contains('SC_MOVE | HTCAPTION'));
     expect(runner, contains('kSettingsPositionedProperty'));
     expect(runner, contains('GetPropW(window, kSettingsPositionedProperty)'));
     expect(runner, contains('SetPropW(window, kSettingsPositionedProperty'));
@@ -4050,6 +4725,12 @@ void main() {
     expect(runner, contains('ShowWindow(GetHandle(), SW_HIDE)'));
     expect(paperWindowHeader, contains('class PaperFlutterWindow'));
     expect(nativeCapsuleHeader, contains('class NativeCapsuleWindow'));
+    expect(nativeCapsuleHeader, contains('HWND covering_window_ = nullptr'));
+    expect(nativeCapsule, contains('if (covering_window_)'));
+    expect(nativeCapsule, contains('still_covers(covering_window_)'));
+    expect(nativeCapsule, contains('covering_window_ = candidate'));
+    expect(nativeCapsule, contains('GetForegroundWindow()'));
+    expect(nativeCapsule, contains('WindowFromPoint(cursor)'));
     expect(nativeCapsuleHeader, contains('public Win32Window'));
     expect(nativeCapsule, isNot(contains('FlutterViewController')));
     expect(nativeCapsule, contains('WS_EX_NOACTIVATE'));
@@ -4564,7 +5245,9 @@ void main() {
     );
     expect(
       nativeCapsule,
-      contains('hovered_ || pointer_down_ || dragging_ ||'),
+      contains(
+        'pointer_down_ || dragging_ || IsPointerOverWindow()',
+      ),
     );
     expect(nativeCapsule, contains('ResetHoverAnimationForHiddenState();'));
     expect(nativeCapsule, contains('hidden_by_transition'));
@@ -4876,6 +5559,27 @@ void main() {
     expect(capsulePaper, contains('paper_window->ApplySurface'));
     expect(capsulePaper, contains('paper_window->IsCollapsed()'));
     expect(capsulePaper, isNot(contains('EnsurePaperWindow(')));
+  });
+
+  test('PaperTodo title-bar actions keep immediate source pointer states', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final design = _readProjectText('docs/DESIGN_SYSTEM.md');
+    final headerAction = _sliceBetween(
+      app,
+      'class _PaperWindowHeaderAction extends StatefulWidget',
+      'class _PaperWindowTopmostGlyph extends StatefulWidget',
+    );
+
+    expect(headerAction, contains('const feedbackDuration = Duration.zero'));
+    expect(headerAction, contains('scale: 1'));
+    expect(headerAction, isNot(contains('scale: _pressed')));
+    expect(headerAction, contains('opacity: _pressed ? 0.7 : 1'));
+    expect(headerAction, contains('? paperColors.hover'));
+    expect(headerAction, contains('splashFactory: NoSplash.splashFactory'));
+    expect(
+      design,
+      contains('ripple, press scaling, or transition delay'),
+    );
   });
 
   test('independent paper windows expose a visible native drag affordance', () {

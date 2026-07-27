@@ -112,7 +112,10 @@ hard-clipped, and 1px color-key guards at the inner edge of all four chrome
 sides overwrite partial-alpha color-key fringes without changing native resize
 hit targets. Foreground fullscreen detection must accept both DWM extended
 frame bounds and raw bounds that cover the monitor; invisible resize borders
-may extend outside the monitor and must not disable avoidance. A policy-hidden
+may extend outside the monitor and must not disable avoidance. The paper's
+Windows-style resize grip keeps its 0.46/0.92 opacity frames but
+switches between them immediately so edge feedback cannot trail the pointer.
+A policy-hidden
 capsule must revoke topmost before it is hidden so Windows restores the correct
 layer when the fullscreen app exits. The capsule's 26px leading drag zone also
 has a native caption hit path while its title and close regions remain ordinary
@@ -402,7 +405,7 @@ button, with 0.72 inactive opacity instead of a generic monitor icon. At the
 Windows title-bar buttons use PaperTodo's immediate pointer states: weak text
 at rest, full paper text with the normal hover tint on hover, and 0.7 opacity
 for the complete button while pressed. They do not use a stronger Material
-pressed state layer or ripple.
+pressed state layer, ripple, press scaling, or transition delay.
 Desktop secondary-click on a paper header/chrome should open a PaperTodo-style
 paper context menu. The menu should reuse existing paper actions instead of
 forking behavior: create Todo or Note papers from the current paper as the
@@ -419,8 +422,8 @@ for scanability, including New, Todo, Canvas, Desktop pin, Format, Text, and
 Item sections where those menus expose the corresponding actions.
 Compact Windows menu commands use an 8px rounded hover surface. Mouse-down must
 retain that same single hover surface rather than adding a second Material
-highlight layer; the original PaperTodo hover and pressed frames are
-pixel-identical.
+highlight layer or fading the command content; the original PaperTodo hover and
+pressed frames are immediate and pixel-identical.
 Paper context menu collapse actions should keep PaperTodo's capsule wording:
 expanded papers show Collapse to capsule, while collapsed papers show Restore
 window.
@@ -599,22 +602,31 @@ long labels such as WebDAV provider presets.
 Windows settings toggles follow PaperTodo's compact checkbox row instead of a
 Material list tile: a 16px mark with 1.5px border and 4px radius, 8px gap to
 13px text, the exact `M 4,8.1 L 7,11 L 12,5` checked path, Hover tint only for
-the unchecked mark, Active checked fill, and 0.55 disabled option opacity.
+the unchecked mark, a full 16px Active checked fill without an inset Material
+selection block, and 0.55 disabled option opacity.
 The 40 source `WrapWithHint` options keep their original Chinese and English
 resource text behind a trailing 18x18 `ⓘ`. The hint uses the symbol font at
-12px, Help cursor, 200ms hover delay and 20-second display duration. It remains
-interactive when its option is disabled and sits outside toggle hit testing,
-so opening help never changes a setting.
+12px, Help cursor, 240px maximum text width, 10x7px content padding, 200ms
+hover delay and 20-second display duration. It remains interactive when its
+option is disabled and sits outside toggle hit testing, so opening help never
+changes a setting. Flutter preserves the source `HasDropShadow` treatment with
+the same light/dark FloatingShadow opacity, blur and two-pixel depth.
 Settings navigation and group labels use the original Display, Todo / Notes,
 Capsules and General / Advanced resource wording. Each page starts with a 12px
 weak semibold group label instead of a decorative divider; nested Top-bar
 buttons, External open and Script capsule groups use the same hierarchy.
+Only inactive navigation categories receive hover and press feedback. Pressing
+the current category keeps its selected tint and geometry unchanged.
 Desktop choices use 28px source segment selectors: a 1px Control-radius outer
 border, equal columns, 1px segment insets, 12px regular inactive text, 12px
 semibold active text, Hover background for inactive choices and Active/paper
 colors for the selection. The maximum-title stepper uses the same 28px shell,
 34px symbol-font side actions and immediate mouse-down changes without ripple
-or tooltips.
+or tooltips. Press feedback applies only to inactive segments; pressing the
+already-selected choice is a visual and state no-op like the source control.
+Compact settings dropdowns keep the same 28px Control-radius field, while the
+opened option surface uses the source 12px Block radius. Their 10x5 chevron
+changes from weak text to normal text on hover and Active while focused/open.
 PaperTodo source setting fields keep their labels outside the control and use
 28px border-only text boxes without decorative leading icons. Hotkey editors
 place a separate 52x26 Clear action at the right; line-spacing editors use a
@@ -732,11 +744,16 @@ while dragging; the source row simultaneously uses the paper hover tint and
 Todo row and title-host hover/focus tint changes are immediate. Do not add a
 transition to pointer-state brushes; PaperTodo reserves motion for row
 insert/delete/completion and capsule/window geometry.
+The Todo drag handle, reorder insertion line, append area, and drag-to-delete
+target follow the same immediate pointer rule. Their source opacity, border,
+and tint frames must not trail the pointer through a feedback transition.
 Todo due editing should preserve PaperTodo date-and-time precision: the picker
 must expose compact year/month/day plus 00-23 hour and 00-59 minute choices,
 default a
 new due time to roughly one hour from now, and save local values as
 `yyyy-MM-ddTHH:mm:ss` without milliseconds and with seconds reset to `00`.
+Date, time, and reminder-unit field chrome changes immediately on pointer and
+focus state; compact field feedback must not trail behind the cursor.
 The due date and reminder interval dialogs should keep PaperTodo's keyboard
 dialog behavior: Enter saves through the same OK path, while Escape cancels
 without changing the item. Independent Windows paper HWNDs use a separate
@@ -790,12 +807,16 @@ Absolute due labels without an explicit year should follow PaperTodo's compact
 time-aware display: today is `HH:mm`, tomorrow is `Tomorrow HH:mm`, and other
 dates use `M/d HH:mm`. Short and full year modes use `yy年M/d HH:mm` and
 `yyyy年M/d HH:mm` respectively.
+Todo due and linked-note badges use PaperTodo's immediate pointer frames. Their
+background and foreground switch without interpolation on hover, while the
+pressed frame keeps the source 0.72 whole-control opacity without scaling.
 Relative due labels should use PaperTodo's duration model rather than coarse
 day names: round the absolute distance up to at least one minute, combine the
 localized day, hour and minute units such as `2h5m` or `2小时5分`, then apply the
 localized future/overdue wrapper. Todo rows keep the relative and absolute
 badges as one compact horizontal group at the far right; the absolute badge
-edits or clears the due date. The reminder timer should also refresh due rows
+edits or clears the due date. Both labels use their native centered baseline;
+the relative label must not be shifted independently. The reminder timer should also refresh due rows
 even when no reminder bubble is shown, so visible countdown text does not go stale.
 Todo ordering should preserve PaperTodo's reorder data semantics: item moves
 must push a todo undo snapshot, keep the moved item focused, normalize item
@@ -814,6 +835,10 @@ trash target with Danger 50 border and 0.65 glyph opacity. Hovering a valid
 drag raises it to Danger 26/32, a solid 1.5px border and full glyph opacity.
 The standalone Windows surface uses PaperTodo's `＋` and `🗑` text glyphs for
 these two states, not Material add/delete icons.
+Collapsed capsule titles use the source 11px normal-weight UI text at zero
+letter spacing and native horizontal scale; do not flatten or offset the title
+to compensate for Material label defaults. The symbol icon and title share the
+same native vertical center instead of using per-paper upward icon offsets.
 Linked-note buttons use the checkbox-column-based PaperTodo width formulas,
 not the larger action-control extent. Their surface changes from Tint 18/28 to
 Tint 34/48 on hover, weak text at 0.72 becomes full paper text, and the whole
@@ -854,13 +879,22 @@ Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,
 and strikethrough belong in a compact overflow menu.
-The Note canvas toolbar is a fixed 31px band with 9/3/9/4 Flutter padding
-(the one-pixel bottom border is included in the rendered height). Its `{}`
+The Note canvas toolbar keeps PaperTodo's 31px minimum height with 9/3/9/4
+Flutter padding; its 24px tool button and 1px bottom divider naturally resolve
+the rendered band to 32px without compressing the control. Its `{}`
 action is 28x24 with 13px normal symbol text, 1px side margins, Tint hover to
-full paper text, and 0.7 pressed opacity. The element count is one-line and
-ellipsis-trimmed. The status bar remains 26px with a minimum 42px mode pill,
+full paper text, and 0.7 pressed opacity. These pointer frames are immediate
+and never scale the button. The element count updates as one stable one-line,
+ellipsis-trimmed text node without a fade or scale transition. The status bar
+remains 26px with a minimum 42px mode pill,
 38px right-aligned zoom field and one-line stats; zoom text uses scale-down
-inside the fixed field so font metrics cannot create a second row.
+inside the fixed field so font metrics cannot create a second row. Mode, stats,
+and zoom update in their existing fixed slots without fading, sliding, scaling,
+or stacking old and new text frames. All three slots use zero letter spacing
+and native vertical centering rather than per-slot pixel translation.
+The non-100% zoom overlay at the lower-right follows PaperTodo's immediate
+pointer frames: transparent with weak text at 0.55 at rest, then the normal
+hover tint with full text opacity while hovered, without a trailing fade.
 Note canvas element geometry should preserve PaperTodo pointer semantics:
 dragging the element header moves the block, dragging the bottom-right grip
 resizes it, movement is clamped to the visible canvas, resize keeps the minimum
@@ -868,6 +902,20 @@ resizes it, movement is clamped to the visible canvas, resize keeps the minimum
 desktop note papers should ignore canvas move, resize, and add-block gestures
 plus edit, duplicate, layer, delete, and text-edit actions so desktop surface
 mode cannot accidentally rearrange note blocks.
+Canvas block chrome is state-driven rather than hover-animated: selection and
+top-layer border, shadow, header tint, and layer badge update immediately, while
+the drag header and resize grip keep their resting Tint when merely hovered.
+Canvas block editors preserve PaperTodo's automatic vertical-scroll feedback:
+the editor and its slim themed scrollbar share one controller, and the thumb is
+only paintable when the block text has a vertical scroll extent.
+The note canvas keeps the source 24px grid with Tint 28 in light themes and
+Tint 38 in dark themes. Its outer border plus the toolbar and status dividers
+share Tint 28/34 so the paper chrome has one continuous edge weight. Horizontal
+and vertical grid strokes share the source zero origin; the two axes must not
+use independent offsets that stagger their intersections.
+Note body editing and canvas block text use normal zero tracking rather than
+inheriting Material body-text letter spacing. Markdown preview retains its
+renderer-specific glyph-width compensation and token metrics.
 Desktop secondary-click on a note canvas block should open a PaperTodo-style
 block context menu with one-step layer moves, front/back layer commands,
 duplicate, and delete. Geometry editing remains a separate explicit tool button

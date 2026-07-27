@@ -83,7 +83,7 @@ class NativeCapsuleWindow : public Win32Window {
   int MeasureLabelWidth(const std::wstring& value) const;
   bool IsChineseLocale() const;
   bool IsExternalFullscreenWindow() const;
-  bool IsCoveredByHigherWindow() const;
+  bool IsCoveredByHigherWindow();
   bool IsPointerOverWindow() const;
   int ScaleMetric(int logical_pixels) const;
   double UnscaleMetric(double physical_pixels) const;
@@ -141,6 +141,10 @@ class NativeCapsuleWindow : public Win32Window {
   int master_transition_fade_duration_ms_ = 0;
   int current_alpha_ = 255;
   bool hide_when_covered_ = false;
+  // Once a higher external HWND covers the capsule, hiding this window changes
+  // its Z order and makes a fresh GW_HWNDPREV scan unreliable. Keep validating
+  // the original blocker until it no longer overlaps the capsule.
+  HWND covering_window_ = nullptr;
   bool hide_when_fullscreen_ = false;
   bool animations_enabled_ = true;
   bool avoid_fullscreen_topmost_ = true;

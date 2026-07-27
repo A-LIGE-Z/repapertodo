@@ -7,6 +7,9 @@
 build/
 dist/
 .reference/
+repapertodo-android-release.apk
+repapertodo-windows-x64.zip
+repapertodo-windows-x64/
 android/.kotlin/
 .android-home/
 .android-sdk/

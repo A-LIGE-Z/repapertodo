@@ -15,6 +15,7 @@ abstract final class PaperTodoMotion {
   /// this in the same token set as the paper/capsule transitions prevents a
   /// content edit from acquiring a second, subtly different rhythm.
   static const Duration quick = Duration(milliseconds: 150);
+  static const Duration controlFeedback = Duration(milliseconds: 90);
   static const Duration fadeIn = Duration(milliseconds: 200);
   static const Duration fadeOut = Duration(milliseconds: 180);
   static const Duration move = Duration(milliseconds: 200);

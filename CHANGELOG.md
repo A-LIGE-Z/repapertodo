@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Restored PaperTodo's source-native text metrics across Windows paper titles,
+  toolbar actions, todo rows, due badges, settings labels, custom-theme actions,
+  and the settings footer. Removed capture-specific fractional offsets, tracking,
+  and glyph scaling that made the Flutter UI look compressed or unstable while
+  preserving the original control geometry, spacing, and interaction feedback.
+- Fixed a Windows shutdown hang: the native date and reminder-interval picker
+  modal loops pump thread-wide messages and dispatch them to the coordinator
+  window, so a `WM_QUIT` posted while a picker was open (tray "exit" or a
+  forwarded exit startup command) was consumed by `GetMessageW` and never
+  reached the outer run loop, leaving a zombie process that also held the
+  single-instance mutex. Both loops now re-post `WM_QUIT` after they exit.
+- Stopped one-shot PowerShell script capsules from orphaning their child
+  process (and leaking the temp script) when RePaperTodo exits mid-run: the
+  one-shot launch path now assigns the process to a kill-on-close job created
+  suspended and resumed, matching the persistent script capsule path.
 - Refreshed the Windows DirectWrite font collection whenever the settings page
   enumerates installed families, and made the settings list's right scrollbar
   explicitly visible and draggable so newly installed fonts appear without a
