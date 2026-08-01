@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../core/model/app_state.dart';
 import '../../core/model/sync_settings.dart';
 import '../../core/state/app_state_codec.dart';
+import '../../core/storage/log_compactor.dart';
 import '../sync_device_id.dart';
 import '../sync_manifest.dart';
 import '../sync_operation.dart';
@@ -1236,7 +1237,7 @@ List<SyncOperation> _contiguousOperationsForUpload(
       expectedSequence += 1;
     }
   }
-  return selected;
+  return const OperationLogCompactor().compact(selected);
 }
 
 SyncOperation _canonicalOperationForUpload(SyncOperation operation) {

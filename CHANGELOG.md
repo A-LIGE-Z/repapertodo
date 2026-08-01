@@ -1,5 +1,7 @@
 # RePaperTodo Changelog
 
+## Unreleased
+
 ## [0.1.1+7] - 2026-08-01
 
 - Matched the master capsule's hidden full-content width to PaperTodo's WPF

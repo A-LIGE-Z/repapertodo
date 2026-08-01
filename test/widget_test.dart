@@ -10865,10 +10865,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('pending-restore-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('pending-restore-note-title')),
+
       'Draft before restore',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byTooltip('Recovery snapshots'));
@@ -12830,10 +12839,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('manual-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('manual-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byTooltip('Sync now'));
     await tester.pump();
@@ -12907,10 +12925,14 @@ void main() {
         syncService: syncService,
       ),
     );
+    await tester.tap(find.byKey(const ValueKey('manual-durable-note-title-display-layer')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.enterText(
       find.byKey(const ValueKey('manual-durable-note-title')),
       'Draft',
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byTooltip('Sync now'));
     await tester.pump();
@@ -13008,10 +13030,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('idempotent-upload-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('idempotent-upload-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byTooltip('Sync now'));
     await tester.pump();
@@ -13116,10 +13147,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('overlap-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('overlap-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byTooltip('Sync now'));
@@ -13217,10 +13257,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('manual-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('manual-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byTooltip('Sync now'));
     await tester.pump();
@@ -13318,10 +13367,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('manual-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('manual-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byTooltip('Sync now'));
     await tester.pump();
@@ -13858,10 +13916,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('lifecycle-pending-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('lifecycle-pending-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 1));
 
@@ -13952,10 +14019,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('durable-outbox-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('durable-outbox-note-title')),
+
       'Durable draft',
+
     );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
     await _waitForSavedTrayTitle(tester, platform, 'Durable draft');
 
     final reloaded = (await tester.runAsync(
@@ -14051,10 +14127,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('durable-outbox-failure-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('durable-outbox-failure-note-title')),
+
       'Saved after failure',
+
     );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
     await _waitForSavedTrayTitle(
       tester,
       platform,
@@ -14120,10 +14205,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('unconfigured-disk-batch-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('unconfigured-disk-batch-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     final controllerBatch = controller.state.sync.pendingOperationBatch;
@@ -14176,10 +14270,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('null-disk-batch-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('null-disk-batch-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(controller.state.papers.single.title, 'Draft');
@@ -14238,10 +14341,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('null-disk-prepare-failure-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('null-disk-prepare-failure-note-title')),
+
       'Saved after failure',
+
     );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
     await _waitForSavedTrayTitle(tester, platform, 'Saved after failure');
 
     expect(syncService.prepareCalls, 1);
@@ -14324,19 +14436,37 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('debounce-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('debounce-note-title')),
+
       'One',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 3));
 
     expect(syncService.calls, 0);
 
+    await tester.tap(find.byKey(const ValueKey('debounce-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('debounce-note-title')),
+
       'Two',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 4));
 
@@ -14408,10 +14538,14 @@ void main() {
         syncService: syncService,
       ),
     );
+    await tester.tap(find.byKey(const ValueKey('debounce-durable-note-title-display-layer')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.enterText(
       find.byKey(const ValueKey('debounce-durable-note-title')),
       'Draft',
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 4));
     expect(syncService.events, isEmpty);
@@ -14504,10 +14638,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('retry-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('retry-note-title')),
+
       'One',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 5));
     await tester.pump();
@@ -14519,10 +14662,19 @@ void main() {
     expect(controller.state.papers.single.title, 'One');
     expect(find.textContaining('unsupported or corrupted'), findsNothing);
 
+    await tester.tap(find.byKey(const ValueKey('retry-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('retry-note-title')),
+
       'Two',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 5));
     await tester.pump();
@@ -14615,10 +14767,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('auto-retry-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('auto-retry-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 5));
     await tester.pump();
@@ -14721,10 +14882,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('manual-retry-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('manual-retry-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 5));
     await tester.pump();
@@ -14829,8 +14999,11 @@ void main() {
     await tester.pump();
     expect(syncService.calls, 1);
 
+    await tester.tap(find.byKey(const ValueKey('busy-note-title-display-layer')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.enterText(
         find.byKey(const ValueKey('busy-note-title')), 'Two');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 5));
     await tester.pump();
@@ -15026,10 +15199,16 @@ void main() {
     await tester.pump();
     expect(syncService.events, ['sync']);
 
+    await tester.tap(find.byKey(const ValueKey('exit-active-sync-note-title-display-layer')));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('exit-active-sync-note-title-display-layer')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.enterText(
       find.byKey(const ValueKey('exit-active-sync-note-title')),
       'Draft',
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     startup.addCommand(const StartupCommand(StartupCommandKind.exit));
@@ -15142,10 +15321,19 @@ void main() {
     await tester.pump();
     expect(syncService.events, ['sync']);
 
+    await tester.tap(find.byKey(const ValueKey('duplicate-exit-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('duplicate-exit-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     startup
@@ -15257,10 +15445,19 @@ void main() {
     await tester.pump();
     expect(syncService.events, ['sync']);
 
+    await tester.tap(find.byKey(const ValueKey('late-exit-event-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('late-exit-event-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     startup.addCommand(const StartupCommand(StartupCommandKind.exit));
@@ -15405,10 +15602,19 @@ void main() {
     await tester.pump();
     expect(syncService.events, ['sync']);
 
+    await tester.tap(find.byKey(const ValueKey('exit-failing-active-sync-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('exit-failing-active-sync-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     startup.addCommand(const StartupCommand(StartupCommandKind.exit));
@@ -15636,10 +15842,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('disable-sync-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('disable-sync-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byTooltip('Settings'));
@@ -15759,10 +15974,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('cancel-settings-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('cancel-settings-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byTooltip('Settings'));
@@ -15861,10 +16085,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('non-sync-settings-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('non-sync-settings-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byTooltip('Settings'));
@@ -15987,10 +16220,19 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('settings-runtime-metadata-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('settings-runtime-metadata-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     expect(
       controller.state.sync.pendingOperationBatch!.deviceId,
@@ -16218,10 +16460,23 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('unchanged-sync-settings-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('unchanged-sync-settings-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byTooltip('Settings'));
@@ -16324,10 +16579,23 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('platform-failure-pending-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('platform-failure-pending-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byTooltip('Settings'));
@@ -16445,10 +16713,23 @@ void main() {
       ),
     );
 
+    await tester.tap(find.byKey(const ValueKey('settings-save-paused-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('settings-save-paused-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byTooltip('Settings'));
@@ -16563,10 +16844,23 @@ void main() {
     expect(find.textContaining('Settings save failed:'), findsOneWidget);
     expect(find.textContaining('settings save failed'), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('settings-save-failure-note-title-display-layer')));
+
+    await tester.pump(const Duration(milliseconds: 300));
+
     await tester.enterText(
+
       find.byKey(const ValueKey('settings-save-failure-note-title')),
+
       'Draft',
+
     );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 5));
     await tester.pump();
@@ -18205,7 +18499,7 @@ void main() {
       TodoReminderIntervalUnits.minutes,
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(item.reminderIntervalValue, 7);
     expect(item.reminderIntervalUnit, TodoReminderIntervalUnits.minutes);
@@ -18814,7 +19108,7 @@ void main() {
         ?.call(30);
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(item.dueAtLocal, '2026-06-30T10:30:00');
     expect(find.text('6/30 10:30'), findsOneWidget);
@@ -20181,7 +20475,7 @@ void main() {
       ),
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     final items = controller.state.papers.single.items;
     expect(items.map((item) => item.text), [
@@ -20342,7 +20636,7 @@ void main() {
 
     await tester.tap(field);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(controller.state.papers.single.items, hasLength(2));
 
@@ -20416,7 +20710,7 @@ void main() {
 
     await tester.tap(mainField);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(controller.state.papers.single.items, hasLength(2));
 
@@ -20483,7 +20777,7 @@ void main() {
 
     await tester.tap(field);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(controller.state.papers.single.items, hasLength(2));
 
@@ -20548,7 +20842,7 @@ void main() {
     await tester.tap(firstField);
     await tester.enterText(firstField, 'Edited first item');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(controller.state.papers.single.items.map((item) => item.text), [
       'Edited first item',
@@ -22112,7 +22406,7 @@ void main() {
       final decoration = surface.decoration as BoxDecoration;
       expect(decoration.borderRadius, BorderRadius.circular(18));
       expect(decoration.boxShadow, hasLength(1));
-      expect(decoration.boxShadow!.single.blurRadius, 16);
+      expect(decoration.boxShadow!.single.blurRadius, 22.0);
 
       expect(
         tester.getSize(

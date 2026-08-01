@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../core/model/markdown_line_analysis.dart';
+import 'markdown_ast_cache.dart';
 import '../core/model/markdown_links.dart';
 import 'papertodo_theme.dart';
 
@@ -54,6 +55,8 @@ class PaperTodoMarkdownSourcePreview extends StatefulWidget {
       _PaperTodoMarkdownSourcePreviewState();
 }
 
+final MarkdownAstCache _astCache = MarkdownAstCache();
+
 class _PaperTodoMarkdownSourcePreviewState
     extends State<PaperTodoMarkdownSourcePreview> {
   List<TapGestureRecognizer> _recognizers = [];
@@ -73,7 +76,7 @@ class _PaperTodoMarkdownSourcePreviewState
 
     final lines = widget.data.split(RegExp(r'\r\n|\r|\n'));
     final analyses = widget.markdownEnabled
-        ? MarkdownLineAnalysis.analyzeLines(widget.data)
+        ? _astCache.analyzeLines(widget.data)
         : null;
     final colors = PaperTodoThemeColors.of(context);
     final baseStyle = PaperTodoTypography.of(context)
@@ -1061,7 +1064,7 @@ class PaperTodoMarkdownEditorBackgroundPainter extends CustomPainter {
       textDirection: textDirection,
       textScaler: textScaler,
     )..layout(maxWidth: size.width);
-    final analyses = MarkdownLineAnalysis.analyzeLines(data);
+    final analyses = _astCache.analyzeLines(data);
     final lines = _logicalLines(data);
     final scrollOffset =
         scrollController.hasClients ? scrollController.offset : 0.0;
@@ -1197,7 +1200,7 @@ class _PaperTodoMarkdownEditorSpanBuilder {
 
   TextSpan build(String data) {
     final lines = data.split(RegExp(r'\r\n|\r|\n'));
-    final analyses = MarkdownLineAnalysis.analyzeLines(data);
+    final analyses = _astCache.analyzeLines(data);
     final children = <InlineSpan>[];
     for (var index = 0; index < lines.length; index++) {
       if (index > 0) {

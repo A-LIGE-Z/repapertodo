@@ -3477,6 +3477,13 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
                                        flutter::EncodableValue(paper_id_)},
                                   });
       return 0;
+    case WM_DPICHANGED: {
+      const LRESULT result = Win32Window::MessageHandler(window, message, wparam, lparam);
+      if (surface_initialized_) {
+        UpdatePaperShadowWindow(true);
+      }
+      return result;
+    }
     case WM_MOVE:
       if (reminder_bubble_) {
         PlaceReminderBubble();
@@ -3526,6 +3533,11 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       }
       break;
     }
+    case WM_DISPLAYCHANGE:
+      if (surface_initialized_) {
+        UpdatePaperShadowWindow(true);
+      }
+      break;
     case WM_WINDOWPOSCHANGED:
       if (!in_size_move_) {
         UpdatePaperShadowWindow(false);

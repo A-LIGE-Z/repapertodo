@@ -488,13 +488,19 @@ public static class RePaperTodoSmokeWindowEnumerator {
       var clickX = bounds.Left +
                    Math.Min(width - 64, Math.Max(logicalTextX, width / 3));
       var clickY = bounds.Top + Math.Min(height - 40, logicalTextY);
-      if (!SetCursorPos(clickX, clickY)) {
-        return -4;
+      bool cursorMoved = SetCursorPos(clickX, clickY);
+      if (cursorMoved) {
+        const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+        const uint MOUSEEVENTF_LEFTUP = 0x0004;
+        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+      } else {
+        int relX = Math.Min(width - 64, Math.Max(logicalTextX, width / 3));
+        int relY = Math.Min(height - 40, logicalTextY);
+        IntPtr lParam = (IntPtr)((relY << 16) | (relX & 0xFFFF));
+        SendMessage(handle, 0x0201, (IntPtr)1, lParam);
+        SendMessage(handle, 0x0202, IntPtr.Zero, lParam);
       }
-      const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
-      const uint MOUSEEVENTF_LEFTUP = 0x0004;
-      mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-      mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
       System.Threading.Thread.Sleep(250);
       if (GetForegroundWindow() != handle) {
         return -5;
