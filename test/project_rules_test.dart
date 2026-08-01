@@ -283,12 +283,29 @@ void main() {
     expect(settings, contains('class _SettingsCheckMarkPainter'));
     expect(settings, contains('dimension: 16'));
     expect(settings, contains('static const double borderWidth = 1.5'));
-    expect(settings, contains('double get checkedInset => 0'));
+    expect(settings, contains('double get sourceBorderRadius => radius'));
+    expect(settings, contains('double get checkedInset => borderWidth + 0.5'));
+    expect(settings, contains('double get checkedRadius => 3.5'));
+    expect(
+      settings,
+      contains('Offset get checkPaintOffset => const Offset(2, 2)'),
+    );
+    expect(settings, contains('double get effectiveBorderRadius => 5.125'));
+    expect(settings, contains('double get effectiveBorderInset => 2'));
+    expect(
+      settings,
+      contains('double get effectiveInnerBorderRadius => 3.5'),
+    );
+    expect(settings, contains('canvas.drawDRRect('));
     expect(settings, contains('..moveTo(4, 8.1)'));
     expect(settings, contains('..lineTo(7, 11)'));
     expect(settings, contains('..lineTo(12, 5)'));
     expect(settings, contains('opacity: enabled ? 1 : 0.55'));
-    expect(design, contains('full 16px Active checked fill'));
+    expect(design, contains('12px Active checked fill'));
+    expect(design, contains('capture-equivalent 3.5px inner radius'));
+    expect(design, contains('outer-minus-inner ring'));
+    expect(design, contains('24px Cancel/Confirm actions'));
+    expect(settings, contains("ValueKey('settings-content-footer-gap')"));
     expect(settings, isNot(contains('CheckboxListTile(')));
     expect(settings, contains('class _SettingsCloseButton'));
     expect(settings, contains("ValueKey('settings-close-button-surface')"));
@@ -400,6 +417,11 @@ void main() {
       'class _SettingsStepper extends',
       'class _SettingsWindowDialog extends',
     );
+    final todoAndNotesPage = _sliceBetween(
+      settings,
+      '_SettingsSection.todoAndNotes) ...[',
+      '_SettingsSection.sync) ...[',
+    );
 
     expect(strings, contains("PaperTodoStringKeys.appearance: 'Display'"));
     expect(
@@ -426,21 +448,40 @@ void main() {
     expect(settings, contains('EdgeInsets.only(top: 12, bottom: 3)'));
     expect(
       settings,
-      matches(
-        RegExp(r'_pressedSettingsSection\s*=\s*value && !selected'),
+      contains('onTapDown: (_) => _selectSettingsSection(section)'),
+    );
+    expect(
+      settings,
+      contains(
+        "'settings-category-\${section.name}-label-metrics'",
       ),
     );
+    expect(settings, contains('Offset _settingsNavigationLabelOffset('));
+    expect(
+      settings,
+      contains('double _settingsNavigationLabelLetterSpacing('),
+    );
+    expect(
+      settings,
+      contains('_SettingsSection.todoAndNotes || _SettingsSection.general'),
+    );
+    expect(
+      settings,
+      contains('_SettingsSection.capsules when selected => -0.05'),
+    );
+    expect(settings, contains('return Offset.zero;'));
+    expect(settings, isNot(contains('_pressedSettingsSection')));
     expect(
       design,
       contains('current category keeps its selected tint and geometry'),
     );
     expect(settings, contains('class _SettingsSegmentSelector'));
     expect(settings, contains('child: AnimatedContainer('));
-    expect(settings, contains('? PaperTodoMotion.controlFeedback'));
+    expect(settings, contains('const feedbackDuration = Duration.zero'));
     expect(settings, contains('class _SettingsSegmentButton'));
     expect(
       settings,
-      contains('final pressable = widget.enabled && !widget.selected'),
+      contains('final hoverable = widget.enabled && !widget.selected'),
     );
     expect(design, contains('already-selected choice is a visual and state'));
     expect(adaptiveSelector, contains('_SettingsSegmentSelector('));
@@ -452,11 +493,11 @@ void main() {
     expect(sourceStepper, contains('height: 28'));
     expect(sourceStepper, contains('width: 34'));
     expect(sourceStepper, contains("fontFamily: 'Segoe UI Symbol'"));
-    expect(sourceStepper, contains('onTapDown: (_) {'));
-    expect(sourceStepper, contains('widget.onPressed();'));
-    expect(sourceStepper, contains('child: AnimatedSwitcher('));
-    expect(sourceStepper, contains('child: AnimatedScale('));
-    expect(sourceStepper, contains('PaperTodoMotion.controlFeedback'));
+    expect(sourceStepper, contains('onTapDown: (_) => widget.onPressed()'));
+    expect(sourceStepper, contains('const duration = Duration.zero'));
+    expect(sourceStepper, isNot(contains('AnimatedSwitcher(')));
+    expect(sourceStepper, isNot(contains('AnimatedScale(')));
+    expect(sourceStepper, isNot(contains('PaperTodoMotion.controlFeedback')));
     expect(sourceStepper, isNot(contains('Tooltip(')));
     expect(settings, contains('height: widget.height'));
     expect(settings, contains("'settings-theme-color-preview'"));
@@ -466,14 +507,33 @@ void main() {
     expect(settings, contains('overlayRadius: 12'));
     expect(settings, contains("'settings-reminder-interval'"));
     expect(settings, contains("'settings-reminder-duration'"));
+    expect(settings, contains("'settings-due-year-reminder-gap'"));
+    expect(settings, contains("'settings-reminder-toggle-paint-offset'"));
+    expect(settings, contains("'settings-due-year-label-metrics'"));
+    expect(settings, contains("'settings-todo-section-header-metrics'"));
+    expect(settings, contains('labelPaintOffset: const Offset(1, 0)'));
+    expect(settings, contains("'settings-external-open-section-metrics'"));
+    expect(
+      settings,
+      contains("'settings-external-extension-label-metrics'"),
+    );
+    expect(settings, contains('const EdgeInsets.fromLTRB('));
     expect(settings, contains("'settings-pinned-todo-hotkey'"));
-    expect(settings, contains('BoxConstraints(minWidth: 76)'));
-    expect(settings, contains('BoxConstraints(minWidth: 82)'));
+    // The source-calibrated color actions use fixed outer widths.  The
+    // explicit SizedBox hosts keep Wrap from stretching or reflowing them;
+    // the inner buttons retain their semantic minimum widths separately.
+    expect(settings, contains('width: 76'));
+    expect(settings, contains('width: 82'));
     expect(settings, contains('height: 27'));
     expect(settings, contains('class _SettingsAuthorLink'));
     expect(settings, contains('https://github.com/snownico0722'));
     expect(settings, contains('Duration(milliseconds: 300)'));
     expect(settings, contains('Duration(seconds: 12)'));
+    expect(
+      todoAndNotesPage.indexOf('moveCompletedTodosToBottom'),
+      greaterThan(todoAndNotesPage.indexOf('runLinkedScriptCapsulesOnClick')),
+      reason: 'RePaperTodo-only settings must not shift PaperTodo source rows',
+    );
     expect(app, contains("openAuthorLink: () => _openUri("));
     expect(
       widgetTest,
@@ -500,6 +560,51 @@ void main() {
     expect(settings, contains('PaperTodoMotion.controlFeedback'));
     expect(settings, contains('widget.fontFamily.isEmpty ? null'));
     expect(settings, contains('borderRadius: BorderRadius.circular(8)'));
+  });
+
+  test('Settings static WPF calibration survives interaction refactors', () {
+    final audit = _readProjectText('docs/UI_PARITY_AUDIT.md');
+    final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
+    final widgetTest = _readProjectText('test/widget_test.dart');
+
+    expect(audit, contains('capture-calibrated static WPF'));
+    expect(settings, contains('offset: const Offset(0, 1.5)'));
+    expect(settings, contains('letterSpacing: 0.5'));
+    expect(settings, contains('offset: const Offset(1, -2)'));
+    expect(settings, contains('height: 14'));
+    expect(settings, contains('width: 76'));
+    expect(settings, contains('width: 82'));
+    expect(settings, contains('offset: const Offset(0, 2)'));
+    expect(settings, contains('letterSpacing: -0.01'));
+    expect(settings, contains('labelLetterSpacing: -0.02'));
+    expect(settings, contains('labelPaintOffset: const Offset(1, 0)'));
+    expect(settings, contains('labelLetterSpacing: -0.003'));
+    expect(settings, contains('labelLetterSpacing: -0.001'));
+    expect(settings, contains('letterSpacing: -0.005'));
+    expect(settings, contains('letterSpacing: -0.05'));
+    expect(settings, contains('offset: const Offset(0, -0.5)'));
+    expect(settings, contains('scaleY: 12 / 11'));
+    expect(settings, contains('fontWeight: FontWeight.w500'));
+    expect(settings, contains('letterSpacing: -0.125'));
+    expect(settings, contains('offset: const Offset(-0.5, -1)'));
+    expect(settings, contains('letterSpacing: -0.075'));
+    expect(settings, contains('-0.5 + labelPaintOffset.dx'));
+    expect(settings, contains('0.5 + labelPaintOffset.dy'));
+    expect(settings, contains('0.5 + widget.titlePaintOffset.dx'));
+    expect(settings, contains('1 + widget.titlePaintOffset.dy'));
+    expect(settings, contains('offset: const Offset(-2, 1)'));
+    expect(settings, contains('scaleX: 99 / 103'));
+    expect(settings, contains("'settings-script-section-metrics'"));
+    expect(
+      settings,
+      contains("'settings-script-persistent-title-metrics'"),
+    );
+    expect(
+      settings,
+      contains("'settings-script-powershell7-title-metrics'"),
+    );
+    expect(settings, contains('offset: const Offset(0, -1)'));
+    expect(widgetTest, contains('closeTo(99 / 103, 0.0001)'));
   });
 
   test('runtime localization maps cover every declared string key', () {
@@ -2269,6 +2374,16 @@ void main() {
     final windowsRunner = _readProjectText('windows/runner/flutter_window.cpp');
     final runtimeFont = _readProjectText('lib/src/ui/runtime_custom_font.dart');
     final appState = _readProjectText('lib/src/core/model/app_state.dart');
+    final uiFontResolver = _sliceBetween(
+      app,
+      'String? resolveAppFontFamily(',
+      'List<String>? resolveAppFontFamilyFallback(',
+    );
+    final contentFontResolver = _sliceBetween(
+      app,
+      'String resolveAppContentFontFamily(',
+      'String resolveWindowsNativeDialogFontFamily(',
+    );
 
     expect(design, contains('papertodo.ttf'));
     expect(design, contains('papertodo.otf'));
@@ -2283,6 +2398,13 @@ void main() {
     expect(app, contains('resolveAppFontFamily'));
     expect(app, contains('resolveAppFontFamilyFallback'));
     expect(app, contains('Microsoft YaHei UI'));
+    expect(uiFontResolver, contains('UiFontPresets.yaHei => null'));
+    expect(uiFontResolver, isNot(contains('_defaultContentFontFamily')));
+    expect(
+      contentFontResolver,
+      contains('UiFontPresets.yaHei => _defaultContentFontFamily'),
+    );
+    expect(design, contains('preserve this UI/content split'));
     expect(appState, contains('this.uiFontPreset = UiFontPresets.yaHei'));
     expect(
       appState,
@@ -2291,6 +2413,10 @@ void main() {
     expect(app, contains('DengXian'));
     expect(app, contains('const _paperTodoDengXianAdvanceScale = 12.5 / 13'));
     expect(app, contains('height: widget.lineSpacing / textMetricScale'));
+    expect(
+      app,
+      contains('letterSpacing: dengXianMetrics ? null : -0.0625'),
+    );
     expect(platform, contains('normalizeInstalledFontFamilies'));
     expect(windowsPlatform, contains('listInstalledFontFamilies'));
     expect(settingsDialog, isNot(contains('value: UiFontPresets.yaHei')));
@@ -2586,7 +2712,35 @@ void main() {
     expect(paperWindow, contains('MulDiv(216'));
     expect(paperWindow, contains('WS_POPUP | WS_CLIPCHILDREN'));
     expect(paperWindow, isNot(contains('WS_POPUP | WS_CAPTION')));
-    expect(paperWindow, contains('CreateRoundRectRgn'));
+    expect(paperWindow, contains('struct LayeredDialogCanvas'));
+    expect(paperWindow, contains('BeginLayeredDialogPaint('));
+    expect(paperWindow, contains('EndLayeredDialogPaint('));
+    expect(paperWindow, contains('ScaleLogicalValue(12.75'));
+    expect(
+      paperWindow,
+      contains('kLayeredDialogShellClass'),
+    );
+    expect(
+      paperWindow,
+      contains('WS_EX_LAYERED | WS_EX_TRANSPARENT'),
+    );
+    expect(paperWindow, contains('WS_EX_NOACTIVATE'));
+    expect(paperWindow, contains('ApplyInteractiveDialogRegion('));
+    expect(paperWindow, contains('CreateLayeredDialogShell('));
+    expect(paperWindow, contains('SetWindowPos(state.shell, dialog'));
+    expect(paperWindow, contains('DestroyWindow(state->shell)'));
+    expect(
+      paperWindow,
+      isNot(contains('WS_EX_TOOLWINDOW | WS_EX_LAYERED, kDatePickerClass')),
+    );
+    expect(
+      paperWindow,
+      isNot(
+        contains(
+          'WS_EX_TOOLWINDOW | WS_EX_LAYERED, kReminderIntervalClass',
+        ),
+      ),
+    );
     expect(paperWindow, contains('WC_COMBOBOXW'));
     expect(paperWindow, contains('CBS_DROPDOWNLIST'));
     expect(paperWindow, contains('BS_OWNERDRAW'));
@@ -2606,8 +2760,18 @@ void main() {
           .existsSync(),
       isTrue,
     );
-    expect(paperWindow, contains('POINT chevron_points[]'));
-    expect(paperWindow, contains('Polygon(draw->hDC, chevron_points'));
+    expect(paperWindow, contains('kPaperDropChevronCoverage[5][5]'));
+    expect(paperWindow, contains('SamplePaperDropChevronCoverage'));
+    expect(paperWindow, contains('DrawPaperDropChevron('));
+    expect(paperWindow, contains('SetPixelV(context, left + x, top + y'));
+    expect(paperWindow, isNot(contains('POINT chevron_points[]')));
+    expect(paperWindow, contains('kPaperSystemComboGradient29[27]'));
+    expect(paperWindow, contains('kPaperSystemComboGradient23[21]'));
+    expect(paperWindow, contains('FillPaperSystemComboGradient('));
+    expect(
+      paperWindow,
+      isNot(contains('240 - ((11 * offset + span / 2) / span)')),
+    );
     expect(
       paperWindow,
       contains('OffsetRect(&text_bounds, 0, -ScaleForDpi(state->dialog, 3))'),
@@ -2615,6 +2779,64 @@ void main() {
     expect(paperWindow, contains('old_numeric_character_extra'));
     expect(paperWindow, contains('const int second_line_top'));
     expect(paperWindow, contains('const int first_line_dc = SaveDC(context)'));
+    expect(paperWindow, contains('#include <d2d1.h>'));
+    expect(paperWindow, contains('#include <dwrite.h>'));
+    expect(paperWindow, contains('DrawPaperDialogTitle('));
+    expect(
+      paperWindow,
+      contains('D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE'),
+    );
+    expect(paperWindow, contains('DWRITE_RENDERING_MODE_NATURAL'));
+    expect(paperWindow, contains('DrawPaperDialogButtonLabel('));
+    expect(paperWindow, contains('DrawPaperDialogMessage('));
+    expect(
+      paperWindow,
+      contains(
+        'DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_WORD_WRAPPING_NO_WRAP, 0.0f,\n      1.0f',
+      ),
+    );
+    expect(
+      paperWindow,
+      contains(
+        'DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_WORD_WRAPPING_NO_WRAP, 0.0f,\n      0.0f',
+      ),
+    );
+    expect(
+      paperWindow,
+      contains(
+        'DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_WORD_WRAPPING_WRAP,\n      1.0f, logical_offset_y',
+      ),
+    );
+    expect(
+      RegExp(r'if \(!DrawPaperDialogMessage\(').allMatches(paperWindow).length,
+      greaterThanOrEqualTo(2),
+    );
+    expect(
+      paperWindow,
+      contains('DWRITE_LINE_SPACING_METHOD_UNIFORM'),
+    );
+    expect(
+      paperWindow,
+      contains('line_metrics[0].height + physical_line_spacing_adjustment'),
+    );
+    expect(
+      RegExp(r'state->font_family, state->weak_text, 1\.0f')
+          .allMatches(paperWindow)
+          .length,
+      greaterThanOrEqualTo(2),
+    );
+    expect(
+      paperWindow,
+      contains('logical_offset_y * static_cast<float>(dpi) / 96.0f'),
+    );
+    expect(paperWindow, isNot(contains('REPAPERTODO_DIALOG_')));
+    expect(runnerCmake, contains('"d2d1.lib"'));
+    expect(
+      RegExp(
+        r'state->title_font = CreateFontW\(\s*-scaled\(14\)[\s\S]*?ANTIALIASED_QUALITY[\s\S]*?state->body_font = CreateFontW\(\s*-scaled\(12\)[\s\S]*?CLEARTYPE_QUALITY',
+      ).allMatches(paperWindow).length,
+      greaterThanOrEqualTo(2),
+    );
     expect(
       paperWindow,
       contains('OffsetRect(&message_bounds, 0, -ScaleForDpi(window, 1))'),
@@ -2650,10 +2872,8 @@ void main() {
     expect(paperWindow, contains('RGB(149, 193, 220)'));
     expect(paperWindow, contains('scaled(170), scaled(21)'));
     expect(paperWindow, contains('scaled(112), scaled(27)'));
-    expect(
-      RegExp(r'const int shade = 240').allMatches(paperWindow).length,
-      greaterThanOrEqualTo(2),
-    );
+    expect(paperWindow, contains('kPaperSystemComboGradient29'));
+    expect(paperWindow, contains('kPaperSystemComboGradient23'));
     expect(paperWindow, contains('value_focused'));
     expect(paperWindow, contains('IsDialogMessageW'));
     expect(paperWindow, contains('kReminderIntervalGlobalId'));
@@ -2705,6 +2925,16 @@ void main() {
     final paperWindow =
         _readProjectText('windows/runner/paper_flutter_window.cpp');
     final header = _readProjectText('windows/runner/paper_flutter_window.h');
+    final reminderBubble = _sliceBetween(
+      paperWindow,
+      'void PaperFlutterWindow::ShowReminderBubble(',
+      'void PaperFlutterWindow::HideReminderBubble()',
+    );
+    final reminderBubbleRendering = _sliceBetween(
+      paperWindow,
+      'LRESULT PaperFlutterWindow::ReminderBubbleMessageHandler(',
+      'LRESULT CALLBACK PaperFlutterWindow::PaperShadowWindowProc(',
+    );
 
     expect(app, contains("'borderColor': reminderTint.toARGB32()"));
     expect(app, contains("'borderAlpha': 150"));
@@ -2712,7 +2942,11 @@ void main() {
     expect(app, contains('(isDark ? 48 : 32) / 255'));
     expect(header, contains('reminder_icon_background_color_'));
     expect(header, contains('int reminder_border_alpha_ = 150'));
-    expect(paperWindow, contains('CS_DROPSHADOW'));
+    expect(
+      reminderBubble,
+      contains('window_class.style = CS_HREDRAW | CS_VREDRAW;'),
+    );
+    expect(reminderBubble, isNot(contains('CS_DROPSHADOW')));
     expect(paperWindow, contains('WS_EX_LAYERED'));
     expect(paperWindow, contains('ScaleForDpi(reminder_bubble_, 260)'));
     expect(paperWindow, contains('ScaleForDpi(reminder_bubble_, 104)'));
@@ -2726,6 +2960,16 @@ void main() {
     expect(
       paperWindow,
       contains('SetTextColor(buffer, reminder_accent_color_)'),
+    );
+    expect(reminderBubbleRendering, contains('DWRITE_FONT_WEIGHT_BOLD'));
+    expect(
+      reminderBubbleRendering,
+      contains('DWRITE_FONT_WEIGHT_SEMI_BOLD'),
+    );
+    expect(paperWindow, contains('D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE'));
+    expect(
+      paperWindow,
+      isNot(contains('REPAPERTODO_REMINDER_BUBBLE_PROBE')),
     );
     expect(paperWindow, contains('UpdateLayeredWindow'));
   });
@@ -2755,6 +2999,11 @@ void main() {
     expect(app, contains('_reorderTodoItemToTarget'));
     expect(app, contains('_todoReorderDropTarget'));
     expect(app, contains('_dropAfterTodoTarget'));
+    expect(app, contains('Offset _todoRowDragAnchor('));
+    expect(app, contains('sourceRenderObject.globalToLocal(globalPosition)'));
+    expect(app, contains('childDragAnchorStrategy('));
+    expect(
+        app, isNot(contains('dragAnchorStrategy: pointerDragAnchorStrategy')));
     expect(app, contains('globalToLocal'));
     expect(app, contains('Draggable<PaperItem>'));
     expect(app, contains('DragTarget<PaperItem>'));
@@ -2802,7 +3051,7 @@ void main() {
         contains("ValueKey('\${widget.paper.id}-todo-delete-drop-target')"));
     expect(app, contains("ValueKey('\${widget.paper.id}-todo-trash-area')"));
     expect(app, contains('paperColors.danger.withValues'));
-    expect(app, contains('width: highlighted ? 1.5 : 1'));
+    expect(app, contains('width: highlighted ? 2 : 1'));
     expect(app, contains('opacity: highlighted ? 1 : 0.65'));
     expect(app, contains('_setTodoItemDragging(false);'));
     expect(app, contains('_deleteItem(details.data)'));
@@ -2835,6 +3084,11 @@ void main() {
       'Widget _linkedNoteButton(',
       'String _compactLinkedNoteTitle(',
     );
+    final mainColumnField = _sliceBetween(
+      app,
+      'Widget _mainColumnField(',
+      'Widget _extraColumnField(',
+    );
 
     expect(design, contains('Completed rows animate to 0.75'));
     expect(design, contains('1.35px BrightWeakText rule'));
@@ -2862,6 +3116,19 @@ void main() {
     expect(app, contains('opacity: dragging ? 0.25'));
     expect(app, contains('SizeChangedLayoutNotifier'));
     expect(app, contains('firstLine.end < item.text.length'));
+    expect(
+      mainColumnField,
+      contains('hintText: widget.standaloneSurface'),
+    );
+    expect(
+      mainColumnField,
+      contains('? null\n                            : strings.get('),
+    );
+    expect(design, contains('standalone Windows paper surfaces'));
+    expect(
+      widgetTest,
+      contains('standalone blank todo rows omit the board placeholder'),
+    );
     expect(
       RegExp('duration: Duration.zero').allMatches(dueIndicator).length,
       2,
@@ -3045,6 +3312,8 @@ void main() {
     expect(app, contains('_todoLinkActionUnlink'));
     expect(app, contains('_noteLinkDragHandle'));
     expect(app, contains("ValueKey('\${paper.id}-note-link-drag-handle')"));
+    expect(app, contains("ValueKey('note-link-drag-glyph-metrics')"));
+    expect(app, contains('offset: const Offset(-1, 1)'));
     expect(app, contains('DragTarget<String>'));
     expect(app, contains('_noteLinkDropTarget'));
     expect(app, contains('_canAcceptNoteLinkDrop'));
@@ -3331,6 +3600,11 @@ void main() {
       'Widget _noteTextZoomOverlay()',
       'void _resetTextZoom()',
     );
+    final notePaperSurface = _sliceBetween(
+      app,
+      'Widget _notePaperSurface(',
+      'Widget _editor(',
+    );
 
     expect(app, contains("ValueKey('note-canvas-toolbar')"));
     expect(
@@ -3342,8 +3616,20 @@ void main() {
     expect(app, contains('PaperTodoMotion.controlFeedback'));
     expect(canvasToolbar, isNot(contains('AnimatedSwitcher(')));
     expect(canvasToolbar, isNot(contains('ScaleTransition(')));
+    expect(
+      canvasToolbar,
+      contains("ValueKey('note-canvas-element-count-metrics')"),
+    );
+    expect(canvasToolbar, contains('offset: const Offset(-1, -1)'));
+    expect(canvasToolbar, contains('fontWeight: FontWeight.w400'));
+    expect(canvasToolbar, contains('letterSpacing: 0'));
     expect(addCanvasButton, isNot(contains('AnimatedScale(')));
     expect(addCanvasButton, isNot(contains('scale: _canvasAddButtonPressed')));
+    expect(
+      addCanvasButton,
+      contains("ValueKey('note-add-canvas-glyph-metrics')"),
+    );
+    expect(addCanvasButton, contains('offset: const Offset(1, 0)'));
     expect(
       RegExp('duration: Duration.zero').allMatches(addCanvasButton).length,
       2,
@@ -3363,19 +3649,37 @@ void main() {
     expect(app, contains('maxLines: 1'));
     expect(app, contains('fit: BoxFit.scaleDown'));
     expect(app, contains("ValueKey('note-status-mode-pill')"));
-    expect(app, contains('].fold<double>(42'));
-    expect(app, contains('painter.width + 14'));
-    expect(noteStatusBar, isNot(contains('AnimatedSwitcher(')));
-    expect(noteStatusBar, isNot(contains('ScaleTransition(')));
-    expect(noteStatusBar, isNot(contains('Transform.translate(')));
-    expect(noteStatusBar, contains('letterSpacing: 0'));
     expect(
       noteStatusBar,
-      contains('alpha: isDark ? 34 / 255 : 28 / 255'),
+      contains('constraints: const BoxConstraints(minWidth: 42)'),
     );
+    expect(noteStatusBar, isNot(contains('AnimatedSwitcher(')));
+    expect(noteStatusBar, isNot(contains('ScaleTransition(')));
+    expect(noteStatusBar, contains('Transform.translate('));
+    expect(noteStatusBar, contains('letterSpacing: 0.7'));
+    expect(noteStatusBar, contains('fontWeight: FontWeight.w400'));
+    expect(
+      RegExp(r'offset: const Offset\(1, 0\)').allMatches(noteStatusBar).length,
+      3,
+    );
+    expect(noteStatusBar, contains('isDark ? 34 : 28'));
+    expect(noteStatusBar, contains('BoxConstraints(minHeight: 27)'));
+    expect(noteStatusBar, contains('_paperTodoFloorBlend('));
+    expect(noteStatusBar, contains('isDark ? 48 : 32'));
+    expect(
+      noteStatusBar,
+      contains("ValueKey('note-status-mode-surface')"),
+    );
+    expect(
+      noteStatusBar,
+      contains("'note-status-mode-surface-metrics'"),
+    );
+    expect(noteStatusBar, contains('fit: StackFit.passthrough'));
+    expect(noteStatusBar, contains('borderRadius: BorderRadius.circular(9)'));
     expect(noteZoomStatus, isNot(contains('AnimatedSwitcher(')));
     expect(noteZoomStatus, isNot(contains('ScaleTransition(')));
-    expect(noteZoomStatus, isNot(contains('Transform.translate(')));
+    expect(noteZoomStatus, contains('Transform.translate('));
+    expect(noteZoomStatus, contains('offset: const Offset(-1, 0)'));
     expect(app, contains("ValueKey('note-status-zoom')"));
     expect(app, contains("ValueKey('note-status-zoom-content')"));
     expect(app, contains('width: 38'));
@@ -3394,30 +3698,47 @@ void main() {
     expect(app, contains('bottom: 7'));
     expect(app, contains('opacity: _zoomOverlayHovered ? 1 : 0.55'));
     expect(app, contains('fontSize: 10.5'));
-    expect(app, contains('EdgeInsets.fromLTRB(26, 12, 14, 12)'));
+    expect(app, contains('EdgeInsets.fromLTRB(24, 12, 14, 12)'));
     expect(app, contains('alpha: isDark ? 63 / 255 : 75 / 255'));
-    expect(app, contains('alpha: isDark ? 34 / 255 : 28 / 255'));
-    expect(app, contains('alpha: isDark ? 38 / 255 : 28 / 255'));
-    expect(app, contains('final double lineOffset = 0'));
-    expect(app, isNot(contains('verticalLineOffset')));
-    expect(app, isNot(contains('horizontalLineOffset')));
+    expect(
+      notePaperSurface,
+      contains("ValueKey('note-paper-page-chrome')"),
+    );
+    expect(
+      notePaperSurface,
+      contains("ValueKey('note-paper-canvas-fill')"),
+    );
+    expect(
+      notePaperSurface,
+      contains("ValueKey('note-paper-canvas-chrome')"),
+    );
+    expect(notePaperSurface, contains('final canvasBorderColor ='));
+    expect(notePaperSurface, contains('_paperTodoBlend('));
+    expect(notePaperSurface, contains('padding: const EdgeInsets.all(1)'));
+    expect(notePaperSurface, contains('right: 1'));
+    expect(notePaperSurface, contains('left: 16'));
+    expect(notePaperSurface, contains('top: 15'));
+    expect(notePaperSurface, contains('bottom: 15'));
+    expect(notePaperSurface, contains('width: 2'));
+    expect(app, contains('final double verticalLineOffset = 1'));
+    expect(app, contains('final double horizontalLineOffset = -1'));
+    expect(app, contains('alpha: isDark ? 24 / 255 : 18 / 255'));
     expect(app, contains("ValueKey('note-preview-scroll')"));
     expect(app, contains('padding: EdgeInsets.zero'));
     expect(app, isNot(contains('final compactContent =')));
     expect(app, isNot(contains('final compactHeader =')));
     expect(app, contains('fontSize: (isCode ? 13 : 14) * widget.scale'));
     expect(app, contains('height: widget.lineSpacing'));
+    expect(app, contains('letterSpacing: isCode ? 0.4 * widget.scale : 0'));
     expect(app, contains('letterSpacing: 0'));
     expect(app, contains('fontFamily: _paperTodoCodeFontFamily'));
     expect(app, contains('PaperTodoTypography.of(context).contentStyle'));
     expect(app, contains("const _paperTodoCodeFontFamily = 'Cascadia Mono'"));
     expect(app, contains("'Consolas'"));
     expect(app, contains('final emphasized = widget.isSelected || isTopLayer'));
-    expect(app, contains(': const []'));
-    expect(app, contains('alpha: isDark ? 0.22 : 0.13'));
-    expect(app, contains('blurRadius: 6'));
-    expect(app, contains('final shadowAxis = 2 / math.sqrt(2)'));
-    expect(app, contains('offset: Offset(shadowAxis, shadowAxis)'));
+    expect(app, contains('boxShadow: const <BoxShadow>[]'));
+    expect(app, contains('ClipToBounds prevents the effect'));
+    expect(app, isNot(contains('final shadowBlur = emphasized ? 24.0')));
     expect(app,
         contains('final origin = embedded ? const Offset(2, 1) : Offset.zero'));
     expect(app,
@@ -3429,8 +3750,19 @@ void main() {
   test('PaperTodo note canvas placement and layer rules are preserved', () {
     final design = _readProjectText('docs/DESIGN_SYSTEM.md');
     final app = _readProjectText('lib/src/app.dart');
+    final widgetTest = _readProjectText('test/widget_test.dart');
     final constants =
         _readProjectText('lib/src/core/model/paper_constants.dart');
+    final canvasEditor = _sliceBetween(
+      app,
+      'class _NoteCanvasElementPreviewState',
+      'enum _CanvasGeometryDragMode',
+    );
+    final wrapWidgetTest = _sliceBetween(
+      widgetTest,
+      "testWidgets('note canvas WPF wrap opportunities stay display-only'",
+      "testWidgets('clips oversized markdown note input'",
+    );
 
     expect(design, contains('New note canvas blocks should follow'));
     expect(design, contains('only code blocks can be created'));
@@ -3445,6 +3777,9 @@ void main() {
     expect(design, contains('current render rank'));
     expect(design, contains('Note canvas code block editors'));
     expect(design, contains('Shift+Tab outdents'));
+    expect(design, contains('`U+200B` wrap opportunities'));
+    expect(design, contains('display and raw text'));
+    expect(design, contains('JSON persistence'));
     expect(constants, contains('static const code = \'code\''));
     expect(constants, isNot(contains('static const text')));
     expect(app, isNot(contains('actionAddTextBlock')));
@@ -3458,6 +3793,23 @@ void main() {
     expect(app, contains('element.zIndex = minLayer - 10'));
     expect(app, contains('_handleCanvasTextKeyEvent'));
     expect(app, contains('_commitCanvasText'));
+    expect(
+      app,
+      contains("const _noteCanvasEditorWrapOpportunity = '\\u200B';"),
+    );
+    expect(app, contains('_noteCanvasEditorRawValue'));
+    expect(app, contains('_noteCanvasEditorDisplayValue'));
+    expect(canvasEditor, contains('widget.element.text = rawValue.text'));
+    expect(canvasEditor, isNot(contains('widget.element.text = value')));
+    expect(canvasEditor, contains('_noteCanvasEditorRawText(clipboardText)'));
+    expect(
+      wrapWidgetTest,
+      contains("element().text, isNot(contains('\\u200B'))"),
+    );
+    expect(wrapWidgetTest, contains("element().toJson()['text']"));
+    expect(wrapWidgetTest, contains('LogicalKeyboardKey.keyC'));
+    expect(wrapWidgetTest, contains('LogicalKeyboardKey.keyX'));
+    expect(wrapWidgetTest, contains('LogicalKeyboardKey.keyV'));
   });
 
   test('Windows runner preserves external URI safety checks', () {
@@ -3536,8 +3888,10 @@ void main() {
     expect(runner, contains('tray_labels_.inline_confirm_action,'));
     expect(runner, contains('tray_labels_.cancel,'));
     expect(platform, contains("'labels': labels.toJson()"));
-    expect(platform,
-        contains("'trayLabel': _trayPaperLabel(paper, title, labels)"));
+    expect(platform, contains("if (labels != null) 'trayLabel': title"));
+    expect(platform, isNot(contains('String _trayPaperLabel(')));
+    expect(runner, contains('std::wstring TrayPaperLabel('));
+    expect(runner, contains('return title;'));
     expect(app, contains('PaperTodoStringKeys.trayNewTodo'));
     expect(app, contains('PaperTodoStringKeys.trayInlineConfirmDelete'));
     expect(app, contains('PaperTodoStringKeys.trayInlineConfirmAction'));
@@ -3559,13 +3913,39 @@ void main() {
     expect(runner, contains('case WM_MEASUREITEM:'));
     expect(runner, contains('case WM_DRAWITEM:'));
     expect(runner, contains('constexpr int kTrayMenuMinimumWidth = 190'));
-    expect(runner, contains('kTrayMenuNativeWidthCompensation = 21'));
-    expect(runner, contains('constexpr int kTrayMenuItemHeight = 24'));
+    expect(runner, contains('kTrayMenuNativeWidthCompensation = 16'));
+    expect(runner, contains('constexpr int kTrayMenuItemHeight = 25'));
+    expect(runner, contains('constexpr int kTrayMenuAppHeaderHeight = 21'));
     expect(runner, contains('constexpr int kTrayMenuHeaderHeight = 22'));
+    expect(runner, contains('constexpr int kTrayMenuPaperHeight = 26'));
+    expect(
+      runner,
+      contains('text_bounds.left += ScaleTrayMetric(window, 12)'),
+    );
     expect(runner, contains('constexpr int kTrayMenuItemRadius = 8'));
     expect(runner, contains('constexpr int kTrayMenuShellRadius = 10'));
-    expect(runner, contains('constexpr int kTrayMenuCheckboxSize = 13'));
-    expect(runner, contains('header ? 11 : 12'));
+    expect(runner, contains('constexpr int kTrayMenuCheckboxWidth = 14'));
+    expect(runner, contains('constexpr int kTrayMenuCheckboxHeight = 13'));
+    expect(runner, contains('#include <d2d1.h>'));
+    expect(runner, contains('bool DrawTrayMenuTextDirectWrite('));
+    expect(
+      runner,
+      contains('D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE'),
+    );
+    expect(runner, contains('DWRITE_RENDERING_MODE_NATURAL'));
+    expect(
+      runner,
+      contains('const float direct_write_font_size = header ? 12.0f : 13.0f'),
+    );
+    expect(runner, contains('DWRITE_TEXT_ALIGNMENT_LEADING'));
+    expect(runner, contains('bool DrawTrayMenuCheckboxDirect2D('));
+    expect(runner, contains('bounds.left + 0.5f * scale'));
+    expect(runner, contains('1.7f * scale, stroke_style.Get()'));
+    expect(runner, contains('item->kind == TrayOwnerDrawKind::paper'));
+    expect(runner, contains('ScaleTrayMetric(window, item->text_offset_y)'));
+    expect(runner, contains('ScaleTrayMetric(window, 14)'));
+    expect(runner, contains('ScaleTrayMetric(window, 32)'));
+    expect(runner, contains('ScaleTrayMetric(window, 52)'));
     expect(runner, contains('MixTrayColor(palette.paper, palette.weak, 0.72)'));
     expect(runner, contains('L"\\u270E"'));
     expect(runner, contains('L"\\u26A1"'));
@@ -3580,6 +3960,9 @@ void main() {
     expect(runner, contains('GetStringArgument(*state, "theme", theme)'));
     expect(
         runner, contains('GetStringArgument(*state, "colorScheme", scheme)'));
+    expect(runner, contains('ResolveTrayFontFamily() const'));
+    expect(runner, contains('GetStringArgument(*state, "fontFamily", "")'));
+    expect(runner, contains('tray_font_family.c_str()'));
     expect(
       runner,
       contains('GetStringArgument(*state, "customThemeColorHex", "")'),
@@ -3609,6 +3992,11 @@ void main() {
       'class _PaperTodoPopupMenuItemState<T>',
       'class _PaperTodoPopupMenuHeaderLabel extends StatelessWidget',
     );
+    final checkedMenuItem = _sliceBetween(
+      app,
+      'PopupMenuItem<T> _paperTodoCheckedMenuItem<T>',
+      'class _PaperTodoPopupMenuCheckmark extends StatelessWidget',
+    );
 
     expect(app, contains('elevation: 0'));
     expect(
@@ -3627,9 +4015,21 @@ void main() {
     expect(app, contains('onHover: _setHovered'));
     expect(app, contains('onHighlightChanged: _setPressed'));
     expect(app, contains('highlightColor: Colors.transparent'));
+    expect(app, contains('this.standaloneGeometry = false'));
+    expect(
+      app,
+      contains('Transform.translate(offset: const Offset(0, 1)'),
+    );
+    expect(
+      app,
+      contains('padding: const EdgeInsets.symmetric(horizontal: 1)'),
+    );
     expect(app, contains('_paperTodoCheckedMenuItem<T>'));
     expect(app, contains("dimension: 18"));
     expect(app, contains("Icons.check_rounded"));
+    expect(checkedMenuItem, contains('child: Opacity('));
+    expect(checkedMenuItem, isNot(contains('AnimatedOpacity(')));
+    expect(checkedMenuItem, isNot(contains('AnimatedScale(')));
     expect(app, isNot(contains('CheckedPopupMenuItem<')));
     expect(app, contains('class _PaperTodoPopupMenuDivider'));
     expect(app, contains('super(thickness: 1, indent: 8, endIndent: 8)'));
@@ -3638,7 +4038,7 @@ void main() {
       RegExp('popUpAnimationStyle: _paperTodoPopupAnimationStyle')
           .allMatches(app)
           .length,
-      8,
+      5,
     );
     expect(app, contains('waitDuration: const Duration(milliseconds: 300)'));
     expect(app, contains('exitDuration: PaperTodoMotion.controlFeedback'));
@@ -3646,7 +4046,34 @@ void main() {
     expect(app, contains('colors.weakText.withValues(alpha: 0.72)'));
     expect(app, contains('colors.onSurface.withValues(alpha: 0.72)'));
     expect(app, contains('return _PaperTodoPopupMenuItem<String>('));
-    expect(app, contains('height: 21'));
+    expect(
+      app,
+      contains('const double _paperTodoStandalonePopupMenuHeaderHeight = 20'),
+    );
+    expect(
+      app,
+      contains('const double _paperTodoStandalonePopupMenuItemHeight = 25'),
+    );
+    expect(
+      app,
+      contains('const double _paperTodoStandalonePopupMenuDividerHeight = 7'),
+    );
+    expect(
+      app,
+      contains('const double _paperTodoMarkdownPopupMenuHeaderHeight = 19'),
+    );
+    expect(
+      app,
+      contains('const double _paperTodoTodoPopupMenuHeaderHeight = 17'),
+    );
+    expect(
+      app,
+      contains('const double _paperTodoTodoPopupMenuItemHeight = 21'),
+    );
+    expect(
+      app,
+      contains('const double _paperTodoPopupMenuHorizontalChrome = 28'),
+    );
     expect(app, contains('widget.standaloneSurface ? 7 : 16'));
     expect(
       app,
@@ -3665,6 +4092,60 @@ void main() {
       settings,
       contains(
           'padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7)'),
+    );
+  });
+
+  test('Independent Windows context menus use the native popup HWND', () {
+    final app = _readProjectText('lib/src/app.dart');
+    final paperWindow =
+        _readProjectText('windows/runner/paper_flutter_window.cpp');
+    final paperWindowHeader =
+        _readProjectText('windows/runner/paper_flutter_window.h');
+
+    expect(app, contains('Future<String?> _showPaperTodoContextMenu({'));
+    expect(app, contains("Platform.environment['FLUTTER_TEST'] != 'true'"));
+    expect(app, contains("'showContextMenu'"));
+    expect(app, contains("'items': serializedEntries"));
+    expect(app, contains('List<Map<String, Object?>>?'));
+    expect(paperWindowHeader, contains('ShowContextMenu('));
+    expect(paperWindowHeader, contains('MeasureContextMenuItem('));
+    expect(paperWindowHeader, contains('DrawContextMenuItem('));
+    expect(paperWindow, contains('CreatePopupMenu()'));
+    expect(paperWindow, contains('MFT_OWNERDRAW'));
+    expect(paperWindow, contains('TrackPopupMenu('));
+    expect(paperWindow, contains('TPM_WORKAREA'));
+    expect(paperWindow, contains('case WM_MEASUREITEM:'));
+    expect(paperWindow, contains('case WM_DRAWITEM:'));
+    expect(paperWindow, contains('WH_CBT'));
+    expect(paperWindow, contains('HCBT_CREATEWND'));
+    expect(paperWindow, contains('HCBT_DESTROYWND'));
+    expect(paperWindow, contains('class_style & ~CS_DROPSHADOW'));
+    expect(paperWindow, contains('RestoreContextMenuClassStyle'));
+    expect(paperWindow, contains('kContextMenuNativeWidthCompensation = 20'));
+    expect(paperWindow, contains('kContextMenuSeparatorLeadingInset = 43'));
+    expect(paperWindow, contains('kContextMenuSeparatorTrailingInset = 13'));
+    expect(
+      paperWindow,
+      contains(
+        'const float direct_write_font_size = header ? 12.0f : 13.0f',
+      ),
+    );
+    expect(paperWindow, contains('RECT direct_write_bounds = {'));
+    expect(
+      paperWindow,
+      contains(
+        'header || item->logical_height <= 21 ? -2.0f : -1.0f',
+      ),
+    );
+    expect(
+      paperWindow,
+      contains(
+        'DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER',
+      ),
+    );
+    expect(
+      paperWindow.indexOf('DestroyMenu(menu);'),
+      lessThan(paperWindow.lastIndexOf('DeleteObject(menu_background);')),
     );
   });
 
@@ -3735,7 +4216,7 @@ void main() {
     expect(settings, contains('_SettingsDropChevron(color: indicatorColor)'));
   });
 
-  test('Settings compact actions share PaperTodo press feedback', () {
+  test('Settings compact actions use immediate PaperTodo press feedback', () {
     final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
     final button = _sliceBetween(
       settings,
@@ -3744,12 +4225,11 @@ void main() {
     );
 
     expect(button, contains('MouseRegion('));
-    expect(button, contains('AnimatedScale('));
+    expect(button, isNot(contains('AnimatedScale(')));
     expect(button, contains('AnimatedContainer('));
     expect(button, contains('AnimatedOpacity('));
-    expect(button, contains('PaperTodoMotion.controlFeedback'));
-    expect(button, contains('MediaQuery.disableAnimationsOf(context)'));
-    expect(button, contains('borderRadius: BorderRadius.circular(8)'));
+    expect(button, contains('const duration = Duration.zero'));
+    expect(button, contains('borderRadius: BorderRadius.zero'));
   });
 
   test('Settings dialog actions replace Material ripples with paper feedback',
@@ -3771,6 +4251,18 @@ void main() {
     expect(button, contains('overlayColor: pressedOverlay'));
     expect(button, contains('PaperTodoMotion.controlFeedback'));
     expect(button, contains('MediaQuery.disableAnimationsOf(context)'));
+    expect(button, contains('final BorderRadius borderRadius'));
+    expect(button, contains('borderRadius: widget.borderRadius'));
+    expect(
+      settings,
+      contains(
+        "key: const ValueKey('settings-theme-color-pick'),\n"
+        '                        primary: true,\n'
+        '                        minWidth: 76,\n'
+        '                        height: 27,\n'
+        '                        borderRadius: BorderRadius.zero,',
+      ),
+    );
   });
 
   test('Settings theme swatch uses PaperTodo feedback without ripples', () {
@@ -3778,19 +4270,23 @@ void main() {
     final swatch = _sliceBetween(
       settings,
       'class _SettingsColorSwatchButton extends StatefulWidget',
-      'class _SettingsCheckboxTile extends StatefulWidget',
+      'class _SettingsSecretToggleButton extends StatefulWidget',
     );
 
-    expect(swatch, contains('AnimatedScale('));
+    expect(swatch, isNot(contains('AnimatedScale(')));
     expect(swatch, contains('AnimatedOpacity('));
     expect(swatch, contains('AnimatedContainer('));
+    expect(swatch, contains('const duration = Duration.zero'));
     expect(swatch, contains('width: 58'));
     expect(swatch, contains('height: 42'));
+    expect(swatch, contains('clipBehavior: Clip.hardEdge'));
+    expect(swatch, contains('borderRadius: BorderRadius.zero'));
+    expect(swatch, isNot(contains('BorderRadius.circular(8)')));
     expect(swatch, contains('colors.brightWeakText'));
     expect(swatch, isNot(contains('InkWell(')));
   });
 
-  test('Settings secret toggles use compact animated paper feedback', () {
+  test('Settings secret toggles use compact immediate paper feedback', () {
     final settings = _readProjectText('lib/src/ui/sync_settings_dialog.dart');
     final toggle = _sliceBetween(
       settings,
@@ -3800,9 +4296,11 @@ void main() {
 
     expect(settings, contains("'settings-webdav-password-toggle'"));
     expect(settings, contains("'settings-webdav-passphrase-toggle'"));
-    expect(toggle, contains('AnimatedScale('));
+    expect(toggle, isNot(contains('AnimatedScale(')));
     expect(toggle, contains('AnimatedContainer('));
-    expect(toggle, contains('AnimatedSwitcher('));
+    expect(toggle, isNot(contains('AnimatedSwitcher(')));
+    expect(toggle, contains('const duration = Duration.zero'));
+    expect(toggle, contains('child: Icon('));
     expect(toggle, contains('width: 34'));
     expect(toggle, contains('height: 26'));
     expect(toggle, isNot(contains('IconButton(')));
@@ -3926,7 +4424,10 @@ void main() {
     );
 
     expect(menuItem, contains('child: Text(label)'));
-    expect(menuItem, contains('height: compact ? 21'));
+    expect(
+      menuItem,
+      contains('? _paperTodoStandalonePopupMenuItemHeight'),
+    );
     expect(menuItem, isNot(contains('Icon(')));
     expect(menuEntries, isNot(contains('icon: Icons.')));
     expect(
@@ -3934,7 +4435,13 @@ void main() {
       contains('constraints: _paperTodoTextMenuConstraints(context, entries)'),
     );
     expect(app, contains('MediaQuery.sizeOf(context).width - 16'));
-    expect(app, contains('clamp(96.0, availableWidth)'));
+    expect(
+      app,
+      contains('widest + _paperTodoPopupMenuHorizontalChrome'),
+    );
+    expect(
+        app, contains('contextMenuBuilder: _markdownTextContextMenuBuilder'));
+    expect(app, contains("ValueKey('markdown-text-context-menu-suppressed')"));
   });
 
   test('Todo command menus keep PaperTodo text-only measured rows', () {
@@ -3951,7 +4458,10 @@ void main() {
     );
 
     expect(menuItem, contains('child: Text(label)'));
-    expect(menuItem, contains('height: compact ? 21'));
+    expect(
+      menuItem,
+      contains('? _paperTodoTodoPopupMenuItemHeight'),
+    );
     expect(menuItem, isNot(contains('child: Row(')));
     expect(menuItem, isNot(contains('Icon(icon')));
     expect(
@@ -3981,6 +4491,15 @@ void main() {
       contains('constraints: _paperTodoTextMenuConstraints(context, entries)'),
     );
     expect(app, contains("'paper-todo-popup-menu-checkmark'"));
+    expect(app, contains('sourceContextMenuLabels: widget.standaloneSurface'));
+    expect(app, contains("? '\\u7f6e\\u9876'"));
+    expect(app, contains("? '\\u7f6e\\u5e95'"));
+    expect(app, contains("? '\\u590d\\u5236'"));
+    final strings = _readProjectText('lib/src/ui/papertodo_strings.dart');
+    expect(
+      strings,
+      contains("PaperTodoStringKeys.actionPinToDesktop: '钉在桌面'"),
+    );
   });
 
   test('Compact app bar menu uses measured PaperTodo text commands', () {
@@ -4102,6 +4621,11 @@ void main() {
 
   test('Windows paper HWNDs preserve PaperTodo transparent shadow chrome', () {
     final app = _readProjectText('lib/src/app.dart');
+    final capsule = _sliceBetween(
+      app,
+      'Widget _paperWindowCapsule(',
+      'Future<void> _runPaperWindowScriptCapsule(',
+    );
     final resizeGrip = _sliceBetween(
       app,
       'class _PaperWindowResizeGrip extends StatefulWidget',
@@ -4117,12 +4641,17 @@ void main() {
     expect(app, contains('clipBehavior: standaloneSurface ? Clip.hardEdge'));
     expect(app, contains('paper-window-capsule-surface'));
     expect(app, contains('paper-window-capsule-title'));
-    expect(app, isNot(contains('scaleX: paper.isNote ? 0.93 : 0.94')));
-    expect(app, isNot(contains('offset: const Offset(-1, -1)')));
-    expect(app, contains('fontWeight: FontWeight.normal'));
-    expect(app, contains('letterSpacing: 0'));
+    expect(capsule, contains('_WpfCapsuleBoxDecoration('));
+    expect(app, contains('cornerRadius + borderWidth / 2'));
+    expect(app, contains('cornerRadius - borderWidth / 2'));
+    expect(capsule, isNot(contains('scaleX: paper.isNote ? 0.93 : 0.94')));
+    expect(capsule, isNot(contains('offset: const Offset(-1, -1)')));
+    expect(capsule, contains('fontWeight: FontWeight.normal'));
+    expect(capsule, contains('paper.isNote ? -0.25 : 0'));
     expect(app, contains('paper-window-capsule-icon'));
-    expect(app, isNot(contains('paper.isNote ? -1 : -1.25')));
+    expect(capsule, contains('scriptCapsuleSpec == null ? 0 : -0.25'));
+    expect(capsule, contains('offset: const Offset(0, -1)'));
+    expect(capsule, isNot(contains('paper.isNote ? -1 : -1.25')));
     expect(resizeGrip, contains('duration: Duration.zero'));
     expect(resizeGrip, isNot(contains('PaperTodoMotion.controlFeedback')));
     expect(resizeGrip, isNot(contains('enableAnimations')));
@@ -4134,11 +4663,33 @@ void main() {
         _readProjectText('windows/runner/paper_flutter_window.cpp');
     final coordinator = _readProjectText('windows/runner/flutter_window.cpp');
 
-    expect(paperWindow, contains('void ActivatePaperWindow(HWND window'));
+    expect(paperWindow, contains('bool ActivatePaperWindow(HWND window'));
     expect(paperWindow, contains('AttachThreadInput'));
     expect(paperWindow, contains('SetForegroundWindow(window)'));
+    expect(paperWindow, contains('return GetForegroundWindow() == window'));
     expect(coordinator, contains('paper_window->SetPinnedToDesktop(false)'));
-    expect(coordinator, contains('paper_window->ShowPaper(true)'));
+    expect(
+      coordinator,
+      contains('const bool native_activated = paper_window->ShowPaper(true)'),
+    );
+    expect(
+      coordinator,
+      contains('flutter::EncodableValue(native_activated)'),
+    );
+    final policySmoke = _readProjectText('scripts/windows_policy_smoke.ps1');
+    expect(
+      policySmoke,
+      contains('ClickNativeCapsuleAndSampleForeground'),
+    );
+    expect(policySmoke, contains('foreground bounced away after activation'));
+    final paperWindowApp =
+        _readProjectText('lib/src/windows/paper_window_app.dart');
+    expect(paperWindow, contains('call.method_name() == "framePresented"'));
+    expect(
+      paperWindowApp,
+      contains("invokeMethod<void>('framePresented'"),
+    );
+    expect(paperWindowApp, contains('ensureVisualUpdate()'));
   });
 
   test('Windows paper HWND geometry stays logical across monitor DPI', () {
@@ -4161,6 +4712,9 @@ void main() {
     final capsule =
         _readProjectText('windows/runner/native_capsule_window.cpp');
     final header = _readProjectText('windows/runner/native_capsule_window.h');
+    final platformServices = _readProjectText(
+      'lib/src/platform/windows_platform_services.dart',
+    );
 
     expect(capsule, contains('FlutterDesktopGetDpiForMonitor'));
     expect(capsule, contains('ScaleMetric(kCapsuleChromeMargin)'));
@@ -4177,6 +4731,36 @@ void main() {
     expect(capsule, contains('SendHide();'));
     expect(capsule, contains('"hideRequested"'));
     expect(capsule, contains('struct CapsulePalette'));
+    expect(capsule, contains('COLORREF active;'));
+    expect(
+      capsule,
+      contains('constexpr int kCapsuleFocusOutlineThickness = 2'),
+    );
+    expect(
+      capsule,
+      contains('constexpr int kCapsuleFocusOutlineOverlap = 1'),
+    );
+    expect(
+      capsule,
+      contains('const bool focus_outline_active = !master_ && active_'),
+    );
+    expect(
+      capsule,
+      contains('Mix(palette.active, palette.text, dark ? 38 : 8)'),
+    );
+    expect(capsule, contains('CreateDIBSection('));
+    expect(capsule, contains('constexpr int kSamplesPerAxis = 4'));
+    expect(capsule, contains('UpdateLayeredWindow(window, screen'));
+    expect(capsule, contains('AC_SRC_ALPHA'));
+    expect(
+      capsule,
+      contains('L"RePaperTodo.NativeCapsuleAlpha"'),
+    );
+    expect(
+      capsule,
+      contains('SetPropW(window, kCapsuleAlphaProperty'),
+    );
+    expect(header, contains('void RenderLayeredWindow(HWND window)'));
     expect(capsule, contains('RelativeLuminance(COLORREF color)'));
     expect(capsule, contains('BlendAlpha(background, palette.tint'));
     expect(capsule, contains('dark ? 48 : 32'));
@@ -4191,20 +4775,75 @@ void main() {
     expect(capsule, contains('int NativeCapsuleWindow::MeasureTextWidth('));
     expect(capsule, contains('62 + glyph_width + label_width'));
     expect(capsule, contains('wpf_metric_correction'));
+    expect(
+      capsule,
+      contains(
+        'script_capsule_ ? -2 : (paper_type_ == "note" ? -1 : -3)',
+      ),
+    );
+    expect(capsule, contains('MeasureWpfTextWidth(master_idle_label'));
+    expect(capsule, contains('factory->CreateTextLayout('));
+    expect(capsule, contains('metrics.widthIncludingTrailingWhitespace'));
+    expect(capsule, contains('35.0 +'));
+    expect(capsule, contains('29.0 +'));
+    expect(capsule, contains('MasterMeasurementFontFamily('));
+    expect(capsule, contains('bool DrawMasterLabelDirectWrite('));
+    expect(
+      capsule,
+      contains('D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE'),
+    );
+    expect(capsule, contains('DWRITE_RENDERING_MODE_NATURAL'));
+    expect(
+      capsule,
+      contains('OffsetRect(&directwrite_text_rect, -ScaleMetric(2), 0)'),
+    );
+    expect(
+      capsule,
+      contains('OffsetRect(&glyph_rect, -ScaleMetric(2), 0)'),
+    );
+    expect(
+      capsule,
+      contains('OffsetRect(&directwrite_text_rect, 0, -ScaleMetric(1))'),
+    );
+    expect(platformServices, contains("'uiFontPreset':"));
+    expect(platformServices, contains("'systemFontFamilyName':"));
     expect(capsule, contains('label_width - 3'));
     expect(capsule, contains('const int title_clip_width ='));
     expect(capsule, contains('IntersectClipRect(buffer, title_clip.left'));
     expect(capsule, contains('SetTextColor(buffer, master_ ? text : weak)'));
+    expect(
+      capsule,
+      contains('OffsetRect(&glyph_rect, ScaleMetric(1), ScaleMetric(1))'),
+    );
+    expect(
+      capsule,
+      contains('OffsetRect(&text_rect, ScaleMetric(1), 0)'),
+    );
+    expect(
+      capsule,
+      isNot(contains('REPAPERTODO_MASTER_TEXT_PROBE')),
+    );
+    expect(
+      capsule,
+      contains('master_label_clip.bottom = body_top + ScaleMetric(20)'),
+    );
+    expect(capsule, contains('const int master_text_reserve = ScaleMetric(2)'));
     expect(capsule, contains('ANTIALIASED_QUALITY'));
     expect(capsule, contains('22 + glyph_width +'));
     expect(capsule, contains('logical_full_width -'));
     expect(capsule, contains('std::min(54, logical_full_width)'));
+    expect(capsule, contains('int NativeCapsuleWindow::TargetVisibleWidth()'));
+    expect(capsule, contains('(!master_ && active_) || hovered_'));
+    expect(capsule, contains('const int target = TargetVisibleWidth();'));
     expect(capsule, contains('? ScaleMetric(12)'));
     expect(capsule, contains('measured_glyph_width'));
     expect(capsule, contains('glyph_rect.right + glyph_gap'));
     expect(header, contains('UINT dpi_ = 96'));
     expect(header, contains('EffectiveFontFamily() const'));
+    expect(header, contains('MasterMeasurementFontFamily('));
+    expect(header, contains('double MeasureWpfTextWidth('));
     expect(header, contains('int MeasureTextWidth('));
+    expect(header, contains('int TargetVisibleWidth() const;'));
     expect(header, contains('bool script_capsule_ = false'));
     expect(header, contains('bool close_hovered_ = false'));
     expect(header, contains('bool close_pressed_ = false'));
@@ -4254,6 +4893,16 @@ void main() {
     expect(
         runner, contains('ApplySettingsCoordinatorWindowStyle(GetHandle())'));
     expect(runner, contains('ApplySettingsCoordinatorWindowStyle(window)'));
+    expect(
+      runner,
+      contains('SetCoordinatorActivationEnabled(GetHandle(), false)'),
+    );
+    expect(
+      runner,
+      contains('SetCoordinatorActivationEnabled(window, true)'),
+    );
+    expect(runner, contains('extended_style |= WS_EX_NOACTIVATE'));
+    expect(runner, contains('HideCoordinatorWindow(window)'));
     expect(runner, contains('SetWindowTextW(window, L"")'));
     expect(runner, contains('WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN'));
     expect(runner, contains('WS_EX_LAYERED | WS_EX_TOOLWINDOW'));
@@ -4279,12 +4928,49 @@ void main() {
     );
     expect(runner, contains('if (message == WM_NCHITTEST)'));
     expect(runner, contains('return SettingsCoordinatorHitTest(hwnd, lparam)'));
+    expect(runner, contains('SettingsFlutterViewSubclassProc'));
+    expect(
+      runner,
+      contains('SetWindowSubclass(\n      flutter_view, '
+          'SettingsFlutterViewSubclassProc'),
+    );
+    expect(runner, contains('coordinator_hit != HTCLIENT'));
+    expect(runner, contains('return HTTRANSPARENT'));
     expect(settings, contains("invokeMethod<void>('startSettingsDrag')"));
     expect(settings, contains("ValueKey('settings-window-drag-handle')"));
     expect(settings, contains('onPointerDown: (_)'));
     expect(settings, isNot(contains('onPanStart: (_)')));
     expect(runner, contains('if (method == "startSettingsDrag")'));
     expect(runner, contains('SC_MOVE | HTCAPTION'));
+    expect(settings, contains("'startSettingsResize'"));
+    expect(runner, contains('if (method == "startSettingsResize")'));
+    expect(runner, contains('SettingsResizeHitTestForDirection'));
+    expect(runner, contains('WM_NCLBUTTONDOWN, hit_test'));
+    expect(
+      settings,
+      contains('defaultTargetPlatform == TargetPlatform.windows'),
+    );
+    for (final direction in const [
+      'left',
+      'right',
+      'top',
+      'bottom',
+      'topLeft',
+      'topRight',
+      'bottomLeft',
+      'bottomRight',
+    ]) {
+      expect(
+        settings,
+        contains("direction: '$direction'"),
+        reason: 'Missing settings resize handle for $direction',
+      );
+      expect(
+        runner,
+        contains('direction == "$direction"'),
+        reason: 'Missing native settings resize mapping for $direction',
+      );
+    }
     expect(runner, contains('kSettingsPositionedProperty'));
     expect(runner, contains('GetPropW(window, kSettingsPositionedProperty)'));
     expect(runner, contains('SetPropW(window, kSettingsPositionedProperty'));
@@ -4739,10 +5425,17 @@ void main() {
     expect(nativeCapsule, contains('"toggleCollapseAll"'));
     expect(nativeCapsule, contains('"capsuleDropped"'));
     expect(nativeCapsule, contains('"capsuleMasterDragUpdated"'));
+    expect(nativeCapsule, contains('"capsuleMasterDragStarted"'));
     expect(nativeCapsule, contains('"targetTop"'));
     expect(nativeCapsuleHeader, contains('PrepareMasterDragTop'));
+    expect(nativeCapsuleHeader, contains('BeginQueueDrag'));
     expect(nativeCapsuleHeader, contains('PrepareQueueDragOffset'));
+    expect(paperWindowHeader, contains('BeginQueueDrag'));
     expect(nativeCapsule, contains('queue_drag_base_top_ = bounds.top'));
+    expect(
+      nativeCapsule,
+      contains('queue_drag_offset_active_ ? current.top'),
+    );
     expect(nativeCapsuleHeader, contains('queue_drag_last_delta_y_'));
     expect(paperWindowHeader, contains('queue_drag_last_delta_y_'));
     expect(
@@ -4876,6 +5569,22 @@ void main() {
     expect(nativeCapsule, contains('kCapsuleBodyHeight = 30'));
     expect(nativeCapsule, contains('kCapsuleChromeMargin = 8'));
     expect(nativeCapsule, contains('kCapsuleCornerRadius = 12'));
+    expect(
+      nativeCapsule,
+      contains('body_corner_radius + body_border_width / 2.0'),
+    );
+    expect(
+      nativeCapsule,
+      contains('body_corner_radius - body_border_width / 2.0'),
+    );
+    expect(
+      nativeCapsule,
+      contains('focus_corner_radius + focus_outline_thickness / 2.0'),
+    );
+    expect(
+      nativeCapsule,
+      contains('focus_corner_radius - focus_outline_thickness / 2.0'),
+    );
     expect(nativeCapsule, contains('#include "paper_motion.h"'));
     expect(paperWindow, contains('#include "paper_motion.h"'));
     expect(nativeMotion, contains('kCapsuleSlideOutMilliseconds = 220'));
@@ -4990,9 +5699,10 @@ void main() {
     expect(runner, contains('entry.second->FinishQueueDrag(commit)'));
     final masterDragBlock = _sliceBetween(
       runner,
-      'if (method == "capsuleMasterDragUpdated" ||',
+      'if (method == "capsuleMasterDragStarted" ||',
       'flutter::EncodableValue routed_arguments = arguments;',
     );
+    expect(masterDragBlock, contains('entry.second->BeginQueueDrag();'));
     expect(masterDragBlock, contains('BeginDeferWindowPos('));
     expect(masterDragBlock, contains('DeferWindowPos('));
     expect(masterDragBlock, contains('EndDeferWindowPos('));
@@ -5011,7 +5721,11 @@ void main() {
     expect(paperWindow, contains('CapsuleWpfMetricCorrection('));
     expect(
       paperWindow,
-      contains('paper_type == "note" || script_capsule ? -2.0 : -3.0'),
+      contains('if (script_capsule) {\n    return -2.0;\n  }'),
+    );
+    expect(
+      paperWindow,
+      contains('paper_type == "note" ? -1.0 : -3.0'),
     );
     expect(paperWindowHeader, contains('std::string paper_type_ = "todo"'));
     expect(paperWindowHeader, contains('bool script_capsule_ = false'));
@@ -5092,9 +5806,20 @@ void main() {
     expect(paperWindow, contains('case WM_NCPAINT:'));
     expect(paperWindow, contains('case WM_NCACTIVATE:'));
     expect(paperWindow, contains('case WM_WINDOWPOSCHANGED:'));
-    expect(paperWindow,
-        contains('const int drag_width = ScaleForDpi(window, 26)'));
-    expect(paperWindow, contains('return HTCAPTION;'));
+    expect(
+      paperWindow,
+      isNot(contains('const int drag_width = ScaleForDpi(window, 26)')),
+    );
+    expect(
+      paperWindow,
+      contains(
+          'starts SC_MOVE only after the pointer crosses the pan threshold'),
+    );
+    expect(paperWindow, contains('const double stable_resting_width ='));
+    expect(
+      paperWindow,
+      contains('capsule_current_visible_width_ = stable_resting_width'),
+    );
     expect(paperWindow, contains('kPaperShadowWindowClass'));
     expect(paperWindow, contains('kPaperShadowOwnerProperty'));
     expect(
@@ -5132,7 +5857,10 @@ void main() {
     expect(
         runner, contains('RememberPaperPinnedToDesktop(target.value, false)'));
     expect(runner, contains('paper_window->SetPinnedToDesktop(false)'));
-    expect(runner, contains('paper_window->ShowPaper(true)'));
+    expect(
+      runner,
+      contains('const bool native_activated = paper_window->ShowPaper(true)'),
+    );
     expect(runner, contains('flutter::EncodableValue routed_arguments'));
     expect(runner, contains('"nativeActivated"'));
     expect(
@@ -5262,15 +5990,12 @@ void main() {
       lessThan(nativeHoverReset.indexOf('dragging_ = false;')),
     );
     expect(nativeCapsule, contains('IsPointerOverWindow()'));
-    expect(
-      nativeCapsule,
-      contains('RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE'),
-    );
+    expect(nativeCapsule, contains('RenderLayeredWindow(window);'));
     expect(
       nativeCapsule,
       contains('FillRect(buffer, &bounds, background_brush)'),
     );
-    expect(nativeCapsule, contains('SetWindowRgn(window, region, FALSE)'));
+    expect(nativeCapsule, contains('SetWindowRgn(window, nullptr, FALSE)'));
     expect(
       nativeCapsule,
       contains('(master_ && force_master_z_order)'),
@@ -5569,13 +6294,55 @@ void main() {
       'class _PaperWindowHeaderAction extends StatefulWidget',
       'class _PaperWindowTopmostGlyph extends StatefulWidget',
     );
+    final titleEditor = _sliceBetween(
+      app,
+      'class _PaperTitleEditorState extends State<_PaperTitleEditor>',
+      'class _TextZoomOption',
+    );
 
     expect(headerAction, contains('const feedbackDuration = Duration.zero'));
-    expect(headerAction, contains('scale: 1'));
-    expect(headerAction, isNot(contains('scale: _pressed')));
+    expect(headerAction, contains('child: AnimatedOpacity('));
+    expect(headerAction, isNot(contains('AnimatedScale(')));
     expect(headerAction, contains('opacity: _pressed ? 0.7 : 1'));
     expect(headerAction, contains('? paperColors.hover'));
     expect(headerAction, contains('splashFactory: NoSplash.splashFactory'));
+    expect(
+      app,
+      contains(
+        'paintOffset: paper.isNote ? const Offset(1, 0) : const Offset(1, 1)',
+      ),
+    );
+    expect(app, contains('offset: widget.paintOffset'));
+    expect(app, contains('offset: const Offset(-1, 1)'));
+    expect(app, contains('offset: const Offset(-1.5, 1)'));
+    expect(app, contains('offset: const Offset(-2, 0)'));
+    expect(app, contains('fontSize: 13.25'));
+    expect(app, contains('letterSpacing: -0.25'));
+    expect(app, contains('class _PaperTitleDividerDecoration'));
+    expect(app, contains('double get horizontalInset => 1'));
+    expect(app, contains('double get verticalOffset => -2'));
+    expect(titleEditor, contains('foregroundDecoration:'));
+    expect(
+      titleEditor,
+      contains('const EdgeInsets.fromLTRB(4, 0, 5, 0)'),
+    );
+    expect(
+      titleEditor,
+      contains(
+        'offset: widget.compact ? const Offset(1, 1) : Offset.zero',
+      ),
+    );
+    expect(
+      titleEditor,
+      contains(
+        'final compactWidth = (titleMeasure.width * metricScale + 9).clamp(\n'
+        '      41.0,\n'
+        '      86.0,\n'
+        '    );',
+      ),
+    );
+    expect(design, contains('capture-calibrated 41px minimum'));
+    expect(design, contains('41px minimum and 86px maximum'));
     expect(
       design,
       contains('ripple, press scaling, or transition delay'),
@@ -5600,7 +6367,9 @@ void main() {
     expect(app, contains('actionResizePaperWindow'));
     expect(app, contains('standaloneSurface: widget.paperWindowMode'));
     expect(app, contains('PaperWindowActionKinds.expandPaper'));
-    expect(app, contains('onPointerDown: widget.paperWindowDragStarter'));
+    expect(app, contains('onPanStart: widget.paperWindowDragStarter'));
+    expect(
+        app, isNot(contains('onPointerDown: widget.paperWindowDragStarter')));
     expect(strings, contains("'Drag to move paper'"));
     expect(strings, contains("'Drag an edge to resize paper'"));
     expect(strings, contains("'拖动以移动纸张'"));
@@ -5796,8 +6565,7 @@ void main() {
 
     expect(dartHost, contains("'isScriptCapsule'"));
     expect(dartHost, contains('ScriptCapsuleSpec.isScriptCapsuleContent'));
-    expect(dartHost,
-        contains("'trayLabel': _trayPaperLabel(paper, title, labels)"));
+    expect(dartHost, contains("if (labels != null) 'trayLabel': title"));
     expect(runner, contains('? "script"'));
     expect(runner, contains('L"\\u26A1"'));
     expect(runner, contains('GetBoolArgument(*paper_map, "isScriptCapsule"'));
@@ -5866,12 +6634,16 @@ void main() {
     expect(design, contains('23x24 leading control'));
     expect(design, contains('generic Material icon'));
     expect(design, contains('0.58 opacity'));
-    expect(design, contains('38 and 180 pixels wide'));
-    expect(design, contains('permanent\nbottom divider'));
+    expect(design, contains('WPF declares a 38-86px title'));
+    expect(design, contains('capture-calibrated 41px minimum'));
+    expect(design, contains('same 86px maximum'));
+    expect(design, contains('permanent bottom\ndivider'));
     expect(design, contains('default 280px Todo and 320px Note'));
     expect(design, contains('structured window title updates'));
     expect(app, contains('class _PaperTitleEditor'));
-    expect(app, contains('class _PaperTitleMarquee'));
+    expect(app, contains('class _PaperTitleDisplay'));
+    expect(app, isNot(contains('class _PaperTitleMarquee')));
+    expect(app, contains('overflow: TextOverflow.ellipsis'));
     expect(app, contains('_todoUndoRetention'));
     expect(app, contains('_scheduleTodoUndoExpiry'));
     expect(app, contains('readOnly: !_isEditingTitle'));
@@ -5895,7 +6667,7 @@ void main() {
     expect(app, contains('opacity: pinned ? 1 : 0.72'));
     expect(pubspec, contains('assets/icons/pin.png'));
     expect(pubspec, contains('assets/icons/unpin.png'));
-    expect(app, contains('PaperTitles.cleanCustomTitle(value)'));
+    expect(app, contains('PaperTitles.cleanCustomTitle(_controller.text)'));
     expect(app, contains('controller.paperTitleText(paper)'));
     expect(paperData, contains('PaperTitles.maxTitleLength'));
     expect(windows, contains('PaperTitles.effectiveTitle'));
@@ -6344,6 +7116,12 @@ void main() {
     );
     expect(windowsPolicySmokeScript, contains('BroadcastTaskbarCreated'));
     expect(windowsPolicySmokeScript, contains('Start-FullscreenProbe'));
+    expect(
+      windowsPolicySmokeScript,
+      contains(
+        'return foreground ownership to RePaperTodo after fullscreen closed',
+      ),
+    );
     expect(windowsPolicySmokeScript, contains('Assert-MonotonicAlpha'));
     expect(
       windowsPolicySmokeScript,
@@ -6377,7 +7155,22 @@ void main() {
     );
     expect(
       windowsPolicySmokeScript,
+      contains('expanded edge proxy did not foreground its owning paper'),
+    );
+    expect(
+      windowsPolicySmokeScript,
+      contains('LastVerticalDragTrace'),
+    );
+    expect(windowsPolicySmokeScript, contains('LastResizeTrace'));
+    expect(
+      windowsPolicySmokeScript,
       contains('ResizePaperAndMeasureSurface'),
+    );
+    expect(windowsPolicySmokeScript, contains('start.Right - 4'));
+    expect(windowsPolicySmokeScript, contains('start.Bottom - 4'));
+    expect(
+      windowsPolicySmokeScript,
+      contains('foreach (int inset in new int[] { 4, 8, 10, 12 })'),
     );
     expect(
       windowsPolicySmokeScript,
@@ -6419,6 +7212,8 @@ void main() {
     );
     expect(windowsPolicySmokeScript, contains('settingsWindowMovable'));
     expect(windowsPolicySmokeScript, contains('settingsWindowResizable'));
+    expect(windowsPolicySmokeScript, contains('DragSettingsBy'));
+    expect(windowsPolicySmokeScript, contains('bounds.Top + 32'));
     expect(
       releaseReadinessAudit,
       contains(

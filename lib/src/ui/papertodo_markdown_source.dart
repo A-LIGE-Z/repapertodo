@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -13,6 +15,7 @@ const _codeFontFamilyFallback = [
   'Segoe UI Emoji',
 ];
 const _paperTodoPreviewLineHeight = 1.26;
+const _paperTodoNaturalLineHeight = 20 / 14;
 const _paperTodoHiddenListMarkerFontSize = 12.0;
 const _supportedHtmlTags = {
   'a',
@@ -32,6 +35,7 @@ class PaperTodoMarkdownSourcePreview extends StatefulWidget {
     required this.data,
     required this.textZoom,
     required this.lineSpacing,
+    this.markdownEnabled = true,
     required this.enhanced,
     required this.onTapLink,
     this.onTap,
@@ -40,6 +44,7 @@ class PaperTodoMarkdownSourcePreview extends StatefulWidget {
   final String data;
   final double textZoom;
   final double lineSpacing;
+  final bool markdownEnabled;
   final bool enhanced;
   final ValueChanged<String> onTapLink;
   final VoidCallback? onTap;
@@ -67,7 +72,9 @@ class _PaperTodoMarkdownSourcePreviewState
     }
 
     final lines = widget.data.split(RegExp(r'\r\n|\r|\n'));
-    final analyses = MarkdownLineAnalysis.analyzeLines(widget.data);
+    final analyses = widget.markdownEnabled
+        ? MarkdownLineAnalysis.analyzeLines(widget.data)
+        : null;
     final colors = PaperTodoThemeColors.of(context);
     final baseStyle = PaperTodoTypography.of(context)
         .contentStyle(
@@ -89,18 +96,25 @@ class _PaperTodoMarkdownSourcePreviewState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (var index = 0; index < lines.length; index++)
-              _line(
-                context,
-                index: index,
-                text: lines[index],
-                analysis: analyses[index],
-                previousAnalysis: index == 0 ? null : analyses[index - 1],
-                nextAnalysis:
-                    index + 1 == analyses.length ? null : analyses[index + 1],
-                colors: colors,
-                baseStyle: baseStyle,
-                recognizers: nextRecognizers,
-              ),
+              if (analyses == null)
+                _plainLine(
+                  index: index,
+                  text: lines[index],
+                  baseStyle: baseStyle,
+                )
+              else
+                _line(
+                  context,
+                  index: index,
+                  text: lines[index],
+                  analysis: analyses[index],
+                  previousAnalysis: index == 0 ? null : analyses[index - 1],
+                  nextAnalysis:
+                      index + 1 == analyses.length ? null : analyses[index + 1],
+                  colors: colors,
+                  baseStyle: baseStyle,
+                  recognizers: nextRecognizers,
+                ),
           ],
         ),
       ),
@@ -212,6 +226,43 @@ class _PaperTodoMarkdownSourcePreviewState
     );
   }
 
+  Widget _plainLine({
+    required int index,
+    required String text,
+    required TextStyle baseStyle,
+  }) {
+    final lineHeight = math.max(
+      _paperTodoNaturalLineHeight,
+      widget.lineSpacing,
+    );
+    final style = baseStyle.copyWith(
+      height: lineHeight,
+      letterSpacing: 0,
+    );
+    return Container(
+      key: ValueKey('papertodo-markdown-line-$index'),
+      constraints: BoxConstraints(
+        minHeight: 14 * widget.textZoom * lineHeight,
+      ),
+      alignment: Alignment.centerLeft,
+      child: SizedBox(
+        width: double.infinity,
+        child: Text(
+          text.isEmpty ? '\u200B' : text,
+          style: style,
+          softWrap: true,
+          textAlign: TextAlign.start,
+          strutStyle: StrutStyle(
+            fontFamily: style.fontFamily,
+            fontFamilyFallback: style.fontFamilyFallback,
+            fontSize: 14 * widget.textZoom,
+            height: lineHeight,
+          ),
+        ),
+      ),
+    );
+  }
+
   bool _isCode(MarkdownLineStyle? analysis) {
     return analysis?.kind == MarkdownLineKind.codeFence ||
         analysis?.kind == MarkdownLineKind.codeBlock;
@@ -223,22 +274,22 @@ class _PaperTodoMarkdownSourcePreviewState
     required MarkdownLineStyle? previousAnalysis,
   }) {
     if (analysis.kind == MarkdownLineKind.heading1) {
-      return const Offset(-1, 2);
+      return const Offset(1, 2);
     }
     if (analysis.kind == MarkdownLineKind.quote) {
-      return const Offset(-1, 0);
+      return const Offset(1, -2);
     }
     if (analysis.kind == MarkdownLineKind.codeFence ||
         analysis.kind == MarkdownLineKind.codeBlock) {
-      return const Offset(0, -2);
+      return const Offset(2, -4);
     }
     if (analysis.isList) {
       return previousAnalysis?.isList == true
-          ? Offset.zero
-          : const Offset(0, -2);
+          ? const Offset(3, -2)
+          : const Offset(3, -4);
     }
     if (text.isNotEmpty) {
-      return Offset.zero;
+      return const Offset(3, 0);
     }
     return Offset.zero;
   }
@@ -275,7 +326,7 @@ class _PaperTodoMarkdownSourcePreviewState
           fontSize: 13 * widget.textZoom,
           letterSpacing: 0.4,
         ),
-      _ => base.copyWith(letterSpacing: -0.09),
+      _ => base.copyWith(letterSpacing: 0.1),
     };
   }
 
@@ -301,6 +352,14 @@ class _PaperTodoMarkdownSourcePreviewState
       fontStyle: FontStyle.normal,
       fontWeight: FontWeight.normal,
     );
+    final fencedCodeStyle = TextStyle(
+      color: colors.active,
+      fontFamily: _codeFontFamily,
+      fontFamilyFallback: _codeFontFamilyFallback,
+      fontSize: 13 * widget.textZoom,
+      fontStyle: FontStyle.normal,
+      fontWeight: FontWeight.normal,
+    );
 
     if (analysis.markerEnd > analysis.markerStart) {
       final hidesEnhancedMarker = widget.enhanced &&
@@ -318,7 +377,7 @@ class _PaperTodoMarkdownSourcePreviewState
                       : null,
                 )
               : analysis.kind == MarkdownLineKind.codeFence
-                  ? codeStyle.copyWith(color: syntaxColor)
+                  ? fencedCodeStyle.copyWith(color: syntaxColor)
                   : normalSymbolStyle,
         ),
       );
@@ -329,7 +388,7 @@ class _PaperTodoMarkdownSourcePreviewState
         _MarkdownStylePatch(
           0,
           text.length,
-          codeStyle.copyWith(color: colors.text),
+          fencedCodeStyle.copyWith(color: colors.text),
         ),
       );
       if (analysis.kind == MarkdownLineKind.codeFence) {
@@ -337,7 +396,7 @@ class _PaperTodoMarkdownSourcePreviewState
           _MarkdownStylePatch(
               0,
               text.length,
-              codeStyle.copyWith(
+              fencedCodeStyle.copyWith(
                 color: syntaxColor,
               )),
         );
@@ -807,8 +866,8 @@ class _PaperTodoMarkdownBlockPainter extends CustomPainter {
   bool get isCode =>
       kind == MarkdownLineKind.codeFence || kind == MarkdownLineKind.codeBlock;
   bool get isQuote => kind == MarkdownLineKind.quote;
-  double get leftInset => isCode ? 4 : 1;
-  double get rightInset => isCode ? 11 : 8;
+  double get leftInset => 1;
+  double get rightInset => isCode ? 9 : 8;
   double get cornerRadius => isCode ? 6 : (isQuote ? 4 : 5);
 
   @override

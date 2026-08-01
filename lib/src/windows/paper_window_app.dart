@@ -47,6 +47,7 @@ class _PaperWindowEngineApp extends StatefulWidget {
 class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
   var _appGeneration = 0;
   var _receivedInitialState = false;
+  var _framePresentedReportScheduled = false;
 
   @override
   void initState() {
@@ -65,6 +66,27 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
     super.dispose();
   }
 
+  void _scheduleFramePresentedReport() {
+    if (_framePresentedReportScheduled || !mounted) {
+      return;
+    }
+    _framePresentedReportScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _framePresentedReportScheduled = false;
+      if (!mounted) {
+        return;
+      }
+      unawaited(_paperWindowChannel.invokeMethod<void>('framePresented', {
+        'paperId': widget.paperId,
+      }));
+    });
+    // A valid coordinator update can be value-identical while the native HWND
+    // has just changed from capsule to paper geometry. Ensure that the child
+    // compositor still produces one correctly sized frame for the native
+    // reveal handshake instead of leaving the layered window at alpha zero.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   Future<Object?> _handleCoordinatorCall(MethodCall call) async {
     switch (call.method) {
       case 'applyState':
@@ -81,6 +103,7 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
               widget.controller.state.toJson(),
               state.toJson(),
             )) {
+          _scheduleFramePresentedReport();
           return true;
         }
         widget.store.replaceState(state);
@@ -93,6 +116,7 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
             }
           });
         }
+        _scheduleFramePresentedReport();
         return true;
       case 'applyPaper':
         final paperJson = _stringKeyedMap(call.arguments);
@@ -110,6 +134,7 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
               state.papers[index].toJson(),
               paper.toJson(),
             )) {
+          _scheduleFramePresentedReport();
           return true;
         }
         if (index < 0) {
@@ -122,6 +147,7 @@ class _PaperWindowEngineAppState extends State<_PaperWindowEngineApp> {
         if (mounted) {
           setState(() {});
         }
+        _scheduleFramePresentedReport();
         return true;
     }
     throw MissingPluginException('Unknown paper window call: ${call.method}');

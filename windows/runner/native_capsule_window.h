@@ -29,6 +29,7 @@ class NativeCapsuleWindow : public Win32Window {
   bool is_master() const { return master_; }
   bool IsInQueue(const std::string& monitor_device_name,
                  const std::string& side) const;
+  void BeginQueueDrag();
   bool PrepareMasterDragTop(int target_top, RECT* target_bounds);
   bool PrepareQueueDragOffset(int delta_y, RECT* target_bounds);
   void ApplyQueueDragOffset(int delta_y);
@@ -45,6 +46,7 @@ class NativeCapsuleWindow : public Win32Window {
   void ResolveWorkArea();
   void ApplyDockedPosition();
   void ApplyWindowRegion();
+  int TargetVisibleWidth() const;
   void SetHovered(bool hovered);
   void ResetHoverAnimationForHiddenState();
   void StartDockAnimation(int target_visible_width, int duration_ms);
@@ -73,9 +75,16 @@ class NativeCapsuleWindow : public Win32Window {
   void SendHide();
   void SendDrop();
   void Paint(HWND window);
+  void RenderLayeredWindow(HWND window);
   bool IsClosePoint(POINT client_point) const;
+  bool IsPointInsideVisual(POINT client_point) const;
   std::wstring EffectiveLabel() const;
   std::wstring EffectiveFontFamily() const;
+  std::wstring MasterMeasurementFontFamily(bool chinese_locale) const;
+  double MeasureWpfTextWidth(const std::wstring& value,
+                             int logical_font_size,
+                             int font_weight,
+                             const std::wstring& font_family) const;
   int MeasureTextWidth(const std::wstring& value,
                        int logical_font_size,
                        int font_weight,
@@ -95,8 +104,8 @@ class NativeCapsuleWindow : public Win32Window {
   std::string paper_type_ = "todo";
   bool script_capsule_ = false;
   std::string title_;
-  std::string label_en_ = "Collapse all";
-  std::string label_zh_ = "\xE6\x94\xB6\xE8\xB5\xB7\xE5\x85\xA8\xE9\x83\xA8";
+  std::string label_en_ = "Collapse";
+  std::string label_zh_ = "\xE6\x94\xB6\xE8\xB5\xB7";
   std::string count_label_en_;
   std::string count_label_zh_;
   std::string capsule_side_ = "right";
@@ -105,6 +114,8 @@ class NativeCapsuleWindow : public Win32Window {
   std::string color_scheme_ = "warm";
   std::string custom_theme_color_hex_;
   std::string font_family_;
+  std::string ui_font_preset_ = "default";
+  std::string system_font_family_name_;
   RECT work_area_ = {};
   UINT dpi_ = 96;
   double top_margin_ = 48.0;
@@ -112,9 +123,6 @@ class NativeCapsuleWindow : public Win32Window {
   int resting_visible_width_ = 52;
   int hover_visible_width_ = 82;
   int height_ = 46;
-  int region_width_ = 0;
-  int region_height_ = 0;
-  std::string region_side_;
   double current_visible_width_ = 0.0;
   double animation_start_visible_width_ = 0.0;
   double animation_target_visible_width_ = 0.0;

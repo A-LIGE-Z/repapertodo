@@ -7,8 +7,11 @@
 #include <string>
 #include <utility>
 
+#include <d2d1.h>
+#include <dwrite.h>
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <wrl/client.h>
 
 #include "paper_motion.h"
 
@@ -17,9 +20,13 @@ namespace {
 constexpr UINT_PTR kCapsuleSlideTimerId = 0xCA51;
 constexpr UINT_PTR kCapsuleQueueFollowTimerId = 0xCA54;
 constexpr UINT_PTR kCapsuleMasterTransitionTimerId = 0xCA55;
+constexpr wchar_t kCapsuleAlphaProperty[] =
+    L"RePaperTodo.NativeCapsuleAlpha";
 constexpr int kCapsuleChromeMargin = 8;
 constexpr int kCapsuleBodyHeight = 30;
 constexpr int kCapsuleCornerRadius = 12;
+constexpr int kCapsuleFocusOutlineThickness = 2;
+constexpr int kCapsuleFocusOutlineOverlap = 1;
 constexpr int kCapsuleCloseWidth = 30;
 constexpr int kCapsuleCloseGlyphOffset = 8;
 using repapertodo::motion::kAnimationFrameMilliseconds;
@@ -189,11 +196,123 @@ COLORREF BlendAlpha(COLORREF background, COLORREF overlay, int alpha) {
                  255);
 }
 
+bool PointInsideRoundedRect(double x, double y, double left, double top,
+                            double right, double bottom, double radius) {
+  if (x < left || x >= right || y < top || y >= bottom) {
+    return false;
+  }
+  const double normalized_radius = std::max(
+      0.0, std::min(radius, std::min(right - left, bottom - top) / 2.0));
+  const double nearest_x =
+      std::clamp(x, left + normalized_radius, right - normalized_radius);
+  const double nearest_y =
+      std::clamp(y, top + normalized_radius, bottom - normalized_radius);
+  const double delta_x = x - nearest_x;
+  const double delta_y = y - nearest_y;
+  return delta_x * delta_x + delta_y * delta_y <=
+         normalized_radius * normalized_radius;
+}
+
+bool DrawMasterLabelDirectWrite(HDC context, const RECT& target_bounds,
+                                const RECT& text_bounds,
+                                const RECT& clip_bounds,
+                                const std::wstring& text,
+                                const std::wstring& font_family,
+                                COLORREF color, int physical_font_size,
+                                bool align_right) {
+  if (!context || text.empty() || physical_font_size <= 0) return false;
+
+  using Microsoft::WRL::ComPtr;
+  ComPtr<ID2D1Factory> d2d_factory;
+  if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                               IID_PPV_ARGS(&d2d_factory)))) {
+    return false;
+  }
+  ComPtr<IDWriteFactory> write_factory;
+  if (FAILED(DWriteCreateFactory(
+          DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+          reinterpret_cast<IUnknown**>(write_factory.GetAddressOf())))) {
+    return false;
+  }
+
+  D2D1_RENDER_TARGET_PROPERTIES properties = {};
+  properties.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+  properties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  properties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
+  properties.dpiX = 96.0f;
+  properties.dpiY = 96.0f;
+  ComPtr<ID2D1DCRenderTarget> render_target;
+  if (FAILED(d2d_factory->CreateDCRenderTarget(
+          &properties, render_target.GetAddressOf())) ||
+      FAILED(render_target->BindDC(context, &target_bounds))) {
+    return false;
+  }
+  render_target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+  ComPtr<IDWriteRenderingParams> rendering_params;
+  if (SUCCEEDED(write_factory->CreateCustomRenderingParams(
+          2.2f, 1.0f, 0.0f, DWRITE_PIXEL_GEOMETRY_FLAT,
+          DWRITE_RENDERING_MODE_NATURAL,
+          rendering_params.GetAddressOf()))) {
+    render_target->SetTextRenderingParams(rendering_params.Get());
+  }
+
+  wchar_t locale_name[LOCALE_NAME_MAX_LENGTH] = {};
+  if (GetUserDefaultLocaleName(locale_name,
+                               static_cast<int>(std::size(locale_name))) <= 0) {
+    wcscpy_s(locale_name, L"en-US");
+  }
+  ComPtr<IDWriteTextFormat> format;
+  if (FAILED(write_factory->CreateTextFormat(
+          font_family.c_str(), nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+          DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+          static_cast<float>(physical_font_size), locale_name,
+          format.GetAddressOf()))) {
+    return false;
+  }
+  format->SetTextAlignment(align_right ? DWRITE_TEXT_ALIGNMENT_TRAILING
+                                      : DWRITE_TEXT_ALIGNMENT_LEADING);
+  format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+  format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+
+  const float width = static_cast<float>(text_bounds.right - text_bounds.left);
+  const float height =
+      static_cast<float>(text_bounds.bottom - text_bounds.top);
+  ComPtr<IDWriteTextLayout> layout;
+  if (FAILED(write_factory->CreateTextLayout(
+          text.c_str(), static_cast<UINT32>(text.size()), format.Get(), width,
+          height, layout.GetAddressOf()))) {
+    return false;
+  }
+  const D2D1_COLOR_F brush_color = {
+      GetRValue(color) / 255.0f, GetGValue(color) / 255.0f,
+      GetBValue(color) / 255.0f, 1.0f};
+  ComPtr<ID2D1SolidColorBrush> brush;
+  if (FAILED(render_target->CreateSolidColorBrush(
+          &brush_color, nullptr, brush.GetAddressOf()))) {
+    return false;
+  }
+
+  render_target->BeginDraw();
+  render_target->PushAxisAlignedClip(
+      D2D1_RECT_F{static_cast<float>(clip_bounds.left),
+                  static_cast<float>(clip_bounds.top),
+                  static_cast<float>(clip_bounds.right),
+                  static_cast<float>(clip_bounds.bottom)},
+      D2D1_ANTIALIAS_MODE_ALIASED);
+  render_target->DrawTextLayout(
+      D2D1_POINT_2F{static_cast<float>(text_bounds.left),
+                    static_cast<float>(text_bounds.top)},
+      layout.Get(), brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+  render_target->PopAxisAlignedClip();
+  return SUCCEEDED(render_target->EndDraw());
+}
+
 struct CapsulePalette {
   COLORREF paper;
   COLORREF border;
   COLORREF text;
   COLORREF weak;
+  COLORREF active;
   COLORREF tint;
 };
 
@@ -205,6 +324,7 @@ CapsulePalette ResolveCapsulePalette(
       dark ? RGB(76, 69, 61) : RGB(224, 206, 167),
       dark ? RGB(231, 224, 212) : RGB(51, 41, 30),
       dark ? RGB(146, 137, 123) : RGB(138, 122, 99),
+      dark ? RGB(168, 142, 106) : RGB(140, 115, 80),
       dark ? RGB(230, 223, 211) : RGB(120, 92, 48),
   };
   if (color_scheme == "forest") {
@@ -213,6 +333,7 @@ CapsulePalette ResolveCapsulePalette(
         dark ? RGB(58, 70, 60) : RGB(200, 218, 198),
         dark ? RGB(220, 228, 220) : RGB(38, 50, 42),
         dark ? RGB(134, 148, 136) : RGB(110, 128, 112),
+        dark ? RGB(124, 168, 134) : RGB(88, 130, 96),
         dark ? RGB(180, 208, 186) : RGB(70, 110, 80),
     };
   } else if (color_scheme == "rose") {
@@ -221,6 +342,7 @@ CapsulePalette ResolveCapsulePalette(
         dark ? RGB(78, 64, 68) : RGB(228, 205, 210),
         dark ? RGB(232, 220, 223) : RGB(54, 38, 42),
         dark ? RGB(152, 132, 137) : RGB(140, 114, 120),
+        dark ? RGB(190, 134, 148) : RGB(158, 104, 118),
         dark ? RGB(224, 180, 190) : RGB(150, 80, 96),
     };
   } else if (color_scheme == "ink") {
@@ -229,6 +351,7 @@ CapsulePalette ResolveCapsulePalette(
         dark ? RGB(60, 66, 76) : RGB(208, 214, 222),
         dark ? RGB(222, 227, 234) : RGB(38, 44, 54),
         dark ? RGB(138, 146, 158) : RGB(118, 126, 138),
+        dark ? RGB(132, 156, 188) : RGB(90, 108, 134),
         dark ? RGB(180, 200, 228) : RGB(70, 90, 120),
     };
   }
@@ -250,6 +373,7 @@ CapsulePalette ResolveCapsulePalette(
                       : Mix(custom, RGB(0, 0, 0), 72);
   palette.border = Mix(palette.paper, palette.text, dark ? 17 : 16);
   palette.weak = Mix(palette.text, palette.paper, 46);
+  palette.active = active;
   palette.tint = dark ? Mix(active, RGB(255, 255, 255), 50)
                       : Mix(active, RGB(0, 0, 0), 10);
   return palette;
@@ -274,7 +398,8 @@ void NativeCapsuleWindow::ApplyNativeStyle() {
   SetWindowLongPtrW(window, GWL_STYLE, WS_POPUP | WS_CLIPCHILDREN);
   SetWindowLongPtrW(window, GWL_EXSTYLE,
                     WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED);
-  SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA);
+  SetPropW(window, kCapsuleAlphaProperty,
+           reinterpret_cast<HANDLE>(static_cast<INT_PTR>(current_alpha_ + 1)));
   SetWindowPos(window, nullptr, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
                    SWP_FRAMECHANGED);
@@ -349,6 +474,10 @@ void NativeCapsuleWindow::ApplySurface(
   custom_theme_color_hex_ = StringValue(
       surface, "customThemeColorHex", custom_theme_color_hex_);
   font_family_ = StringValue(surface, "fontFamily", font_family_);
+  ui_font_preset_ =
+      StringValue(surface, "uiFontPreset", ui_font_preset_);
+  system_font_family_name_ = StringValue(
+      surface, "systemFontFamilyName", system_font_family_name_);
 
   if (previous_capsule_side != capsule_side_ ||
       previous_monitor_device_name != monitor_device_name_) {
@@ -403,10 +532,15 @@ void NativeCapsuleWindow::ApplySurface(
   const std::wstring master_active_label =
       master_ ? Utf8ToWide(chinese_locale ? count_label_zh_ : count_label_en_)
               : std::wstring();
-  const int label_width =
-      master_ ? std::max(MeasureLabelWidth(master_idle_label),
-                         MeasureLabelWidth(master_active_label))
-              : MeasureLabelWidth(label);
+  const std::wstring master_measurement_font =
+      master_ ? MasterMeasurementFontFamily(chinese_locale) : std::wstring();
+  const double master_label_width =
+      master_ ? std::max(MeasureWpfTextWidth(master_idle_label, 11, FW_NORMAL,
+                                             master_measurement_font),
+                         MeasureWpfTextWidth(master_active_label, 11, FW_NORMAL,
+                                             master_measurement_font))
+              : 0.0;
+  const int label_width = master_ ? 0 : MeasureLabelWidth(label);
   const std::wstring glyph = master_
                                  ? (active_ ? L"\u25B8" : L"\u25BE")
                                  : (script_capsule_
@@ -416,41 +550,47 @@ void NativeCapsuleWindow::ApplySurface(
   const int glyph_font_size = master_ ? 12 : (script_capsule_ ? 15 : 13);
   const int glyph_width = MeasureTextWidth(
       glyph, glyph_font_size, FW_SEMIBOLD, L"Segoe UI Symbol");
-  const int master_peek_glyph_width =
+  const double master_peek_glyph_width =
       master_
-          ? std::max(MeasureTextWidth(L"\u25BE", 12, FW_SEMIBOLD,
-                                      L"Segoe UI Symbol"),
-                     MeasureTextWidth(L"\u25B8", 12, FW_SEMIBOLD,
-                                      L"Segoe UI Symbol"))
-          : 0;
-  // WPF's FormattedText advance is a few pixels tighter than GDI for the
-  // compact capsule label. Keep the full viewport and the hidden edge reveal
-  // on the same source metrics as the Flutter paper window.
+          ? std::max(MeasureWpfTextWidth(L"\u25BE", 12, FW_SEMIBOLD,
+                                        L"Segoe UI Symbol"),
+                     MeasureWpfTextWidth(L"\u25B8", 12, FW_SEMIBOLD,
+                                        L"Segoe UI Symbol"))
+          : 0.0;
+  // Ordinary proxy labels still use their capture-calibrated GDI-to-WPF
+  // correction. The master uses DirectWrite advances and rounds only after
+  // adding every source padding, matching WPF FormattedText for each locale
+  // and selected Windows font instead of relying on one fixed correction.
   const int wpf_metric_correction =
-      (!master_ && (paper_type_ == "note" || script_capsule_)) ? -2 : -3;
+      script_capsule_ ? -2 : (paper_type_ == "note" ? -1 : -3);
   const int logical_full_width = master_
-                                     ? std::max(
-                                           1, 35 + master_peek_glyph_width +
-                                                  label_width)
+                                     ? std::max(1, static_cast<int>(std::ceil(
+                                                       35.0 +
+                                                       master_peek_glyph_width +
+                                                       master_label_width)))
                                      : std::max(
                                            92, 62 + glyph_width + label_width +
                                                    wpf_metric_correction);
-  const auto first_label_width = [this](const std::wstring& value) {
-    return value.empty()
-               ? 0
-               : MeasureTextWidth(value.substr(0, 1), 11, FW_NORMAL,
-                                  EffectiveFontFamily());
-  };
-  const int leading_label_width =
-      master_ ? std::max(first_label_width(master_idle_label),
-                         first_label_width(master_active_label))
-              : first_label_width(label);
+  const double master_leading_label_width =
+      master_
+          ? std::max(
+                master_idle_label.empty()
+                    ? 0.0
+                    : MeasureWpfTextWidth(master_idle_label.substr(0, 1), 11,
+                                          FW_NORMAL, master_measurement_font),
+                master_active_label.empty()
+                    ? 0.0
+                    : MeasureWpfTextWidth(master_active_label.substr(0, 1), 11,
+                                          FW_NORMAL, master_measurement_font))
+          : 0.0;
   const int logical_resting_visible_width = master_
-                                                ? std::clamp(
-                                                      29 +
-                                                          master_peek_glyph_width +
-                                                          leading_label_width,
-                                                      1, logical_full_width)
+                                                 ? std::clamp(
+                                                       static_cast<int>(
+                                                           std::lround(
+                                                               29.0 +
+                                                               master_peek_glyph_width +
+                                                               master_leading_label_width)),
+                                                       1, logical_full_width)
                                                 : std::clamp(
                                                       22 + glyph_width +
                                                           label_width - 3,
@@ -475,8 +615,7 @@ void NativeCapsuleWindow::ApplySurface(
   // a disabled-animation surface refresh from composing one frame with the
   // new bounds but the previous title-width region.
   ApplyWindowRegion();
-  const int desired_visible_width =
-      hovered_ ? hover_visible_width_ : resting_visible_width_;
+  const int desired_visible_width = TargetVisibleWidth();
   if (previous_dpi != dpi_ || current_visible_width_ <= 0.0 ||
       !dock_animation_active_) {
     current_visible_width_ = desired_visible_width;
@@ -622,30 +761,19 @@ double NativeCapsuleWindow::UnscaleMetric(double physical_pixels) const {
 void NativeCapsuleWindow::ApplyWindowRegion() {
   HWND window = GetHandle();
   if (!window) return;
-  if (region_width_ == full_width_ && region_height_ == height_ &&
-      region_side_ == capsule_side_) {
-    return;
-  }
-  const bool left = capsule_side_ == "left";
-  const int chrome_margin = ScaleMetric(kCapsuleChromeMargin);
-  const int body_height = ScaleMetric(kCapsuleBodyHeight);
-  const int body_left = left ? 0 : chrome_margin;
-  const int body_right = left ? full_width_ - chrome_margin
-                              : full_width_;
-  const int body_top = (height_ - body_height) / 2;
-  const int body_bottom = body_top + body_height;
-  HRGN region = CreateRoundRectRgn(
-      body_left, body_top, body_right + 1, body_bottom + 1,
-      ScaleMetric(kCapsuleCornerRadius * 2),
-      ScaleMetric(kCapsuleCornerRadius * 2));
-  // The caller invalidates the fully updated back buffer at the end of the
-  // surface transaction.  Asking USER32 to redraw immediately here can expose
-  // a clipped, uninitialised frame while a capsule title or queue state is
-  // being committed.
-  SetWindowRgn(window, region, FALSE);
-  region_width_ = full_width_;
-  region_height_ = height_;
-  region_side_ = capsule_side_;
+  // UpdateLayeredWindow supplies the antialiased per-pixel shape. A Win32
+  // region clips that fractional alpha back to a staircase, which is exactly
+  // the rough edge visible in the old GDI capsule captures.
+  SetWindowRgn(window, nullptr, FALSE);
+}
+
+int NativeCapsuleWindow::TargetVisibleWidth() const {
+  // Native proxies represent an expanded paper's reserved edge slot. PaperTodo
+  // renders that slot in its active/focus-width presentation even after the
+  // pointer leaves; only an inactive proxy would use the half-hidden resting
+  // width. Master capsules keep their own fixed peek width.
+  return (!master_ && active_) || hovered_ ? hover_visible_width_
+                                           : resting_visible_width_;
 }
 
 void NativeCapsuleWindow::ApplyDockedPosition() {
@@ -658,10 +786,18 @@ void NativeCapsuleWindow::ApplyDockedPosition() {
   const int x = capsule_side_ == "left"
                     ? work_area_.left - (full_width_ - visible_width)
                     : work_area_.right - visible_width;
-  const int y = EffectiveDockedTopPhysical();
   RECT current = {};
-  if (GetWindowRect(window, &current) && current.left == x &&
-      current.top == y && current.right - current.left == full_width_ &&
+  if (!GetWindowRect(window, &current)) {
+    return;
+  }
+  // Hover/reveal animation owns only the horizontal edge exposure. During a
+  // master queue drag, replaying EffectiveDockedTopPhysical here resets the
+  // child to its pre-drag slot between two atomic DeferWindowPos frames. Keep
+  // the coordinator-owned live Y while continuing to animate X normally.
+  const int y = queue_drag_offset_active_ ? current.top
+                                          : EffectiveDockedTopPhysical();
+  if (current.left == x && current.top == y &&
+      current.right - current.left == full_width_ &&
       current.bottom - current.top == height_) {
     return;
   }
@@ -754,8 +890,12 @@ void NativeCapsuleWindow::ApplyMasterTransitionAlpha(int alpha) {
   }
   current_alpha_ = next_alpha;
   if (HWND window = GetHandle()) {
-    SetLayeredWindowAttributes(window, 0,
-                               static_cast<BYTE>(current_alpha_), LWA_ALPHA);
+    SetPropW(window, kCapsuleAlphaProperty,
+             reinterpret_cast<HANDLE>(
+                 static_cast<INT_PTR>(current_alpha_ + 1)));
+    if (IsWindowVisible(window)) {
+      RenderLayeredWindow(window);
+    }
   }
 }
 
@@ -979,7 +1119,7 @@ void NativeCapsuleWindow::SetHovered(bool hovered) {
   }
   if (hovered_ == hovered) return;
   hovered_ = hovered;
-  const int target = hovered_ ? hover_visible_width_ : resting_visible_width_;
+  const int target = TargetVisibleWidth();
   if (animations_enabled_ && !master_) {
     StartDockAnimation(
         target, hovered_ ? kCapsuleSlideOutMilliseconds
@@ -1078,6 +1218,34 @@ bool NativeCapsuleWindow::IsInQueue(
          capsule_side_ == (side == "left" ? "left" : "right");
 }
 
+void NativeCapsuleWindow::BeginQueueDrag() {
+  if (queue_drag_offset_active_) return;
+  HWND window = GetHandle();
+  if (!window) return;
+
+  // Freeze an in-flight collapse-all transition at mouse-down, before the
+  // pointer has crossed USER32's drag threshold. Waiting for the first
+  // WM_MOUSEMOVE lets a child consume one more 16 ms transition frame while
+  // the master remains still, which permanently bends the queue by 8-12 px.
+  PauseMasterTransitionForQueueDrag();
+
+  RECT bounds = {};
+  if (!GetWindowRect(window, &bounds)) {
+    ResumeMasterTransitionAfterQueueDrag();
+    return;
+  }
+  queue_drag_offset_active_ = true;
+  queue_drag_base_top_ = bounds.top;
+  queue_drag_target_top_ = bounds.top;
+  queue_drag_last_delta_y_ = 0;
+  queue_drag_master_transition_coupled_ =
+      master_transition_active_ ||
+      queue_drag_master_transition_paused_at_ != 0;
+  CaptureQueueDragModelAnchors();
+  KillTimer(window, kCapsuleQueueFollowTimerId);
+  queue_drag_animation_active_ = false;
+}
+
 bool NativeCapsuleWindow::PrepareMasterDragTop(int target_top,
                                                RECT* target_bounds) {
   if (!master_ || !target_bounds) return false;
@@ -1085,15 +1253,9 @@ bool NativeCapsuleWindow::PrepareMasterDragTop(int target_top,
   RECT bounds = {};
   if (!window || !GetWindowRect(window, &bounds)) return false;
   if (!queue_drag_offset_active_) {
-    // Treat the master as a first-class member of the same queue drag
-    // transaction as its proxies.  Without retaining the original top here,
-    // a cancelled capture could return the child capsules to their old slots
-    // while leaving the master at the last pointer position.
-    queue_drag_offset_active_ = true;
-    queue_drag_base_top_ = bounds.top;
-    queue_drag_last_delta_y_ = 0;
-    queue_drag_master_transition_coupled_ = false;
-    CaptureQueueDragModelAnchors();
+    BeginQueueDrag();
+    if (!queue_drag_offset_active_) return false;
+    if (!GetWindowRect(window, &bounds)) return false;
   }
   queue_drag_target_top_ = target_top;
   queue_drag_last_delta_y_ = target_top - queue_drag_base_top_;
@@ -1112,20 +1274,11 @@ bool NativeCapsuleWindow::PrepareQueueDragOffset(int delta_y,
   HWND window = GetHandle();
   if (!window) return false;
   if (!queue_drag_offset_active_) {
-    PauseMasterTransitionForQueueDrag();
+    BeginQueueDrag();
+    if (!queue_drag_offset_active_) return false;
   }
   RECT bounds = {};
   if (!GetWindowRect(window, &bounds)) return false;
-  if (!queue_drag_offset_active_) {
-    queue_drag_offset_active_ = true;
-    queue_drag_base_top_ = bounds.top;
-    queue_drag_target_top_ = bounds.top;
-    queue_drag_last_delta_y_ = 0;
-    queue_drag_master_transition_coupled_ =
-        master_transition_active_ ||
-        queue_drag_master_transition_paused_at_ != 0;
-    CaptureQueueDragModelAnchors();
-  }
   const int incremental_delta = delta_y - queue_drag_last_delta_y_;
   queue_drag_last_delta_y_ = delta_y;
   queue_drag_target_top_ = bounds.top + incremental_delta;
@@ -1289,6 +1442,72 @@ std::wstring NativeCapsuleWindow::EffectiveFontFamily() const {
   return family;
 }
 
+std::wstring NativeCapsuleWindow::MasterMeasurementFontFamily(
+    bool chinese_locale) const {
+  std::wstring system_family = Utf8ToWide(system_font_family_name_);
+  if (!system_family.empty()) {
+    return system_family;
+  }
+
+  if (chinese_locale) {
+    if (ui_font_preset_ == "yahei") return L"Microsoft YaHei UI";
+    if (ui_font_preset_ == "dengxian") return L"DengXian";
+  } else if (ui_font_preset_ == "default" || ui_font_preset_ == "yahei" ||
+             ui_font_preset_ == "dengxian") {
+    // PaperTodo's three source presets all put Segoe UI first, so Latin master
+    // labels retain its advance even when the CJK fallback changes.
+    return L"Segoe UI";
+  }
+  return EffectiveFontFamily();
+}
+
+double NativeCapsuleWindow::MeasureWpfTextWidth(
+    const std::wstring& value, int logical_font_size, int font_weight,
+    const std::wstring& font_family) const {
+  if (value.empty()) return 0.0;
+
+  using Microsoft::WRL::ComPtr;
+  ComPtr<IDWriteFactory> factory;
+  if (FAILED(DWriteCreateFactory(
+          DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+          reinterpret_cast<IUnknown**>(factory.GetAddressOf())))) {
+    return static_cast<double>(MeasureTextWidth(
+        value, logical_font_size, font_weight, font_family));
+  }
+
+  wchar_t locale_name[LOCALE_NAME_MAX_LENGTH] = {};
+  if (GetUserDefaultLocaleName(locale_name,
+                               static_cast<int>(std::size(locale_name))) <= 0) {
+    wcscpy_s(locale_name, L"en-US");
+  }
+  ComPtr<IDWriteTextFormat> format;
+  if (FAILED(factory->CreateTextFormat(
+          font_family.c_str(), nullptr,
+          static_cast<DWRITE_FONT_WEIGHT>(font_weight),
+          DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+          static_cast<float>(logical_font_size), locale_name,
+          format.GetAddressOf()))) {
+    return static_cast<double>(MeasureTextWidth(
+        value, logical_font_size, font_weight, font_family));
+  }
+  format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+
+  ComPtr<IDWriteTextLayout> layout;
+  if (FAILED(factory->CreateTextLayout(
+          value.c_str(), static_cast<UINT32>(value.size()), format.Get(),
+          4096.0f, 256.0f, layout.GetAddressOf()))) {
+    return static_cast<double>(MeasureTextWidth(
+        value, logical_font_size, font_weight, font_family));
+  }
+  DWRITE_TEXT_METRICS metrics = {};
+  if (FAILED(layout->GetMetrics(&metrics))) {
+    return static_cast<double>(MeasureTextWidth(
+        value, logical_font_size, font_weight, font_family));
+  }
+  return std::max(0.0, static_cast<double>(
+                           metrics.widthIncludingTrailingWhitespace));
+}
+
 int NativeCapsuleWindow::MeasureTextWidth(
     const std::wstring& value,
     int logical_font_size,
@@ -1375,6 +1594,29 @@ bool NativeCapsuleWindow::IsClosePoint(POINT client_point) const {
                    client_point.x < body_left + close_width
              : client_point.x >= body_right - close_width &&
                    client_point.x < body_right;
+}
+
+bool NativeCapsuleWindow::IsPointInsideVisual(POINT client_point) const {
+  const bool focus_outline_active = !master_ && active_;
+  const bool left = capsule_side_ == "left";
+  const double margin = static_cast<double>(ScaleMetric(
+      focus_outline_active
+          ? kCapsuleChromeMargin - kCapsuleFocusOutlineThickness +
+                kCapsuleFocusOutlineOverlap
+          : kCapsuleChromeMargin));
+  const double visual_left = left ? 0.0 : margin;
+  const double visual_right =
+      left ? static_cast<double>(full_width_) - margin
+           : static_cast<double>(full_width_);
+  const double radius = static_cast<double>(ScaleMetric(
+      kCapsuleCornerRadius +
+      (focus_outline_active ? kCapsuleFocusOutlineThickness -
+                                  kCapsuleFocusOutlineOverlap
+                            : 0)));
+  return PointInsideRoundedRect(
+      static_cast<double>(client_point.x) + 0.5,
+      static_cast<double>(client_point.y) + 0.5, visual_left, margin,
+      visual_right, static_cast<double>(height_) - margin, radius);
 }
 
 void NativeCapsuleWindow::SendDrop() {
@@ -1547,6 +1789,7 @@ void NativeCapsuleWindow::RefreshVisibility(bool force_master_z_order) {
   if (retracted_by_master) {
     ApplyMasterTransitionAlpha(0);
     if (!IsWindowVisible(window)) {
+      RenderLayeredWindow(window);
       SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                        SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
@@ -1568,8 +1811,7 @@ void NativeCapsuleWindow::RefreshVisibility(bool force_master_z_order) {
       // Paint the final label, hover state and theme into the hidden HWND
       // before revealing it. Otherwise Windows can briefly present the last
       // cached frame when a master capsule expands its queue.
-      RedrawWindow(window, nullptr, nullptr,
-                   RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
+      RenderLayeredWindow(window);
     }
     SetWindowPos(window, z_order, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
@@ -1580,15 +1822,36 @@ void NativeCapsuleWindow::RefreshVisibility(bool force_master_z_order) {
   }
 }
 
-void NativeCapsuleWindow::Paint(HWND window) {
-  PAINTSTRUCT paint = {};
-  HDC target = BeginPaint(window, &paint);
+void NativeCapsuleWindow::RenderLayeredWindow(HWND window) {
   RECT bounds = {};
   GetClientRect(window, &bounds);
-  HDC buffer = CreateCompatibleDC(target);
-  HBITMAP bitmap = CreateCompatibleBitmap(
-      target, std::max(1L, bounds.right), std::max(1L, bounds.bottom));
+  const int bitmap_width = std::max(1L, bounds.right - bounds.left);
+  const int bitmap_height = std::max(1L, bounds.bottom - bounds.top);
+  HDC screen = GetDC(nullptr);
+  HDC buffer = screen ? CreateCompatibleDC(screen) : nullptr;
+  BITMAPINFO bitmap_info = {};
+  bitmap_info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bitmap_info.bmiHeader.biWidth = bitmap_width;
+  bitmap_info.bmiHeader.biHeight = -bitmap_height;
+  bitmap_info.bmiHeader.biPlanes = 1;
+  bitmap_info.bmiHeader.biBitCount = 32;
+  bitmap_info.bmiHeader.biCompression = BI_RGB;
+  void* bitmap_bits = nullptr;
+  HBITMAP bitmap =
+      screen && buffer
+          ? CreateDIBSection(screen, &bitmap_info, DIB_RGB_COLORS,
+                             &bitmap_bits, nullptr, 0)
+          : nullptr;
+  if (!screen || !buffer || !bitmap || !bitmap_bits) {
+    if (bitmap) DeleteObject(bitmap);
+    if (buffer) DeleteDC(buffer);
+    if (screen) ReleaseDC(nullptr, screen);
+    return;
+  }
   HGDIOBJ old_bitmap = SelectObject(buffer, bitmap);
+  auto* pixels = static_cast<uint32_t*>(bitmap_bits);
+  std::fill(pixels,
+            pixels + static_cast<size_t>(bitmap_width) * bitmap_height, 0u);
 
   const bool dark = theme_ == "dark" ||
                     (theme_ == "system" && IsSystemDarkMode());
@@ -1607,14 +1870,12 @@ void NativeCapsuleWindow::Paint(HWND window) {
   // Keep click feedback to the stable hover/close affordance instead.
 
   HBRUSH background_brush = CreateSolidBrush(background);
-  HPEN border_pen =
-      CreatePen(PS_SOLID, std::max(1, ScaleMetric(1)), border);
   HGDIOBJ old_brush = SelectObject(buffer, background_brush);
-  HGDIOBJ old_pen = SelectObject(buffer, border_pen);
-  // CreateCompatibleBitmap leaves its pixels undefined. A click repaint or
-  // DWM composition boundary can expose those bytes before the rounded pill
-  // has covered them, producing a one-frame black patch on Windows 10. Start
-  // every back buffer from a valid paper-colored frame.
+  HGDIOBJ old_pen = SelectObject(buffer, GetStockObject(NULL_PEN));
+  // GDI supplies the existing grayscale text metrics while the post-process
+  // below supplies the WPF-like rounded alpha and borders. Filling the whole
+  // DIB gives antialiased text a stable paper background; pixels outside the
+  // capsule are made fully transparent before UpdateLayeredWindow.
   FillRect(buffer, &bounds, background_brush);
   const bool left = capsule_side_ == "left";
   const int chrome_margin = ScaleMetric(kCapsuleChromeMargin);
@@ -1626,8 +1887,6 @@ void NativeCapsuleWindow::Paint(HWND window) {
       (static_cast<int>(bounds.bottom - bounds.top) - body_height) / 2;
   const int body_bottom = body_top + body_height;
   const int corner_ellipse = ScaleMetric(kCapsuleCornerRadius * 2);
-  RoundRect(buffer, body_left, body_top, body_right, body_bottom,
-            corner_ellipse, corner_ellipse);
 
   const int close_width = ScaleMetric(kCapsuleCloseWidth);
   RECT close_rect = capsule_side_ == "left"
@@ -1654,7 +1913,7 @@ void NativeCapsuleWindow::Paint(HWND window) {
     }
     FillRect(buffer, &close_fill, close_brush);
     SelectObject(buffer, background_brush);
-    SelectObject(buffer, border_pen);
+    SelectObject(buffer, GetStockObject(NULL_PEN));
     DeleteObject(close_brush);
   }
 
@@ -1666,6 +1925,10 @@ void NativeCapsuleWindow::Paint(HWND window) {
                                         : (paper_type_ == "note" ? L"\u270E"
                                                                     : L"\u2713"));
   const std::wstring label = EffectiveLabel();
+  constexpr DWORD glyph_quality = ANTIALIASED_QUALITY;
+  constexpr DWORD label_quality = ANTIALIASED_QUALITY;
+  constexpr int master_label_font_size = 11;
+  constexpr int master_label_weight = FW_NORMAL;
   const int glyph_font_size = master_
                                   ? ScaleMetric(12)
                                   : (script_capsule_ ? ScaleMetric(15)
@@ -1673,12 +1936,14 @@ void NativeCapsuleWindow::Paint(HWND window) {
   HFONT glyph_font = CreateFontW(
       -glyph_font_size, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-      ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI Symbol");
+      glyph_quality, DEFAULT_PITCH, L"Segoe UI Symbol");
   const std::wstring text_font_family = EffectiveFontFamily();
   HFONT text_font = CreateFontW(
-      -ScaleMetric(11), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+      -ScaleMetric(master_ ? master_label_font_size : 11), 0, 0, 0,
+      master_ ? master_label_weight : FW_NORMAL, FALSE, FALSE, FALSE,
       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-      ANTIALIASED_QUALITY, DEFAULT_PITCH, text_font_family.c_str());
+      master_ ? label_quality : ANTIALIASED_QUALITY, DEFAULT_PITCH,
+      text_font_family.c_str());
   const int inset_6 = ScaleMetric(6);
   const int glyph_inset = master_ ? ScaleMetric(5) : inset_6;
   const int glyph_gap = ScaleMetric(4);
@@ -1698,9 +1963,19 @@ void NativeCapsuleWindow::Paint(HWND window) {
                               body_top, glyph_rect.left - glyph_gap,
                               body_bottom}
                        : RECT{glyph_rect.right + glyph_gap, body_top,
-                              body_right -
-                                  (master_ ? master_tail_padding : close_width),
-                              body_bottom};
+                               body_right -
+                                   (master_ ? master_tail_padding : close_width),
+                               body_bottom};
+  if (master_) {
+    // Keep the master glyph and label corrections paint-only. The mirrored
+    // left glyph needs the same two-pixel reversal as the label; vertical
+    // centering remains glyph-specific through the selected Symbol raster.
+    OffsetRect(&glyph_rect, ScaleMetric(1), ScaleMetric(1));
+    if (left) {
+      OffsetRect(&glyph_rect, -ScaleMetric(2), 0);
+    }
+    OffsetRect(&text_rect, ScaleMetric(1), 0);
+  }
   if (!master_ && paper_type_ == "todo" && !script_capsule_) {
     OffsetRect(&text_rect, left ? ScaleMetric(1) : -ScaleMetric(1), 0);
   }
@@ -1719,9 +1994,45 @@ void NativeCapsuleWindow::Paint(HWND window) {
   SelectObject(buffer, text_font);
   SetTextColor(buffer, weak);
   if (master_) {
-    DrawTextW(buffer, label.c_str(), static_cast<int>(label.size()), &text_rect,
-              DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX |
-                  (left ? DT_RIGHT : DT_LEFT));
+    RECT master_label_clip = text_rect;
+    master_label_clip.top = body_top + ScaleMetric(9);
+    master_label_clip.bottom = body_top + ScaleMetric(20);
+    const int master_visible_width = static_cast<int>(
+        std::lround(std::clamp(current_visible_width_, 1.0,
+                               static_cast<double>(full_width_))));
+    const int master_text_reserve = ScaleMetric(2);
+    if (left) {
+      master_label_clip.left = std::max(
+          master_label_clip.left,
+          static_cast<LONG>(full_width_ - master_visible_width +
+                            master_text_reserve));
+    } else {
+      master_label_clip.right = std::min(
+          master_label_clip.right,
+          static_cast<LONG>(master_visible_width - master_text_reserve));
+    }
+    const int master_label_dc = SaveDC(buffer);
+    IntersectClipRect(buffer, master_label_clip.left, master_label_clip.top,
+                      master_label_clip.right, master_label_clip.bottom);
+    RECT directwrite_text_rect = text_rect;
+    if (left) {
+      OffsetRect(&directwrite_text_rect, -ScaleMetric(2), 0);
+    }
+    if (active_) {
+      OffsetRect(&directwrite_text_rect, 0, -ScaleMetric(1));
+    }
+    const bool directwrite_drawn =
+        DrawMasterLabelDirectWrite(
+            buffer, bounds, directwrite_text_rect, master_label_clip, label,
+            MasterMeasurementFontFamily(IsChineseLocale()), weak,
+            ScaleMetric(master_label_font_size), left);
+    if (!directwrite_drawn) {
+      DrawTextW(buffer, label.c_str(), static_cast<int>(label.size()),
+                &text_rect,
+                DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX |
+                    (left ? DT_RIGHT : DT_LEFT));
+    }
+    RestoreDC(buffer, master_label_dc);
   } else {
     RECT title_clip = text_rect;
     const int title_clip_width =
@@ -1736,9 +2047,15 @@ void NativeCapsuleWindow::Paint(HWND window) {
     const int saved_dc = SaveDC(buffer);
     IntersectClipRect(buffer, title_clip.left, title_clip.top,
                       title_clip.right, title_clip.bottom);
-    DrawTextW(buffer, label.c_str(), static_cast<int>(label.size()), &text_rect,
-              DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX |
-                  (left ? DT_RIGHT : DT_LEFT));
+    const bool directwrite_drawn = DrawMasterLabelDirectWrite(
+        buffer, bounds, text_rect, title_clip, label, text_font_family, weak,
+        ScaleMetric(11), left);
+    if (!directwrite_drawn) {
+      DrawTextW(buffer, label.c_str(), static_cast<int>(label.size()),
+                &text_rect,
+                DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX |
+                    (left ? DT_RIGHT : DT_LEFT));
+    }
     RestoreDC(buffer, saved_dc);
   }
   if (!master_) {
@@ -1760,17 +2077,144 @@ void NativeCapsuleWindow::Paint(HWND window) {
     DeleteObject(close_font);
   }
 
-  BitBlt(target, 0, 0, bounds.right, bounds.bottom, buffer, 0, 0, SRCCOPY);
+  // Build the capsule shape from 4x4 coverage samples. This preserves the
+  // source GDI text metrics but replaces both the jagged Win32 region and the
+  // jagged GDI RoundRect border with per-pixel alpha. The focus ring remains a
+  // separate two-pixel overlay, matching PaperTodo's DeepCapsuleSlotOutline.
+  constexpr int kSamplesPerAxis = 4;
+  constexpr int kSampleCount = kSamplesPerAxis * kSamplesPerAxis;
+  const double body_border_width =
+      static_cast<double>(std::max(1, ScaleMetric(1)));
+  // WPF Border does not use CornerRadius directly for both edges of a
+  // stroke. Its outer and inner stream geometries add/subtract half of the
+  // relevant BorderThickness. Reproducing that distinction keeps the
+  // antialiased cap from looking one pixel fuller than PaperTodo's pill.
+  const double body_corner_radius =
+      static_cast<double>(ScaleMetric(kCapsuleCornerRadius));
+  const double body_outer_radius =
+      body_corner_radius + body_border_width / 2.0;
+  const double body_inner_radius =
+      std::max(0.0, body_corner_radius - body_border_width / 2.0);
+  const bool focus_outline_active = !master_ && active_;
+  const double focus_outline_thickness = static_cast<double>(
+      std::max(1, ScaleMetric(kCapsuleFocusOutlineThickness)));
+  const double focus_outline_margin = static_cast<double>(ScaleMetric(
+      kCapsuleChromeMargin - kCapsuleFocusOutlineThickness +
+      kCapsuleFocusOutlineOverlap));
+  const double focus_corner_radius = static_cast<double>(ScaleMetric(
+      kCapsuleCornerRadius + kCapsuleFocusOutlineThickness -
+      kCapsuleFocusOutlineOverlap));
+  const double focus_outer_radius =
+      focus_corner_radius + focus_outline_thickness / 2.0;
+  const double focus_inner_radius =
+      std::max(0.0,
+               focus_corner_radius - focus_outline_thickness / 2.0);
+  const double focus_left = left ? 0.0 : focus_outline_margin;
+  const double focus_right =
+      left ? static_cast<double>(bitmap_width) - focus_outline_margin
+           : static_cast<double>(bitmap_width);
+  const COLORREF focus_border =
+      Mix(palette.active, palette.text, dark ? 38 : 8);
+  for (int y = 0; y < bitmap_height; ++y) {
+    for (int x = 0; x < bitmap_width; ++x) {
+      const size_t index = static_cast<size_t>(y) * bitmap_width + x;
+      const uint32_t content_pixel = pixels[index];
+      const BYTE content_blue = static_cast<BYTE>(content_pixel & 0xFF);
+      const BYTE content_green =
+          static_cast<BYTE>((content_pixel >> 8) & 0xFF);
+      const BYTE content_red =
+          static_cast<BYTE>((content_pixel >> 16) & 0xFF);
+      int alpha_samples = 0;
+      int red_sum = 0;
+      int green_sum = 0;
+      int blue_sum = 0;
+      for (int sample_y = 0; sample_y < kSamplesPerAxis; ++sample_y) {
+        for (int sample_x = 0; sample_x < kSamplesPerAxis; ++sample_x) {
+          const double point_x =
+              x + (static_cast<double>(sample_x) + 0.5) / kSamplesPerAxis;
+          const double point_y =
+              y + (static_cast<double>(sample_y) + 0.5) / kSamplesPerAxis;
+          bool opaque = false;
+          COLORREF sample_color = 0;
+          const bool inside_body = PointInsideRoundedRect(
+              point_x, point_y, static_cast<double>(body_left),
+              static_cast<double>(body_top), static_cast<double>(body_right),
+              static_cast<double>(body_bottom), body_outer_radius);
+          if (inside_body) {
+            const bool inside_body_content = PointInsideRoundedRect(
+                point_x, point_y,
+                static_cast<double>(body_left) + body_border_width,
+                static_cast<double>(body_top) + body_border_width,
+                static_cast<double>(body_right) - body_border_width,
+                static_cast<double>(body_bottom) - body_border_width,
+                body_inner_radius);
+            sample_color = inside_body_content
+                               ? RGB(content_red, content_green, content_blue)
+                               : border;
+            opaque = true;
+          }
+          if (focus_outline_active) {
+            const bool inside_focus = PointInsideRoundedRect(
+                point_x, point_y, focus_left, focus_outline_margin,
+                focus_right,
+                static_cast<double>(bitmap_height) - focus_outline_margin,
+                focus_outer_radius);
+            const bool inside_focus_content = PointInsideRoundedRect(
+                point_x, point_y, focus_left + focus_outline_thickness,
+                focus_outline_margin + focus_outline_thickness,
+                focus_right - focus_outline_thickness,
+                static_cast<double>(bitmap_height) - focus_outline_margin -
+                    focus_outline_thickness,
+                focus_inner_radius);
+            if (inside_focus && !inside_focus_content) {
+              sample_color = focus_border;
+              opaque = true;
+            }
+          }
+          if (!opaque) continue;
+          ++alpha_samples;
+          red_sum += GetRValue(sample_color);
+          green_sum += GetGValue(sample_color);
+          blue_sum += GetBValue(sample_color);
+        }
+      }
+      const uint32_t alpha = static_cast<uint32_t>(
+          (alpha_samples * 255 + kSampleCount / 2) / kSampleCount);
+      const uint32_t red = static_cast<uint32_t>(
+          (red_sum + kSampleCount / 2) / kSampleCount);
+      const uint32_t green = static_cast<uint32_t>(
+          (green_sum + kSampleCount / 2) / kSampleCount);
+      const uint32_t blue = static_cast<uint32_t>(
+          (blue_sum + kSampleCount / 2) / kSampleCount);
+      pixels[index] = blue | (green << 8) | (red << 16) | (alpha << 24);
+    }
+  }
+
+  RECT window_bounds = {};
+  GetWindowRect(window, &window_bounds);
+  POINT destination = {window_bounds.left, window_bounds.top};
+  POINT source = {0, 0};
+  SIZE layer_size = {bitmap_width, bitmap_height};
+  BLENDFUNCTION blend = {AC_SRC_OVER, 0,
+                         static_cast<BYTE>(current_alpha_), AC_SRC_ALPHA};
+  UpdateLayeredWindow(window, screen, &destination, &layer_size, buffer,
+                      &source, 0, &blend, ULW_ALPHA);
   SelectObject(buffer, old_font);
   SelectObject(buffer, old_pen);
   SelectObject(buffer, old_brush);
   SelectObject(buffer, old_bitmap);
   DeleteObject(text_font);
   DeleteObject(glyph_font);
-  DeleteObject(border_pen);
   DeleteObject(background_brush);
   DeleteObject(bitmap);
   DeleteDC(buffer);
+  ReleaseDC(nullptr, screen);
+}
+
+void NativeCapsuleWindow::Paint(HWND window) {
+  PAINTSTRUCT paint = {};
+  BeginPaint(window, &paint);
+  RenderLayeredWindow(window);
   EndPaint(window, &paint);
 }
 
@@ -1797,12 +2241,21 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
         return 0;
       }
       break;
-    case WM_NCHITTEST:
+    case WM_NCHITTEST: {
       if (master_retracted_ ||
           (master_transition_active_ && master_transition_target_hidden_)) {
         return HTTRANSPARENT;
       }
+      POINT client_point = {
+          static_cast<LONG>(static_cast<short>(LOWORD(lparam))),
+          static_cast<LONG>(static_cast<short>(HIWORD(lparam))),
+      };
+      ScreenToClient(window, &client_point);
+      if (!IsPointInsideVisual(client_point)) {
+        return HTTRANSPARENT;
+      }
       return HTCLIENT;
+    }
     case WM_MOUSEACTIVATE:
       // WS_EX_NOACTIVATE is the persistent policy, but explicitly answering
       // the click message prevents USER32 from briefly activating a stale
@@ -1913,6 +2366,16 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       GetCursorPos(&drag_start_cursor_);
       GetWindowRect(window, &drag_start_bounds_);
       SetCapture(window);
+      if (master_ && event_callback_) {
+        event_callback_(
+            "capsuleMasterDragStarted",
+            flutter::EncodableMap{
+                {flutter::EncodableValue("monitorDeviceName"),
+                 flutter::EncodableValue(monitor_device_name_)},
+                {flutter::EncodableValue("side"),
+                 flutter::EncodableValue(capsule_side_)},
+            });
+      }
       SetHovered(true);
       if (!hover_changed &&
           (previous_close_hovered != close_hovered_ ||
@@ -1952,6 +2415,21 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
               });
         }
       } else {
+        if (master_ && event_callback_) {
+          // Mouse-down prepared and froze the whole queue. A normal click is
+          // not a drag, so release that preparation before toggleCollapseAll
+          // starts the next independent capsule transition.
+          event_callback_(
+              "capsuleMasterDragFinished",
+              flutter::EncodableMap{
+                  {flutter::EncodableValue("monitorDeviceName"),
+                   flutter::EncodableValue(monitor_device_name_)},
+                  {flutter::EncodableValue("side"),
+                   flutter::EncodableValue(capsule_side_)},
+                  {flutter::EncodableValue("commit"),
+                   flutter::EncodableValue(false)},
+              });
+        }
         SendClick();
       }
       // Releasing capture does not guarantee a WM_MOUSEMOVE before the next
@@ -1978,7 +2456,7 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       return 0;
     }
     case WM_CAPTURECHANGED: {
-      if (master_ && dragging_ && event_callback_) {
+      if (master_ && pointer_down_ && event_callback_) {
         event_callback_(
             "capsuleMasterDragFinished",
             flutter::EncodableMap{
@@ -2006,6 +2484,7 @@ LRESULT NativeCapsuleWindow::MessageHandler(HWND window, UINT const message,
       dock_animation_active_ = false;
       queue_drag_animation_active_ = false;
       master_transition_active_ = false;
+      RemovePropW(window, kCapsuleAlphaProperty);
       ClearCommittedQueueDrag();
       break;
     case WM_CLOSE:

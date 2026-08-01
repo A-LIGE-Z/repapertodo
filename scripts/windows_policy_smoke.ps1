@@ -74,9 +74,24 @@ using System.Runtime.InteropServices;
 
 public static class RePaperTodoPolicyNative {
   public delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
+  public static string LastVerticalDragTrace = "";
+  public static string LastResizeTrace = "";
+  public static string LastForegroundTrace = "";
+  public static string LastSettingsDragTrace = "";
 
   [StructLayout(LayoutKind.Sequential)]
   public struct RECT { public int Left, Top, Right, Bottom; }
+
+  [StructLayout(LayoutKind.Sequential)]
+  public struct POINT { public int X, Y; }
+
+  [StructLayout(LayoutKind.Sequential)]
+  public struct MONITORINFO {
+    public uint cbSize;
+    public RECT rcMonitor;
+    public RECT rcWork;
+    public uint dwFlags;
+  }
 
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
   public struct NOTIFYICONDATA {
@@ -113,6 +128,10 @@ public static class RePaperTodoPolicyNative {
   [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr window, int command);
   [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
   [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT point);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr window, uint flags);
+  [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
+  [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
   [DllImport("user32.dll")] static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
   [DllImport("user32.dll")] static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
   [DllImport("user32.dll")] static extern bool SystemParametersInfo(uint action, uint parameter, out RECT bounds, uint flags);
@@ -134,6 +153,11 @@ public static class RePaperTodoPolicyNative {
     const uint LWA_ALPHA = 0x00000002;
     if ((GetWindowLongPtr(window, -20).ToInt64() & WS_EX_LAYERED) == 0) {
       return 255;
+    }
+    long nativeCapsuleAlpha =
+        GetProp(window, "RePaperTodo.NativeCapsuleAlpha").ToInt64();
+    if (nativeCapsuleAlpha > 0 && nativeCapsuleAlpha <= 256) {
+      return (byte)(nativeCapsuleAlpha - 1);
     }
     uint colorKey, flags;
     byte alpha;
@@ -365,11 +389,15 @@ public static class RePaperTodoPolicyNative {
   }
 
   public static int RightWorkAreaVisibleWidth(IntPtr window) {
-    RECT bounds, workArea;
-    if (!GetWindowRect(window, out bounds) ||
-        !SystemParametersInfo(0x0030, 0, out workArea, 0)) return 0;
-    return Math.Max(0, Math.Min(bounds.Right, workArea.Right) -
-                       Math.Max(bounds.Left, workArea.Left));
+    RECT bounds;
+    if (!GetWindowRect(window, out bounds)) return 0;
+    IntPtr monitor = MonitorFromWindow(window, 2);
+    var info = new MONITORINFO {
+      cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO))
+    };
+    if (monitor == IntPtr.Zero || !GetMonitorInfo(monitor, ref info)) return 0;
+    return Math.Max(0, Math.Min(bounds.Right, info.rcWork.Right) -
+                       Math.Max(bounds.Left, info.rcWork.Left));
   }
 
   public static void HoverCapsule(IntPtr window) {
@@ -420,6 +448,31 @@ public static class RePaperTodoPolicyNative {
                          bounds.Right, bounds.Bottom);
   }
 
+  public static string CapsuleActionPointSummary(IntPtr window) {
+    HoverCapsule(window);
+    RECT bounds; if (!GetWindowRect(window, out bounds)) return "missing";
+    int visibleWidth = Math.Max(1, RightWorkAreaVisibleWidth(window));
+    var point = new POINT {
+      X = bounds.Left + Math.Max(16, visibleWidth / 2),
+      Y = bounds.Top + Math.Max(12, (bounds.Bottom - bounds.Top) / 2)
+    };
+    IntPtr hit = WindowFromPoint(point);
+    IntPtr root = hit == IntPtr.Zero ? IntPtr.Zero : GetAncestor(hit, 2);
+    var hitClass = new System.Text.StringBuilder(128);
+    var rootTitle = new System.Text.StringBuilder(256);
+    if (hit != IntPtr.Zero) GetClassName(hit, hitClass, hitClass.Capacity);
+    if (root != IntPtr.Zero) GetWindowText(root, rootTitle, rootTitle.Capacity);
+    long packedPoint = ((long)(ushort)point.Y << 16) | (ushort)point.X;
+    long hitTest = root == IntPtr.Zero
+      ? -1
+      : SendMessage(root, 0x0084, IntPtr.Zero, new IntPtr(packedPoint)).ToInt64();
+    return String.Format(
+      "target=0x{0:X};bounds={1},{2},{3},{4};visible={5};point={6},{7};hit=0x{8:X};hitClass={9};root=0x{10:X};rootTitle={11};hitTest={12}",
+      window.ToInt64(), bounds.Left, bounds.Top, bounds.Right, bounds.Bottom,
+      visibleWidth, point.X, point.Y, hit.ToInt64(), hitClass.ToString(),
+      root.ToInt64(), rootTitle.ToString(), hitTest);
+  }
+
   public static string VisibleWindowSummary(uint pid) {
     var entries = new List<string>();
     EnumWindows((window, parameter) => {
@@ -464,6 +517,53 @@ public static class RePaperTodoPolicyNative {
     SendMessage(window, 0x0201, new IntPtr(1), point);
     SendMessage(window, 0x0202, IntPtr.Zero, point);
     System.Threading.Thread.Sleep(300);
+  }
+
+  public static int[] ClickNativeCapsuleAndSampleForeground(
+      IntPtr capsule, IntPtr paper, int durationMilliseconds,
+      int intervalMilliseconds) {
+    LastForegroundTrace = "";
+    if (capsule == IntPtr.Zero || paper == IntPtr.Zero) {
+      return new int[] { -1, -1, 0 };
+    }
+    RECT bounds;
+    if (!GetWindowRect(capsule, out bounds)) {
+      return new int[] { -1, -1, 0 };
+    }
+    int x = Math.Max(1, (bounds.Right - bounds.Left) / 2);
+    int y = Math.Max(1, (bounds.Bottom - bounds.Top) / 2);
+    IntPtr point = new IntPtr((y << 16) | (x & 0xFFFF));
+    SendMessage(capsule, 0x0201, new IntPtr(1), point);
+    SendMessage(capsule, 0x0202, IntPtr.Zero, point);
+
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    var changes = new List<string>();
+    IntPtr previous = IntPtr.Zero;
+    int firstPaperMilliseconds = -1;
+    int firstLossMilliseconds = -1;
+    bool reachedPaper = false;
+    while (stopwatch.ElapsedMilliseconds <= durationMilliseconds) {
+      IntPtr foreground = GetForegroundWindow();
+      int elapsed = (int)stopwatch.ElapsedMilliseconds;
+      if (foreground != previous) {
+        changes.Add(String.Format("{0}:0x{1:X}", elapsed,
+                                  foreground.ToInt64()));
+        previous = foreground;
+      }
+      if (foreground == paper) {
+        if (!reachedPaper) firstPaperMilliseconds = elapsed;
+        reachedPaper = true;
+      } else if (reachedPaper && firstLossMilliseconds < 0) {
+        firstLossMilliseconds = elapsed;
+      }
+      System.Threading.Thread.Sleep(Math.Max(1, intervalMilliseconds));
+    }
+    LastForegroundTrace = String.Join(",", changes.ToArray());
+    return new int[] {
+        firstPaperMilliseconds,
+        firstLossMilliseconds,
+        GetForegroundWindow() == paper ? 1 : 0,
+    };
   }
 
   public static int[] ClickNativeCapsuleAndSampleAlpha(
@@ -542,7 +642,13 @@ public static class RePaperTodoPolicyNative {
     if (masterWindow == IntPtr.Zero || childWindow == IntPtr.Zero ||
         !GetWindowRect(masterWindow, out masterStart) ||
         !GetWindowRect(childWindow, out childStart) ||
-        !SystemParametersInfo(0x0030, 0, out workArea, 0)) return Int32.MaxValue;
+        !SystemParametersInfo(0x0030, 0, out workArea, 0)) {
+      LastVerticalDragTrace = "initial window geometry unavailable";
+      return Int32.MaxValue;
+    }
+    var trace = new System.Text.StringBuilder();
+    trace.AppendFormat("start master={0}, child={1}",
+                       masterStart.Top, childStart.Top);
     int visibleLeft = Math.Max(masterStart.Left, workArea.Left);
     int visibleRight = Math.Min(masterStart.Right, workArea.Right);
     int startX = visibleLeft + Math.Max(8, (visibleRight - visibleLeft) / 2);
@@ -563,6 +669,7 @@ public static class RePaperTodoPolicyNative {
       if (!GetWindowRect(masterWindow, out masterCurrent) ||
           !GetWindowRect(childWindow, out childCurrent)) {
         maximumError = Int32.MaxValue;
+        trace.AppendFormat("; step {0}: geometry unavailable", step);
         break;
       }
       if (!dragStarted) {
@@ -573,6 +680,8 @@ public static class RePaperTodoPolicyNative {
           // proves that the queue drag has begun.
           previousMasterTop = masterCurrent.Top;
           previousChildTop = childCurrent.Top;
+          trace.AppendFormat("; step {0}: waiting master={1}, child={2}",
+                             step, masterCurrent.Top, childCurrent.Top);
           continue;
         }
         dragStarted = true;
@@ -581,13 +690,18 @@ public static class RePaperTodoPolicyNative {
       }
       int masterOffset = masterCurrent.Top - activeMasterStart;
       int childOffset = childCurrent.Top - activeChildStart;
-      maximumError = Math.Max(maximumError,
-                              Math.Abs(masterOffset - childOffset));
+      int frameError = Math.Abs(masterOffset - childOffset);
+      maximumError = Math.Max(maximumError, frameError);
+      trace.AppendFormat(
+          "; step {0}: master={1} ({2}), child={3} ({4}), error={5}",
+          step, masterCurrent.Top, masterOffset, childCurrent.Top, childOffset,
+          frameError);
       previousMasterTop = masterCurrent.Top;
       previousChildTop = childCurrent.Top;
     }
     mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
     System.Threading.Thread.Sleep(300);
+    LastVerticalDragTrace = trace.ToString();
     return dragStarted ? maximumError : Int32.MaxValue;
   }
 
@@ -622,14 +736,97 @@ public static class RePaperTodoPolicyNative {
     System.Threading.Thread.Sleep(500);
   }
 
+  public static void DragSettingsBy(IntPtr window, int deltaX, int deltaY) {
+    RECT bounds;
+    if (!GetWindowRect(window, out bounds)) {
+      LastSettingsDragTrace = "initial window geometry unavailable";
+      return;
+    }
+    int startX = (bounds.Left + bounds.Right) / 2;
+    // SettingsCoordinatorHitTest reserves 20..64 logical pixels for the
+    // native caption. Use its middle instead of the ordinary paper's 17 px
+    // Flutter-header drag point.
+    int startY = bounds.Top + 32;
+    var point = new POINT { X = startX, Y = startY };
+    IntPtr hit = WindowFromPoint(point);
+    IntPtr root = hit == IntPtr.Zero ? IntPtr.Zero : GetAncestor(hit, 2);
+    var hitClass = new System.Text.StringBuilder(128);
+    if (hit != IntPtr.Zero) GetClassName(hit, hitClass, hitClass.Capacity);
+    long packedPoint = ((long)(ushort)startY << 16) | (ushort)startX;
+    long rootHitTest = SendMessage(window, 0x0084, IntPtr.Zero,
+                                   new IntPtr(packedPoint)).ToInt64();
+    long childHitTest = hit == IntPtr.Zero
+      ? -1
+      : SendMessage(hit, 0x0084, IntPtr.Zero,
+                    new IntPtr(packedPoint)).ToInt64();
+    LastSettingsDragTrace = String.Format(
+      "before={0},{1},{2},{3};point={4},{5};hit=0x{6:X};hitClass={7};root=0x{8:X};rootHitTest={9};childHitTest={10};foreground=0x{11:X}",
+      bounds.Left, bounds.Top, bounds.Right, bounds.Bottom, startX, startY,
+      hit.ToInt64(), hitClass.ToString(), root.ToInt64(), rootHitTest,
+      childHitTest, GetForegroundWindow().ToInt64());
+    SetForegroundWindow(window);
+    SetCursorPos(startX, startY);
+    System.Threading.Thread.Sleep(80);
+    mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+    for (int step = 1; step <= 12; step++) {
+      SetCursorPos(startX + (deltaX * step / 12),
+                   startY + (deltaY * step / 12));
+      System.Threading.Thread.Sleep(35);
+    }
+    mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    System.Threading.Thread.Sleep(500);
+    RECT finalBounds;
+    if (GetWindowRect(window, out finalBounds)) {
+      LastSettingsDragTrace += String.Format(
+        ";after={0},{1},{2},{3};foregroundAfter=0x{4:X}",
+        finalBounds.Left, finalBounds.Top, finalBounds.Right,
+        finalBounds.Bottom, GetForegroundWindow().ToInt64());
+    } else {
+      LastSettingsDragTrace += ";final window geometry unavailable";
+    }
+  }
+
   public static int[] ResizePaperAndMeasureSurface(
       IntPtr window, int deltaX, int deltaY) {
     RECT start;
     if (window == IntPtr.Zero || !GetWindowRect(window, out start)) {
       return new int[] { Int32.MaxValue, 0, 0, 0 };
     }
-    int startX = start.Right - 2;
-    int startY = start.Bottom - 2;
+    // Pick a visible point inside the bottom-right resize band. Ordinary paper
+    // windows expose a painted grip dot near 4 px, while the settings paper's
+    // larger rounded corner becomes hit-testable farther inward. Color-key
+    // transparent candidates resolve to another root HWND and are skipped.
+    int startX = start.Right - 4;
+    int startY = start.Bottom - 4;
+    int selectedInset = 4;
+    foreach (int inset in new int[] { 4, 8, 10, 12 }) {
+      POINT candidate = new POINT {
+        X = start.Right - inset,
+        Y = start.Bottom - inset,
+      };
+      IntPtr hit = WindowFromPoint(candidate);
+      if (hit == window || (hit != IntPtr.Zero &&
+                            GetAncestor(hit, 2) == window)) {
+        startX = candidate.X;
+        startY = candidate.Y;
+        selectedInset = inset;
+        break;
+      }
+    }
+    POINT selectedPoint = new POINT { X = startX, Y = startY };
+    IntPtr selectedHit = WindowFromPoint(selectedPoint);
+    IntPtr selectedRoot = selectedHit == IntPtr.Zero
+                              ? IntPtr.Zero
+                              : GetAncestor(selectedHit, 2);
+    long packedPoint = ((long)(ushort)startX) |
+                       ((long)(ushort)startY << 16);
+    int selectedHitTest = SendMessage(
+        window, 0x0084, IntPtr.Zero, new IntPtr(packedPoint)).ToInt32();
+    LastResizeTrace = String.Format(
+        "start={0}x{1}, inset={2}, point={3},{4}, hit=0x{5:X}, root=0x{6:X}, nchittest={7}",
+        start.Right - start.Left, start.Bottom - start.Top, selectedInset,
+        startX, startY, selectedHit.ToInt64(), selectedRoot.ToInt64(),
+        selectedHitTest);
     IntPtr paperShadow = FindPaperShadowFor(window);
     SetForegroundWindow(window);
     SetCursorPos(startX, startY);
@@ -662,9 +859,16 @@ public static class RePaperTodoPolicyNative {
     System.Threading.Thread.Sleep(500);
     RECT finalBounds;
     if (!GetWindowRect(window, out finalBounds)) {
+      LastResizeTrace += "; final geometry unavailable";
       return new int[] {
           maximumVisibleShadows, minimumPaperAlpha, 0, 0 };
     }
+    LastResizeTrace += String.Format(
+        "; final={0}x{1}, delta={2},{3}",
+        finalBounds.Right - finalBounds.Left,
+        finalBounds.Bottom - finalBounds.Top,
+        (finalBounds.Right - finalBounds.Left) - (start.Right - start.Left),
+        (finalBounds.Bottom - finalBounds.Top) - (start.Bottom - start.Top));
     return new int[] {
         maximumVisibleShadows,
         minimumPaperAlpha,
@@ -873,10 +1077,27 @@ try {
       [uint32]$primary.Id,
       "RePaperTodo Native Capsule [proxy:pinned-policy-paper]") -ne [IntPtr]::Zero
   }
+  $pinnedPaper = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
+    [uint32]$primary.Id, "Pinned QA")
+  if ($pinnedPaper -eq [IntPtr]::Zero -or
+      -not [RePaperTodoPolicyNative]::IsVisibleInteractiveDesktopPaper($pinnedPaper)) {
+    $windows = [RePaperTodoPolicyNative]::VisibleWindowSummary([uint32]$primary.Id)
+    throw "Policy smoke desktop-pinned paper did not retain a stable interactive HWND. Visible windows: $windows"
+  }
   $desktopPinnedProxy = [RePaperTodoPolicyNative]::FindWindowByTitle(
     [uint32]$primary.Id,
     "RePaperTodo Native Capsule [proxy:pinned-policy-paper]")
-  [RePaperTodoPolicyNative]::ClickNativeCapsule($desktopPinnedProxy)
+  $pinnedActivationMetrics =
+    [RePaperTodoPolicyNative]::ClickNativeCapsuleAndSampleForeground(
+      $desktopPinnedProxy, $pinnedPaper, 800, 5)
+  if ([int]$pinnedActivationMetrics[0] -lt 0) {
+    $trace = [RePaperTodoPolicyNative]::LastForegroundTrace
+    throw "Policy smoke pinned capsule never foregrounded its paper. Foreground trace: $trace"
+  }
+  if ([int]$pinnedActivationMetrics[1] -ge 0) {
+    $trace = [RePaperTodoPolicyNative]::LastForegroundTrace
+    throw "Policy smoke pinned capsule foreground bounced away after activation at $($pinnedActivationMetrics[1]) ms. Foreground trace: $trace"
+  }
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke pinned capsule did not unpin and foreground its paper." -Condition {
     if (-not [RePaperTodoPolicyNative]::IsVisible($pinnedPaper) -or
         -not [RePaperTodoPolicyNative]::IsForeground($pinnedPaper)) {
@@ -1002,12 +1223,19 @@ try {
   }
   $collapsedPaperCapsule = [RePaperTodoPolicyNative]::FindWindowByTitle(
     [uint32]$primary.Id, "Collap")
+  $collapsedPaperCapsuleDebug =
+    [RePaperTodoPolicyNative]::CapsuleActionPointSummary($collapsedPaperCapsule)
   [RePaperTodoPolicyNative]::ClickCapsule($collapsedPaperCapsule)
-  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke normal collapsed paper capsule did not expand its paper." -Condition {
-    $expandedCollapsedPaper = [RePaperTodoPolicyNative]::FindWindowByTitle(
-      [uint32]$primary.Id, "Collap")
-    $expandedCollapsedPaper -ne [IntPtr]::Zero -and
-      [RePaperTodoPolicyNative]::CapsuleWindowWidth($expandedCollapsedPaper) -eq 360
+  try {
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke normal collapsed paper capsule did not expand its paper." -Condition {
+      $expandedCollapsedPaper = [RePaperTodoPolicyNative]::FindWindowByTitleFragment(
+        [uint32]$primary.Id, "Collap")
+      $expandedCollapsedPaper -ne [IntPtr]::Zero -and
+        [RePaperTodoPolicyNative]::CapsuleWindowWidth($expandedCollapsedPaper) -eq 360
+    }
+  } catch {
+    $windows = [RePaperTodoPolicyNative]::VisibleWindowSummary([uint32]$primary.Id)
+    throw "Policy smoke normal collapsed paper capsule did not expand its paper. Click target: $collapsedPaperCapsuleDebug. Visible windows: $windows"
   }
   $collapsedPaperCapsuleClickExpands = $true
   $masterHandleBeforeToggle = $nativeMaster
@@ -1138,7 +1366,8 @@ try {
     [RePaperTodoPolicyNative]::MeasureVerticalDragFollowing(
       $nativeMaster, $expandedProxy, 64)
   if ($masterCapsuleDragMaxFrameError -gt 2) {
-    throw "Policy smoke child capsules did not follow the master in the same animation frame (maximum error=$masterCapsuleDragMaxFrameError px)."
+    $dragTrace = [RePaperTodoPolicyNative]::LastVerticalDragTrace
+    throw "Policy smoke child capsules did not follow the master in the same animation frame (maximum error=$masterCapsuleDragMaxFrameError px). Trace: $dragTrace"
   }
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke native master drag did not persist the queue start margin." -Condition {
     try { $saved = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json } catch { return $false }
@@ -1192,13 +1421,14 @@ try {
     throw "Policy smoke could not identify the expanded proxy's owning paper."
   }
   $reminderPaper = [RePaperTodoPolicyNative]::FindWindowByTitle([uint32]$primary.Id, "Remind")
-  [RePaperTodoPolicyNative]::HideWindow($paper)
-  Wait-ForCondition -TimeoutSeconds 5 -Message "Policy smoke could not hide the proxy's paper for routing validation." -Condition {
-    -not [RePaperTodoPolicyNative]::IsVisible($paper)
+  [RePaperTodoPolicyNative]::SetForegroundWindow($reminderPaper) | Out-Null
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke could not move focus away from the expanded proxy's paper." -Condition {
+    [RePaperTodoPolicyNative]::IsForeground($reminderPaper)
   }
   [RePaperTodoPolicyNative]::ClickNativeCapsule($expandedProxy)
-  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke expanded edge proxy did not restore its owning paper." -Condition {
-    [RePaperTodoPolicyNative]::IsVisible($paper)
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke expanded edge proxy did not foreground its owning paper." -Condition {
+    [RePaperTodoPolicyNative]::IsVisible($paper) -and
+      [RePaperTodoPolicyNative]::IsForeground($paper)
   }
   $expandedProxyClickActivates = $true
   if ([RePaperTodoPolicyNative]::CapsuleWindowWidth($paper) -ne 360) {
@@ -1260,6 +1490,14 @@ try {
   $fullscreenAvoided = $true
   Stop-Process -Id $fullscreen.Id -Force -ErrorAction SilentlyContinue
   $fullscreen = $null
+  # The shell may restore a different maximized/fullscreen application after
+  # the probe exits (for example the test host itself). In that state keeping
+  # papers non-topmost is correct. Explicitly return foreground ownership to a
+  # RePaperTodo paper before asserting the no-fullscreen restoration path.
+  [RePaperTodoPolicyNative]::SetForegroundWindow($reminderPaper) | Out-Null
+  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke could not return foreground ownership to RePaperTodo after fullscreen closed." -Condition {
+    [RePaperTodoPolicyNative]::ForegroundProcessId() -eq $primary.Id
+  }
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke paper did not restore topmost after fullscreen closed." -Condition {
     [RePaperTodoPolicyNative]::IsTopmost($paper)
   }
@@ -1323,7 +1561,8 @@ try {
   $interactiveResizePaperVisible = $true
   if ([Math]::Abs([int]$resizeMetrics[2]) -lt 48 -or
       [Math]::Abs([int]$resizeMetrics[3]) -lt 36) {
-    throw "Policy smoke paper resize did not change the HWND by the requested amount (widthDelta=$($resizeMetrics[2]), heightDelta=$($resizeMetrics[3]))."
+    $resizeTrace = [RePaperTodoPolicyNative]::LastResizeTrace
+    throw "Policy smoke paper resize did not change the HWND by the requested amount (widthDelta=$($resizeMetrics[2]), heightDelta=$($resizeMetrics[3])). Trace: $resizeTrace"
   }
   $interactiveResizeBoundsChanged = $true
 
@@ -1386,12 +1625,21 @@ try {
   Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke UI did not respond while script was running." -Condition {
     [RePaperTodoPolicyNative]::IsVisible($coordinator)
   }
+  # IsVisible can turn true in the same dispatch that asks Flutter to build the
+  # settings page. A human cannot press the title in that sub-frame, so wait
+  # for the first interactive Flutter frame before injecting mouse input.
+  Start-Sleep -Milliseconds 250
   $settingsBoundsBeforeMove =
     [RePaperTodoPolicyNative]::BoundsString($coordinator)
-  [RePaperTodoPolicyNative]::DragPaperBy($coordinator, 84, 58)
-  Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke settings window could not be moved from its paper header." -Condition {
-    [RePaperTodoPolicyNative]::BoundsString($coordinator) -ne
-      $settingsBoundsBeforeMove
+  [RePaperTodoPolicyNative]::DragSettingsBy($coordinator, 84, 58)
+  try {
+    Wait-ForCondition -TimeoutSeconds 10 -Message "Policy smoke settings window could not be moved from its paper header." -Condition {
+      [RePaperTodoPolicyNative]::BoundsString($coordinator) -ne
+        $settingsBoundsBeforeMove
+    }
+  } catch {
+    $settingsDragTrace = [RePaperTodoPolicyNative]::LastSettingsDragTrace
+    throw "Policy smoke settings window could not be moved from its paper header. Trace: $settingsDragTrace"
   }
   $settingsWindowMovable = $true
   $settingsResizeMetrics =
@@ -1399,7 +1647,8 @@ try {
       $coordinator, 90, 64)
   if ([Math]::Abs([int]$settingsResizeMetrics[2]) -lt 45 -or
       [Math]::Abs([int]$settingsResizeMetrics[3]) -lt 32) {
-    throw "Policy smoke settings window could not be resized (widthDelta=$($settingsResizeMetrics[2]), heightDelta=$($settingsResizeMetrics[3]))."
+    $resizeTrace = [RePaperTodoPolicyNative]::LastResizeTrace
+    throw "Policy smoke settings window could not be resized (widthDelta=$($settingsResizeMetrics[2]), heightDelta=$($settingsResizeMetrics[3])). Trace: $resizeTrace"
   }
   $settingsWindowResizable = $true
   [RePaperTodoPolicyNative]::CloseWindow($coordinator)
@@ -1454,6 +1703,7 @@ try {
       interactiveResizeBoundsChanged = $interactiveResizeBoundsChanged
       settingsWindowMovable = $settingsWindowMovable
       settingsWindowResizable = $settingsWindowResizable
+      settingsDragTrace = [RePaperTodoPolicyNative]::LastSettingsDragTrace
       desktopPinnedPaperVisible = $desktopPinnedPaperVisible
       desktopPinnedPaperInteractive = $desktopPinnedPaperInteractive
       pinnedCapsuleUnpinsAndForegrounds = $pinnedCapsuleUnpinsAndForegrounds

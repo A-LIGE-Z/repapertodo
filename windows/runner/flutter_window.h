@@ -164,6 +164,7 @@ class FlutterWindow : public Win32Window {
   };
   enum class TrayOwnerDrawKind {
     command,
+    app_header,
     header,
     separator,
     paper,
@@ -176,6 +177,7 @@ class FlutterWindow : public Win32Window {
     bool has_submenu = false;
     bool danger = false;
     std::string paper_type;
+    int text_offset_y = 0;
   };
   struct TrayPalette {
     COLORREF paper = RGB(255, 249, 234);
@@ -188,6 +190,7 @@ class FlutterWindow : public Win32Window {
     COLORREF danger = RGB(176, 90, 70);
     bool dark = false;
   };
+  std::wstring ResolveTrayFontFamily() const;
   TrayPalette ResolveTrayPalette() const;
   std::vector<TrayPaperMenuItem> tray_papers_;
   std::vector<std::unique_ptr<TrayOwnerDrawItem>> active_tray_items_;

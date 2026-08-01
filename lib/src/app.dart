@@ -50,12 +50,22 @@ const _paperWindowMethodChannel = MethodChannel('repapertodo/paper_window');
 const _externalMarkdownExportRetention = Duration(days: 7);
 const _maxExternalMarkdownPaperIdFileNameLength = 96;
 const _maxTodoReminderDetailLines = 4;
+const _todoReminderFallbackDetailMaxLines = 3;
 const _todoReminderLeadTime = Duration(minutes: 10);
 const _todoReminderGraceTime = Duration(minutes: 2);
 const _todoUndoRetention = Duration(minutes: 30);
 const _windowsPaperTransparencyKey = Color(0xFF010203);
 const _paperWindowChromeMargin = 8.0;
+const _paperTodoNoteContentPadding = EdgeInsets.fromLTRB(24, 12, 14, 12);
+const _paperTodoNoteEditorContentPadding = EdgeInsets.fromLTRB(26, 14, 12, 10);
+const _paperTodoNoteNaturalLineHeightFactor = 20 / 14;
 const _dengXianFontFamily = 'DengXian';
+const _paperTodoUiFontFamilyFallback = [
+  'Microsoft YaHei UI',
+  'Microsoft YaHei',
+  'Segoe UI Symbol',
+  'Segoe UI Emoji',
+];
 const _dengXianFontFamilyFallback = [
   'Segoe UI',
   'Microsoft YaHei UI',
@@ -99,6 +109,20 @@ Color _paperTodoBlend(Color background, Color foreground, int alpha) {
     mix(channel(background.r * 255), channel(foreground.r * 255)),
     mix(channel(background.g * 255), channel(foreground.g * 255)),
     mix(channel(background.b * 255), channel(foreground.b * 255)),
+  );
+}
+
+Color _paperTodoFloorBlend(Color background, Color foreground, int alpha) {
+  final clampedAlpha = alpha.clamp(0, 255);
+  final inverse = 255 - clampedAlpha;
+  int channel(double value) => (value * 255).round();
+  int mix(double base, double overlay) =>
+      ((channel(base) * inverse) + (channel(overlay) * clampedAlpha)) ~/ 255;
+  return Color.fromARGB(
+    255,
+    mix(background.r, foreground.r),
+    mix(background.g, foreground.g),
+    mix(background.b, foreground.b),
   );
 }
 
@@ -390,7 +414,7 @@ class _RePaperTodoAppState extends State<RePaperTodoApp> {
           side: BorderSide(color: colors.outlineVariant),
           borderRadius: BorderRadius.circular(12),
         ),
-        menuPadding: const EdgeInsets.all(4),
+        menuPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
         textStyle: base.textTheme.bodyMedium?.copyWith(
           color: colors.onSurface,
           fontSize: 13,
@@ -590,11 +614,14 @@ String? resolveAppFontFamily(
     return runtimeFamily;
   }
   return switch (UiFontPresets.normalize(state.uiFontPreset)) {
-    UiFontPresets.yaHei => _defaultContentFontFamily,
+    // PaperTodo keeps UI chrome on the platform Segoe UI chain for both its
+    // default and YaHei presets. YaHei-first typography is reserved for note
+    // and Todo content through resolveAppContentFontFamily.
+    UiFontPresets.yaHei => null,
     UiFontPresets.dengXian => _dengXianFontFamily,
     UiFontPresets.serif => 'serif',
     UiFontPresets.mono => 'monospace',
-    _ => _defaultContentFontFamily,
+    _ => null,
   };
 }
 
@@ -610,10 +637,10 @@ List<String>? resolveAppFontFamilyFallback(
     return null;
   }
   return switch (UiFontPresets.normalize(state.uiFontPreset)) {
-    UiFontPresets.yaHei => _defaultContentFontFamilyFallback,
+    UiFontPresets.yaHei => _paperTodoUiFontFamilyFallback,
     UiFontPresets.dengXian => _dengXianFontFamilyFallback,
     UiFontPresets.serif || UiFontPresets.mono => null,
-    _ => _defaultContentFontFamilyFallback,
+    _ => _paperTodoUiFontFamilyFallback,
   };
 }
 
@@ -1375,10 +1402,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                   padding: const EdgeInsets.symmetric(horizontal: 9),
                   child: Row(
                     children: [
-                      Listener(
+                      GestureDetector(
                         key: ValueKey('${paper.id}-master-capsule-drag-handle'),
                         behavior: HitTestBehavior.opaque,
-                        onPointerDown: widget.paperWindowDragStarter == null
+                        onPanStart: widget.paperWindowDragStarter == null
                             ? null
                             : (_) =>
                                 unawaited(widget.paperWindowDragStarter!()),
@@ -1470,10 +1497,10 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                 color: Colors.transparent,
                 child: DecoratedBox(
                   key: ValueKey('${paper.id}-paper-window-capsule-surface'),
-                  decoration: BoxDecoration(
+                  decoration: _WpfCapsuleBoxDecoration(
                     color: colorScheme.surface,
-                    border: Border.all(color: colorScheme.outlineVariant),
-                    borderRadius: BorderRadius.circular(capsuleRadius),
+                    borderColor: colorScheme.outlineVariant,
+                    cornerRadius: capsuleRadius,
                   ),
                   child: Row(
                     children: [
@@ -1505,20 +1532,26 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                                   clipBehavior: Clip.none,
                                   alignment: Alignment.centerLeft,
                                   children: [
-                                    Text(
-                                      capsuleIcon,
-                                      key: ValueKey(
-                                        '${paper.id}-paper-window-capsule-icon',
+                                    Transform.translate(
+                                      offset: Offset(
+                                        scriptCapsuleSpec == null ? 0 : -0.25,
+                                        -1,
                                       ),
-                                      style: TextStyle(
-                                        color: paperColors.brightWeakText,
-                                        fontFamily: 'Segoe UI Symbol',
-                                        fontFamilyFallback: const <String>[
-                                          'Segoe UI Emoji',
-                                        ],
-                                        fontSize: capsuleIconSize,
-                                        fontWeight: FontWeight.w600,
-                                        height: 1,
+                                      child: Text(
+                                        capsuleIcon,
+                                        key: ValueKey(
+                                          '${paper.id}-paper-window-capsule-icon',
+                                        ),
+                                        style: TextStyle(
+                                          color: paperColors.brightWeakText,
+                                          fontFamily: 'Segoe UI Symbol',
+                                          fontFamilyFallback: const <String>[
+                                            'Segoe UI Emoji',
+                                          ],
+                                          fontSize: capsuleIconSize,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1,
+                                        ),
                                       ),
                                     ),
                                     Positioned(
@@ -1526,12 +1559,12 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                                       width: 26,
                                       top: -8,
                                       bottom: -8,
-                                      child: Listener(
+                                      child: GestureDetector(
                                         key: ValueKey(
                                           '${paper.id}-capsule-drag-handle',
                                         ),
                                         behavior: HitTestBehavior.opaque,
-                                        onPointerDown:
+                                        onPanStart:
                                             widget.paperWindowDragStarter ==
                                                     null
                                                 ? null
@@ -1545,22 +1578,26 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
                                 ),
                                 const SizedBox(width: 4),
                                 Expanded(
-                                  child: Text(
-                                    _displayTitle(paper),
-                                    key: ValueKey(
-                                      '${paper.id}-paper-window-capsule-title',
+                                  child: Transform.translate(
+                                    offset: const Offset(0, -1),
+                                    child: Text(
+                                      _displayTitle(paper),
+                                      key: ValueKey(
+                                        '${paper.id}-paper-window-capsule-title',
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: colorScheme.onSurfaceVariant,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.normal,
+                                            letterSpacing:
+                                                paper.isNote ? -0.25 : 0,
+                                          ),
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                          color: colorScheme.onSurfaceVariant,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.normal,
-                                          letterSpacing: 0,
-                                        ),
                                   ),
                                 ),
                               ],
@@ -4734,11 +4771,19 @@ class _PaperBoardScreenState extends State<PaperBoardScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(message),
-              for (final detail in details) ...[
-                const SizedBox(height: 4),
+              Text(
+                message,
+                key: const ValueKey('todo-reminder-snackbar-title'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (details.isNotEmpty) ...[
+                const SizedBox(height: 5),
                 Text(
-                  detail,
+                  details.join('\n'),
+                  key: const ValueKey('todo-reminder-snackbar-details'),
+                  maxLines: _todoReminderFallbackDetailMaxLines,
+                  overflow: TextOverflow.clip,
                   style: DefaultTextStyle.of(
                     context,
                   ).style.copyWith(fontSize: 12, height: 1.2),
@@ -6011,8 +6056,11 @@ class _PaperTodoPopupMenuItem<T> extends PopupMenuItem<T> {
     super.textStyle,
     super.labelTextStyle,
     super.mouseCursor,
+    this.standaloneGeometry = false,
     required super.child,
   });
+
+  final bool standaloneGeometry;
 
   @override
   PopupMenuItemState<T, _PaperTodoPopupMenuItem<T>> createState() =>
@@ -6061,6 +6109,9 @@ class _PaperTodoPopupMenuItemState<T>
     final padding = widget.padding ??
         EdgeInsets.symmetric(horizontal: theme.useMaterial3 ? 12 : 16);
     final highlighted = widget.enabled && (_hovered || _focused || _pressed);
+    final menuChild = widget.standaloneGeometry
+        ? Transform.translate(offset: const Offset(0, 1), child: buildChild())
+        : buildChild();
     final item = AnimatedContainer(
       key: ValueKey('paper-todo-popup-menu-item-feedback-${widget.value}'),
       duration: Duration.zero,
@@ -6077,7 +6128,7 @@ class _PaperTodoPopupMenuItemState<T>
             padding: padding,
             child: Align(
               alignment: AlignmentDirectional.centerStart,
-              child: buildChild(),
+              child: menuChild,
             ),
           ),
         ),
@@ -6099,7 +6150,12 @@ class _PaperTodoPopupMenuItemState<T>
           focusColor: Colors.transparent,
           highlightColor: Colors.transparent,
           splashColor: Colors.transparent,
-          child: item,
+          child: widget.standaloneGeometry
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: item,
+                )
+              : item,
         ),
       ),
     );
@@ -6149,6 +6205,15 @@ const EdgeInsets _paperTodoStandalonePopupMenuItemPadding = EdgeInsets.fromLTRB(
   2,
 );
 
+const double _paperTodoStandalonePopupMenuHeaderHeight = 20;
+const double _paperTodoStandalonePopupMenuItemHeight = 25;
+const double _paperTodoStandalonePopupMenuDividerHeight = 7;
+const double _paperTodoMarkdownPopupMenuHeaderHeight = 19;
+const double _paperTodoTodoPopupMenuHeaderHeight = 17;
+const double _paperTodoTodoPopupMenuItemHeight = 21;
+const double _paperTodoPopupMenuHorizontalChrome = 28;
+const double _paperTodoNativePopupMenuPadding = 4;
+
 PopupMenuItem<T> _paperTodoCheckedMenuItem<T>({
   required T value,
   required bool checked,
@@ -6165,17 +6230,10 @@ PopupMenuItem<T> _paperTodoCheckedMenuItem<T>({
           SizedBox.square(
             dimension: 18,
             child: Center(
-              child: AnimatedOpacity(
+              child: Opacity(
                 key: const ValueKey('paper-todo-popup-menu-checkmark'),
-                duration: PaperTodoMotion.controlFeedback,
-                curve: PaperTodoMotion.quickCurve,
                 opacity: checked ? 1 : 0,
-                child: AnimatedScale(
-                  duration: PaperTodoMotion.controlFeedback,
-                  curve: PaperTodoMotion.quickCurve,
-                  scale: checked ? 1 : 0.72,
-                  child: const _PaperTodoPopupMenuCheckmark(),
-                ),
+                child: const _PaperTodoPopupMenuCheckmark(),
               ),
             ),
           ),
@@ -6254,9 +6312,171 @@ BoxConstraints _paperTodoTextMenuConstraints(
   }
   // PaperTodo's menu is content-sized: 4 px menu padding, 8/10 px item
   // padding, and a 1 px border on both sides.
-  final availableWidth = math.max(96.0, MediaQuery.sizeOf(context).width - 16);
-  final width = (widest + 28).ceilToDouble().clamp(96.0, availableWidth);
+  final availableWidth = math.max(
+    _paperTodoPopupMenuHorizontalChrome,
+    MediaQuery.sizeOf(context).width - 16,
+  );
+  final width =
+      (widest + _paperTodoPopupMenuHorizontalChrome).ceilToDouble().clamp(
+            _paperTodoPopupMenuHorizontalChrome,
+            availableWidth,
+          );
   return BoxConstraints.tightFor(width: width);
+}
+
+class _PaperTodoNativeMenuAttempt {
+  const _PaperTodoNativeMenuAttempt({
+    required this.available,
+    this.selection,
+  });
+
+  const _PaperTodoNativeMenuAttempt.unavailable()
+      : available = false,
+        selection = null;
+
+  final bool available;
+  final String? selection;
+}
+
+Future<String?> _showPaperTodoContextMenu({
+  required BuildContext context,
+  required Offset globalPosition,
+  required List<PopupMenuEntry<String>> entries,
+  required BoxConstraints constraints,
+  required bool useNativeWindowsMenu,
+  bool requestFocus = true,
+}) async {
+  // Widget tests have no native paper HWND even though they run on Windows.
+  // Keep their real Flutter popup surface available as the parity fallback.
+  final hasNativePaperWindow =
+      Platform.isWindows && Platform.environment['FLUTTER_TEST'] != 'true';
+  if (useNativeWindowsMenu && hasNativePaperWindow) {
+    final native = await _tryShowPaperTodoNativeContextMenu(
+      context: context,
+      globalPosition: globalPosition,
+      entries: entries,
+      constraints: constraints,
+    );
+    if (native.available) {
+      return native.selection;
+    }
+  }
+
+  final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
+  if (overlay is! RenderBox) {
+    return null;
+  }
+  return showMenu<String>(
+    context: context,
+    popUpAnimationStyle: _paperTodoPopupAnimationStyle,
+    requestFocus: requestFocus,
+    position: RelativeRect.fromRect(
+      Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+      Offset.zero & overlay.size,
+    ),
+    items: entries,
+    constraints: constraints,
+  );
+}
+
+Future<_PaperTodoNativeMenuAttempt> _tryShowPaperTodoNativeContextMenu({
+  required BuildContext context,
+  required Offset globalPosition,
+  required List<PopupMenuEntry<String>> entries,
+  required BoxConstraints constraints,
+}) async {
+  final serializedEntries = _paperTodoNativeContextMenuEntries(entries);
+  if (serializedEntries == null) {
+    return const _PaperTodoNativeMenuAttempt.unavailable();
+  }
+
+  final theme = Theme.of(context);
+  final colors = PaperTodoThemeColors.of(context);
+  final background = colors.paper;
+  final hover = Color.alphaBlend(colors.hover, background);
+  final headerText = Color.alphaBlend(
+    colors.weakText.withValues(alpha: 0.72),
+    background,
+  );
+  final disabledText = Color.alphaBlend(
+    colors.text.withValues(alpha: 0.72),
+    background,
+  );
+  final fontFamily = theme.textTheme.bodyMedium?.fontFamily?.trim();
+  try {
+    final response = await _paperWindowMethodChannel.invokeMethod<Object?>(
+      'showContextMenu',
+      <String, Object?>{
+        'anchorX': globalPosition.dx,
+        'anchorY': globalPosition.dy,
+        'width': constraints.minWidth,
+        'padding': _paperTodoNativePopupMenuPadding,
+        'fontFamily':
+            fontFamily == null || fontFamily.isEmpty ? 'Segoe UI' : fontFamily,
+        'backgroundColor': background.toARGB32(),
+        'borderColor': colors.paperBorder.toARGB32(),
+        'textColor': colors.text.toARGB32(),
+        'headerTextColor': headerText.toARGB32(),
+        'disabledTextColor': disabledText.toARGB32(),
+        'hoverColor': hover.toARGB32(),
+        'dark': theme.brightness == Brightness.dark,
+        'items': serializedEntries,
+      },
+    );
+    if (response is! Map || response['available'] != true) {
+      return const _PaperTodoNativeMenuAttempt.unavailable();
+    }
+    final selection = response['selection'];
+    return _PaperTodoNativeMenuAttempt(
+      available: true,
+      selection: selection is String ? selection : null,
+    );
+  } on MissingPluginException {
+    return const _PaperTodoNativeMenuAttempt.unavailable();
+  } on PlatformException catch (error) {
+    if (error.code == 'unimplemented' || error.code == 'unavailable') {
+      return const _PaperTodoNativeMenuAttempt.unavailable();
+    }
+    rethrow;
+  }
+}
+
+List<Map<String, Object?>>? _paperTodoNativeContextMenuEntries(
+  List<PopupMenuEntry<String>> entries,
+) {
+  final serialized = <Map<String, Object?>>[];
+  for (final entry in entries) {
+    if (entry is PopupMenuDivider) {
+      serialized.add(<String, Object?>{
+        'kind': 'separator',
+        'height': entry.height,
+      });
+      continue;
+    }
+    if (entry is! PopupMenuItem<String>) {
+      return null;
+    }
+    final child = entry.child;
+    if (child is _PaperTodoPopupMenuHeaderLabel) {
+      serialized.add(<String, Object?>{
+        'kind': 'header',
+        'label': child.label,
+        'height': entry.height,
+      });
+      continue;
+    }
+    if (child is! Text || child.data == null) {
+      return null;
+    }
+    serialized.add(<String, Object?>{
+      'kind': 'command',
+      'value': entry.value,
+      'label': child.data,
+      'enabled': entry.enabled,
+      'height': entry.height,
+    });
+  }
+  return serialized;
 }
 
 double _paperTodoPopupMenuHeight() {
@@ -6559,7 +6779,6 @@ class PaperPreview extends StatelessWidget {
                                           fieldEnabled:
                                               !desktopInteractionLocked,
                                           enableToolTips: enableToolTips,
-                                          enableAnimations: enableAnimations,
                                           compact: standaloneSurface,
                                           onTitleChanged: onTitleChanged,
                                         ),
@@ -6681,15 +6900,20 @@ class PaperPreview extends StatelessWidget {
           key: ValueKey('${paper.id}-note-link-drag-handle'),
           dimension: standaloneSurface ? 24 : 48,
           child: standaloneSurface
-              ? Text(
-                  '\u2316',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Segoe UI Symbol',
-                    fontFamilyFallback: const <String>['Segoe UI Emoji'],
-                    fontSize: 13,
-                    color: colorScheme.primary,
-                    height: 1,
+              ? Center(
+                  child: Transform.translate(
+                    key: const ValueKey('note-link-drag-glyph-metrics'),
+                    offset: const Offset(-1, 1),
+                    child: Text(
+                      '\u2316',
+                      style: TextStyle(
+                        fontFamily: 'Segoe UI Symbol',
+                        fontFamilyFallback: const <String>['Segoe UI Emoji'],
+                        fontSize: 13,
+                        color: colorScheme.primary,
+                        height: 1,
+                      ),
+                    ),
                   ),
                 )
               : Icon(Icons.link_outlined, size: 16, color: colorScheme.primary),
@@ -7260,12 +7484,16 @@ class PaperPreview extends StatelessWidget {
           key: ValueKey('${paper.id}-open-markdown'),
           tooltip: _openMarkdownEditorLabel(strings),
           onPressed: () => unawaited(onOpenExternalMarkdown(paper)),
-          child: const Text(
-            'MD',
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w400,
-              height: 1,
+          child: Transform.translate(
+            key: const ValueKey('paper-window-open-markdown-glyph-metrics'),
+            offset: const Offset(-1, 0),
+            child: const Text(
+              'MD',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w400,
+                height: 1,
+              ),
             ),
           ),
         ),
@@ -7288,16 +7516,16 @@ class PaperPreview extends StatelessWidget {
               unawaited(onCreatePaper(PaperTypes.todo, sourcePaper: paper)),
           child: Transform.translate(
             key: const ValueKey('paper-window-new-todo-glyph-metrics'),
-            offset: Offset.zero,
+            offset: const Offset(-1.5, 1),
             child: const Text(
               '\uFF0B\u2713',
               style: TextStyle(
                 fontFamily: 'Segoe UI Symbol',
                 fontFamilyFallback: <String>['Segoe UI Emoji'],
-                fontSize: 13,
+                fontSize: 13.25,
                 fontWeight: FontWeight.w400,
                 height: 1,
-                letterSpacing: 0,
+                letterSpacing: -0.25,
               ),
             ),
           ),
@@ -7311,7 +7539,7 @@ class PaperPreview extends StatelessWidget {
               unawaited(onCreatePaper(PaperTypes.note, sourcePaper: paper)),
           child: Transform.translate(
             key: const ValueKey('paper-window-new-note-glyph-metrics'),
-            offset: Offset.zero,
+            offset: const Offset(-1, 1),
             child: const Text(
               '\uFF0B\u270E',
               style: TextStyle(
@@ -7335,7 +7563,7 @@ class PaperPreview extends StatelessWidget {
             useCapsuleMode ? _toggleCollapsed : () => unawaited(onHide(paper)),
         child: Transform.translate(
           key: const ValueKey('paper-window-close-glyph-metrics'),
-          offset: Offset.zero,
+          offset: const Offset(-1, 1),
           child: Text(
             useCapsuleMode ? '\u2500' : '\u00D7',
             style: const TextStyle(
@@ -7353,7 +7581,7 @@ class PaperPreview extends StatelessWidget {
   Widget _paperTodoDesktopPinGlyph({required bool pinned, double size = 15}) {
     return Transform.translate(
       key: const ValueKey('paper-window-desktop-pin-glyph-metrics'),
-      offset: Offset.zero,
+      offset: const Offset(-2, 0),
       child: AnimatedOpacity(
         key: const ValueKey('paper-window-desktop-pin-glyph-opacity'),
         opacity: pinned ? 1 : 0.72,
@@ -7391,6 +7619,7 @@ class PaperPreview extends StatelessWidget {
         enabled: !_desktopInteractionLocked,
         glyph: paper.isTodo ? '\u2611' : '\u270E',
         size: paper.isNote ? 15 : 13,
+        paintOffset: paper.isNote ? const Offset(1, 0) : const Offset(1, 1),
         activeColor: paperColors.text,
         inactiveColor: paperColors.weakText,
       ),
@@ -7532,21 +7761,14 @@ class PaperPreview extends StatelessWidget {
     BuildContext context,
     Offset globalPosition,
   ) async {
-    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
-    if (overlay is! RenderBox) {
-      return;
-    }
     final entries = _paperContextMenuItems(context);
-    final selected = await showMenu<String>(
+    final selected = await _showPaperTodoContextMenu(
       context: context,
-      popUpAnimationStyle: _paperTodoPopupAnimationStyle,
-      requestFocus: false,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
-        Offset.zero & overlay.size,
-      ),
-      items: entries,
+      globalPosition: globalPosition,
+      entries: entries,
       constraints: _paperTodoTextMenuConstraints(context, entries),
+      useNativeWindowsMenu: standaloneSurface,
+      requestFocus: false,
     );
     if (!context.mounted || selected == null) {
       return;
@@ -7739,10 +7961,11 @@ class PaperPreview extends StatelessWidget {
   }
 
   PopupMenuItem<String> _paperTodoDesktopMenuHeader(String label) {
-    return PopupMenuItem<String>(
+    return _PaperTodoPopupMenuItem<String>(
       enabled: false,
-      height: 17,
+      height: _paperTodoStandalonePopupMenuHeaderHeight,
       padding: _paperTodoStandalonePopupMenuItemPadding,
+      standaloneGeometry: true,
       child: _PaperTodoPopupMenuHeaderLabel(label),
     );
   }
@@ -7753,8 +7976,9 @@ class PaperPreview extends StatelessWidget {
   }) {
     return _PaperTodoPopupMenuItem<String>(
       value: value,
-      height: 21,
+      height: _paperTodoStandalonePopupMenuItemHeight,
       padding: _paperTodoStandalonePopupMenuItemPadding,
+      standaloneGeometry: true,
       child: Text(label),
     );
   }
@@ -8040,65 +8264,59 @@ class _PaperWindowHeaderActionState extends State<_PaperWindowHeaderAction> {
             : null,
         onPointerUp: enabled ? (_) => _clearPressed() : null,
         onPointerCancel: enabled ? (_) => _clearPressed() : null,
-        child: AnimatedScale(
-          key: const ValueKey('paper-header-action-scale-feedback'),
-          scale: 1,
+        child: AnimatedOpacity(
+          key: const ValueKey('paper-header-action-opacity-feedback'),
+          opacity: _pressed ? 0.7 : 1,
           duration: feedbackDuration,
           curve: PaperTodoMotion.quickCurve,
-          child: AnimatedOpacity(
-            key: const ValueKey('paper-header-action-opacity-feedback'),
-            opacity: _pressed ? 0.7 : 1,
+          child: AnimatedContainer(
+            key: const ValueKey('paper-header-action-surface-feedback'),
             duration: feedbackDuration,
             curve: PaperTodoMotion.quickCurve,
-            child: AnimatedContainer(
-              key: const ValueKey('paper-header-action-surface-feedback'),
-              duration: feedbackDuration,
-              curve: PaperTodoMotion.quickCurve,
-              decoration: BoxDecoration(
-                color: enabled && (_hovered || _pressed)
-                    ? paperColors.hover
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ExcludeFocus(
-                child: IconButton(
-                  onPressed: widget.onPressed,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  style: baseStyle.copyWith(
-                    foregroundColor: WidgetStateProperty.resolveWith<Color?>((
-                      states,
-                    ) {
-                      if (!enabled || states.contains(WidgetState.disabled)) {
-                        return disabledForeground;
-                      }
-                      if (_hovered ||
-                          _pressed ||
-                          states.contains(WidgetState.hovered) ||
-                          states.contains(WidgetState.pressed)) {
-                        return paperColors.text;
-                      }
-                      return paperColors.weakText;
-                    }),
+            decoration: BoxDecoration(
+              color: enabled && (_hovered || _pressed)
+                  ? paperColors.hover
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ExcludeFocus(
+              child: IconButton(
+                onPressed: widget.onPressed,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                style: baseStyle.copyWith(
+                  foregroundColor: WidgetStateProperty.resolveWith<Color?>((
+                    states,
+                  ) {
+                    if (!enabled || states.contains(WidgetState.disabled)) {
+                      return disabledForeground;
+                    }
+                    if (_hovered ||
+                        _pressed ||
+                        states.contains(WidgetState.hovered) ||
+                        states.contains(WidgetState.pressed)) {
+                      return paperColors.text;
+                    }
+                    return paperColors.weakText;
+                  }),
+                ),
+                icon: TweenAnimationBuilder<Color?>(
+                  key: const ValueKey(
+                    'paper-header-action-foreground-feedback',
                   ),
-                  icon: TweenAnimationBuilder<Color?>(
-                    key: const ValueKey(
-                      'paper-header-action-foreground-feedback',
-                    ),
-                    tween: ColorTween(end: foreground),
-                    duration: feedbackDuration,
-                    curve: PaperTodoMotion.quickCurve,
-                    builder: (context, animatedForeground, child) {
-                      return IconTheme.merge(
-                        data: IconThemeData(color: animatedForeground),
-                        child: DefaultTextStyle.merge(
-                          style: TextStyle(color: animatedForeground),
-                          child: child!,
-                        ),
-                      );
-                    },
-                    child: widget.child,
-                  ),
+                  tween: ColorTween(end: foreground),
+                  duration: feedbackDuration,
+                  curve: PaperTodoMotion.quickCurve,
+                  builder: (context, animatedForeground, child) {
+                    return IconTheme.merge(
+                      data: IconThemeData(color: animatedForeground),
+                      child: DefaultTextStyle.merge(
+                        style: TextStyle(color: animatedForeground),
+                        child: child!,
+                      ),
+                    );
+                  },
+                  child: widget.child,
                 ),
               ),
             ),
@@ -8127,6 +8345,7 @@ class _PaperWindowTopmostGlyph extends StatefulWidget {
     required this.enabled,
     required this.glyph,
     required this.size,
+    required this.paintOffset,
     required this.activeColor,
     required this.inactiveColor,
   });
@@ -8135,6 +8354,7 @@ class _PaperWindowTopmostGlyph extends StatefulWidget {
   final bool enabled;
   final String glyph;
   final double size;
+  final Offset paintOffset;
   final Color activeColor;
   final Color inactiveColor;
 
@@ -8166,7 +8386,7 @@ class _PaperWindowTopmostGlyphState extends State<_PaperWindowTopmostGlyph> {
         curve: PaperTodoMotion.quickCurve,
         child: Transform.translate(
           key: const ValueKey('paper-window-topmost-glyph-metrics'),
-          offset: Offset.zero,
+          offset: widget.paintOffset,
           child: Text(
             widget.glyph,
             style: TextStyle(
@@ -8225,8 +8445,8 @@ class _PaperTodoScrollViewportState extends State<_PaperTodoScrollViewport> {
   }
 }
 
-class _PaperTitleMarquee extends StatefulWidget {
-  const _PaperTitleMarquee({
+class _PaperTitleDisplay extends StatelessWidget {
+  const _PaperTitleDisplay({
     required this.text,
     required this.style,
     required this.textScaler,
@@ -8239,154 +8459,134 @@ class _PaperTitleMarquee extends StatefulWidget {
   final Key richTextKey;
 
   @override
-  State<_PaperTitleMarquee> createState() => _PaperTitleMarqueeState();
+  Widget build(BuildContext context) {
+    return RichText(
+      key: richTextKey,
+      text: TextSpan(text: text, style: style),
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      textScaler: textScaler,
+    );
+  }
 }
 
-class _PaperTitleMarqueeState extends State<_PaperTitleMarquee> {
-  static const _initialPause = Duration(milliseconds: 1200);
-  static const _endPause = Duration(milliseconds: 900);
-  static const _restartPause = Duration(milliseconds: 1400);
+class _PaperTitleDividerDecoration extends Decoration {
+  const _PaperTitleDividerDecoration(this.color);
 
-  late final ScrollController _scrollController;
-  Timer? _phaseTimer;
-  double? _scheduledExtent;
-  int _cycleToken = 0;
-  bool _cycleActive = false;
+  final Color color;
+
+  double get horizontalInset => 1;
+  double get verticalOffset => -2;
+  double get radius => 8;
 
   @override
-  void initState() {
-    super.initState();
-    _scrollController = ScrollController();
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
+    return _PaperTitleDividerBoxPainter(this, onChanged);
   }
 
   @override
-  void didUpdateWidget(covariant _PaperTitleMarquee oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text ||
-        oldWidget.style != widget.style ||
-        oldWidget.textScaler != widget.textScaler) {
-      _cancelCycle();
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(0);
-      }
-    }
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is _PaperTitleDividerDecoration && other.color == color;
+  }
+
+  @override
+  int get hashCode => color.hashCode;
+}
+
+class _WpfCapsuleBoxDecoration extends BoxDecoration {
+  _WpfCapsuleBoxDecoration({
+    required Color color,
+    required Color borderColor,
+    this.cornerRadius = 12,
+    this.wpfBorderWidth = 1,
+  })  : borderColor = borderColor,
+        super(
+          color: color,
+          border: Border.all(color: borderColor, width: wpfBorderWidth),
+          borderRadius: BorderRadius.circular(cornerRadius),
+        );
+
+  final Color borderColor;
+  final double cornerRadius;
+  final double wpfBorderWidth;
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
+    return _WpfCapsuleBoxPainter(this, onChanged);
+  }
+}
+
+class _WpfCapsuleBoxPainter extends BoxPainter {
+  _WpfCapsuleBoxPainter(this.decoration, VoidCallback? onChanged)
+      : super(onChanged);
+
+  final _WpfCapsuleBoxDecoration decoration;
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    final size = configuration.size;
+    if (size == null || size.isEmpty) return;
+    final outerRect = offset & size;
+    final borderWidth = decoration.wpfBorderWidth;
+    final outerRadius = decoration.cornerRadius + borderWidth / 2;
+    final outer = RRect.fromRectAndRadius(
+      outerRect,
+      Radius.circular(outerRadius),
+    );
+    canvas.drawRRect(
+      outer,
+      Paint()
+        ..isAntiAlias = true
+        ..color = decoration.borderColor,
+    );
+    final innerRect = outerRect.deflate(borderWidth);
+    if (innerRect.isEmpty) return;
+    final innerRadius = math.max(
+      0.0,
+      decoration.cornerRadius - borderWidth / 2,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(innerRect, Radius.circular(innerRadius)),
+      Paint()
+        ..isAntiAlias = true
+        ..color = decoration.color ?? Colors.transparent,
+    );
+  }
+}
+
+class _PaperTitleDividerBoxPainter extends BoxPainter {
+  _PaperTitleDividerBoxPainter(this.decoration, VoidCallback? onChanged)
+      : _delegate = BoxDecoration(
+          border: Border(bottom: BorderSide(color: decoration.color)),
+          borderRadius: BorderRadius.circular(decoration.radius),
+        ).createBoxPainter(onChanged),
+        super(onChanged);
+
+  final _PaperTitleDividerDecoration decoration;
+  final BoxPainter _delegate;
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    final size = configuration.size;
+    if (size == null || size.isEmpty) return;
+    _delegate.paint(
+      canvas,
+      offset + Offset(decoration.horizontalInset, decoration.verticalOffset),
+      configuration.copyWith(
+        size: Size(
+          math.max(0, size.width - decoration.horizontalInset * 2),
+          size.height,
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
-    _cancelCycle();
-    _scrollController.dispose();
+    _delegate.dispose();
     super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final textPainter = TextPainter(
-          text: TextSpan(text: widget.text, style: widget.style),
-          textDirection: Directionality.of(context),
-          textScaler: widget.textScaler,
-          maxLines: 1,
-        )..layout();
-        final viewportWidth = constraints.maxWidth;
-        final overflow =
-            viewportWidth.isFinite && textPainter.width > viewportWidth + 0.5;
-        if (!overflow) {
-          _cancelCycle();
-          if (_scrollController.hasClients && _scrollController.offset != 0) {
-            _scrollController.jumpTo(0);
-          }
-        } else {
-          _scheduleCycle(textPainter.width - viewportWidth);
-        }
-        return ClipRect(
-          child: SingleChildScrollView(
-            controller: _scrollController,
-            scrollDirection: Axis.horizontal,
-            physics: const NeverScrollableScrollPhysics(),
-            child: RichText(
-              key: widget.richTextKey,
-              text: TextSpan(text: widget.text, style: widget.style),
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.clip,
-              textScaler: widget.textScaler,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _scheduleCycle(double extent) {
-    if (extent <= 0 ||
-        (_scheduledExtent != null &&
-            (_scheduledExtent! - extent).abs() < 0.5 &&
-            _cycleActive)) {
-      return;
-    }
-    _cancelCycle();
-    _scheduledExtent = extent;
-    _cycleActive = true;
-    final token = ++_cycleToken;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || token != _cycleToken) {
-        return;
-      }
-      _phaseTimer = Timer(_initialPause, () {
-        if (!mounted || token != _cycleToken || !_scrollController.hasClients) {
-          return;
-        }
-        final duration = Duration(
-          milliseconds: (extent / 24 * 1000).round().clamp(1600, 8000),
-        );
-        _scrollController
-            .animateTo(
-          extent,
-          duration: duration,
-          curve: Curves.linear,
-        )
-            .then<void>((_) {
-          if (!mounted || token != _cycleToken) {
-            return;
-          }
-          _phaseTimer = Timer(_endPause, () {
-            if (!mounted ||
-                token != _cycleToken ||
-                !_scrollController.hasClients) {
-              return;
-            }
-            _scrollController
-                .animateTo(
-              0,
-              duration: duration,
-              curve: Curves.linear,
-            )
-                .then<void>((_) {
-              if (!mounted || token != _cycleToken) {
-                return;
-              }
-              _phaseTimer = Timer(_restartPause, () {
-                if (mounted && token == _cycleToken) {
-                  _phaseTimer = null;
-                  _cycleActive = false;
-                  _scheduleCycle(extent);
-                }
-              });
-            }, onError: (_, __) {});
-          });
-        }, onError: (_, __) {});
-      });
-    });
-  }
-
-  void _cancelCycle() {
-    _phaseTimer?.cancel();
-    _phaseTimer = null;
-    _scheduledExtent = null;
-    _cycleActive = false;
-    _cycleToken++;
   }
 }
 
@@ -8399,7 +8599,6 @@ class _PaperTitleEditor extends StatefulWidget {
     required this.enabled,
     required this.fieldEnabled,
     required this.enableToolTips,
-    required this.enableAnimations,
     this.compact = false,
     required this.onTitleChanged,
   });
@@ -8411,7 +8610,6 @@ class _PaperTitleEditor extends StatefulWidget {
   final bool enabled;
   final bool fieldEnabled;
   final bool enableToolTips;
-  final bool enableAnimations;
   final bool compact;
   final Future<void> Function(PaperData paper) onTitleChanged;
 
@@ -8468,9 +8666,6 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
     final strings = PaperTodoStringsScope.of(context);
     final editTitleLabel = strings.get(PaperTodoStringKeys.actionEditTitle);
     final emphasized = _isEditingTitle || _isHovered;
-    final transitionDuration = widget.enableAnimations
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
     final dividerColor = paperColors.tint.withValues(
       alpha: paperColors.isDark ? 34 / 255 : 28 / 255,
     );
@@ -8482,7 +8677,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
           height: 1,
           fontSize: widget.compact ? 11 : null,
           fontWeight: widget.compact ? FontWeight.w600 : null,
-          letterSpacing: widget.compact ? -0.1 : null,
+          letterSpacing: widget.compact ? 0 : null,
         );
     final field = AnimatedContainer(
       key: ValueKey('${widget.paper.id}-title-host'),
@@ -8492,40 +8687,47 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
       duration: Duration.zero,
       height: widget.compact ? 24 : 28,
       padding: widget.compact
-          ? const EdgeInsets.fromLTRB(4, 1, 5, 1)
+          ? const EdgeInsets.fromLTRB(4, 0, 5, 0)
           : const EdgeInsets.symmetric(horizontal: 3),
       decoration: BoxDecoration(
         color: emphasized ? paperColors.hover : Colors.transparent,
         border: widget.compact
-            ? Border(bottom: BorderSide(color: dividerColor))
-            : Border.all(color: emphasized ? dividerColor : Colors.transparent),
+            ? const Border(
+                bottom: BorderSide(color: Colors.transparent),
+              )
+            : Border.all(
+                color: emphasized ? dividerColor : Colors.transparent,
+              ),
         borderRadius: BorderRadius.circular(8),
       ),
+      foregroundDecoration:
+          widget.compact ? _PaperTitleDividerDecoration(dividerColor) : null,
       child: Focus(
         onKeyEvent: _handleKeyEvent,
         child: Transform.translate(
           key: ValueKey('${widget.paper.id}-title-wpf-metrics'),
-          // WPF centers both title layers inside the same host. Keeping this
-          // transform at the origin avoids a one-pixel jump between the paper
-          // chrome and the editable title.
-          offset: Offset.zero,
+          // Flutter paints Segoe UI one pixel above and left of the captured
+          // WPF title origin. Move the shared display/editor stack together so
+          // entering edit mode cannot change the title's calibrated position.
+          offset: widget.compact ? const Offset(1, 1) : Offset.zero,
           child: Stack(
             alignment: Alignment.centerLeft,
             children: [
               Positioned.fill(
                 child: IgnorePointer(
                   ignoring: _isEditingTitle || !widget.enabled,
-                  child: AnimatedOpacity(
+                  child: Visibility(
                     key: ValueKey('${widget.paper.id}-title-display-layer'),
-                    opacity: _isEditingTitle ? 0 : 1,
-                    duration: transitionDuration,
-                    curve: PaperTodoMotion.quickCurve,
+                    visible: !_isEditingTitle,
+                    maintainState: true,
+                    maintainAnimation: true,
+                    maintainSize: true,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: widget.enabled ? _beginTitleEdit : null,
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: _PaperTitleMarquee(
+                        child: _PaperTitleDisplay(
                           text: _displayTitle,
                           style: titleStyle,
                           textScaler: MediaQuery.textScalerOf(context),
@@ -8540,11 +8742,12 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
               ),
               IgnorePointer(
                 ignoring: !widget.enabled || !_isEditingTitle,
-                child: AnimatedOpacity(
+                child: Visibility(
                   key: ValueKey('${widget.paper.id}-title-editor-layer'),
-                  opacity: _isEditingTitle ? 1 : 0,
-                  duration: transitionDuration,
-                  curve: PaperTodoMotion.quickCurve,
+                  visible: _isEditingTitle,
+                  maintainState: true,
+                  maintainAnimation: true,
+                  maintainSize: true,
                   child: TextFormField(
                     key: ValueKey('${widget.paper.id}-title'),
                     controller: _controller,
@@ -8573,7 +8776,6 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
                     textInputAction: TextInputAction.done,
                     style: titleStyle,
                     onTap: _beginTitleEdit,
-                    onChanged: _handleTitleChanged,
                     onFieldSubmitted: (_) =>
                         unawaited(_endTitleEdit(commit: true)),
                   ),
@@ -8612,12 +8814,12 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,
     )..layout();
-    // WPF's Segoe UI title metrics are narrower than Flutter's fallback at
-    // the narrow reference width. The source host remains within 38-86 px at
-    // every paper width; overflow belongs to the marquee, not the header row.
+    // WPF declares a 38-86 px title host, but Flutter needs a 41 px calibrated
+    // minimum to keep the complete default `Todo1` title visible at 280 px.
+    // Overflow still belongs to CharacterEllipsis, not the header row.
     final metricScale = MediaQuery.sizeOf(context).width <= 280 ? 0.8 : 1.0;
     final compactWidth = (titleMeasure.width * metricScale + 9).clamp(
-      38.0,
+      41.0,
       86.0,
     );
     return SizedBox(width: compactWidth, child: titleHostContent);
@@ -8671,6 +8873,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
     _focusNode.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _isEditingTitle) {
+        _focusNode.requestFocus();
         _selectAll();
       }
     });
@@ -8681,18 +8884,6 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
       baseOffset: 0,
       extentOffset: _controller.text.length,
     );
-  }
-
-  void _handleTitleChanged(String value) {
-    if (!_isEditingTitle) {
-      return;
-    }
-    final cleaned = PaperTitles.cleanCustomTitle(value);
-    if (widget.paper.title == cleaned) {
-      return;
-    }
-    widget.paper.title = cleaned;
-    unawaited(widget.onTitleChanged(widget.paper));
   }
 
   Future<void> _endTitleEdit({required bool commit}) async {
@@ -8709,7 +8900,7 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
       _syncControllerToDisplayTitle();
     });
     _focusNode.unfocus();
-    if (changed || !commit) {
+    if (changed) {
       await widget.onTitleChanged(widget.paper);
     }
   }
@@ -8726,9 +8917,8 @@ class _PaperTitleEditorState extends State<_PaperTitleEditor> {
   }
 
   String get _displayTitle {
-    // Keep the complete title in the viewport. Standalone windows constrain
-    // the viewport using the configured title length and marquee the overflow
-    // instead of replacing the user's title with an ellipsis.
+    // RichText keeps the complete value available to editing and semantics;
+    // the compact PaperTodo title host applies CharacterEllipsis at paint time.
     return _editableTitle;
   }
 
@@ -8796,7 +8986,8 @@ class _NotePaperGridPainter extends CustomPainter {
 
   final Color color;
   final double spacing = 24;
-  final double lineOffset = 0;
+  final double verticalLineOffset = 1;
+  final double horizontalLineOffset = -1;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -8804,10 +8995,10 @@ class _NotePaperGridPainter extends CustomPainter {
       ..color = color
       ..strokeWidth = 1
       ..isAntiAlias = false;
-    for (var x = lineOffset; x <= size.width; x += spacing) {
+    for (var x = verticalLineOffset; x <= size.width; x += spacing) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
-    for (var y = lineOffset; y <= size.height; y += spacing) {
+    for (var y = horizontalLineOffset; y <= size.height; y += spacing) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
@@ -8821,7 +9012,6 @@ class _NotePaperGridPainter extends CustomPainter {
 class _NoteEditorState extends State<_NoteEditor> {
   static const _viewEdit = 'edit';
   static const _viewPreview = 'preview';
-  static const _viewSplit = 'split';
   static const _markdownActionStrikethrough = 'strikethrough';
   static const _markdownActionHeading = 'heading';
   static const _markdownActionQuote = 'quote';
@@ -8838,7 +9028,7 @@ class _NoteEditorState extends State<_NoteEditor> {
   late final ScrollController _contentScrollController;
   late final ScrollController _previewScrollController;
   late final FocusNode _contentFocusNode;
-  late String _view = _defaultView(widget.markdownRenderMode, widget.paper);
+  late String _view = _defaultView(widget.paper);
   bool _toolbarInteractionActive = false;
   bool _enteringEditorFromPreview = false;
   bool _previewLinkActivated = false;
@@ -8875,7 +9065,7 @@ class _NoteEditorState extends State<_NoteEditor> {
         MarkdownRenderModes.normalize(widget.markdownRenderMode) !=
             MarkdownRenderModes.off,
       );
-      _view = _defaultView(widget.markdownRenderMode, widget.paper);
+      _view = _defaultView(widget.paper);
     }
     if (oldWidget.paper.id != widget.paper.id ||
         widget.paper.content != _contentController.text) {
@@ -8908,11 +9098,13 @@ class _NoteEditorState extends State<_NoteEditor> {
   @override
   Widget build(BuildContext context) {
     final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
-    final view = mode == MarkdownRenderModes.off ? _viewEdit : _safeView(mode);
+    final view = _view;
+    final editing = view != _viewPreview;
     final page = _notePaperSurface(
-      view == _viewPreview
-          ? _preview(context)
-          : _editor(context, minLines: 4, maxLines: 12),
+      editing ? _editor(context, minLines: 4, maxLines: 12) : _preview(context),
+      contentPadding: editing || mode == MarkdownRenderModes.off
+          ? _paperTodoNoteEditorContentPadding
+          : _paperTodoNoteContentPadding,
     );
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -8958,15 +9150,23 @@ class _NoteEditorState extends State<_NoteEditor> {
             children: [
               _addCanvasButton(),
               const Spacer(),
-              Text(
-                countText,
-                key: const ValueKey('note-canvas-element-count'),
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+              const SizedBox(width: 8),
+              Transform.translate(
+                key: const ValueKey('note-canvas-element-count-metrics'),
+                offset: const Offset(-1, -1),
+                child: Text(
+                  countText,
+                  key: const ValueKey('note-canvas-element-count'),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0,
+                      ),
+                ),
               ),
             ],
           );
@@ -8975,7 +9175,10 @@ class _NoteEditorState extends State<_NoteEditor> {
     );
   }
 
-  Widget _notePaperSurface(Widget child) {
+  Widget _notePaperSurface(
+    Widget child, {
+    required EdgeInsets contentPadding,
+  }) {
     final theme = Theme.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     final paperColors = PaperTodoThemeColors.of(context);
@@ -8983,81 +9186,138 @@ class _NoteEditorState extends State<_NoteEditor> {
     final minimumPageHeight = widget.standaloneSurface
         ? 0.0
         : math.max(160.0, widget.paper.height - 150);
+    final canvasBorderColor = _paperTodoBlend(
+      colorScheme.surface,
+      paperColors.tint,
+      isDark ? 34 : 28,
+    );
     return Container(
       key: const ValueKey('note-paper-canvas'),
       margin: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-      decoration: BoxDecoration(
-        color: paperColors.tint.withValues(alpha: isDark ? 0.055 : 0.035),
-        border: Border.all(
-          color: paperColors.tint.withValues(
-            alpha: isDark ? 34 / 255 : 28 / 255,
-          ),
-        ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
-        child: CustomPaint(
-          key: const ValueKey('note-paper-grid'),
-          painter: _NotePaperGridPainter(
-            color: paperColors.tint.withValues(
-              alpha: isDark ? 38 / 255 : 28 / 255,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 1,
+            top: 0,
+            right: 1,
+            bottom: 0,
+            child: DecoratedBox(
+              key: const ValueKey('note-paper-canvas-fill'),
+              decoration: BoxDecoration(
+                color: paperColors.tint.withValues(
+                  alpha: isDark ? 0.055 : 0.035,
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(7),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                border: Border.all(color: colorScheme.outlineVariant),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(11),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: minimumPageHeight),
+          Padding(
+            padding: const EdgeInsets.all(1),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: CustomPaint(
+                key: const ValueKey('note-paper-grid'),
+                painter: _NotePaperGridPainter(
+                  color: paperColors.tint.withValues(
+                    alpha: isDark ? 24 / 255 : 18 / 255,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(7),
                   child: Stack(
                     children: [
                       Positioned(
-                        left: 14,
-                        top: 14,
-                        bottom: 14,
-                        child: Container(
-                          key: const ValueKey('note-paper-binding-line'),
-                          width: 2,
+                        left: 1,
+                        top: 0,
+                        right: 1,
+                        bottom: 0,
+                        child: DecoratedBox(
+                          key: const ValueKey('note-paper-page-chrome'),
                           decoration: BoxDecoration(
-                            color: paperColors.tint.withValues(
-                              // PaperTodo applies 72% opacity to its binding
-                              // brush after resolving the theme tint.
-                              alpha: isDark ? 63 / 255 : 75 / 255,
-                            ),
-                            borderRadius: BorderRadius.circular(1),
+                            color: colorScheme.surface,
+                            border:
+                                Border.all(color: colorScheme.outlineVariant),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                       ),
-                      if (widget.standaloneSurface)
-                        Positioned.fill(
-                          child: Padding(
-                            key: const ValueKey('note-paper-content-padding'),
-                            padding: const EdgeInsets.fromLTRB(26, 12, 14, 12),
-                            child: child,
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(minHeight: minimumPageHeight),
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                // WPF applies its 14px binding margins from the
+                                // bordered page content box. Keep the calibrated
+                                // content layout fixed and compensate only the
+                                // paint endpoints for Flutter's outer Stack
+                                // raster origin.
+                                left: 16,
+                                top: 15,
+                                bottom: 15,
+                                child: Container(
+                                  key:
+                                      const ValueKey('note-paper-binding-line'),
+                                  width: 2,
+                                  decoration: BoxDecoration(
+                                    color: paperColors.tint.withValues(
+                                      // PaperTodo applies 72% opacity to its
+                                      // binding brush after resolving the theme
+                                      // tint.
+                                      alpha: isDark ? 63 / 255 : 75 / 255,
+                                    ),
+                                    borderRadius: BorderRadius.circular(1),
+                                  ),
+                                ),
+                              ),
+                              if (widget.standaloneSurface)
+                                Positioned.fill(
+                                  child: Padding(
+                                    key: const ValueKey(
+                                        'note-paper-content-padding'),
+                                    padding: contentPadding,
+                                    child: child,
+                                  ),
+                                )
+                              else
+                                Padding(
+                                  key: const ValueKey(
+                                      'note-paper-content-padding'),
+                                  padding: contentPadding,
+                                  child: child,
+                                ),
+                              if (widget.paper.noteCanvasElements.isNotEmpty)
+                                Positioned.fill(
+                                  child: _canvasPreview(embedded: true),
+                                ),
+                            ],
                           ),
-                        )
-                      else
-                        Padding(
-                          key: const ValueKey('note-paper-content-padding'),
-                          padding: const EdgeInsets.fromLTRB(26, 12, 14, 12),
-                          child: child,
                         ),
-                      if (widget.paper.noteCanvasElements.isNotEmpty)
-                        Positioned.fill(child: _canvasPreview(embedded: true)),
+                      ),
                     ],
                   ),
                 ),
               ),
             ),
           ),
-        ),
+          Positioned(
+            left: 1,
+            top: 0,
+            right: 1,
+            bottom: 0,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                key: const ValueKey('note-paper-canvas-chrome'),
+                decoration: BoxDecoration(
+                  border: Border.all(color: canvasBorderColor),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -9074,7 +9334,10 @@ class _NoteEditorState extends State<_NoteEditor> {
         )
         .apply(fontSizeFactor: widget.textZoom)
         .copyWith(
-          height: widget.lineSpacing,
+          height: math.max(
+            _paperTodoNoteNaturalLineHeightFactor,
+            widget.lineSpacing,
+          ),
           letterSpacing: 0,
         );
     final editor = TextFormField(
@@ -9082,6 +9345,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       controller: _contentController,
       scrollController: _contentScrollController,
       focusNode: _contentFocusNode,
+      contextMenuBuilder: _markdownTextContextMenuBuilder,
       onTapAlwaysCalled: true,
       onTap: () => _handleEditorTap(context),
       expands: widget.standaloneSurface,
@@ -9145,6 +9409,23 @@ class _NoteEditorState extends State<_NoteEditor> {
     );
   }
 
+  Widget _markdownTextContextMenuBuilder(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    if (Platform.isWindows) {
+      // The Windows editor already opens PaperTodo's formatting menu on
+      // secondary click. Suppress Flutter's overlapping text-selection menu.
+      return const SizedBox.shrink(
+        key: ValueKey('markdown-text-context-menu-suppressed'),
+      );
+    }
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: editableTextState.contextMenuButtonItems,
+    );
+  }
+
   /*
    * PaperTodo keeps Markdown formatting in keyboard shortcuts and the editor
    * context menu. The visible row above the page is reserved for canvas tools,
@@ -9161,10 +9442,13 @@ class _NoteEditorState extends State<_NoteEditor> {
     return _PaperTodoPopupMenuItem<String>(
       value: value,
       enabled: enabled,
-      height: compact ? 21 : _paperTodoPopupMenuHeight(),
+      height: compact
+          ? _paperTodoStandalonePopupMenuItemHeight
+          : _paperTodoPopupMenuHeight(),
       padding: compact
           ? _paperTodoStandalonePopupMenuItemPadding
           : _paperTodoPopupMenuItemPadding,
+      standaloneGeometry: compact,
       child: Text(label),
     );
   }
@@ -9173,10 +9457,11 @@ class _NoteEditorState extends State<_NoteEditor> {
     if (!widget.standaloneSurface) {
       return _paperTodoMenuHeader(label);
     }
-    return PopupMenuItem<String>(
+    return _PaperTodoPopupMenuItem<String>(
       enabled: false,
-      height: 17,
+      height: _paperTodoMarkdownPopupMenuHeaderHeight,
       padding: _paperTodoStandalonePopupMenuItemPadding,
+      standaloneGeometry: true,
       child: _PaperTodoPopupMenuHeaderLabel(label),
     );
   }
@@ -9201,22 +9486,15 @@ class _NoteEditorState extends State<_NoteEditor> {
     BuildContext context,
     Offset globalPosition,
   ) async {
-    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
-    if (overlay is! RenderBox) {
-      return;
-    }
     _beginToolbarInteraction();
     try {
       final entries = _markdownEditorContextMenuItems();
-      final selected = await showMenu<String>(
+      final selected = await _showPaperTodoContextMenu(
         context: context,
-        popUpAnimationStyle: _paperTodoPopupAnimationStyle,
-        position: RelativeRect.fromRect(
-          Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
-          Offset.zero & overlay.size,
-        ),
-        items: entries,
+        globalPosition: globalPosition,
+        entries: entries,
         constraints: _paperTodoTextMenuConstraints(context, entries),
+        useNativeWindowsMenu: widget.standaloneSurface,
       );
       if (!mounted || !context.mounted || selected == null) {
         return;
@@ -9479,12 +9757,10 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   void _handleEditorFocusChange() {
-    final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
     if (_contentFocusNode.hasFocus ||
         _enteringEditorFromPreview ||
         _toolbarInteractionActive ||
-        mode == MarkdownRenderModes.off ||
-        _safeView(mode) != _viewEdit) {
+        _view != _viewEdit) {
       return;
     }
     final editorOffset = _contentScrollController.hasClients
@@ -9518,93 +9794,119 @@ class _NoteEditorState extends State<_NoteEditor> {
     final colorScheme = Theme.of(context).colorScheme;
     final paperColors = PaperTodoThemeColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dividerColor = _paperTodoBlend(
+      colorScheme.surface,
+      paperColors.tint,
+      isDark ? 34 : 28,
+    );
+    final statusBackgroundColor = _paperTodoBlend(
+      colorScheme.surface,
+      paperColors.tint,
+      isDark ? 16 : 10,
+    );
+    final modePillColor = _paperTodoFloorBlend(
+      statusBackgroundColor,
+      paperColors.tint,
+      isDark ? 48 : 32,
+    );
     final textStyle = Theme.of(
       context,
     ).textTheme.labelSmall?.copyWith(
           color: colorScheme.onSurfaceVariant,
+          fontSize: 11,
+          fontWeight: FontWeight.w400,
           letterSpacing: 0,
         );
     final modeTextStyle = textStyle?.copyWith(
           color: colorScheme.onSurface,
           fontWeight: FontWeight.w600,
+          letterSpacing: 0.7,
         ) ??
         TextStyle(
           color: colorScheme.onSurface,
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          letterSpacing: 0,
+          letterSpacing: 0.7,
         );
-    final modePillWidth = <String>[
-      _viewEdit,
-      _viewPreview,
-      _viewSplit,
-    ].fold<double>(42, (width, candidate) {
-      final painter = TextPainter(
-        text: TextSpan(text: _noteViewLabel(candidate), style: modeTextStyle),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-        maxLines: 1,
-      )..layout();
-      return math.max(width, painter.width + 14);
-    });
     final statsText = _noteStatsText();
-    return DecoratedBox(
-      key: const ValueKey('note-status-bar'),
-      decoration: BoxDecoration(
-        color: paperColors.tint.withValues(alpha: isDark ? 16 / 255 : 10 / 255),
-        border: Border(
-          top: BorderSide(
-            color: paperColors.tint.withValues(
-              alpha: isDark ? 34 / 255 : 28 / 255,
+    return IgnorePointer(
+      key: const ValueKey('note-status-hit-test'),
+      child: DecoratedBox(
+        key: const ValueKey('note-status-bar'),
+        decoration: BoxDecoration(
+          color:
+              paperColors.tint.withValues(alpha: isDark ? 16 / 255 : 10 / 255),
+          border: Border(
+            top: BorderSide(
+              color: dividerColor,
             ),
           ),
         ),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 26),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 3, 10, 4),
-          child: Row(
-            children: [
-              SizedBox(
-                key: const ValueKey('note-status-mode-pill'),
-                width: modePillWidth,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: paperColors.tint.withValues(
-                      alpha: isDark ? 48 / 255 : 33 / 255,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 27),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 3, 10, 4),
+            child: Row(
+              children: [
+                ConstrainedBox(
+                  key: const ValueKey('note-status-mode-pill'),
+                  constraints: const BoxConstraints(minWidth: 42),
+                  child: Stack(
+                    fit: StackFit.passthrough,
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: Transform.translate(
+                          key: const ValueKey(
+                              'note-status-mode-surface-metrics'),
+                          offset: const Offset(1, 0),
+                          child: DecoratedBox(
+                            key: const ValueKey('note-status-mode-surface'),
+                            decoration: BoxDecoration(
+                              color: modePillColor,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DecoratedBox(
+                        decoration: const BoxDecoration(),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(7, 1, 7, 2),
+                          child: Transform.translate(
+                            key: const ValueKey('note-status-mode-metrics'),
+                            offset: const Offset(1, 0),
+                            child: Text(
+                              _noteViewLabel(view),
+                              key: const ValueKey('note-status-mode'),
+                              textAlign: TextAlign.center,
+                              style: modeTextStyle,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(7, 1, 7, 2),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Transform.translate(
+                    key: const ValueKey('note-status-stats-metrics'),
+                    offset: const Offset(1, 0),
                     child: Text(
-                      _noteViewLabel(view),
-                      key: const ValueKey('note-status-mode'),
-                      textAlign: TextAlign.center,
-                      style: modeTextStyle,
+                      statsText,
+                      key: const ValueKey('note-status-stats'),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: textStyle,
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Align(
-                  key: const ValueKey('note-status-stats-metrics'),
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    statsText,
-                    key: const ValueKey('note-status-stats'),
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: textStyle,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              _noteZoomStatus(textStyle),
-            ],
+                const SizedBox(width: 8),
+                _noteZoomStatus(textStyle),
+              ],
+            ),
           ),
         ),
       ),
@@ -9615,9 +9917,9 @@ class _NoteEditorState extends State<_NoteEditor> {
     return SizedBox(
       key: const ValueKey('note-status-zoom'),
       width: 38,
-      child: Align(
+      child: Transform.translate(
         key: const ValueKey('note-status-zoom-metrics'),
-        alignment: Alignment.centerRight,
+        offset: const Offset(-1, 0),
         child: FittedBox(
           key: const ValueKey('note-status-zoom-content'),
           fit: BoxFit.scaleDown,
@@ -9738,7 +10040,6 @@ class _NoteEditorState extends State<_NoteEditor> {
   String _noteViewLabel(String view) {
     return switch (view) {
       _viewPreview => strings.get(PaperTodoStringKeys.noteViewPreview),
-      _viewSplit => strings.get(PaperTodoStringKeys.noteViewSplit),
       _ => strings.get(PaperTodoStringKeys.noteViewEdit),
     };
   }
@@ -9773,11 +10074,12 @@ class _NoteEditorState extends State<_NoteEditor> {
                 padding: EdgeInsets.zero,
                 child: PaperTodoMarkdownSourcePreview(
                   key: ValueKey(
-                    '${widget.paper.id}-${mode == MarkdownRenderModes.enhanced ? 'enhanced' : 'basic'}-markdown-preview',
+                    '${widget.paper.id}-$mode-markdown-preview',
                   ),
                   data: data,
                   textZoom: widget.textZoom,
                   lineSpacing: widget.lineSpacing,
+                  markdownEnabled: mode != MarkdownRenderModes.off,
                   enhanced: mode == MarkdownRenderModes.enhanced,
                   onTap: () {
                     if (!_previewLinkActivated) {
@@ -9808,10 +10110,6 @@ class _NoteEditorState extends State<_NoteEditor> {
   }
 
   void _enterEditorFromPreview() {
-    final mode = MarkdownRenderModes.normalize(widget.markdownRenderMode);
-    if (mode == MarkdownRenderModes.off) {
-      return;
-    }
     final previewOffset = _previewScrollController.hasClients
         ? _previewScrollController.offset
         : 0.0;
@@ -9870,21 +10168,12 @@ class _NoteEditorState extends State<_NoteEditor> {
     );
   }
 
-  String _safeView(String mode) {
-    if (_view == _viewSplit && mode != MarkdownRenderModes.enhanced) {
-      return _viewEdit;
-    }
-    return _view;
-  }
-
-  String _defaultView(String mode, PaperData paper) {
+  String _defaultView(PaperData paper) {
     if (paper.content.isEmpty ||
         ScriptCapsuleSpec.tryParse(paper.content) != null) {
       return _viewEdit;
     }
-    return MarkdownRenderModes.normalize(mode) == MarkdownRenderModes.off
-        ? _viewEdit
-        : _viewPreview;
+    return _viewPreview;
   }
 
   Widget _canvasPreview({bool embedded = false}) {
@@ -9895,6 +10184,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       enableToolTips: widget.enableToolTips,
       enableAnimations: widget.enableAnimations,
       embedded: embedded,
+      sourceContextMenuLabels: widget.standaloneSurface,
       textZoom: widget.textZoom,
       onChanged: widget.onChanged,
       onGeometryChanging: _refreshCanvasGeometry,
@@ -9985,14 +10275,18 @@ class _NoteEditorState extends State<_NoteEditor> {
                     ),
                   ),
                   onPressed: onPressed,
-                  icon: Text(
-                    '{}',
-                    style: TextStyle(
-                      color: _canvasAddButtonHovered
-                          ? paperColors.text
-                          : paperColors.weakText,
-                      fontFamily: 'Segoe UI Symbol',
-                      fontSize: 13,
+                  icon: Transform.translate(
+                    key: const ValueKey('note-add-canvas-glyph-metrics'),
+                    offset: const Offset(1, 0),
+                    child: Text(
+                      '{}',
+                      style: TextStyle(
+                        color: _canvasAddButtonHovered
+                            ? paperColors.text
+                            : paperColors.weakText,
+                        fontFamily: 'Segoe UI Symbol',
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ),
@@ -10251,6 +10545,7 @@ class _NoteCanvasPreview extends StatelessWidget {
     required this.enableToolTips,
     required this.enableAnimations,
     required this.embedded,
+    required this.sourceContextMenuLabels,
     required this.textZoom,
     required this.onChanged,
     required this.onGeometryChanging,
@@ -10267,6 +10562,7 @@ class _NoteCanvasPreview extends StatelessWidget {
   final bool enableToolTips;
   final bool enableAnimations;
   final bool embedded;
+  final bool sourceContextMenuLabels;
   final double textZoom;
   final Future<void> Function() onChanged;
   final VoidCallback onGeometryChanging;
@@ -10330,6 +10626,7 @@ class _NoteCanvasPreview extends StatelessWidget {
                     enableToolTips: enableToolTips,
                     enableAnimations: enableAnimations,
                     strings: strings,
+                    sourceContextMenuLabels: sourceContextMenuLabels,
                     scale: scale,
                     canvasWidth: canvasWidth,
                     canvasHeight: canvasHeight,
@@ -10383,6 +10680,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
     required this.enableToolTips,
     required this.enableAnimations,
     required this.strings,
+    required this.sourceContextMenuLabels,
     required this.scale,
     required this.canvasWidth,
     required this.canvasHeight,
@@ -10405,6 +10703,7 @@ class _NoteCanvasElementPreview extends StatefulWidget {
   final bool enableToolTips;
   final bool enableAnimations;
   final PaperTodoStrings strings;
+  final bool sourceContextMenuLabels;
   final double scale;
   final double canvasWidth;
   final double canvasHeight;
@@ -10441,22 +10740,42 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   @override
   void initState() {
     super.initState();
-    _textController = TextEditingController(text: widget.element.text);
+    _textController = TextEditingController(
+      text: _noteCanvasEditorDisplayText(
+        widget.element.text,
+        isCode: widget.element.type == NoteCanvasElementTypes.code,
+      ),
+    );
     _textScrollController = ScrollController();
   }
 
   @override
   void didUpdateWidget(covariant _NoteCanvasElementPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final displayValue = _textController.value;
+    final rawValue = _noteCanvasEditorRawValue(displayValue);
+    final isComposing =
+        displayValue.composing.isValid && !displayValue.composing.isCollapsed;
     if (oldWidget.element.id != widget.element.id ||
-        widget.element.text != _textController.text) {
-      final offset = _textController.selection.baseOffset
+        widget.element.text != rawValue.text) {
+      final rawOffset = rawValue.selection.baseOffset
           .clamp(0, widget.element.text.length)
           .toInt();
-      _textController.value = TextEditingValue(
-        text: widget.element.text,
-        selection: TextSelection.collapsed(offset: offset),
+      _textController.value = _noteCanvasEditorDisplayValue(
+        TextEditingValue(
+          text: widget.element.text,
+          selection: TextSelection.collapsed(offset: rawOffset),
+        ),
+        isCode: widget.element.type == NoteCanvasElementTypes.code,
       );
+    } else if (!isComposing) {
+      final normalizedDisplayValue = _noteCanvasEditorDisplayValue(
+        rawValue,
+        isCode: widget.element.type == NoteCanvasElementTypes.code,
+      );
+      if (normalizedDisplayValue != displayValue) {
+        _textController.value = normalizedDisplayValue;
+      }
     }
   }
 
@@ -10485,7 +10804,12 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                 : PaperTodoTypography.of(context).contentStyle(baseStyle))
             .copyWith(
             fontSize: (isCode ? 13 : 14) * widget.scale,
-            letterSpacing: 0,
+            height: isCode ? 15 / 13 : null,
+            // WPF Display mode rounds the 13px Cascadia advances wider than
+            // Skia. The same +0.4px correction is used by fenced Markdown
+            // code and preserves the source wrapping without changing the
+            // fixed 15px line rhythm.
+            letterSpacing: isCode ? 0.4 * widget.scale : 0,
           );
     final typeLabel = _noteCanvasElementTypeLabel(element.type);
     final layerLabel = _noteCanvasLayerLabel(
@@ -10499,6 +10823,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
     final headerHeight = (22 * widget.scale).clamp(18, 22).toDouble();
     final headerLeftPadding = (7 * widget.scale).clamp(4, 7).toDouble();
     final headerRightPadding = (6 * widget.scale).clamp(4, 6).toDouble();
+    final editorHorizontalInset = (9 * widget.scale).clamp(4, 9).toDouble();
+    final editorHorizontalOriginCorrection =
+        (7 * widget.scale).clamp(1, 7).toDouble();
     final layerBadgeMaxWidth = math.min(
       72.0,
       math.max(
@@ -10506,7 +10833,6 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
         (element.width * widget.scale) - headerLeftPadding - headerRightPadding,
       ),
     );
-    final shadowAxis = 2 / math.sqrt(2);
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _handleCanvasContextMenuPointerDown,
@@ -10525,20 +10851,11 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
             width: emphasized ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(radius),
-          // WPF clips the resting DropShadowEffect to the element bounds on
-          // PaperTodo's canvas. Flutter's BoxShadow uses a different blur
-          // model and otherwise paints a large gray halo outside the block.
-          boxShadow: emphasized
-              ? [
-                  BoxShadow(
-                    color: colorScheme.shadow.withValues(
-                      alpha: isDark ? 0.22 : 0.13,
-                    ),
-                    blurRadius: 6,
-                    offset: Offset(shadowAxis, shadowAxis),
-                  ),
-                ]
-              : const [],
+          // PaperTodo assigns a DropShadowEffect to this same clipped Border.
+          // PrintWindow evidence shows that ClipToBounds prevents the effect
+          // from emitting pixels outside the block, so Flutter must not add an
+          // external BoxShadow around the otherwise source-matched chrome.
+          boxShadow: const <BoxShadow>[],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(math.max(0, radius - 1)),
@@ -10586,20 +10903,26 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                           child: Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  typeLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                        fontSize: (10 * widget.scale)
-                                            .clamp(8, 10)
-                                            .toDouble(),
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                child: Transform.translate(
+                                  key: ValueKey(
+                                    'note-canvas-type-label-metrics-${element.id}',
+                                  ),
+                                  offset: Offset(-1 * widget.scale, 0),
+                                  child: Text(
+                                    typeLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: colorScheme.onSurfaceVariant,
+                                          fontSize: (10 * widget.scale)
+                                              .clamp(8, 10)
+                                              .toDouble(),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
                                 ),
                               ),
                               AnimatedContainer(
@@ -10628,23 +10951,32 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                                     (4 * widget.scale).clamp(3, 4).toDouble(),
                                   ),
                                 ),
-                                child: Text(
-                                  layerLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.clip,
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(
-                                        color: isTopLayer
-                                            ? colorScheme.onSurface
-                                            : colorScheme.onSurfaceVariant,
-                                        fontSize: (9.5 * widget.scale)
-                                            .clamp(8, 9.5)
-                                            .toDouble(),
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                child: Transform.translate(
+                                  key: ValueKey(
+                                    'note-canvas-layer-label-metrics-${element.id}',
+                                  ),
+                                  offset: Offset(
+                                    (isTopLayer ? 2 : 0) * widget.scale,
+                                    -1 * widget.scale,
+                                  ),
+                                  child: Text(
+                                    layerLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.clip,
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: isTopLayer
+                                              ? colorScheme.onSurface
+                                              : colorScheme.onSurfaceVariant,
+                                          fontSize: (9.5 * widget.scale)
+                                              .clamp(8, 9.5)
+                                              .toDouble(),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -10655,10 +10987,15 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
                   ),
                   Expanded(
                     child: Padding(
+                      key: ValueKey(
+                        'note-canvas-editor-padding-${element.id}',
+                      ),
                       padding: EdgeInsets.fromLTRB(
-                        (9 * widget.scale).clamp(4, 9).toDouble(),
-                        (7 * widget.scale).clamp(4, 7).toDouble(),
-                        (9 * widget.scale).clamp(4, 9).toDouble(),
+                        editorHorizontalInset -
+                            editorHorizontalOriginCorrection,
+                        0,
+                        editorHorizontalInset +
+                            editorHorizontalOriginCorrection,
                         (7 * widget.scale).clamp(4, 7).toDouble(),
                       ),
                       child: AbsorbPointer(
@@ -10785,20 +11122,13 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   }
 
   Future<void> _showCanvasElementContextMenu(Offset globalPosition) async {
-    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
-    if (overlay is! RenderBox) {
-      return;
-    }
     final entries = _canvasElementContextMenuItems();
-    final selected = await showMenu<String>(
+    final selected = await _showPaperTodoContextMenu(
       context: context,
-      popUpAnimationStyle: _paperTodoPopupAnimationStyle,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
-        Offset.zero & overlay.size,
-      ),
-      items: entries,
+      globalPosition: globalPosition,
+      entries: entries,
       constraints: _paperTodoTextMenuConstraints(context, entries),
+      useNativeWindowsMenu: widget.sourceContextMenuLabels,
     );
     if (!mounted || selected == null) {
       return;
@@ -10808,10 +11138,11 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
 
   List<PopupMenuEntry<String>> _canvasElementContextMenuItems() {
     return [
-      PopupMenuItem<String>(
+      _PaperTodoPopupMenuItem<String>(
         enabled: false,
-        height: 17,
+        height: _paperTodoStandalonePopupMenuHeaderHeight,
         padding: _paperTodoStandalonePopupMenuItemPadding,
+        standaloneGeometry: true,
         child: _PaperTodoPopupMenuHeaderLabel(
           '${_noteCanvasElementTypeLabel(widget.element.type)}'
           ' · 层 ${widget.layerRank}',
@@ -10819,25 +11150,37 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
       ),
       _canvasElementContextMenuItem(
         value: _compactCanvasActionBringForward,
-        label: widget.strings.get(PaperTodoStringKeys.canvasBringForward),
+        label: widget.sourceContextMenuLabels
+            ? '\u4e0a\u79fb\u4e00\u5c42'
+            : widget.strings.get(PaperTodoStringKeys.canvasBringForward),
       ),
       _canvasElementContextMenuItem(
         value: _compactCanvasActionSendBackward,
-        label: widget.strings.get(PaperTodoStringKeys.canvasSendBackward),
+        label: widget.sourceContextMenuLabels
+            ? '\u4e0b\u79fb\u4e00\u5c42'
+            : widget.strings.get(PaperTodoStringKeys.canvasSendBackward),
       ),
       _canvasElementContextMenuItem(
         value: _compactCanvasActionBringToFront,
-        label: widget.strings.get(PaperTodoStringKeys.canvasBringToFront),
+        label: widget.sourceContextMenuLabels
+            ? '\u7f6e\u9876'
+            : widget.strings.get(PaperTodoStringKeys.canvasBringToFront),
       ),
       _canvasElementContextMenuItem(
         value: _compactCanvasActionSendToBack,
-        label: widget.strings.get(PaperTodoStringKeys.canvasSendToBack),
+        label: widget.sourceContextMenuLabels
+            ? '\u7f6e\u5e95'
+            : widget.strings.get(PaperTodoStringKeys.canvasSendToBack),
       ),
       _canvasElementContextMenuItem(
         value: _compactCanvasActionDuplicate,
-        label: widget.strings.get(PaperTodoStringKeys.canvasDuplicateBlock),
+        label: widget.sourceContextMenuLabels
+            ? '\u590d\u5236'
+            : widget.strings.get(PaperTodoStringKeys.canvasDuplicateBlock),
       ),
-      const _PaperTodoPopupMenuDivider(height: 7),
+      const _PaperTodoPopupMenuDivider(
+        height: _paperTodoStandalonePopupMenuDividerHeight,
+      ),
       _canvasElementContextMenuItem(
         value: _compactCanvasActionDelete,
         label: widget.strings.get(PaperTodoStringKeys.actionDelete),
@@ -10851,8 +11194,9 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   }) {
     return _PaperTodoPopupMenuItem<String>(
       value: value,
-      height: 21,
+      height: _paperTodoStandalonePopupMenuItemHeight,
       padding: _paperTodoStandalonePopupMenuItemPadding,
+      standaloneGeometry: true,
       child: Text(label),
     );
   }
@@ -10879,28 +11223,187 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
   }
 
   KeyEventResult _handleCanvasTextKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.tab ||
-        !widget.geometryGesturesEnabled) {
+    if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
-    _textController.value = MarkdownFormatting.handleTab(
-      _textController.value,
-      outdent: HardwareKeyboard.instance.isShiftPressed,
-    );
-    _commitCanvasText(_textController.text);
-    return KeyEventResult.handled;
+    final hardwareKeyboard = HardwareKeyboard.instance;
+    final shortcutPressed =
+        hardwareKeyboard.isControlPressed || hardwareKeyboard.isMetaPressed;
+    if (shortcutPressed && event.logicalKey == LogicalKeyboardKey.keyC) {
+      unawaited(_copyCanvasTextSelection());
+      return KeyEventResult.handled;
+    }
+    if (!widget.geometryGesturesEnabled) {
+      return KeyEventResult.ignored;
+    }
+    if (shortcutPressed && event.logicalKey == LogicalKeyboardKey.keyX) {
+      unawaited(_cutCanvasTextSelection());
+      return KeyEventResult.handled;
+    }
+    if (shortcutPressed && event.logicalKey == LogicalKeyboardKey.keyV) {
+      unawaited(_pasteCanvasTextSelection());
+      return KeyEventResult.handled;
+    }
+    if (!shortcutPressed && !hardwareKeyboard.isShiftPressed) {
+      final markerResult = _handleCanvasWrapMarkerKey(event.logicalKey);
+      if (markerResult == KeyEventResult.handled) {
+        return markerResult;
+      }
+    }
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      final rawValue = _noteCanvasEditorRawValue(_textController.value);
+      final formattedValue = MarkdownFormatting.handleTab(
+        rawValue,
+        outdent: hardwareKeyboard.isShiftPressed,
+      );
+      _setCanvasRawEditingValue(formattedValue);
+      _commitCanvasText(_textController.text);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _commitCanvasText(String value) {
     if (!widget.geometryGesturesEnabled) {
       return;
     }
-    if (widget.element.text == value) {
+    final displayValue = _textController.value;
+    final rawValue = _noteCanvasEditorRawValue(displayValue);
+    final isComposing =
+        displayValue.composing.isValid && !displayValue.composing.isCollapsed;
+    if (!isComposing) {
+      final normalizedDisplayValue = _noteCanvasEditorDisplayValue(
+        rawValue,
+        isCode: widget.element.type == NoteCanvasElementTypes.code,
+      );
+      if (normalizedDisplayValue != displayValue) {
+        _textController.value = normalizedDisplayValue;
+      }
+    }
+    if (widget.element.text == rawValue.text) {
       return;
     }
-    widget.element.text = value;
+    widget.element.text = rawValue.text;
     unawaited(widget.onChanged());
+  }
+
+  void _setCanvasRawEditingValue(TextEditingValue rawValue) {
+    _textController.value = _noteCanvasEditorDisplayValue(
+      rawValue,
+      isCode: widget.element.type == NoteCanvasElementTypes.code,
+    );
+  }
+
+  Future<void> _copyCanvasTextSelection() async {
+    final rawValue = _noteCanvasEditorRawValue(_textController.value);
+    if (!rawValue.selection.isValid || rawValue.selection.isCollapsed) {
+      return;
+    }
+    await Clipboard.setData(
+      ClipboardData(text: rawValue.selection.textInside(rawValue.text)),
+    );
+  }
+
+  Future<void> _cutCanvasTextSelection() async {
+    final rawValue = _noteCanvasEditorRawValue(_textController.value);
+    if (!rawValue.selection.isValid || rawValue.selection.isCollapsed) {
+      return;
+    }
+    await Clipboard.setData(
+      ClipboardData(text: rawValue.selection.textInside(rawValue.text)),
+    );
+    _setCanvasRawEditingValue(rawValue.replaced(rawValue.selection, ''));
+    _commitCanvasText(_textController.text);
+  }
+
+  Future<void> _pasteCanvasTextSelection() async {
+    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    final clipboardText = clipboard?.text;
+    if (clipboardText == null) {
+      return;
+    }
+    final rawValue = _noteCanvasEditorRawValue(_textController.value);
+    final replacementRange = rawValue.selection.isValid
+        ? rawValue.selection
+        : TextRange.collapsed(rawValue.text.length);
+    _setCanvasRawEditingValue(
+      rawValue.replaced(
+        replacementRange,
+        _noteCanvasEditorRawText(clipboardText),
+      ),
+    );
+    _commitCanvasText(_textController.text);
+  }
+
+  KeyEventResult _handleCanvasWrapMarkerKey(LogicalKeyboardKey key) {
+    final displayValue = _textController.value;
+    final selection = displayValue.selection;
+    if (!selection.isValid ||
+        !selection.isCollapsed ||
+        (displayValue.composing.isValid &&
+            !displayValue.composing.isCollapsed)) {
+      return KeyEventResult.ignored;
+    }
+    final displayOffset = selection.extentOffset;
+    final displayText = displayValue.text;
+    final markerBeforeCaret = displayOffset > 0 &&
+        displayText[displayOffset - 1] == _noteCanvasEditorWrapOpportunity;
+    final markerAfterCaret = displayOffset < displayText.length &&
+        displayText[displayOffset] == _noteCanvasEditorWrapOpportunity;
+    if (!markerBeforeCaret && !markerAfterCaret) {
+      return KeyEventResult.ignored;
+    }
+    final rawValue = _noteCanvasEditorRawValue(displayValue);
+    final rawOffset = rawValue.selection.extentOffset;
+    if (key == LogicalKeyboardKey.arrowLeft && markerBeforeCaret) {
+      _setCanvasRawEditingValue(
+        rawValue.copyWith(
+          selection: TextSelection.collapsed(
+            offset: math.max(0, rawOffset - 1),
+          ),
+          composing: TextRange.empty,
+        ),
+      );
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight && markerAfterCaret) {
+      _setCanvasRawEditingValue(
+        rawValue.copyWith(
+          selection: TextSelection.collapsed(
+            offset: math.min(rawValue.text.length, rawOffset + 1),
+          ),
+          composing: TextRange.empty,
+        ),
+      );
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.backspace && markerBeforeCaret) {
+      if (rawOffset <= 0) {
+        return KeyEventResult.handled;
+      }
+      _setCanvasRawEditingValue(
+        rawValue.replaced(
+          TextRange(start: rawOffset - 1, end: rawOffset),
+          '',
+        ),
+      );
+      _commitCanvasText(_textController.text);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.delete && markerAfterCaret) {
+      if (rawOffset >= rawValue.text.length) {
+        return KeyEventResult.handled;
+      }
+      _setCanvasRawEditingValue(
+        rawValue.replaced(
+          TextRange(start: rawOffset, end: rawOffset + 1),
+          '',
+        ),
+      );
+      _commitCanvasText(_textController.text);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _updateGeometryGesture(PointerMoveEvent event) {
@@ -10976,6 +11479,157 @@ class _NoteCanvasElementPreviewState extends State<_NoteCanvasElementPreview> {
 enum _CanvasGeometryDragMode { move, resize }
 
 String _noteCanvasElementTypeLabel(String type) => 'CODE';
+
+const _noteCanvasEditorWrapOpportunity = '\u200B';
+
+String _noteCanvasEditorDisplayText(
+  String rawText, {
+  required bool isCode,
+}) {
+  final normalized = _noteCanvasEditorRawText(rawText);
+  if (!isCode) {
+    return normalized;
+  }
+  return normalized.replaceAll(
+    '(',
+    '$_noteCanvasEditorWrapOpportunity(',
+  );
+}
+
+String _noteCanvasEditorRawText(String displayText) =>
+    displayText.replaceAll(_noteCanvasEditorWrapOpportunity, '');
+
+int _noteCanvasEditorRawOffset(String displayText, int displayOffset) {
+  final limit = displayOffset.clamp(0, displayText.length);
+  var rawOffset = 0;
+  for (var index = 0; index < limit; index += 1) {
+    if (displayText[index] != _noteCanvasEditorWrapOpportunity) {
+      rawOffset += 1;
+    }
+  }
+  return rawOffset;
+}
+
+int _noteCanvasEditorDisplayOffset(String displayText, int rawOffset) {
+  final target =
+      rawOffset.clamp(0, _noteCanvasEditorRawText(displayText).length);
+  var displayOffset = 0;
+  var consumedRawCharacters = 0;
+  while (displayOffset < displayText.length && consumedRawCharacters < target) {
+    if (displayText[displayOffset] != _noteCanvasEditorWrapOpportunity) {
+      consumedRawCharacters += 1;
+    }
+    displayOffset += 1;
+  }
+  while (displayOffset < displayText.length &&
+      displayText[displayOffset] == _noteCanvasEditorWrapOpportunity) {
+    displayOffset += 1;
+  }
+  return displayOffset;
+}
+
+TextSelection _noteCanvasEditorRawSelection(
+  String displayText,
+  TextSelection displaySelection,
+) {
+  if (!displaySelection.isValid) {
+    return displaySelection;
+  }
+  return TextSelection(
+    baseOffset: _noteCanvasEditorRawOffset(
+      displayText,
+      displaySelection.baseOffset,
+    ),
+    extentOffset: _noteCanvasEditorRawOffset(
+      displayText,
+      displaySelection.extentOffset,
+    ),
+    affinity: displaySelection.affinity,
+    isDirectional: displaySelection.isDirectional,
+  );
+}
+
+TextSelection _noteCanvasEditorDisplaySelection(
+  String displayText,
+  TextSelection rawSelection,
+) {
+  if (!rawSelection.isValid) {
+    return rawSelection;
+  }
+  return TextSelection(
+    baseOffset: _noteCanvasEditorDisplayOffset(
+      displayText,
+      rawSelection.baseOffset,
+    ),
+    extentOffset: _noteCanvasEditorDisplayOffset(
+      displayText,
+      rawSelection.extentOffset,
+    ),
+    affinity: rawSelection.affinity,
+    isDirectional: rawSelection.isDirectional,
+  );
+}
+
+TextRange _noteCanvasEditorRawRange(
+  String displayText,
+  TextRange displayRange,
+) {
+  if (!displayRange.isValid) {
+    return displayRange;
+  }
+  return TextRange(
+    start: _noteCanvasEditorRawOffset(displayText, displayRange.start),
+    end: _noteCanvasEditorRawOffset(displayText, displayRange.end),
+  );
+}
+
+TextRange _noteCanvasEditorDisplayRange(
+  String displayText,
+  TextRange rawRange,
+) {
+  if (!rawRange.isValid) {
+    return rawRange;
+  }
+  return TextRange(
+    start: _noteCanvasEditorDisplayOffset(displayText, rawRange.start),
+    end: _noteCanvasEditorDisplayOffset(displayText, rawRange.end),
+  );
+}
+
+TextEditingValue _noteCanvasEditorRawValue(TextEditingValue displayValue) {
+  return TextEditingValue(
+    text: _noteCanvasEditorRawText(displayValue.text),
+    selection: _noteCanvasEditorRawSelection(
+      displayValue.text,
+      displayValue.selection,
+    ),
+    composing: _noteCanvasEditorRawRange(
+      displayValue.text,
+      displayValue.composing,
+    ),
+  );
+}
+
+TextEditingValue _noteCanvasEditorDisplayValue(
+  TextEditingValue rawValue, {
+  required bool isCode,
+}) {
+  final displayText = _noteCanvasEditorDisplayText(
+    rawValue.text,
+    isCode: isCode,
+  );
+  return TextEditingValue(
+    text: displayText,
+    selection: _noteCanvasEditorDisplaySelection(
+      displayText,
+      rawValue.selection,
+    ),
+    composing: _noteCanvasEditorDisplayRange(
+      displayText,
+      rawValue.composing,
+    ),
+  );
+}
 
 String _noteCanvasLayerLabel(int layerRank, int layerCount) {
   if (layerCount > 1 && layerRank == layerCount) {
@@ -11248,7 +11902,17 @@ class _PaperTodoTodoCheckBoxPainter extends CustomPainter {
   static const double radius = 4;
   static const double checkStrokeWidth = 2;
 
-  double get effectiveBorderRadius => radius + borderWidth / 2;
+  // WPF's 1.5px Border is device-pixel snapped. At 96 DPI its straight
+  // edges cover two complete pixel rows/columns rather than the one full +
+  // one half-covered row produced by a centered Skia stroke. These radii are
+  // the capture-calibrated Flutter representation of that bordered ring; the
+  // source 4px CornerRadius and 1.5px BorderThickness remain documented by
+  // [radius] and [borderWidth].
+  double get sourceBorderWidth => borderWidth;
+  double get sourceBorderRadius => radius;
+  double get effectiveBorderRadius => 5.125;
+  double get effectiveBorderInset => 2;
+  double get effectiveInnerBorderRadius => 3.5;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -11257,22 +11921,38 @@ class _PaperTodoTodoCheckBoxPainter extends CustomPainter {
     final progress = selectionProgress.clamp(0.0, 1.0);
     final uncheckedOpacity = 1 - progress;
     final scale = math.min(scaleX, scaleY);
-    final inset = borderWidth / 2;
-    final borderRect = Rect.fromLTWH(
-      inset,
-      inset,
-      math.max(0.0, size.width - borderWidth),
-      math.max(0.0, size.height - borderWidth),
+    final borderOuterRect = Offset.zero & size;
+    final borderInnerRect = Rect.fromLTRB(
+      effectiveBorderInset * scaleX,
+      effectiveBorderInset * scaleY,
+      math.max(
+        effectiveBorderInset * scaleX,
+        size.width - effectiveBorderInset * scaleX,
+      ),
+      math.max(
+        effectiveBorderInset * scaleY,
+        size.height - effectiveBorderInset * scaleY,
+      ),
     );
-    // WPF applies CornerRadius=4 to the outer bordered element. Flutter draws
-    // a centered stroke on the inset path, so add the half-stroke inset back
-    // to preserve the same outer radius instead of squaring the corners.
-    final borderRadius = radius + inset;
+    final borderOuterRRect = RRect.fromRectAndRadius(
+      borderOuterRect,
+      Radius.elliptical(
+        effectiveBorderRadius * scaleX,
+        effectiveBorderRadius * scaleY,
+      ),
+    );
+    final borderInnerRRect = RRect.fromRectAndRadius(
+      borderInnerRect,
+      Radius.elliptical(
+        effectiveInnerBorderRadius * scaleX,
+        effectiveInnerBorderRadius * scaleY,
+      ),
+    );
 
     if (uncheckedOpacity > 0) {
       if (hovered) {
         canvas.drawRRect(
-          RRect.fromRectAndRadius(borderRect, Radius.circular(borderRadius)),
+          borderOuterRRect,
           Paint()
             ..color = colors.checkBoxUncheckedHover.withValues(
               alpha: colors.checkBoxUncheckedHover.a * uncheckedOpacity,
@@ -11282,14 +11962,14 @@ class _PaperTodoTodoCheckBoxPainter extends CustomPainter {
       }
       final borderColor =
           hovered ? colors.checkBoxHoverBorder : colors.checkBox;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(borderRect, Radius.circular(borderRadius)),
+      canvas.drawDRRect(
+        borderOuterRRect,
+        borderInnerRRect,
         Paint()
           ..color = borderColor.withValues(
             alpha: borderColor.a * uncheckedOpacity,
           )
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = borderWidth,
+          ..style = PaintingStyle.fill,
       );
     }
 
@@ -11472,6 +12152,7 @@ class _TodoEntranceAnimation extends StatefulWidget {
     required this.slideDuration,
     required this.slideDistance,
     required this.slideCurve,
+    required this.opacityKey,
     required this.onFinished,
     required this.child,
     this.expandSize = false,
@@ -11483,6 +12164,7 @@ class _TodoEntranceAnimation extends StatefulWidget {
   final Duration slideDuration;
   final double slideDistance;
   final Curve slideCurve;
+  final Key opacityKey;
   final VoidCallback onFinished;
   final Widget child;
   final bool expandSize;
@@ -11538,6 +12220,7 @@ class _TodoEntranceAnimationState extends State<_TodoEntranceAnimation>
           (_controller.value * opacityScale).clamp(0.0, 1.0),
         );
         final content = Opacity(
+          key: widget.opacityKey,
           opacity: opacityProgress,
           child: Transform.translate(
             offset: Offset(0, -widget.slideDistance * (1 - slideProgress)),
@@ -11902,6 +12585,7 @@ class _TodoEditorState extends State<_TodoEditor> {
   final _todoExtraFieldFocusNodes = <String, FocusNode>{};
   final _todoColumnHitTestKeys = <String, GlobalKey>{};
   final _todoDropTargetKeys = <String, GlobalKey>{};
+  final _todoDragAnchorOffsets = <String, Offset>{};
   final _undoStack = <_TodoUndoSnapshot>[];
   final _redoStack = <_TodoUndoSnapshot>[];
   final _focusedTodoTextUndoStack = <_TodoTextUndoSnapshot>[];
@@ -11980,7 +12664,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         )
         .copyWith(
           height: widget.lineSpacing / textMetricScale,
-          letterSpacing: dengXianMetrics ? null : 0,
+          letterSpacing: dengXianMetrics ? null : -0.0625,
         );
     return Focus(
       focusNode: _todoFocusNode,
@@ -12044,6 +12728,9 @@ class _TodoEditorState extends State<_TodoEditor> {
       if (entrance != null) {
         final animatedRow = _TodoEntranceAnimation(
           key: ValueKey('${widget.paper.id}-${item.id}-entrance'),
+          opacityKey: ValueKey(
+            '${widget.paper.id}-${item.id}-entrance-opacity',
+          ),
           delay: entrance.delay,
           opacityDuration: entrance.opacityDuration,
           slideDuration: entrance.slideDuration,
@@ -12299,7 +12986,7 @@ class _TodoEditorState extends State<_TodoEditor> {
           _canAcceptTodoItemDrop(details.data, item),
       onMove: (details) {
         if (!_canAcceptTodoItemDrop(details.data, item)) return;
-        final after = _dropAfterTodoTarget(item, details.offset);
+        final after = _dropAfterTodoTarget(details.data, item, details.offset);
         if (_activeTodoDropTargetId == item.id &&
             _activeTodoDropAfter == after) {
           return;
@@ -12315,7 +13002,7 @@ class _TodoEditorState extends State<_TodoEditor> {
         }
       },
       onAcceptWithDetails: (details) {
-        final after = _dropAfterTodoTarget(item, details.offset);
+        final after = _dropAfterTodoTarget(details.data, item, details.offset);
         setState(() => _activeTodoDropTargetId = null);
         _reorderTodoItemToTarget(details.data, item, after: after);
       },
@@ -12366,7 +13053,34 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
   }
 
-  bool _dropAfterTodoTarget(PaperItem target, Offset globalOffset) {
+  Offset _todoRowDragAnchor(
+    PaperItem item,
+    Draggable<Object> draggable,
+    BuildContext dragContext,
+    Offset globalPosition,
+  ) {
+    final sourceRenderObject =
+        _todoDropTargetKeys[item.id]?.currentContext?.findRenderObject();
+    if (sourceRenderObject is RenderBox && sourceRenderObject.hasSize) {
+      final localPosition = sourceRenderObject.globalToLocal(globalPosition);
+      final anchor = Offset(
+        localPosition.dx.clamp(0.0, sourceRenderObject.size.width),
+        localPosition.dy.clamp(0.0, sourceRenderObject.size.height),
+      );
+      _todoDragAnchorOffsets[item.id] = anchor;
+      return anchor;
+    }
+    final anchor =
+        childDragAnchorStrategy(draggable, dragContext, globalPosition);
+    _todoDragAnchorOffsets[item.id] = anchor;
+    return anchor;
+  }
+
+  bool _dropAfterTodoTarget(
+    PaperItem dragged,
+    PaperItem target,
+    Offset feedbackOrigin,
+  ) {
     final key = _todoDropTargetKeys[target.id];
     final renderObject = key?.currentContext?.findRenderObject();
     if (renderObject is! RenderBox ||
@@ -12374,7 +13088,12 @@ class _TodoEditorState extends State<_TodoEditor> {
         renderObject.size.height <= 0) {
       return false;
     }
-    final localOffset = renderObject.globalToLocal(globalOffset);
+    // DragTargetDetails.offset is the feedback's global origin, not the
+    // pointer position. Reconstruct the pointer so changing the visual anchor
+    // cannot silently change before/after insertion semantics.
+    final pointerOffset =
+        feedbackOrigin + (_todoDragAnchorOffsets[dragged.id] ?? Offset.zero);
+    final localOffset = renderObject.globalToLocal(pointerOffset);
     return localOffset.dy >= renderObject.size.height / 2;
   }
 
@@ -12428,7 +13147,11 @@ class _TodoEditorState extends State<_TodoEditor> {
                 color: highlighted
                     ? paperColors.danger
                     : paperColors.danger.withValues(alpha: 50 / 255),
-                width: highlighted ? 1.5 : 1,
+                // WPF's centered 1.5px stroke covers two complete raster rows
+                // at 96 DPI. Flutter's inside-aligned 1.5px Border leaves the
+                // second row partially blended, so 2px is capture-equivalent
+                // while the layout bounds remain unchanged.
+                width: highlighted ? 2 : 1,
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -12704,7 +13427,7 @@ class _TodoEditorState extends State<_TodoEditor> {
       context,
       item,
       visualSpec,
-      showRelativeBadge: widget.showDueRelativeTime,
+      showRelativeBadge: widget.standaloneSurface || widget.showDueRelativeTime,
     );
     final itemActions = _todoItemActions(
       context: context,
@@ -12809,8 +13532,6 @@ class _TodoEditorState extends State<_TodoEditor> {
         trailing,
       ],
     );
-    final rowBody =
-        widget.enableTodoNoteLinks ? _noteLinkDropTarget(item, row) : row;
     final dragging = _draggingTodoItemId == item.id;
     final hovered = _hoveredTodoItemId == item.id || dragging;
     // Row hover is an immediate brush change in PaperTodo. Completion and
@@ -12823,57 +13544,81 @@ class _TodoEditorState extends State<_TodoEditor> {
                 ? PaperTodoMotion.fadeIn
                 : PaperTodoMotion.quick
         : Duration.zero;
+    final stateCurve = item.done ? PaperTodoMotion.quickCurve : Curves.linear;
     final paperColors = PaperTodoThemeColors.of(context);
-    return Padding(
-      key: ValueKey('${widget.paper.id}-${item.id}-row'),
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: MouseRegion(
-        onEnter: (_) {
-          if (_hoveredTodoItemId != item.id) {
-            setState(() => _hoveredTodoItemId = item.id);
-          }
-        },
-        onExit: (_) {
-          if (_hoveredTodoItemId == item.id) {
-            setState(() => _hoveredTodoItemId = null);
-          }
-        },
-        child: AnimatedContainer(
-          key: ValueKey('${widget.paper.id}-${item.id}-row-surface'),
-          duration: hoverDuration,
-          curve: PaperTodoMotion.enterCurve,
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-          decoration: BoxDecoration(
-            color: hovered
-                ? paperColors.tint.withValues(
-                    alpha: Theme.of(context).brightness == Brightness.dark
-                        ? 48 / 255
-                        : 32 / 255,
-                  )
-                : Colors.transparent,
-            border: Border.all(
-              color: paperColors.tint.withValues(
-                alpha: Theme.of(context).brightness == Brightness.dark
-                    ? 18 / 255
-                    : 12 / 255,
-              ),
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
+    Widget buildRowSurface(bool noteLinkHighlighted) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final borderColor = Color.alphaBlend(
+        paperColors.tint.withValues(
+          alpha: noteLinkHighlighted
+              ? 150 / 255
+              : isDark
+                  ? 18 / 255
+                  : 12 / 255,
+        ),
+        paperColors.paper,
+      );
+      return Padding(
+        key: ValueKey('${widget.paper.id}-${item.id}-row'),
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: MouseRegion(
+          onEnter: (_) {
+            if (_hoveredTodoItemId != item.id) {
+              setState(() => _hoveredTodoItemId = item.id);
+            }
+          },
+          onExit: (_) {
+            if (_hoveredTodoItemId == item.id) {
+              setState(() => _hoveredTodoItemId = null);
+            }
+          },
           child: AnimatedOpacity(
+            key: ValueKey('${widget.paper.id}-${item.id}-row-opacity'),
             duration: stateDuration,
-            curve: PaperTodoMotion.enterCurve,
+            curve: stateCurve,
             opacity: dragging ? 0.25 : (item.done ? 0.75 : 1),
-            child: Listener(
-              behavior: HitTestBehavior.translucent,
-              onPointerDown: (event) =>
-                  _handleTodoContextMenuPointerDown(context, item, event),
-              child: rowBody,
+            child: AnimatedContainer(
+              key: ValueKey('${widget.paper.id}-${item.id}-row-surface'),
+              duration: hoverDuration,
+              curve: PaperTodoMotion.enterCurve,
+              padding: noteLinkHighlighted
+                  ? const EdgeInsets.fromLTRB(1, 3, 1, 3)
+                  : const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+              decoration: BoxDecoration(
+                color: noteLinkHighlighted
+                    ? paperColors.tint.withValues(
+                        alpha: isDark ? 36 / 255 : 28 / 255,
+                      )
+                    : hovered
+                        ? paperColors.tint.withValues(
+                            alpha: isDark ? 48 / 255 : 32 / 255,
+                          )
+                        : Colors.transparent,
+                border: Border.all(
+                  // WPF paints the Border brush against the paper, then fills
+                  // the hover background inside that ring. Precompositing the
+                  // translucent brush keeps the straight edge unchanged when
+                  // the row fill appears instead of blending it twice.
+                  color: borderColor,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (event) =>
+                    _handleTodoContextMenuPointerDown(context, item, event),
+                child: row,
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    }
+
+    if (!widget.enableTodoNoteLinks) {
+      return buildRowSurface(false);
+    }
+    return _noteLinkDropTarget(item, buildRowSurface);
   }
 
   void _setTodoItemDone(PaperItem item, bool value) {
@@ -12965,20 +13710,13 @@ class _TodoEditorState extends State<_TodoEditor> {
     int columnIndex,
     Offset globalPosition,
   ) async {
-    final overlay = Overlay.maybeOf(context)?.context.findRenderObject();
-    if (overlay is! RenderBox) {
-      return;
-    }
     final entries = _todoItemContextMenuItems(item, columnIndex);
-    final selected = await showMenu<String>(
+    final selected = await _showPaperTodoContextMenu(
       context: context,
-      popUpAnimationStyle: _paperTodoPopupAnimationStyle,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(globalPosition.dx, globalPosition.dy + 1, 0, 0),
-        Offset.zero & overlay.size,
-      ),
-      items: entries,
+      globalPosition: globalPosition,
+      entries: entries,
       constraints: _paperTodoTextMenuConstraints(context, entries),
+      useNativeWindowsMenu: widget.standaloneSurface,
     );
     if (!mounted || !context.mounted) {
       return;
@@ -13144,17 +13882,20 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (!widget.standaloneSurface) {
       return _paperTodoMenuHeader(label);
     }
-    return PopupMenuItem<String>(
+    return _PaperTodoPopupMenuItem<String>(
       enabled: false,
-      height: 17,
+      height: _paperTodoTodoPopupMenuHeaderHeight,
       padding: _paperTodoStandalonePopupMenuItemPadding,
+      standaloneGeometry: true,
       child: _PaperTodoPopupMenuHeaderLabel(label),
     );
   }
 
   PopupMenuDivider _todoItemMenuDivider() {
     return _PaperTodoPopupMenuDivider(
-      height: widget.standaloneSurface ? 7 : 16,
+      height: widget.standaloneSurface
+          ? _paperTodoStandalonePopupMenuDividerHeight
+          : 16,
     );
   }
 
@@ -13226,7 +13967,7 @@ class _TodoEditorState extends State<_TodoEditor> {
     final absolute = _formatAbsoluteDueDate(dueAt);
     final relative = _formatRelativeDueDate(dueAt);
     final label = strings.format(PaperTodoStringKeys.dueLabel, [
-      widget.showDueRelativeTime ? '$relative, $absolute' : absolute,
+      showRelativeBadge ? '$relative, $absolute' : absolute,
     ]);
     return Semantics(
       label: label,
@@ -13365,10 +14106,14 @@ class _TodoEditorState extends State<_TodoEditor> {
     );
   }
 
-  Widget _noteLinkDropTarget(PaperItem item, Widget row) {
-    final paperColors = PaperTodoThemeColors.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _noteLinkDropTarget(
+    PaperItem item,
+    Widget Function(bool highlighted) buildRowSurface,
+  ) {
     return DragTarget<String>(
+      key: ValueKey(
+        '${widget.paper.id}-${item.id}-note-link-drop-surface',
+      ),
       onWillAcceptWithDetails: (details) =>
           _canAcceptNoteLinkDrop(details.data),
       onAcceptWithDetails: (details) => _linkNote(item, details.data),
@@ -13376,31 +14121,10 @@ class _TodoEditorState extends State<_TodoEditor> {
         final highlighted = candidateData.whereType<String>().any(
               _canAcceptNoteLinkDrop,
             );
-        return TweenAnimationBuilder<double>(
-          key: ValueKey(
-            '${widget.paper.id}-${item.id}-note-link-drop-surface',
-          ),
-          tween: Tween<double>(end: highlighted ? 1 : 0),
-          duration: widget.enableAnimations
-              ? PaperTodoMotion.controlFeedback
-              : Duration.zero,
-          curve: PaperTodoMotion.quickCurve,
-          builder: (context, progress, child) => DecoratedBox(
-            decoration: BoxDecoration(
-              color: paperColors.tint.withValues(
-                alpha: progress * (isDark ? 36 / 255 : 28 / 255),
-              ),
-              border: Border.all(
-                color: paperColors.tint.withValues(
-                  alpha: progress * 150 / 255,
-                ),
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: child,
-          ),
-          child: row,
-        );
+        // PaperTodo sets the row brushes and padding directly while a note is
+        // over the target. Keeping this state on the row surface avoids a
+        // nested animated border and makes enter/leave feedback frame-immediate.
+        return buildRowSurface(highlighted);
       },
     );
   }
@@ -13446,7 +14170,13 @@ class _TodoEditorState extends State<_TodoEditor> {
             child: Draggable<PaperItem>(
               key: ValueKey('${widget.paper.id}-${item.id}-drag-handle'),
               data: item,
-              dragAnchorStrategy: pointerDragAnchorStrategy,
+              dragAnchorStrategy: (draggable, context, position) =>
+                  _todoRowDragAnchor(
+                item,
+                draggable,
+                context,
+                position,
+              ),
               feedback: _todoDragFeedback(item, visualSpec),
               childWhenDragging: _standaloneTodoDragHandle(
                 item,
@@ -13643,7 +14373,13 @@ class _TodoEditorState extends State<_TodoEditor> {
       Draggable<PaperItem>(
         key: ValueKey('${widget.paper.id}-${item.id}-drag-handle'),
         data: item,
-        dragAnchorStrategy: pointerDragAnchorStrategy,
+        dragAnchorStrategy: (draggable, context, position) =>
+            _todoRowDragAnchor(
+          item,
+          draggable,
+          context,
+          position,
+        ),
         feedback: _todoDragFeedback(item, visualSpec),
         childWhenDragging: Opacity(
           opacity: 0.35,
@@ -13907,55 +14643,114 @@ class _TodoEditorState extends State<_TodoEditor> {
   Widget _todoDragFeedback(PaperItem item, _TodoVisualSpec visualSpec) {
     final paperColors = PaperTodoThemeColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      color: Colors.transparent,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 260),
-        child: DecoratedBox(
-          key: ValueKey('${widget.paper.id}-${item.id}-drag-feedback'),
-          decoration: BoxDecoration(
-            color: paperColors.paper,
-            border: Border.all(color: paperColors.paperBorder),
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.14),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '\u2261',
-                  style: TextStyle(
-                    color: paperColors.weakText,
-                    fontFamily: 'Segoe UI Symbol',
-                    fontFamilyFallback: const <String>['Segoe UI Emoji'],
-                    fontSize: visualSpec.dragGlyphSize,
-                    height: 1,
+    return Builder(
+      builder: (context) {
+        final sourceRenderObject =
+            _todoDropTargetKeys[item.id]?.currentContext?.findRenderObject();
+        final sourceSize =
+            sourceRenderObject is RenderBox && sourceRenderObject.hasSize
+                ? sourceRenderObject.size
+                : Size.zero;
+        final ghostWidth = math.max(sourceSize.width, 160.0);
+        final ghostMinHeight = math.max(sourceSize.height, 30.0);
+        final itemColor =
+            item.done ? paperColors.brightWeakText : paperColors.text;
+        return Material(
+          color: Colors.transparent,
+          child: Opacity(
+            key: ValueKey(
+              '${widget.paper.id}-${item.id}-drag-feedback-opacity',
+            ),
+            opacity: 0.65,
+            child: SizedBox(
+              width: ghostWidth,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: ghostMinHeight),
+                child: DecoratedBox(
+                  key: ValueKey(
+                    '${widget.paper.id}-${item.id}-drag-feedback',
                   ),
-                ),
-                const SizedBox(width: 7),
-                Flexible(
-                  child: Text(
-                    _displayItemText(item),
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: paperColors.text,
-                          fontWeight: FontWeight.w500,
+                  decoration: BoxDecoration(
+                    color: paperColors.paper,
+                    border: Border.all(
+                      color: paperColors.tint.withValues(alpha: 150 / 255),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.36 : 0.22,
                         ),
+                        blurRadius: isDark ? 26 : 24,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: visualSpec.checkColumnWidth,
+                          child: Opacity(
+                            opacity: 0.78,
+                            child: Text(
+                              item.done ? '\u2611' : '\u2610',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: itemColor,
+                                fontSize: visualSpec.ghostTextSize,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: visualSpec.mainContentPadding,
+                            child: Text(
+                              item.text,
+                              softWrap: true,
+                              style: TextStyle(
+                                color: itemColor,
+                                fontSize: visualSpec.ghostTextSize,
+                                decoration: item.done
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: visualSpec.dragHandleSlotWidth,
+                          child: Opacity(
+                            opacity: 0.58,
+                            child: Text(
+                              '\u2261',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: paperColors.weakText,
+                                fontFamily: 'Segoe UI Symbol',
+                                fontFamilyFallback: const <String>[
+                                  'Segoe UI Emoji',
+                                ],
+                                fontSize:
+                                    math.max(12, visualSpec.ghostTextSize - 1),
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -13969,10 +14764,13 @@ class _TodoEditorState extends State<_TodoEditor> {
     return _PaperTodoPopupMenuItem<String>(
       value: value,
       enabled: enabled,
-      height: compact ? 21 : _paperTodoPopupMenuHeight(),
+      height: compact
+          ? _paperTodoTodoPopupMenuItemHeight
+          : _paperTodoPopupMenuHeight(),
       padding: compact
           ? _paperTodoStandalonePopupMenuItemPadding
           : _paperTodoPopupMenuItemPadding,
+      standaloneGeometry: compact,
       child: Text(label),
     );
   }
@@ -14368,9 +15166,10 @@ class _TodoEditorState extends State<_TodoEditor> {
   }
 
   EditableTextState? _editableTextStateFor(BuildContext? context) {
-    if (context == null) {
+    if (!_buildContextIsActive(context)) {
       return null;
     }
+    context = context!;
     final ancestor = context.findAncestorStateOfType<EditableTextState>();
     if (ancestor != null) {
       return ancestor;
@@ -14389,6 +15188,20 @@ class _TodoEditorState extends State<_TodoEditor> {
 
     context.visitChildElements(visit);
     return descendant;
+  }
+
+  bool _buildContextIsActive(BuildContext? context) {
+    if (context == null || !context.mounted) {
+      return false;
+    }
+    var isActive = true;
+    assert(() {
+      if (context is Element) {
+        isActive = context.debugIsActive;
+      }
+      return true;
+    }());
+    return isActive;
   }
 
   void _unfocusTodoItem(PaperItem item) {
@@ -14892,9 +15705,11 @@ class _TodoEditorState extends State<_TodoEditor> {
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
                         filled: false,
-                        hintText: strings.get(
-                          PaperTodoStringKeys.todoNewItemHint,
-                        ),
+                        hintText: widget.standaloneSurface
+                            ? null
+                            : strings.get(
+                                PaperTodoStringKeys.todoNewItemHint,
+                              ),
                         isDense: true,
                         isCollapsed: true,
                         contentPadding: visualSpec.mainContentPadding,
@@ -14965,9 +15780,17 @@ class _TodoEditorState extends State<_TodoEditor> {
           )) {
         return;
       }
-      final editableState = _editableTextStateFor(
-        _todoMainFieldFocusNodes[item.id]?.context,
-      );
+      final fieldContext = _todoMainFieldFocusNodes[item.id]?.context;
+      if (!_buildContextIsActive(fieldContext)) {
+        // Closing a popup route can replace the TextFormField after this
+        // measurement was queued but before the frame callback runs. Wait for
+        // the replacement Focus attachment instead of walking the inactive
+        // element tree; doing so avoids a one-frame scheduler exception and
+        // the corresponding due-dialog flash.
+        _queueTodoLineMeasurement(item);
+        return;
+      }
+      final editableState = _editableTextStateFor(fieldContext);
       final renderEditable = editableState?.renderEditable;
       if (renderEditable == null || !renderEditable.attached) {
         return;
@@ -15380,6 +16203,9 @@ class _TodoEditorState extends State<_TodoEditor> {
     if (!mounted ||
         (_isDraggingTodoItem == value && _draggingTodoItemId == nextItemId)) {
       return;
+    }
+    if (!value && _draggingTodoItemId != null) {
+      _todoDragAnchorOffsets.remove(_draggingTodoItemId);
     }
     setState(() {
       _isDraggingTodoItem = value;
@@ -16183,13 +17009,6 @@ class _TodoEditorState extends State<_TodoEditor> {
       number++;
     }
     return math.max(1, number);
-  }
-
-  String _displayItemText(PaperItem item) {
-    final text = item.text.trim();
-    return text.isEmpty
-        ? strings.get(PaperTodoStringKeys.todoItemFallback)
-        : text;
   }
 
   String _formatAbsoluteDueDate(DateTime date) {
@@ -17001,6 +17820,14 @@ class _TodoVisualSpec {
         _ => math.max(11, controlExtent - 18),
       };
 
+  double get ghostTextSize => switch (controlExtent) {
+        28 => 13,
+        30 => 14,
+        32 => 15,
+        36 => 17,
+        _ => math.max(13, controlExtent - 16),
+      };
+
   double get appendGlyphSize => switch (controlExtent) {
         28 => 13,
         30 => 14,
@@ -17018,17 +17845,21 @@ class _TodoVisualSpec {
       };
 
   EdgeInsets get mainContentPadding => EdgeInsets.fromLTRB(
-        2,
-        textVerticalPadding,
-        2,
-        textVerticalPadding,
+        // Flutter's EditableText paints Segoe UI two pixels farther left and
+        // one pixel higher than WPF TodoTextBox for the same layout box.
+        // Redistribute, rather than add, padding so wrapping and row height
+        // remain identical while the visible glyph origin matches PaperTodo.
+        4,
+        textVerticalPadding + 1,
+        0,
+        textVerticalPadding - 1,
       );
 
   EdgeInsets get extraContentPadding => EdgeInsets.fromLTRB(
-        8,
-        textVerticalPadding,
-        4,
-        textVerticalPadding,
+        10,
+        textVerticalPadding + 1,
+        2,
+        textVerticalPadding - 1,
       );
 
   static _TodoVisualSpec from(String value) {

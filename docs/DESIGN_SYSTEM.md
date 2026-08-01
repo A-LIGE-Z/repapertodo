@@ -147,9 +147,9 @@ exit command so Dart can save, sync, and clean up normally.
 Secondary startup commands can arrive before the Flutter UI has subscribed to
 platform startup events, so the Windows platform host must buffer early
 commands and replay them in order once the app listener is attached.
-The Windows tray paper list should expose useful paper state at a glance:
-visible papers are checked, while hidden, collapsed, desktop-pinned, and
-topmost states are shown in the menu label. Platform close/show/hide events
+The Windows tray paper list should follow PaperTodo's title-only rows: visible
+papers are checked, hidden papers are unchecked, and collapse, desktop-pin, and
+topmost state must not be appended to the title. Platform close/show/hide events
 should refresh the tray menu promptly when they change paper visibility, while
 plain move/resize bounds updates should not trigger extra tray rebuilds.
 Paper deletion should remain available from the Windows tray with an explicit
@@ -172,12 +172,40 @@ All Windows capsule surfaces use a 30px pill inside a 46px host with 8px
 transparent chrome. For the `Todo1` visual fixture, ordinary Todo/Note/script
 capsules measure `93/97/91x46`; deep native proxy windows measure
 `102/106/100x46`, with resting screen-visible slices of `62/65/59x46`.
+The 96-DPI GDI measurement bridge must keep type-specific WPF advance
+corrections: Todo `-3px`, ordinary Note `-1px`, and script `-2px`. Ordinary
+Flutter capsule icons and titles use a paint-only `-1px` vertical origin;
+Note/script titles use `-0.25px` tracking, while the 15px script lightning also
+uses a paint-only `-0.25px` horizontal origin. These corrections must not alter
+the 26px drag target, close area, window geometry, or saved paper geometry.
+Native layered pills must reproduce WPF `Border` stream geometry: the outer
+curve adds half of the border thickness to the declared corner radius and the
+inner curve subtracts half. Using `CornerRadius` directly for both curves
+creates a visibly fuller cap even when the nominal 12px metric is unchanged.
 Collapsed Flutter capsules and lightweight native proxies must both reveal the
 same 20px on hover, using the source 220ms slide-out and 180ms slide-in cubic
 ease-out. Disabling UI animations makes that position change immediate without
 changing the resting or hover endpoints. The master capsule reserves the wider
 of its collapsed and expanded labels plus both chevron advances, so toggling a
 queue never changes the master HWND width or produces a one-frame edge jump.
+Its source text is exact rather than descriptive: idle is `Collapse` / `收起`,
+and the retracted state is `{count}` / `{count} 个`. Mirroring changes content
+order and clipping. The Symbol chevron keeps its `(+1, +1)` GDI paint origin.
+Its mirrored left-edge paint rect then moves back 2px. The master label uses
+grayscale DirectWrite Natural rendering in the common `(+1, 0)` layout rect,
+with the same `-2px` horizontal correction on the mirrored left edge; the
+active count label also moves up 1px. Do not replace that label path with
+default ClearType or ordinary GDI quality, because the colored subpixel fringe
+and lighter glyph coverage do not exist in PaperTodo's transparent WPF window.
+At 96 DPI the master's hidden full-content reserve follows the source formula
+`ceil(35 + chevron advance + widest label advance)`, and its visible viewport
+rounds `29 + chevron advance + first-label advance`. These master-only
+advances use DirectWrite with the selected preset/system-family semantics;
+ordinary proxy titles keep their separately capture-calibrated GDI corrections.
+Default Chinese and the verified DengXian system-font path both produce a 68px
+reserve and 51x46 docked viewport. Changing the measurement path must not move
+the visible curve, calibrated text paint origins, drag target, or screen-edge
+anchor.
 Imported or restored collapse-all queue maps should normalize queue aliases
 with exact canonical `(monitor|side)` entries taking precedence over legacy
 aliases, including canonical `false` values that remove an older alias.
@@ -228,6 +256,22 @@ directories do not disable runtime icon overrides.
 The first tray menu row should match PaperTodo's version header pattern by
 showing `RePaperTodo v<version>` from the packaged Flutter version, with build
 metadata after `+` hidden from the visible label.
+At 96 DPI the owner-drawn tray menu uses a 21px application header, 25px
+command rows, a 22px paper-group header, and 26px paper rows. Tray labels use
+grayscale DirectWrite Natural rendering at the source 12px SemiBold header and
+13px Regular command/paper sizes, with local row clips and independently
+capture-calibrated vertical origins; the previous GDI text remains only as a
+failure fallback. The paper check uses per-primitive Direct2D antialiasing and
+a half-pixel horizontal WPF origin to retain the capture-equivalent 14x13
+raster footprint even though the source declares a 13x13 border; its GDI path
+also remains a failure fallback. Paper labels remain title-only; the check
+alone communicates current visibility. RePaperTodo's Toggle-all and
+Delete-paper rows remain explicit extensions, so reference vertical
+coordinates are compared after accounting for those two additional 25px
+command rows.
+The menu text font is resolved from the same `fontFamily` state forwarded to
+Windows paper and capsule surfaces, with Segoe UI used only as a fallback, so
+system and custom UI-font choices do not leave the native tray visually stale.
 Tray icon primary-button handling should match PaperTodo: double-click restores
 all papers through the same `show` startup command path, while a single left
 click does not show or create paper windows.
@@ -347,20 +391,23 @@ Windows executable directory before falling back to built-in font presets.
 Missing, invalid, or unsupported runtime font files must not block startup.
 Original PaperTodo font preset migration must preserve `yahei` and `dengxian`
 instead of silently normalizing them to the default preset.
-PaperTodo's WPF chains list `Segoe UI` before their selected CJK family, but
-Flutter must preserve the resulting rendered metrics rather than copy a family
-list that Skia resolves differently. Real v2.27 captures prove `yahei` is
-pixel-identical to the default Windows UI/content chain, so Flutter reuses that
-chain. `dengxian` uses DengXian as the concrete family with Segoe UI and YaHei
-fallbacks; wrapped Todo text applies the capture-calibrated `12.5/13` advance
-factor while inversely preserving the original line-box height. This matches
-WPF Display-mode CJK wrapping without changing other fonts.
-The default preset keeps UI chrome on the platform/culture Segoe UI chain but
-uses PaperTodo's separate content chain for note Markdown and non-code canvas
-text: `Microsoft YaHei UI`, `Segoe UI`, `Microsoft YaHei`, `Segoe UI Symbol`,
-then `Segoe UI Emoji`. Explicit installed-system and runtime custom fonts take
-precedence for both UI and content; code stays on the dedicated Cascadia Mono
-chain.
+PaperTodo's WPF chains list `Segoe UI` before their selected CJK family.
+Flutter keeps the platform Segoe UI primary family for default and `yahei`
+chrome, but must explicitly supply `Microsoft YaHei UI`, `Microsoft YaHei`,
+`Segoe UI Symbol` and `Segoe UI Emoji` as its fallback list. Leaving fallback
+entirely to Skia selects a different Chinese glyph face on Windows even when
+Latin metrics remain unchanged. Real v2.27 captures prove `yahei` keeps this
+same platform/culture Segoe UI chrome chain as the default preset, while note
+and Todo content use PaperTodo's separate YaHei-first content chain:
+`Microsoft YaHei UI`, `Segoe UI`, `Microsoft YaHei`, `Segoe UI Symbol`, then
+`Segoe UI Emoji`. Flutter must preserve this UI/content split instead of
+applying the wider content family to title bars and controls. `dengxian` uses
+DengXian as the concrete family with Segoe UI and YaHei fallbacks; wrapped Todo
+text applies the capture-calibrated `12.5/13` advance factor while inversely
+preserving the original line-box height. This matches WPF Display-mode CJK
+wrapping without changing other fonts. Explicit installed-system and runtime
+custom fonts take precedence for both UI and content; code stays on the
+dedicated Cascadia Mono chain.
 The custom font family setting should refresh the installed Windows font list
 each time settings opens. DirectWrite is the authoritative source and returns
 one localized display name for every installed family, preferring a Chinese
@@ -385,12 +432,14 @@ editing until restored or unpinned.
 Windows paper title bars should keep PaperTodo's compact metrics and identity:
 the 23x24 leading control uses PaperTodo's `☑` Todo or `✎` Note symbol rather
 than a generic Material icon; inactive topmost state uses the weak color at
-0.58 opacity and becomes fully opaque on hover. The title host stays between
-38 and 180 pixels wide according to the configured title length, keeps its 24px
-height, 4/5 horizontal padding, permanent
-bottom divider, and hover paper tint.
-Titles that exceed the available viewport marquee horizontally and return to the
-start after a pause. Trailing controls retain a one-pixel
+0.58 opacity and becomes fully opaque on hover. WPF declares a 38-86px title
+host; Flutter uses a capture-calibrated 41px minimum and the same 86px maximum
+because Skia otherwise ellipsizes the default `Todo1` at the 280px paper width.
+The host keeps its 24px height, 4/5 horizontal padding, permanent bottom
+divider, hover paper tint and shared +1/+1 display/editor paint origin.
+Titles that exceed the available viewport use source-matched character
+ellipsis without introducing a timer, scrolling layer, or delayed return to
+the start. Trailing controls retain a one-pixel
 outer gap and remain right-anchored while resizing. Desktop pin uses
 PaperTodo's original 15px `pin.png` / `unpin.png` assets inside its 28x24
 button, with 0.72 inactive opacity instead of a generic monitor icon. At the
@@ -399,13 +448,18 @@ button, with 0.72 inactive opacity instead of a generic monitor icon. At the
   returns at 180px of usable header width for Todo and 230px for Note; the
   RePaperTodo sync action is added to the left of that group at 210px for Todo
   and 280px for Note. This keeps the original actions right-anchored and leaves
-  the title between its measured 38px minimum and 180px maximum.
+  the Flutter title host between its calibrated 41px minimum and 86px maximum.
   The default 280px Todo and 320px Note therefore show their full configured
   action sets.
 Windows title-bar buttons use PaperTodo's immediate pointer states: weak text
 at rest, full paper text with the normal hover tint on hover, and 0.7 opacity
 for the complete button while pressed. They do not use a stronger Material
 pressed state layer, ripple, press scaling, or transition delay.
+Immediate feedback must preserve the capture-calibrated glyph metrics: the
+Todo topmost symbol uses a +1/+1 WPF origin and the Note symbol uses +1/0;
+new-Todo and new-Note glyphs use their independent -1.5/+1 and -1/+1 origins,
+collapse/hide uses -1/+1, the `MD` label uses -1/0, and the 15px pin asset
+keeps its -2px horizontal origin.
 Desktop secondary-click on a paper header/chrome should open a PaperTodo-style
 paper context menu. The menu should reuse existing paper actions instead of
 forking behavior: create Todo or Note papers from the current paper as the
@@ -423,7 +477,38 @@ Item sections where those menus expose the corresponding actions.
 Compact Windows menu commands use an 8px rounded hover surface. Mouse-down must
 retain that same single hover surface rather than adding a second Material
 highlight layer or fading the command content; the original PaperTodo hover and
-pressed frames are immediate and pixel-identical.
+pressed frames are immediate and pixel-identical. Checked extension commands
+reserve a stable 18px leading slot and show or hide their mark in the first
+frame without opacity or scale entrance animation.
+Independent Windows context menus use the captured WPF geometry: 20px disabled
+section headers, 25px command rows, 7px separators, 5px vertical shell padding,
+and 28px of measured horizontal chrome around the widest label. Markdown's two
+short CJK section headers use their captured 19px intrinsic height; Todo-item
+menus retain their distinct 17px headers and 21px commands. Their popup
+origin is the secondary-click point without an additional Flutter offset.
+Independent paper windows route these menus through an owner-drawn Win32 popup
+HWND rather than a Flutter Overlay, so a long Markdown menu may extend beyond
+the paper HWND without being shifted upward or clipped. This keeps the Paper
+menu at its captured 93px width while allowing the Markdown menu to shrink to
+its captured 80px width. Native menu text uses grayscale DirectWrite Natural
+rendering with the source 12px SemiBold header and 13px Regular command sizes;
+the item HDC is rebound to a local clip before drawing so later rows cannot be
+clipped by their absolute menu coordinates. Headers and 17/19/20/21px rows use
+a -2px WPF paint origin, while 25px commands use -1px. GDI remains only the
+failure fallback. Separators preserve the WPF default 43px leading indent,
+13px trailing indent, two-pixel upward raster origin, and 38% system-line
+blend. A thread-local CBT hook removes the built-in
+`CS_DROPSHADOW` flag before USER32 creates the popup and restores the menu class
+style during destruction, matching the source's shadowless popup without
+changing tray or later menu classes. The hover surface is inset one additional
+pixel on each horizontal edge without shrinking the command hit target. Widget
+tests and non-native surfaces retain the Flutter popup implementation as a
+fallback.
+Windows Markdown editors suppress Flutter's overlapping text-selection menu;
+Android retains the adaptive selection toolbar.
+The Windows canvas-element menu preserves PaperTodo's fixed source labels
+`上移一层`, `下移一层`, `置顶`, `置底`, and `复制`; board/mobile surfaces keep
+their localized action wording.
 Paper context menu collapse actions should keep PaperTodo's capsule wording:
 expanded papers show Collapse to capsule, while collapsed papers show Restore
 window.
@@ -536,6 +621,18 @@ source-like images/tables, and full-width heading, quote, and code-block paper
 backgrounds. Markdown editing keeps the same source styling without preview
 marker hiding; active IME composing ranges fall back to native text spans, and
 the editor's quote/code-block backgrounds track its scroll offset.
+At 96 DPI the preview uses paint-only WPF origin compensation without changing
+line layout or wrapping: H1 uses `Offset(1, 2)`, quote `Offset(1, -2)`, ordinary
+paragraphs `Offset(3, 0)`, the first list line `Offset(3, -4)`, later list lines
+`Offset(3, -2)`, and fenced-code lines `Offset(2, -4)`. Ordinary preview text
+uses the capture-calibrated 0.1px tracking; quote, list and code keep their
+independent 0.05px, -0.075px and 0.4px tracking. These transforms apply to the
+paint layer only so selection, hit testing, wrapping and scroll extents retain
+the PaperTodo document geometry.
+Fenced-code line painters use the WPF-equivalent 1px left and 9px right insets
+around the 1px border. Inline code keeps its own glyph-run background, while
+fenced code text relies exclusively on the rounded line painter so it cannot
+square off the line corners with a second rectangular background.
 Markdown source link scanning should stay deliberately small like PaperTodo:
 the first literal `](` and following literal `)` delimit the target, backslash
 escapes are not interpreted, CommonMark angle destinations and title suffixes
@@ -587,6 +684,10 @@ Windows data location changes use the native folder picker, write the current
 state successfully before switching the active path, and retain the old file
 as a recovery copy. A first run without portable data asks for the data folder;
 an existing `data.json` beside the executable remains compatible.
+Windows state replacement should retry short sharing/access violations around
+the delete-and-rename window, because tray diagnostics, sync checks or external
+backup readers can briefly hold `data.json` without representing a permanent
+storage failure.
 On narrow screens, keep one primary sync action directly reachable and move
 secondary board actions such as create, recovery, hidden papers, and settings
 into an overflow menu so the app bar never depends on desktop-width space.
@@ -602,8 +703,21 @@ long labels such as WebDAV provider presets.
 Windows settings toggles follow PaperTodo's compact checkbox row instead of a
 Material list tile: a 16px mark with 1.5px border and 4px radius, 8px gap to
 13px text, the exact `M 4,8.1 L 7,11 L 12,5` checked path, Hover tint only for
-the unchecked mark, a full 16px Active checked fill without an inset Material
-selection block, and 0.55 disabled option opacity.
+the unchecked mark, a WPF-equivalent 12px Active checked fill inside the 16px
+border host, and 0.55 disabled option opacity. At 96 DPI, the checked fill uses
+a capture-equivalent 3.5px inner radius and the unchanged source path receives
+a paint-only `Offset(2, 2)` correction so Skia reproduces WPF's rounded fill
+and stroke raster without changing layout or hit testing. The unchecked 1.5px
+source border is painted as a capture-equivalent outer-minus-inner ring with a
+5.125px outer radius, 2px inset and 3.5px inner radius; this gives WPF's two
+complete straight raster rows instead of Skia's centered full-plus-half stroke.
+Fractional layout at
+the bottom of Display gives only the nested Top-bar heading and its three mark
+layers a local -1px paint correction; their titles and help targets stay on the
+already verified rows. The desktop draft footer keeps a 2px content gap and
+24px Cancel/Confirm actions so that this RePaperTodo extension occupies the
+same vertical budget as PaperTodo's author footer and cannot shorten the source
+settings viewport.
 The 40 source `WrapWithHint` options keep their original Chinese and English
 resource text behind a trailing 18x18 `ⓘ`. The hint uses the symbol font at
 12px, Help cursor, 240px maximum text width, 10x7px content padding, 200ms
@@ -615,15 +729,38 @@ Settings navigation and group labels use the original Display, Todo / Notes,
 Capsules and General / Advanced resource wording. Each page starts with a 12px
 weak semibold group label instead of a decorative divider; nested Top-bar
 buttons, External open and Script capsule groups use the same hierarchy.
-Only inactive navigation categories receive hover and press feedback. Pressing
-the current category keeps its selected tint and geometry unchanged.
+The desktop settings shell compensates for Flutter's non-layout border by using
+a 14px title-to-content gap. Navigation and its divider use independent
+`Offset(1, -2)` paint layers so their visible origin matches WPF while the
+right-hand scroll surface stays in the source coordinate system. Navigation
+labels use capture-calibrated paint origins without changing their rows or hit
+targets: Display `(0, -1)`, Todo / Notes `(-1, 0)`, Capsules `(0, 0)`, and
+General / Advanced `(-1, 0)` when inactive or `(-1, 1)` when selected. The
+custom
+theme editor keeps the source 58x42 swatch and fixed 76x27/82x27 action widths.
+Those source buttons and the 52/58px compact Clear/Default actions are hard
+rectangles like the WPF `Button` template, not 8px Flutter pills; they must not
+expand to the available row width.
+The borderless settings coordinator keeps native `WS_THICKFRAME` resize
+semantics even though its Flutter child covers the client area. Eight invisible
+8px edge/16px corner pointer targets use the matching Windows resize cursors
+and explicitly enter USER32's non-client sizing loop on pointer-down. These
+targets exist only on Windows, stay above the rendered paper without adding
+visible chrome, and must not overlap the inset title, close action, navigation,
+or settings fields.
+Only inactive navigation categories receive hover feedback. Mouse-down replaces
+the page immediately without a separate pressed tint or scale; pressing the
+current category keeps its selected tint and geometry unchanged.
 Desktop choices use 28px source segment selectors: a 1px Control-radius outer
 border, equal columns, 1px segment insets, 12px regular inactive text, 12px
 semibold active text, Hover background for inactive choices and Active/paper
 colors for the selection. The maximum-title stepper uses the same 28px shell,
 34px symbol-font side actions and immediate mouse-down changes without ripple
-or tooltips. Press feedback applies only to inactive segments; pressing the
-already-selected choice is a visual and state no-op like the source control.
+or tooltips. Inactive segments use hover only and become selected immediately
+on mouse-down; pressing the already-selected choice is a visual and state no-op
+like the source control. Source-derived compact actions, the custom-color
+swatch, and WebDAV secret buttons keep their geometry fixed and change hover,
+pressed, or icon state immediately without scale or cross-fade frames.
 Compact settings dropdowns keep the same 28px Control-radius field, while the
 opened option surface uses the source 12px Block radius. Their 10x5 chevron
 changes from weak text to normal text on hover and Active while focused/open.
@@ -673,7 +810,18 @@ the local due timestamp, seconds-precise relative countdown, and 80-character
 Todo fallback text. The 14px source corner is rendered as a DPI-aware layered
 surface with a 150/255 Tint border, antialiased paper edge and antialiased 28px
 icon circle; this preserves the desktop-composited border instead of blending
-it into the paper color before painting.
+it into the paper color before painting. Text uses grayscale DirectWrite for
+the transparent WPF-equivalent surface: the 13px SemiBold title and all three
+12px message baselines retain the source glyph bounds without ClearType color
+fringing. The source `DropShadowEffect` is clipped by its fixed transparent
+HWND, so the native bubble deliberately avoids `CS_DROPSHADOW`; a system shadow
+would add pixels outside the source's 260x104 bounds.
+Flutter reminder fallbacks use the same bounded information hierarchy rather
+than expanding to show every wrapped item. The title is one ellipsized line,
+followed by a 5px gap and one combined detail text capped to three clipped
+lines. This retains the complete underlying reminder message for semantics and
+actions while keeping a four-item Chinese reminder at 220px to a 101px surface,
+with its 64x48 Open action fully inside the paper.
 Opening a Todo reminder should follow PaperTodo's programmatic-open behavior:
 make the Todo paper visible, expand it if it was collapsed, and reveal a
 desktop-pinned reminder paper instead of sending it through an ordinary show
@@ -726,10 +874,24 @@ resizes only that column pair, each column width is clamped to at least 0.2 and
 at most 8. Width saves happen without creating a todo undo snapshot.
 Multi-column text hosts must not add a separate bottom inset. Every Todo visual
 size uses PaperTodo's source font, vertical padding, row minimum, checkbox
-column, append glyph and trash glyph metrics. Completed rows animate to 0.75
+column, append glyph and trash glyph metrics. Non-DengXian Todo editors use the
+capture-calibrated -0.0625px tracking; DengXian keeps its separate advance-scale
+correction without additional tracking. Completed rows animate to 0.75
 opacity over 200 ms and draw one 1.35px BrightWeakText rule from 3px inside
 each complete text column rather than applying a per-glyph text decoration;
 unchecking returns to full opacity over 150 ms.
+The completion/drag opacity layer wraps the complete row border and hover fill,
+not only its editors and trailing controls. Because WPF fills the row interior
+inside its border, Flutter must precompose the translucent Tint border against
+the paper before painting the hover background; otherwise the border darkens
+when hovered. Flutter's Segoe UI editable glyph origin is compensated without
+changing total padding: main and extra column editors move 2px right and 1px
+down by transferring those pixels from the right and bottom padding to the
+left and top. This keeps row height, available wrap width and splitter geometry
+unchanged.
+Blank Todo rows in standalone Windows paper surfaces do not paint a placeholder,
+matching PaperTodo's empty `TodoTextBox`. The localized New item hint remains a
+board/mobile affordance and must not leak into the independent paper capture.
 The checkbox itself stays 16px at every Todo visual size, with a 1.5px outline
 and 4px radius centered inside the size-specific checkbox column. Windows
 draws PaperTodo's exact rounded check path `M 3,7.5 L 6.5,11 L 13,4`, with
@@ -754,11 +916,37 @@ new due time to roughly one hour from now, and save local values as
 `yyyy-MM-ddTHH:mm:ss` without milliseconds and with seconds reset to `00`.
 Date, time, and reminder-unit field chrome changes immediately on pointer and
 focus state; compact field feedback must not trail behind the cursor.
+The native Windows hour, minute, and reminder-unit selectors share the same
+5x5 antialiased WPF chevron coverage map. At 96 DPI it uses the captured
+`#606060` light foreground and blends into the already-painted field one pixel
+at a time; other DPI values scale the transparent coverage map rather than
+falling back to GDI's solid `Polygon` triangle.
+Their light WPF chrome is not a generic two-stop integer gradient: the 29px
+due controls and 23px reminder control retain separate source-captured raster
+rows, then scale those row maps at non-96 DPI. The transparent native dialog
+titles, explanatory messages, and action labels use grayscale DirectWrite
+Natural rendering. The 12px messages keep a +1px WPF paint origin; wrapped
+messages also add one physical row to the measured DirectWrite line advance.
+Editable date, numeric, and selector controls retain their independently
+calibrated native ClearType or grayscale paths.
+The native paper shell is a separate non-activating 32-bit layered HWND on
+Windows 10 and 11. It premultiplies the paper color through a
+source-calibrated 12.75px outer and inner rounded-rectangle coverage map with
+a one-pixel theme border. The ordinary interactive dialog HWND sits directly
+above it and owns the edit, date, combo, calendar and owner-drawn button
+children. Its inset binary region only exposes the antialiased shell edge; it
+must never replace that visible edge with a hard clipped approximation. This
+two-surface structure is required because applying `UpdateLayeredWindow` to
+the same HWND that owns native controls makes the dialog visible while mouse
+hit testing falls through to the Flutter paper behind it.
 The due date and reminder interval dialogs should keep PaperTodo's keyboard
 dialog behavior: Enter saves through the same OK path, while Escape cancels
 without changing the item. Independent Windows paper HWNDs use a separate
 native date/time picker window; other platforms retain the compact Flutter
-picker fallback.
+picker fallback. Its semibold title and smaller explanatory message use
+grayscale DirectWrite Natural rendering to match the transparent WPF dialog,
+while the editable date/time input glyphs retain their independently verified
+native ClearType rendering.
 The reminder interval dialog should focus the interval value field on open and
 select the full value so typing immediately replaces the previous interval.
 PaperTodo-compatible due dates read from storage should accept common
@@ -772,10 +960,12 @@ PaperTodo due urgency begins ten minutes before the due time. The absolute
 badge uses 5px horizontal and 1px vertical padding, an 8px radius, no outline,
 and a minimum size derived from the current Todo row and checkbox metrics. Its
 hover state uses the paper hover tint (or stronger Danger tint when overdue)
-and must keep the full compact absolute label visible. The optional relative
-badge uses the same height, padding and SemiBold metric, sizes to the localized
-duration text, and keeps PaperTodo's localized day, hour and minute units;
-standalone papers retain it at every supported width like the source UI. The
+and must keep the full compact absolute label visible. The relative badge uses
+the same height, padding and SemiBold metric, sizes to the localized duration
+text, and keeps PaperTodo's localized day, hour and minute units. Independent
+Windows papers retain it at every supported width like the source UI even when
+periodic relative-time refresh is disabled; board/mobile surfaces still honor
+the visibility setting. The
 absolute badge paints its Tint 18/28 resting surface and uses 0.72 whole-badge
 opacity while pressed.
 When the natural trailing group exceeds an extremely narrow paper, lay it out
@@ -818,12 +1008,22 @@ badges as one compact horizontal group at the far right; the absolute badge
 edits or clears the due date. Both labels use their native centered baseline;
 the relative label must not be shifted independently. The reminder timer should also refresh due rows
 even when no reminder bubble is shown, so visible countdown text does not go stale.
+Opening a native due-date or reminder-interval dialog must not let a queued
+Todo line-measurement callback inspect a `TextFormField` deactivated by the
+closing popup route. Defer that measurement until the replacement field's
+Focus attachment is active; the platform picker request itself remains
+single-shot so the user never sees a duplicate or flashing dialog.
 Todo ordering should preserve PaperTodo's reorder data semantics: item moves
 must push a todo undo snapshot, keep the moved item focused, normalize item
 orders after every move, and expose a visible drag handle for pointer reordering
 with move-up/move-down actions as a precise fallback. Dropping a dragged row on
 the upper or lower half of another row should insert before or after that row
 respectively, matching PaperTodo's boundary-based drag placement.
+The Todo drag feedback must preserve the pointer's original offset inside the
+complete source row. Starting from the trailing handle therefore keeps the
+ghost row under the source row and extends it to the pointer's left, matching
+PaperTodo's `point - MouseOffsetInRow` placement; anchoring the feedback's
+top-left corner directly to the pointer is incorrect.
 Dragging a Todo row handle onto the bottom delete area should follow the same
 delete path as the explicit delete action, so PaperTodo tombstones, fallback
 row creation, focus recovery, toolbar/keyboard undo, and sync-safe save behavior stay
@@ -832,7 +1032,10 @@ The standalone Todo append area uses a 6px top and 2px bottom margin, Tint 12
 background, Tint 45 border and a 0.42-opacity plus glyph; hover changes these
 to Tint 26 and 0.7. While dragging, the same surface becomes a Danger 12/16
 trash target with Danger 50 border and 0.65 glyph opacity. Hovering a valid
-drag raises it to Danger 26/32, a solid 1.5px border and full glyph opacity.
+drag raises it to Danger 26/32, full glyph opacity, and a capture-equivalent
+2px Flutter border. PaperTodo declares 1.5px in WPF, but its centered stroke
+covers two complete raster rows at 96 DPI while Flutter's 1.5px inside stroke
+leaves the second row visibly under-blended.
 The standalone Windows surface uses PaperTodo's `＋` and `🗑` text glyphs for
 these two states, not Material add/delete icons.
 Collapsed capsule titles use the source 11px normal-weight UI text at zero
@@ -874,7 +1077,10 @@ screen edge, then clamp it inside the work area like PaperTodo.
 Note-to-Todo drag linking should preserve PaperTodo's drop model: note papers
 expose a dedicated link drag handle, Todo rows accept only existing note IDs,
 candidate rows highlight while hovered, and dropping a note onto a Todo row uses
-the same undoable link path as menu linking.
+the same undoable link path as menu linking. The independent Windows title bar
+keeps the source 24x24 `⌖` slot; its 13px Symbol glyph is vertically centered
+and uses a capture-calibrated `Offset(-1, 1)` without changing the native drag
+target.
 Markdown note editing on narrow screens should keep high-frequency formatting
 actions such as bold, italic, and link insertion directly reachable, while
 secondary block or structural actions such as heading, quote, list, code block,
@@ -883,15 +1089,31 @@ The Note canvas toolbar keeps PaperTodo's 31px minimum height with 9/3/9/4
 Flutter padding; its 24px tool button and 1px bottom divider naturally resolve
 the rendered band to 32px without compressing the control. Its `{}`
 action is 28x24 with 13px normal symbol text, 1px side margins, Tint hover to
-full paper text, and 0.7 pressed opacity. These pointer frames are immediate
-and never scale the button. The element count updates as one stable one-line,
-ellipsis-trimmed text node without a fade or scale transition. The status bar
-remains 26px with a minimum 42px mode pill,
+full paper text, 0.7 pressed opacity, and a paint-only +1px horizontal origin
+that aligns the `{}` glyph without moving its button or hit target. These
+pointer frames are immediate and never scale the button. The element count
+updates as one stable one-line,
+ellipsis-trimmed text node without a fade or scale transition. It explicitly
+uses the source 11px Regular/zero-tracking metrics and a capture-calibrated
+`Offset(-1, -1)` paint origin while preserving its right-anchored layout. The
+source 26px status minimum uses a capture-equivalent 27px Flutter host so its
+top divider reaches the reference row while the paper bottom stays fixed. It
+retains a minimum 42px mode pill,
 38px right-aligned zoom field and one-line stats; zoom text uses scale-down
 inside the fixed field so font metrics cannot create a second row. Mode, stats,
 and zoom update in their existing fixed slots without fading, sliding, scaling,
-or stacking old and new text frames. All three slots use zero letter spacing
-and native vertical centering rather than per-slot pixel translation.
+or stacking old and new text frames. The mode label keeps the calibrated 0.7px
+Display tracking and `Offset(1, 0)` paint origin. Statistics explicitly use the
+source 11px Regular weight with zero tracking and the WPF-equivalent
+`Offset(1, 0)` content origin; zoom shares the same 11px Regular metrics and
+uses `Offset(-1, 0)`. The mode-pill background is independent from its text and
+hit target: it uses the source 32/48 Tint over the already-resolved status
+surface with WPF floor compositing, a +1px paint-only horizontal origin and a
+capture-equivalent 9px Flutter radius. The warm-light result is the exact
+`#E9E0CC` source fill while the text retains its original 42px centering. The
+status divider and note-canvas frame use the shared WPF 28/34 Tint resource
+precomposited over the paper surface so Flutter cannot darken them by painting
+a translucent border over its own tinted fill.
 The non-100% zoom overlay at the lower-right follows PaperTodo's immediate
 pointer frames: transparent with weak text at 0.55 at rest, then the normal
 hover tint with full text opacity while hovered, without a trailing fade.
@@ -903,19 +1125,54 @@ desktop note papers should ignore canvas move, resize, and add-block gestures
 plus edit, duplicate, layer, delete, and text-edit actions so desktop surface
 mode cannot accidentally rearrange note blocks.
 Canvas block chrome is state-driven rather than hover-animated: selection and
-top-layer border, shadow, header tint, and layer badge update immediately, while
-the drag header and resize grip keep their resting Tint when merely hovered.
+top-layer border, header tint, and layer badge update immediately, while the
+drag header and resize grip keep their resting Tint when merely hovered. The
+source assigns its layer shadow to the same WPF Border that has
+`ClipToBounds=true`; controlled `PrintWindow` subtraction shows zero changed
+pixels below the block. Flutter therefore keeps the external shadow list empty
+instead of leaking a broad Skia blur outside the source block bounds.
 Canvas block editors preserve PaperTodo's automatic vertical-scroll feedback:
 the editor and its slim themed scrollbar share one controller, and the thumb is
 only paintable when the block text has a vertical scroll extent.
-The note canvas keeps the source 24px grid with Tint 28 in light themes and
-Tint 38 in dark themes. Its outer border plus the toolbar and status dividers
-share Tint 28/34 so the paper chrome has one continuous edge weight. Horizontal
-and vertical grid strokes share the source zero origin; the two axes must not
-use independent offsets that stagger their intersections.
+The note canvas keeps the source 24px grid. Flutter uses the capture-equivalent
+Tint 18 in light themes and Tint 24 in dark themes, with a +1px vertical-line
+phase and -1px horizontal-line phase to reproduce WPF's integer-coordinate Pen
+coverage. Its paint-only outer fill and foreground border are inset one pixel
+horizontally while retaining the layout's one-pixel child inset; this preserves
+all content geometry and places the straight frame at x=17/422 and y=79/384.
+The outer border, toolbar divider, and status divider share Tint 28/34. The
+inner page chrome is a paint-only layer inset one pixel on the left and right,
+with its bottom compensated by the 27px status host. This reproduces the WPF
+border at screenshot columns 25/414 and rows 87/376 without moving the already
+calibrated note content or its interaction bounds. The two-pixel binding strip
+keeps the same layout origin and uses paint-equivalent 16/15/15px
+left/top/bottom insets, placing its visible pixels at columns 40-41 and rows
+103-360. In the same-data 440x420 light capture, the outer left/right/top/bottom
+crops reach 0.0323/0.0197/0.0253/0.0161 MAE, the binding crop remains 0.0057,
+and the unchanged content crop retains exactly the same error.
 Note body editing and canvas block text use normal zero tracking rather than
-inheriting Material body-text letter spacing. Markdown preview retains its
-renderer-specific glyph-width compensation and token metrics.
+inheriting Material body-text letter spacing. Canvas code uses a fixed 15/13
+line-height factor independent of note zoom. Its unchanged total 18px
+horizontal inset is redistributed to 7px left and 11px right at full scale to
+compensate for Cascadia's Flutter bearing; the Flutter-only top inset is zero
+because RenderEditable otherwise places the first visible glyph nine pixels
+below WPF's TextBox origin. Markdown preview retains its renderer-specific
+glyph-width compensation and token metrics.
+For every Markdown render mode, a non-empty ordinary Note starts in Preview,
+clicking its body enters Edit, and editor focus loss returns it to Preview.
+Empty Notes and script-capsule Notes are the only direct-to-Edit cases. Off
+mode remains a true plain-text preview: it does not analyze or decorate
+Markdown and does not activate Markdown links. Its Preview and Edit states
+share the calibrated `26/14/12/10` content inset, zero tracking and a minimum
+20px natural line rhythm so the text never shifts when the interaction state
+changes.
+Independent Windows paper geometry is expressed in logical pixels and must
+remain unchanged at fractional device-pixel ratios. At 125% and 150%, 220px
+and 280px Todo/Note surfaces retain the 8px transparent chrome, 31px header,
+right-edge action anchor, Todo row/checkbox/append alignment, Note canvas and
+27px status strip. Markdown-Off Preview/Edit transitions must preserve the
+same content rectangle at every covered logical width; DPI changes may alter
+only raster sampling, never layout geometry or action breakpoints.
 Desktop secondary-click on a note canvas block should open a PaperTodo-style
 block context menu with one-step layer moves, front/back layer commands,
 duplicate, and delete. Geometry editing remains a separate explicit tool button
@@ -940,3 +1197,8 @@ one rank.
 Note canvas code block editors should accept Tab like the main Markdown note
 editor: Tab inserts or indents literal tab characters and Shift+Tab outdents
 without moving focus away from the canvas block.
+To reproduce WPF's code-token wrapping, the Windows canvas editor may add
+`U+200B` wrap opportunities to its display controller immediately before `(`.
+Those markers are display-only: selection and composing offsets must map
+between display and raw text, while the note-canvas model, clipboard actions,
+and JSON persistence must always use marker-free raw text.

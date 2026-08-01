@@ -1,16 +1,23 @@
 #include "paper_flutter_window.h"
 
 #include <dwmapi.h>
+#include <d2d1.h>
+#include <dwrite.h>
 #include <commctrl.h>
 #include <shobjidl.h>
 #include <windowsx.h>
 
+#include <wrl/client.h>
+
 #include <flutter_windows.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <optional>
+#include <thread>
 #include <utility>
 #include <variant>
 
@@ -78,6 +85,15 @@ std::string StringValue(const flutter::EncodableMap& map, const char* key,
   return fallback;
 }
 
+const flutter::EncodableList* ListValue(const flutter::EncodableMap& map,
+                                        const char* key) {
+  const auto iterator = map.find(flutter::EncodableValue(key));
+  if (iterator == map.end()) {
+    return nullptr;
+  }
+  return std::get_if<flutter::EncodableList>(&iterator->second);
+}
+
 std::wstring Utf8WindowTitle(const std::string& value) {
   if (value.empty()) {
     return std::wstring();
@@ -122,6 +138,164 @@ COLORREF ColorRefFromArgb(int64_t value, COLORREF fallback) {
 int ScaleForDpi(HWND window, int logical_pixels) {
   const UINT dpi = window ? GetDpiForWindow(window) : 96;
   return MulDiv(logical_pixels, dpi ? static_cast<int>(dpi) : 96, 96);
+}
+
+bool DrawPaperDialogText(HDC context, HWND window, const RECT& target_bounds,
+                         const RECT& bounds, const std::wstring& text,
+                         const std::wstring& font_family, COLORREF color,
+                         float logical_size, DWRITE_FONT_WEIGHT weight,
+                         DWRITE_TEXT_ALIGNMENT alignment,
+                         DWRITE_PARAGRAPH_ALIGNMENT paragraph_alignment,
+                         DWRITE_WORD_WRAPPING word_wrapping,
+                         float logical_line_spacing_adjustment,
+                         float logical_offset_y) {
+  if (!context || !window || text.empty()) return false;
+
+  using Microsoft::WRL::ComPtr;
+  ComPtr<ID2D1Factory> d2d_factory;
+  if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                               IID_PPV_ARGS(&d2d_factory)))) {
+    return false;
+  }
+  ComPtr<IDWriteFactory> write_factory;
+  if (FAILED(DWriteCreateFactory(
+          DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+          reinterpret_cast<IUnknown**>(write_factory.GetAddressOf())))) {
+    return false;
+  }
+
+  D2D1_RENDER_TARGET_PROPERTIES properties = {};
+  properties.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+  properties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  properties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
+  properties.dpiX = 96.0f;
+  properties.dpiY = 96.0f;
+  properties.usage = D2D1_RENDER_TARGET_USAGE_NONE;
+  properties.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
+  ComPtr<ID2D1DCRenderTarget> render_target;
+  if (FAILED(d2d_factory->CreateDCRenderTarget(
+          &properties, render_target.GetAddressOf()))) {
+    return false;
+  }
+
+  if (FAILED(render_target->BindDC(context, &target_bounds))) {
+    return false;
+  }
+  render_target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+
+  ComPtr<IDWriteRenderingParams> rendering_params;
+  if (SUCCEEDED(write_factory->CreateCustomRenderingParams(
+          2.2f, 1.0f, 0.0f, DWRITE_PIXEL_GEOMETRY_FLAT,
+          DWRITE_RENDERING_MODE_NATURAL,
+          rendering_params.GetAddressOf()))) {
+    render_target->SetTextRenderingParams(rendering_params.Get());
+  }
+
+  wchar_t locale_name[LOCALE_NAME_MAX_LENGTH] = {};
+  if (GetUserDefaultLocaleName(locale_name,
+                               static_cast<int>(std::size(locale_name))) <= 0) {
+    wcscpy_s(locale_name, L"zh-CN");
+  }
+  const UINT dpi = GetDpiForWindow(window) > 0 ? GetDpiForWindow(window) : 96;
+  const float physical_size =
+      logical_size * static_cast<float>(dpi) / 96.0f;
+  ComPtr<IDWriteTextFormat> text_format;
+  if (FAILED(write_factory->CreateTextFormat(
+          font_family.c_str(), nullptr, weight,
+          DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, physical_size,
+          locale_name, text_format.GetAddressOf()))) {
+    return false;
+  }
+  text_format->SetTextAlignment(alignment);
+  text_format->SetParagraphAlignment(paragraph_alignment);
+  text_format->SetWordWrapping(word_wrapping);
+
+  const float width = static_cast<float>(bounds.right - bounds.left);
+  const float height = static_cast<float>(bounds.bottom - bounds.top);
+  ComPtr<IDWriteTextLayout> layout;
+  if (FAILED(write_factory->CreateTextLayout(
+          text.c_str(), static_cast<UINT32>(text.size()), text_format.Get(),
+          width, height, layout.GetAddressOf()))) {
+    return false;
+  }
+  if (logical_line_spacing_adjustment != 0.0f) {
+    DWRITE_LINE_METRICS line_metrics[8] = {};
+    UINT32 line_count = 0;
+    if (SUCCEEDED(layout->GetLineMetrics(
+            line_metrics, static_cast<UINT32>(std::size(line_metrics)),
+            &line_count)) &&
+        line_count > 0) {
+      const float physical_line_spacing_adjustment =
+          logical_line_spacing_adjustment * static_cast<float>(dpi) / 96.0f;
+      layout->SetLineSpacing(
+          DWRITE_LINE_SPACING_METHOD_UNIFORM,
+          line_metrics[0].height + physical_line_spacing_adjustment,
+          line_metrics[0].baseline);
+    }
+  }
+  DWRITE_TRIMMING trimming = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+  ComPtr<IDWriteInlineObject> ellipsis;
+  if (SUCCEEDED(write_factory->CreateEllipsisTrimmingSign(
+          text_format.Get(), ellipsis.GetAddressOf()))) {
+    layout->SetTrimming(&trimming, ellipsis.Get());
+  }
+
+  D2D1_COLOR_F brush_color = {
+      GetRValue(color) / 255.0f, GetGValue(color) / 255.0f,
+      GetBValue(color) / 255.0f, 1.0f};
+  ComPtr<ID2D1SolidColorBrush> brush;
+  if (FAILED(render_target->CreateSolidColorBrush(
+          &brush_color, nullptr, brush.GetAddressOf()))) {
+    return false;
+  }
+  const float offset_y =
+      logical_offset_y * static_cast<float>(dpi) / 96.0f;
+  render_target->BeginDraw();
+  render_target->DrawTextLayout(
+      D2D1_POINT_2F{static_cast<float>(bounds.left), bounds.top + offset_y},
+      layout.Get(), brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+  return SUCCEEDED(render_target->EndDraw());
+}
+
+bool DrawPaperDialogTitle(HDC context, HWND window, const RECT& bounds,
+                          const std::wstring& text,
+                          const std::wstring& font_family, COLORREF color) {
+  RECT target_bounds = {};
+  if (!GetClientRect(window, &target_bounds)) {
+    return false;
+  }
+  return DrawPaperDialogText(
+      context, window, target_bounds, bounds, text, font_family, color, 15.0f,
+      DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING,
+      DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_WORD_WRAPPING_NO_WRAP, 0.0f,
+      1.0f);
+}
+
+bool DrawPaperDialogMessage(HDC context, HWND window, const RECT& bounds,
+                            const std::wstring& text,
+                            const std::wstring& font_family, COLORREF color,
+                            float logical_offset_y) {
+  RECT target_bounds = {};
+  if (!GetClientRect(window, &target_bounds)) {
+    return false;
+  }
+  return DrawPaperDialogText(
+      context, window, target_bounds, bounds, text, font_family, color, 12.0f,
+      DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING,
+      DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_WORD_WRAPPING_WRAP,
+      1.0f, logical_offset_y);
+}
+
+bool DrawPaperDialogButtonLabel(HDC context, HWND window,
+                                const RECT& bounds,
+                                const std::wstring& text,
+                                const std::wstring& font_family,
+                                COLORREF color) {
+  return DrawPaperDialogText(
+      context, window, bounds, bounds, text, font_family, color, 12.0f,
+      DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER,
+      DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_WORD_WRAPPING_NO_WRAP, 0.0f,
+      0.0f);
 }
 
 UINT DpiForPhysicalPoint(HWND window, double x, double y) {
@@ -176,8 +350,8 @@ using repapertodo::motion::EaseOutCubic;
 // successfully unpinned.  Temporarily joining the foreground input queue
 // makes the activation deterministic without changing the paper's normal
 // task-switcher or z-order policy.
-void ActivatePaperWindow(HWND window, bool always_on_top) {
-  if (!window || !IsWindow(window)) return;
+bool ActivatePaperWindow(HWND window, bool always_on_top) {
+  if (!window || !IsWindow(window)) return false;
 
   HWND foreground = GetForegroundWindow();
   DWORD foreground_thread = 0;
@@ -204,6 +378,10 @@ void ActivatePaperWindow(HWND window, bool always_on_top) {
   if (attached) {
     AttachThreadInput(foreground_thread, current_thread, FALSE);
   }
+  // SetForegroundWindow is only a request. Synthetic proxy input and the
+  // foreground-lock timeout can still reject it, so report the observed HWND
+  // instead of telling Dart that a best-effort call necessarily succeeded.
+  return GetForegroundWindow() == window;
 }
 constexpr UINT kDeferredPaperActionMessage = WM_APP + 0x351;
 constexpr UINT kDeferredPaperShadowRefreshMessage = WM_APP + 0x352;
@@ -311,7 +489,10 @@ double CapsuleWpfMetricCorrection(const std::string& paper_type,
                                   bool script_capsule) {
   // WPF FormattedText and GDI differ by a small glyph-specific advance at
   // 11/13/15 logical pixels. These values match PaperTodo v2.27 captures.
-  return paper_type == "note" || script_capsule ? -2.0 : -3.0;
+  if (script_capsule) {
+    return -2.0;
+  }
+  return paper_type == "note" ? -1.0 : -3.0;
 }
 
 double CapsuleWindowWidth(const std::string& title,
@@ -515,8 +696,17 @@ RECT WorkAreaForWindow(HWND window, const std::string& device_name) {
   return fallback;
 }
 
+struct LayeredDialogShellState {
+  COLORREF background = RGB(255, 249, 234);
+  COLORREF border = RGB(224, 206, 167);
+  double radius = 12.75;
+  double border_width = 1.0;
+};
+
 struct DateTimePickerDialogState {
   HWND dialog = nullptr;
+  HWND shell = nullptr;
+  LayeredDialogShellState shell_state;
   HWND date = nullptr;
   HWND date_surface = nullptr;
   HWND hour = nullptr;
@@ -600,8 +790,117 @@ COLORREF BlendColor(COLORREF background, COLORREF foreground,
                  255,
              (GetGValue(background) * inverse + GetGValue(foreground) * alpha) /
                  255,
-             (GetBValue(background) * inverse + GetBValue(foreground) * alpha) /
-                 255);
+              (GetBValue(background) * inverse + GetBValue(foreground) * alpha) /
+                  255);
+}
+
+constexpr int kContextMenuNativeWidthCompensation = 20;
+constexpr int kContextMenuShellRadius = 12;
+constexpr int kContextMenuItemRadius = 8;
+constexpr int kContextMenuHorizontalPadding = 4;
+constexpr int kContextMenuTextInset = 10;
+constexpr int kContextMenuSeparatorLeadingInset = 43;
+constexpr int kContextMenuSeparatorTrailingInset = 13;
+constexpr int kContextMenuSeparatorOffsetY = -2;
+constexpr UINT kContextMenuChromeRefreshIntervalMs = 16;
+
+struct ContextMenuChromeContext {
+  int radius = kContextMenuShellRadius;
+  COLORREF border = RGB(218, 198, 161);
+  bool dark = false;
+  DWORD process_id = 0;
+};
+
+struct ContextMenuShadowHookContext {
+  HWND menu_window = nullptr;
+  LONG_PTR original_class_style = 0;
+  bool class_style_changed = false;
+};
+
+thread_local ContextMenuShadowHookContext* context_menu_shadow_hook_context =
+    nullptr;
+
+void RestoreContextMenuClassStyle(ContextMenuShadowHookContext* context) {
+  if (!context || !context->class_style_changed || !context->menu_window) {
+    return;
+  }
+  SetClassLongPtrW(context->menu_window, GCL_STYLE,
+                   context->original_class_style);
+  context->class_style_changed = false;
+}
+
+LRESULT CALLBACK ContextMenuShadowCbtHook(int code, WPARAM wparam,
+                                          LPARAM lparam) {
+  ContextMenuShadowHookContext* context = context_menu_shadow_hook_context;
+  const HWND window = reinterpret_cast<HWND>(wparam);
+  if (context && code == HCBT_CREATEWND && window) {
+    wchar_t class_name[32] = {};
+    if (GetClassNameW(window, class_name,
+                      static_cast<int>(std::size(class_name))) > 0 &&
+        wcscmp(class_name, L"#32768") == 0) {
+      const LONG_PTR class_style = GetClassLongPtrW(window, GCL_STYLE);
+      context->menu_window = window;
+      context->original_class_style = class_style;
+      if ((class_style & CS_DROPSHADOW) != 0) {
+        SetClassLongPtrW(window, GCL_STYLE, class_style & ~CS_DROPSHADOW);
+        context->class_style_changed = true;
+      }
+    }
+  } else if (context && code == HCBT_DESTROYWND &&
+             window == context->menu_window) {
+    RestoreContextMenuClassStyle(context);
+  }
+  return CallNextHookEx(nullptr, code, wparam, lparam);
+}
+
+BOOL CALLBACK ApplyContextMenuChrome(HWND window, LPARAM parameter) {
+  const auto* context =
+      reinterpret_cast<const ContextMenuChromeContext*>(parameter);
+  DWORD process_id = 0;
+  GetWindowThreadProcessId(window, &process_id);
+  if (!context || process_id != context->process_id) {
+    return TRUE;
+  }
+  wchar_t class_name[32] = {};
+  if (GetClassNameW(window, class_name,
+                    static_cast<int>(std::size(class_name))) <= 0 ||
+      wcscmp(class_name, L"#32768") != 0 || !IsWindowVisible(window)) {
+    return TRUE;
+  }
+  RECT bounds = {};
+  if (!GetWindowRect(window, &bounds)) {
+    return TRUE;
+  }
+  const int width = std::max(1L, bounds.right - bounds.left);
+  const int height = std::max(1L, bounds.bottom - bounds.top);
+  HRGN current_region = CreateRectRgn(0, 0, 0, 0);
+  const bool has_region =
+      current_region && GetWindowRgn(window, current_region) != ERROR;
+  if (current_region) {
+    DeleteObject(current_region);
+  }
+  if (!has_region) {
+    HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1,
+                                     context->radius * 2,
+                                     context->radius * 2);
+    if (region && SetWindowRgn(window, region, TRUE) == 0) {
+      DeleteObject(region);
+    }
+
+    constexpr DWORD kDwmWindowCornerPreference = 33;
+    constexpr DWORD kDwmBorderColor = 34;
+    constexpr int kDwmCornerRound = 2;
+    const BOOL dark = context->dark ? TRUE : FALSE;
+    DwmSetWindowAttribute(window, static_cast<DWMWINDOWATTRIBUTE>(20), &dark,
+                          sizeof(dark));
+    DwmSetWindowAttribute(
+        window, static_cast<DWMWINDOWATTRIBUTE>(kDwmWindowCornerPreference),
+        &kDwmCornerRound, sizeof(kDwmCornerRound));
+    DwmSetWindowAttribute(window,
+                          static_cast<DWMWINDOWATTRIBUTE>(kDwmBorderColor),
+                          &context->border, sizeof(context->border));
+  }
+  return TRUE;
 }
 
 bool PointInsideRoundedRect(double x, double y, double left, double top,
@@ -638,6 +937,190 @@ double RoundedRectPixelCoverage(int x, int y, double left, double top,
   }
   return static_cast<double>(inside) /
          (kSamplesPerAxis * kSamplesPerAxis);
+}
+
+struct LayeredDialogCanvas {
+  PAINTSTRUCT paint = {};
+  RECT bounds = {};
+  HDC target = nullptr;
+  HDC buffer = nullptr;
+  HBITMAP bitmap = nullptr;
+  HGDIOBJ old_bitmap = nullptr;
+  uint32_t* pixels = nullptr;
+};
+
+bool BeginLayeredDialogPaint(HWND window, COLORREF background,
+                             LayeredDialogCanvas* canvas) {
+  if (!window || !canvas) return false;
+  canvas->target = BeginPaint(window, &canvas->paint);
+  GetClientRect(window, &canvas->bounds);
+  const int width = std::max(
+      1, static_cast<int>(canvas->bounds.right - canvas->bounds.left));
+  const int height = std::max(
+      1, static_cast<int>(canvas->bounds.bottom - canvas->bounds.top));
+  canvas->buffer = CreateCompatibleDC(canvas->target);
+  BITMAPINFO bitmap_info = {};
+  bitmap_info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bitmap_info.bmiHeader.biWidth = width;
+  bitmap_info.bmiHeader.biHeight = -height;
+  bitmap_info.bmiHeader.biPlanes = 1;
+  bitmap_info.bmiHeader.biBitCount = 32;
+  bitmap_info.bmiHeader.biCompression = BI_RGB;
+  void* bitmap_bits = nullptr;
+  canvas->bitmap = CreateDIBSection(
+      canvas->target, &bitmap_info, DIB_RGB_COLORS, &bitmap_bits, nullptr, 0);
+  canvas->pixels = static_cast<uint32_t*>(bitmap_bits);
+  if (!canvas->buffer || !canvas->bitmap || !canvas->pixels) {
+    if (canvas->bitmap) DeleteObject(canvas->bitmap);
+    if (canvas->buffer) DeleteDC(canvas->buffer);
+    canvas->bitmap = nullptr;
+    canvas->buffer = nullptr;
+    canvas->pixels = nullptr;
+    EndPaint(window, &canvas->paint);
+    return false;
+  }
+  canvas->old_bitmap = SelectObject(canvas->buffer, canvas->bitmap);
+  const uint32_t background_pixel =
+      static_cast<uint32_t>(GetBValue(background)) |
+      (static_cast<uint32_t>(GetGValue(background)) << 8) |
+      (static_cast<uint32_t>(GetRValue(background)) << 16);
+  std::fill(canvas->pixels, canvas->pixels + width * height,
+            background_pixel);
+  return true;
+}
+
+void EndLayeredDialogPaint(HWND window, LayeredDialogCanvas* canvas,
+                           COLORREF border, double radius,
+                           double border_width) {
+  if (!window || !canvas || !canvas->buffer || !canvas->pixels) return;
+  const int width = std::max(
+      1, static_cast<int>(canvas->bounds.right - canvas->bounds.left));
+  const int height = std::max(
+      1, static_cast<int>(canvas->bounds.bottom - canvas->bounds.top));
+  const double inner_radius = radius;
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      const double outer_coverage = RoundedRectPixelCoverage(
+          x, y, 0.0, 0.0, static_cast<double>(width),
+          static_cast<double>(height), radius);
+      const double inner_coverage = RoundedRectPixelCoverage(
+          x, y, border_width, border_width, width - border_width,
+          height - border_width, inner_radius);
+      const double border_coverage =
+          std::max(0.0, outer_coverage - inner_coverage);
+      const size_t index = static_cast<size_t>(y) * width + x;
+      const uint32_t pixel = canvas->pixels[index];
+      const auto premultiply = [inner_coverage, border_coverage](
+                                   BYTE content, BYTE border_channel) {
+        return static_cast<uint32_t>(std::clamp(
+            std::lround(content * inner_coverage +
+                        border_channel * border_coverage),
+            0L, 255L));
+      };
+      const uint32_t blue = premultiply(
+          static_cast<BYTE>(pixel & 0xFF), GetBValue(border));
+      const uint32_t green = premultiply(
+          static_cast<BYTE>((pixel >> 8) & 0xFF), GetGValue(border));
+      const uint32_t red = premultiply(
+          static_cast<BYTE>((pixel >> 16) & 0xFF), GetRValue(border));
+      const uint32_t alpha = static_cast<uint32_t>(
+          std::lround(std::clamp(outer_coverage, 0.0, 1.0) * 255.0));
+      canvas->pixels[index] =
+          blue | (green << 8) | (red << 16) | (alpha << 24);
+    }
+  }
+  RECT window_bounds = {};
+  GetWindowRect(window, &window_bounds);
+  POINT destination = {window_bounds.left, window_bounds.top};
+  POINT source = {0, 0};
+  SIZE size = {width, height};
+  BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+  HDC screen = GetDC(nullptr);
+  UpdateLayeredWindow(window, screen, &destination, &size, canvas->buffer,
+                      &source, 0, &blend, ULW_ALPHA);
+  if (screen) ReleaseDC(nullptr, screen);
+  SelectObject(canvas->buffer, canvas->old_bitmap);
+  DeleteObject(canvas->bitmap);
+  DeleteDC(canvas->buffer);
+  EndPaint(window, &canvas->paint);
+}
+
+constexpr wchar_t kLayeredDialogShellClass[] =
+    L"RePaperTodo.LayeredDialogShell";
+
+LRESULT CALLBACK LayeredDialogShellWindowProc(HWND window, UINT message,
+                                               WPARAM wparam,
+                                               LPARAM lparam) noexcept {
+  auto* state = reinterpret_cast<LayeredDialogShellState*>(
+      GetWindowLongPtrW(window, GWLP_USERDATA));
+  if (message == WM_NCCREATE) {
+    const auto* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+    state = create
+                ? static_cast<LayeredDialogShellState*>(
+                      create->lpCreateParams)
+                : nullptr;
+    SetWindowLongPtrW(window, GWLP_USERDATA,
+                      reinterpret_cast<LONG_PTR>(state));
+  }
+  if (!state) return DefWindowProcW(window, message, wparam, lparam);
+
+  switch (message) {
+    case WM_ERASEBKGND:
+      return 1;
+    case WM_NCHITTEST:
+      return HTTRANSPARENT;
+    case WM_PAINT: {
+      LayeredDialogCanvas canvas;
+      if (!BeginLayeredDialogPaint(window, state->background, &canvas)) {
+        return 0;
+      }
+      EndLayeredDialogPaint(window, &canvas, state->border, state->radius,
+                            state->border_width);
+      return 0;
+    }
+    case WM_DESTROY:
+      SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+      return 0;
+  }
+  return DefWindowProcW(window, message, wparam, lparam);
+}
+
+HWND CreateLayeredDialogShell(HWND owner, int left, int top, int width,
+                              int height,
+                              LayeredDialogShellState* state) {
+  static bool registered = false;
+  if (!registered) {
+    WNDCLASSW klass = {};
+    klass.style = CS_HREDRAW | CS_VREDRAW;
+    klass.lpfnWndProc = LayeredDialogShellWindowProc;
+    klass.hInstance = GetModuleHandleW(nullptr);
+    klass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    klass.hbrBackground = nullptr;
+    klass.lpszClassName = kLayeredDialogShellClass;
+    registered = RegisterClassW(&klass) != 0 ||
+                 GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+  }
+  if (!registered || !state) return nullptr;
+  return CreateWindowExW(
+      WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT |
+          WS_EX_NOACTIVATE,
+      kLayeredDialogShellClass, L"", WS_POPUP, left, top, width, height,
+      owner, nullptr, GetModuleHandleW(nullptr), state);
+}
+
+void ApplyInteractiveDialogRegion(HWND dialog, int width, int height,
+                                  double radius, double border_width) {
+  if (!dialog) return;
+  const int inset = std::max(1, static_cast<int>(std::ceil(border_width)));
+  const int diameter = std::max(
+      2, static_cast<int>(std::lround(
+             std::max(1.0, radius - border_width) * 2.0)));
+  HRGN region = CreateRoundRectRgn(inset, inset, width - inset,
+                                   height - inset, diameter, diameter);
+  if (!region) return;
+  if (SetWindowRgn(dialog, region, TRUE) == 0) {
+    DeleteObject(region);
+  }
 }
 
 double CirclePixelCoverage(int x, int y, double left, double top,
@@ -762,6 +1245,40 @@ std::wstring DateTimePickerDateLabel(const SYSTEMTIME& value) {
   return label;
 }
 
+constexpr BYTE kPaperSystemComboGradient29[27] = {
+    240, 239, 239, 239, 238, 238, 237, 237, 237,
+    236, 236, 235, 235, 235, 234, 234, 233, 233,
+    232, 232, 232, 231, 231, 231, 230, 230, 229,
+};
+
+constexpr BYTE kPaperSystemComboGradient23[21] = {
+    240, 239, 239, 238, 238, 237, 237, 236, 235, 235, 235,
+    234, 234, 233, 232, 232, 231, 231, 230, 230, 229,
+};
+
+void FillPaperSystemComboGradient(HDC context, const RECT& bounds,
+                                  const BYTE* source, int source_size) {
+  if (!context || !source || source_size <= 0) return;
+  const int row_count = std::max(
+      1, static_cast<int>(bounds.bottom - bounds.top - 2));
+  for (int row = 0; row < row_count; ++row) {
+    const double source_y =
+        (static_cast<double>(row) + 0.5) * source_size / row_count - 0.5;
+    const int first = std::clamp(static_cast<int>(std::floor(source_y)), 0,
+                                 source_size - 1);
+    const int second = std::min(source_size - 1, first + 1);
+    const double fraction = std::clamp(source_y - std::floor(source_y),
+                                       0.0, 1.0);
+    const int shade = static_cast<int>(std::round(
+        source[first] * (1.0 - fraction) + source[second] * fraction));
+    RECT line = {bounds.left + 1, bounds.top + 1 + row,
+                 bounds.right - 1, bounds.top + 2 + row};
+    HBRUSH line_brush = CreateSolidBrush(RGB(shade, shade, shade));
+    FillRect(context, &line, line_brush);
+    DeleteObject(line_brush);
+  }
+}
+
 void DrawDateTimePickerInputFrame(const DRAWITEMSTRUCT* draw,
                                   DateTimePickerDialogState* state,
                                   bool hovered, bool system_combo) {
@@ -787,16 +1304,9 @@ void DrawDateTimePickerInputFrame(const DRAWITEMSTRUCT* draw,
   const HGDIOBJ old_brush = SelectObject(draw->hDC, background_brush);
   const HGDIOBJ old_pen = SelectObject(draw->hDC, border_pen);
   if (light_system_combo && !hovered) {
-    for (int y = draw->rcItem.top + 1; y < draw->rcItem.bottom - 1; ++y) {
-      const int span = std::max(
-          1, static_cast<int>(draw->rcItem.bottom - draw->rcItem.top - 3));
-      const int offset = y - draw->rcItem.top - 1;
-      const int shade = 240 - ((11 * offset + span / 2) / span);
-      RECT row = {draw->rcItem.left + 1, y, draw->rcItem.right - 1, y + 1};
-      HBRUSH row_brush = CreateSolidBrush(RGB(shade, shade, shade));
-      FillRect(draw->hDC, &row, row_brush);
-      DeleteObject(row_brush);
-    }
+    FillPaperSystemComboGradient(
+        draw->hDC, draw->rcItem, kPaperSystemComboGradient29,
+        static_cast<int>(std::size(kPaperSystemComboGradient29)));
     SelectObject(draw->hDC, GetStockObject(NULL_BRUSH));
   }
   Rectangle(draw->hDC, draw->rcItem.left, draw->rcItem.top,
@@ -870,26 +1380,68 @@ void DrawDateTimePickerCalendarIcon(HDC context, const RECT& bounds,
   DeleteObject(icon_border);
 }
 
+constexpr BYTE kPaperDropChevronCoverage[5][5] = {
+    {83, 0, 0, 0, 51},
+    {249, 82, 0, 27, 231},
+    {154, 249, 95, 209, 170},
+    {7, 201, 255, 194, 3},
+    {0, 31, 194, 11, 0},
+};
+
+double SamplePaperDropChevronCoverage(double source_x, double source_y) {
+  const int left = static_cast<int>(std::floor(source_x));
+  const int top = static_cast<int>(std::floor(source_y));
+  const double horizontal = source_x - left;
+  const double vertical = source_y - top;
+  double coverage = 0.0;
+  for (int row = 0; row < 2; ++row) {
+    const int sample_y = top + row;
+    if (sample_y < 0 || sample_y >= 5) continue;
+    const double row_weight = row == 0 ? 1.0 - vertical : vertical;
+    for (int column = 0; column < 2; ++column) {
+      const int sample_x = left + column;
+      if (sample_x < 0 || sample_x >= 5) continue;
+      const double column_weight =
+          column == 0 ? 1.0 - horizontal : horizontal;
+      coverage += kPaperDropChevronCoverage[sample_y][sample_x] *
+                  row_weight * column_weight;
+    }
+  }
+  return coverage;
+}
+
+void DrawPaperDropChevron(HDC context, const RECT& bounds, HWND owner,
+                          COLORREF color) {
+  if (!context || !owner) return;
+  const int width = std::max(1, ScaleForDpi(owner, 5));
+  const int height = std::max(1, ScaleForDpi(owner, 5));
+  const int center_x = bounds.right - ScaleForDpi(owner, 10);
+  const int center_y = (bounds.top + bounds.bottom) / 2;
+  const int left = center_x - width / 2;
+  const int top = center_y - ScaleForDpi(owner, 3);
+  for (int y = 0; y < height; ++y) {
+    const double source_y =
+        (static_cast<double>(y) + 0.5) * 5.0 / height - 0.5;
+    for (int x = 0; x < width; ++x) {
+      const double source_x =
+          (static_cast<double>(x) + 0.5) * 5.0 / width - 0.5;
+      const int coverage = static_cast<int>(std::round(
+          SamplePaperDropChevronCoverage(source_x, source_y)));
+      if (coverage <= 0) continue;
+      const COLORREF background = GetPixel(context, left + x, top + y);
+      if (background == CLR_INVALID) continue;
+      SetPixelV(context, left + x, top + y,
+                BlendColor(background, color, coverage));
+    }
+  }
+}
+
 void DrawDateTimePickerDropChevron(HDC context, const RECT& bounds,
                                    DateTimePickerDialogState* state) {
   if (!context || !state) return;
-  const int center_x = bounds.right - ScaleForDpi(state->dialog, 10);
-  const int center_y = (bounds.top + bounds.bottom) / 2;
-  const COLORREF color =
-      state->dark ? state->weak_text : RGB(102, 102, 102);
-  POINT points[] = {
-      {center_x - ScaleForDpi(state->dialog, 2),
-       center_y - ScaleForDpi(state->dialog, 3)},
-      {center_x + ScaleForDpi(state->dialog, 3),
-       center_y - ScaleForDpi(state->dialog, 3)},
-      {center_x, center_y + ScaleForDpi(state->dialog, 2)}};
-  HBRUSH brush = CreateSolidBrush(color);
-  const HGDIOBJ old_brush = SelectObject(context, brush);
-  const HGDIOBJ old_pen = SelectObject(context, GetStockObject(NULL_PEN));
-  Polygon(context, points, static_cast<int>(std::size(points)));
-  SelectObject(context, old_brush);
-  SelectObject(context, old_pen);
-  DeleteObject(brush);
+  DrawPaperDropChevron(
+      context, bounds, state->dialog,
+      state->dark ? state->weak_text : RGB(96, 96, 96));
 }
 
 LRESULT CALLBACK DateTimePickerWindowProc(HWND window, UINT message,
@@ -914,10 +1466,13 @@ LRESULT CALLBACK DateTimePickerWindowProc(HWND window, UINT message,
       state->background_brush = CreateSolidBrush(state->background);
       state->input_background_brush =
           CreateSolidBrush(state->input_background);
+      // WPF's semibold title on the transparent paper dialog rasterizes as
+      // grayscale text. The smaller body and native input glyphs remain
+      // closer through ClearType, so keep this quality choice title-local.
       state->title_font = CreateFontW(
           -scaled(14), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-          CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+          ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
           state->font_family.c_str());
       state->body_font = CreateFontW(
           -scaled(12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -1024,10 +1579,6 @@ LRESULT CALLBACK DateTimePickerWindowProc(HWND window, UINT message,
       DateTime_SetSystemtime(state->date, GDT_VALID, &state->initial);
       SendMessageW(state->hour, CB_SETCURSEL, state->initial.wHour, 0);
       SendMessageW(state->minute, CB_SETCURSEL, state->initial.wMinute, 0);
-      SetWindowRgn(window,
-                   CreateRoundRectRgn(0, 0, scaled(354) + 1,
-                                      scaled(242) + 1, scaled(24), scaled(24)),
-                   TRUE);
       const BOOL dark_mode = state->dark ? TRUE : FALSE;
       DwmSetWindowAttribute(window, 20, &dark_mode, sizeof(dark_mode));
       SetFocus(state->date);
@@ -1038,36 +1589,31 @@ LRESULT CALLBACK DateTimePickerWindowProc(HWND window, UINT message,
     case WM_PAINT: {
       PAINTSTRUCT paint = {};
       HDC context = BeginPaint(window, &paint);
-      RECT bounds = {};
-      GetClientRect(window, &bounds);
-      const int radius = ScaleForDpi(window, 12);
-      const HGDIOBJ old_brush =
-          SelectObject(context, state->background_brush);
-      const HGDIOBJ old_pen = SelectObject(context, GetStockObject(NULL_PEN));
-      RoundRect(context, bounds.left, bounds.top, bounds.right, bounds.bottom,
-                radius * 2, radius * 2);
-      HPEN border_pen = CreatePen(PS_SOLID, 1, state->border);
-      SelectObject(context, GetStockObject(NULL_BRUSH));
-      SelectObject(context, border_pen);
-      RoundRect(context, bounds.left, bounds.top, bounds.right,
-                bounds.bottom, radius * 2, radius * 2);
+      RECT client_bounds = {};
+      GetClientRect(window, &client_bounds);
+      FillRect(context, &client_bounds, state->background_brush);
       SetBkMode(context, TRANSPARENT);
       SetTextColor(context, state->text);
-      SelectObject(context, state->title_font);
       RECT title_bounds = {ScaleForDpi(window, 17), ScaleForDpi(window, 14),
                            ScaleForDpi(window, 338), ScaleForDpi(window, 39)};
-      DrawTextW(context, state->title.c_str(), -1, &title_bounds,
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+      if (!DrawPaperDialogTitle(
+              context, window, title_bounds, state->title,
+              state->font_family, state->text)) {
+        SelectObject(context, state->title_font);
+        DrawTextW(context, state->title.c_str(), -1, &title_bounds,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+      }
       SetTextColor(context, state->weak_text);
       SelectObject(context, state->body_font);
       RECT message_bounds = {ScaleForDpi(window, 17), ScaleForDpi(window, 45),
                              ScaleForDpi(window, 338),
                              ScaleForDpi(window, 80)};
-      DrawTextW(context, state->message.c_str(), -1, &message_bounds,
-                DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS);
-      SelectObject(context, old_brush);
-      SelectObject(context, old_pen);
-      DeleteObject(border_pen);
+      if (!DrawPaperDialogMessage(
+              context, window, message_bounds, state->message,
+              state->font_family, state->weak_text, 1.0f)) {
+        DrawTextW(context, state->message.c_str(), -1, &message_bounds,
+                  DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS);
+      }
       EndPaint(window, &paint);
       return 0;
     }
@@ -1180,8 +1726,13 @@ LRESULT CALLBACK DateTimePickerWindowProc(HWND window, UINT message,
       GetWindowTextW(draw->hwndItem, label, 128);
       RECT text_bounds = draw->rcItem;
       OffsetRect(&text_bounds, 0, ScaleForDpi(state->dialog, 1));
-      DrawTextW(draw->hDC, label, -1, &text_bounds,
-                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+      if (!DrawPaperDialogButtonLabel(
+              draw->hDC, state->dialog, draw->rcItem, label,
+              state->font_family,
+              primary ? state->primary_text : state->text)) {
+        DrawTextW(draw->hDC, label, -1, &text_bounds,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+      }
       if ((draw->itemState & ODS_FOCUS) != 0) {
         RECT focus_bounds = draw->rcItem;
         InflateRect(&focus_bounds, -ScaleForDpi(draw->hwndItem, 4),
@@ -1296,6 +1847,10 @@ LRESULT CALLBACK DateTimePickerWindowProc(HWND window, UINT message,
       }
       break;
     case WM_DESTROY:
+      if (state->shell && IsWindow(state->shell)) {
+        DestroyWindow(state->shell);
+      }
+      state->shell = nullptr;
       if (state->background_brush) DeleteObject(state->background_brush);
       if (state->input_background_brush)
         DeleteObject(state->input_background_brush);
@@ -1418,15 +1973,34 @@ std::optional<flutter::EncodableMap> ShowNativeDateTimePicker(
   }
   const bool restore_owner_activation =
       owner && (GetForegroundWindow() == owner || GetActiveWindow() == owner);
+  state.shell_state.background = state.background;
+  state.shell_state.border = state.border;
+  state.shell_state.radius = ScaleLogicalValue(12.75, dpi);
+  state.shell_state.border_width =
+      static_cast<double>(std::max(1, MulDiv(1, static_cast<int>(dpi), 96)));
   HWND dialog = CreateWindowExW(
       WS_EX_TOOLWINDOW, kDatePickerClass, state.title.c_str(),
       WS_POPUP | WS_CLIPCHILDREN, left, top, dialog_width, dialog_height, owner,
       nullptr,
       GetModuleHandleW(nullptr), &state);
   if (!dialog) return std::nullopt;
+  ApplyInteractiveDialogRegion(
+      dialog, dialog_width, dialog_height, state.shell_state.radius,
+      state.shell_state.border_width);
+  state.shell = CreateLayeredDialogShell(
+      owner, left, top, dialog_width, dialog_height, &state.shell_state);
+  if (state.shell) {
+    ShowWindow(state.shell, SW_SHOWNOACTIVATE);
+    UpdateWindow(state.shell);
+  }
   if (owner) EnableWindow(owner, FALSE);
   ShowWindow(dialog, SW_SHOW);
   UpdateWindow(dialog);
+  if (state.shell) {
+    SetWindowPos(state.shell, dialog, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                     SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+  }
   if (state.open_calendar && state.date) {
     SetFocus(state.date);
     PostMessageW(state.date, WM_KEYDOWN, VK_F4, 0);
@@ -1474,6 +2048,8 @@ std::optional<flutter::EncodableMap> ShowNativeDateTimePicker(
 
 struct ReminderIntervalDialogState {
   HWND dialog = nullptr;
+  HWND shell = nullptr;
+  LayeredDialogShellState shell_state;
   HWND value = nullptr;
   HWND unit = nullptr;
   HWND unit_surface = nullptr;
@@ -1632,8 +2208,8 @@ LRESULT CALLBACK ReminderIntervalValueSubclassProc(
 }
 
 LRESULT CALLBACK ReminderIntervalWindowProc(HWND window, UINT message,
-                                             WPARAM wparam,
-                                             LPARAM lparam) noexcept {
+                                            WPARAM wparam,
+                                            LPARAM lparam) noexcept {
   auto* state = reinterpret_cast<ReminderIntervalDialogState*>(
       GetWindowLongPtrW(window, GWLP_USERDATA));
   if (message == WM_NCCREATE) {
@@ -1659,7 +2235,7 @@ LRESULT CALLBACK ReminderIntervalWindowProc(HWND window, UINT message,
       state->title_font = CreateFontW(
           -scaled(14), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-          CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+          ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
           state->font_family.c_str());
       state->body_font = CreateFontW(
           -scaled(12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -1754,10 +2330,6 @@ LRESULT CALLBACK ReminderIntervalWindowProc(HWND window, UINT message,
                           reinterpret_cast<DWORD_PTR>(state));
       }
 
-      SetWindowRgn(window,
-                   CreateRoundRectRgn(0, 0, scaled(326) + 1,
-                                      scaled(216) + 1, scaled(24), scaled(24)),
-                   TRUE);
       const BOOL dark_mode = state->dark ? TRUE : FALSE;
       DwmSetWindowAttribute(window, 20, &dark_mode, sizeof(dark_mode));
       SetFocus(state->value);
@@ -1770,52 +2342,49 @@ LRESULT CALLBACK ReminderIntervalWindowProc(HWND window, UINT message,
     case WM_PAINT: {
       PAINTSTRUCT paint = {};
       HDC context = BeginPaint(window, &paint);
-      RECT bounds = {};
-      GetClientRect(window, &bounds);
-      const int radius = ScaleForDpi(window, 12);
-      const HGDIOBJ old_brush =
-          SelectObject(context, state->background_brush);
-      const HGDIOBJ old_pen = SelectObject(context, GetStockObject(NULL_PEN));
-      RoundRect(context, bounds.left, bounds.top, bounds.right, bounds.bottom,
-                radius * 2, radius * 2);
-      HPEN border_pen = CreatePen(
-          PS_SOLID, std::max(1, ScaleForDpi(window, 1)), state->border);
-      SelectObject(context, GetStockObject(NULL_BRUSH));
-      SelectObject(context, border_pen);
-      RoundRect(context, bounds.left, bounds.top, bounds.right,
-                bounds.bottom, radius * 2, radius * 2);
+      RECT client_bounds = {};
+      GetClientRect(window, &client_bounds);
+      FillRect(context, &client_bounds, state->background_brush);
 
       SetBkMode(context, TRANSPARENT);
       SetTextColor(context, state->text);
-      SelectObject(context, state->title_font);
       RECT title_bounds = {ScaleForDpi(window, 17), ScaleForDpi(window, 14),
                            ScaleForDpi(window, 310),
                            ScaleForDpi(window, 39)};
-      DrawTextW(context, state->title.c_str(), -1, &title_bounds,
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
-                    DT_NOPREFIX);
+      if (!DrawPaperDialogTitle(
+              context, window, title_bounds, state->title,
+              state->font_family, state->text)) {
+        SelectObject(context, state->title_font);
+        DrawTextW(context, state->title.c_str(), -1, &title_bounds,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
+                      DT_NOPREFIX);
+      }
       SetTextColor(context, state->weak_text);
       SelectObject(context, state->body_font);
       RECT message_bounds = {ScaleForDpi(window, 17), ScaleForDpi(window, 45),
                              ScaleForDpi(window, 310),
                              ScaleForDpi(window, 84)};
-      const int second_line_top =
-          message_bounds.top + ScaleForDpi(window, 16);
-      const int first_line_dc = SaveDC(context);
-      IntersectClipRect(context, message_bounds.left, message_bounds.top,
-                        message_bounds.right, second_line_top);
-      DrawTextW(context, state->message.c_str(), -1, &message_bounds,
-                DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS |
-                    DT_NOPREFIX);
-      RestoreDC(context, first_line_dc);
-      const int remaining_lines_dc = SaveDC(context);
-      IntersectClipRect(context, message_bounds.left, second_line_top,
-                        message_bounds.right, message_bounds.bottom);
-      OffsetRect(&message_bounds, 0, -ScaleForDpi(window, 1));
-      DrawTextW(context, state->message.c_str(), -1, &message_bounds,
-                DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS |
-                    DT_NOPREFIX);
-      RestoreDC(context, remaining_lines_dc);
+      if (!DrawPaperDialogMessage(
+              context, window, message_bounds, state->message,
+              state->font_family, state->weak_text, 1.0f)) {
+        const int second_line_top =
+            message_bounds.top + ScaleForDpi(window, 16);
+        const int first_line_dc = SaveDC(context);
+        IntersectClipRect(context, message_bounds.left, message_bounds.top,
+                          message_bounds.right, second_line_top);
+        DrawTextW(context, state->message.c_str(), -1, &message_bounds,
+                  DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS |
+                      DT_NOPREFIX);
+        RestoreDC(context, first_line_dc);
+        const int remaining_lines_dc = SaveDC(context);
+        IntersectClipRect(context, message_bounds.left, second_line_top,
+                          message_bounds.right, message_bounds.bottom);
+        OffsetRect(&message_bounds, 0, -ScaleForDpi(window, 1));
+        DrawTextW(context, state->message.c_str(), -1, &message_bounds,
+                  DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS |
+                      DT_NOPREFIX);
+        RestoreDC(context, remaining_lines_dc);
+      }
       HPEN input_border_pen = CreatePen(
           PS_SOLID, std::max(1, ScaleForDpi(window, 1)),
           state->value_focused
@@ -1831,9 +2400,6 @@ LRESULT CALLBACK ReminderIntervalWindowProc(HWND window, UINT message,
       SelectObject(context, old_input_brush);
       SelectObject(context, old_input_pen);
       DeleteObject(input_border_pen);
-      SelectObject(context, old_brush);
-      SelectObject(context, old_pen);
-      DeleteObject(border_pen);
       EndPaint(window, &paint);
       return 0;
     }
@@ -1870,20 +2436,9 @@ LRESULT CALLBACK ReminderIntervalWindowProc(HWND window, UINT message,
             SelectObject(draw->hDC, background_brush);
         const HGDIOBJ old_pen = SelectObject(draw->hDC, border_pen);
         if (!state->dark && !emphasized) {
-          for (int y = control_bounds.top + 1;
-               y < control_bounds.bottom - 1; ++y) {
-            const int span = std::max(
-                1, static_cast<int>(control_bounds.bottom -
-                                    control_bounds.top - 3));
-            const int offset = y - control_bounds.top - 1;
-            const int shade = 240 - ((11 * offset + span / 2) / span);
-            RECT row = {control_bounds.left + 1, y,
-                        control_bounds.right - 1, y + 1};
-            HBRUSH row_brush =
-                CreateSolidBrush(RGB(shade, shade, shade));
-            FillRect(draw->hDC, &row, row_brush);
-            DeleteObject(row_brush);
-          }
+          FillPaperSystemComboGradient(
+              draw->hDC, control_bounds, kPaperSystemComboGradient23,
+              static_cast<int>(std::size(kPaperSystemComboGradient23)));
         } else {
           RECT interior = control_bounds;
           InflateRect(&interior, -1, -1);
@@ -1907,26 +2462,11 @@ LRESULT CALLBACK ReminderIntervalWindowProc(HWND window, UINT message,
         DrawTextW(draw->hDC, label, -1, &text_bounds,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
                       DT_NOPREFIX);
-        const int center_x =
-            control_bounds.right - ScaleForDpi(state->dialog, 10);
-        const int center_y =
-            (control_bounds.top + control_bounds.bottom) / 2;
-        const COLORREF chevron_color =
-            state->dark ? state->weak_text : RGB(102, 102, 102);
-        POINT chevron_points[] = {
-            {center_x - ScaleForDpi(state->dialog, 2),
-             center_y - ScaleForDpi(state->dialog, 3)},
-            {center_x + ScaleForDpi(state->dialog, 3),
-             center_y - ScaleForDpi(state->dialog, 3)},
-            {center_x, center_y + ScaleForDpi(state->dialog, 2)}};
-        HBRUSH chevron_brush = CreateSolidBrush(chevron_color);
-        SelectObject(draw->hDC, chevron_brush);
-        SelectObject(draw->hDC, GetStockObject(NULL_PEN));
-        Polygon(draw->hDC, chevron_points,
-                static_cast<int>(std::size(chevron_points)));
+        DrawPaperDropChevron(
+            draw->hDC, control_bounds, state->dialog,
+            state->dark ? state->weak_text : RGB(96, 96, 96));
         SelectObject(draw->hDC, old_brush);
         SelectObject(draw->hDC, old_pen);
-        DeleteObject(chevron_brush);
         DeleteObject(background_brush);
         DeleteObject(border_pen);
         return TRUE;
@@ -1957,9 +2497,14 @@ LRESULT CALLBACK ReminderIntervalWindowProc(HWND window, UINT message,
       GetWindowTextW(draw->hwndItem, label, 128);
       RECT text_bounds = draw->rcItem;
       OffsetRect(&text_bounds, 0, ScaleForDpi(state->dialog, 1));
-      DrawTextW(draw->hDC, label, -1, &text_bounds,
-                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
-                    DT_NOPREFIX);
+      if (!DrawPaperDialogButtonLabel(
+              draw->hDC, state->dialog, draw->rcItem, label,
+              state->font_family,
+              primary ? state->primary_text : state->text)) {
+        DrawTextW(draw->hDC, label, -1, &text_bounds,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
+                      DT_NOPREFIX);
+      }
       if ((draw->itemState & ODS_FOCUS) != 0) {
         RECT focus_bounds = draw->rcItem;
         InflateRect(&focus_bounds, -ScaleForDpi(draw->hwndItem, 4),
@@ -2052,6 +2597,10 @@ LRESULT CALLBACK ReminderIntervalWindowProc(HWND window, UINT message,
       }
       break;
     case WM_DESTROY:
+      if (state->shell && IsWindow(state->shell)) {
+        DestroyWindow(state->shell);
+      }
+      state->shell = nullptr;
       if (state->background_brush) DeleteObject(state->background_brush);
       if (state->input_background_brush)
         DeleteObject(state->input_background_brush);
@@ -2173,14 +2722,33 @@ std::optional<flutter::EncodableMap> ShowNativeReminderIntervalPicker(
 
   const bool restore_owner_activation =
       owner && (GetForegroundWindow() == owner || GetActiveWindow() == owner);
+  state.shell_state.background = state.background;
+  state.shell_state.border = state.border;
+  state.shell_state.radius = ScaleLogicalValue(12.75, dpi);
+  state.shell_state.border_width =
+      static_cast<double>(std::max(1, MulDiv(1, static_cast<int>(dpi), 96)));
   HWND dialog = CreateWindowExW(
       WS_EX_TOOLWINDOW, kReminderIntervalClass, state.title.c_str(),
       WS_POPUP | WS_CLIPCHILDREN, left, top, dialog_width, dialog_height,
       owner, nullptr, GetModuleHandleW(nullptr), &state);
   if (!dialog) return std::nullopt;
+  ApplyInteractiveDialogRegion(
+      dialog, dialog_width, dialog_height, state.shell_state.radius,
+      state.shell_state.border_width);
+  state.shell = CreateLayeredDialogShell(
+      owner, left, top, dialog_width, dialog_height, &state.shell_state);
+  if (state.shell) {
+    ShowWindow(state.shell, SW_SHOWNOACTIVATE);
+    UpdateWindow(state.shell);
+  }
   if (owner) EnableWindow(owner, FALSE);
   ShowWindow(dialog, SW_SHOW);
   UpdateWindow(dialog);
+  if (state.shell) {
+    SetWindowPos(state.shell, dialog, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                     SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+  }
   MSG message = {};
   BOOL message_result = 0;
   while (IsWindow(dialog) &&
@@ -2259,6 +2827,23 @@ bool PaperFlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (call.method_name() == "framePresented") {
+          // Dart reports this only after the child engine has completed a
+          // frame for the latest coordinator update. The embedder's
+          // SetNextFrameCallback is retained as the fast path, while this
+          // explicit handshake prevents a capsule-to-paper shape change from
+          // remaining permanently transparent if that one-shot callback is
+          // displaced by another engine frame request.
+          if (HWND window = GetHandle();
+              window && (paper_shadow_refresh_pending_ ||
+                         paper_surface_reveal_pending_)) {
+            PostMessageW(window, kDeferredPaperShadowRefreshMessage,
+                         static_cast<WPARAM>(paper_shadow_refresh_generation_),
+                         0);
+          }
+          result->Success();
+          return;
+        }
         if (call.method_name() == "pickDateTime") {
           if (call.arguments()) {
             if (const auto* arguments =
@@ -2291,6 +2876,28 @@ bool PaperFlutterWindow::OnCreate() {
             }
           }
           result->Success();
+          return;
+        }
+        if (call.method_name() == "showContextMenu") {
+          if (call.arguments()) {
+            if (const auto* arguments =
+                    std::get_if<flutter::EncodableMap>(call.arguments())) {
+              const auto selected = ShowContextMenu(*arguments);
+              flutter::EncodableMap response{
+                  {flutter::EncodableValue("available"),
+                   flutter::EncodableValue(true)},
+                  {flutter::EncodableValue("selection"),
+                   selected.has_value() ? flutter::EncodableValue(*selected)
+                                        : flutter::EncodableValue()},
+              };
+              result->Success(flutter::EncodableValue(response));
+              return;
+            }
+          }
+          result->Success(flutter::EncodableValue(flutter::EncodableMap{
+              {flutter::EncodableValue("available"),
+               flutter::EncodableValue(false)},
+          }));
           return;
         }
         if (call.method_name() == "paperChanged") {
@@ -2432,10 +3039,344 @@ void PaperFlutterWindow::OnDestroy() {
   Win32Window::OnDestroy();
 }
 
+std::optional<std::string> PaperFlutterWindow::ShowContextMenu(
+    const flutter::EncodableMap& arguments) {
+  HWND window = GetHandle();
+  const flutter::EncodableList* encoded_items = ListValue(arguments, "items");
+  if (!window || !encoded_items || encoded_items->empty()) {
+    return std::nullopt;
+  }
+
+  context_menu_logical_width_ = std::clamp(
+      static_cast<int>(std::lround(NumberValue(arguments, "width", 80.0))),
+      28, 1024);
+  const int logical_padding = std::clamp(
+      static_cast<int>(std::lround(NumberValue(arguments, "padding", 4.0))),
+      0, 32);
+  context_menu_font_family_ =
+      Utf8WindowTitle(StringValue(arguments, "fontFamily", "Segoe UI"));
+  if (context_menu_font_family_.empty()) {
+    context_menu_font_family_ = L"Segoe UI";
+  }
+  context_menu_palette_.background = ColorRefFromArgb(
+      IntegerValue(arguments, "backgroundColor", -1), RGB(255, 250, 239));
+  context_menu_palette_.border = ColorRefFromArgb(
+      IntegerValue(arguments, "borderColor", -1), RGB(218, 198, 161));
+  context_menu_palette_.text = ColorRefFromArgb(
+      IntegerValue(arguments, "textColor", -1), RGB(54, 47, 39));
+  context_menu_palette_.header_text = ColorRefFromArgb(
+      IntegerValue(arguments, "headerTextColor", -1), RGB(113, 100, 83));
+  context_menu_palette_.disabled_text = ColorRefFromArgb(
+      IntegerValue(arguments, "disabledTextColor", -1), RGB(113, 100, 83));
+  context_menu_palette_.hover = ColorRefFromArgb(
+      IntegerValue(arguments, "hoverColor", -1), RGB(238, 229, 211));
+  context_menu_palette_.dark = BoolValue(arguments, "dark", false);
+
+  HMENU menu = CreatePopupMenu();
+  if (!menu) {
+    return std::nullopt;
+  }
+  HBRUSH menu_background =
+      CreateSolidBrush(context_menu_palette_.background);
+  if (!menu_background) {
+    DestroyMenu(menu);
+    return std::nullopt;
+  }
+  MENUINFO menu_info = {};
+  menu_info.cbSize = sizeof(menu_info);
+  menu_info.fMask = MIM_BACKGROUND | MIM_STYLE;
+  menu_info.hbrBack = menu_background;
+  menu_info.dwStyle = MNS_NOCHECK;
+  SetMenuInfo(menu, &menu_info);
+
+  active_context_menu_items_.clear();
+  UINT next_command_id = 1;
+  const auto append_item =
+      [&](ContextMenuItemKind kind, const std::wstring& text,
+          const std::string& value, int logical_height, bool enabled) {
+        auto item = std::make_unique<ContextMenuItem>();
+        item->kind = kind;
+        item->text = text;
+        item->value = value;
+        item->logical_height = std::clamp(logical_height, 1, 512);
+        item->enabled = enabled;
+        if (kind == ContextMenuItemKind::command) {
+          item->command_id = next_command_id++;
+        }
+        ContextMenuItem* item_data = item.get();
+
+        MENUITEMINFOW info = {};
+        info.cbSize = sizeof(info);
+        info.fMask = MIIM_FTYPE | MIIM_STATE | MIIM_DATA | MIIM_ID;
+        info.fType = MFT_OWNERDRAW;
+        info.fState = enabled ? MFS_ENABLED : MFS_DISABLED;
+        info.wID = item->command_id;
+        info.dwItemData = reinterpret_cast<ULONG_PTR>(item_data);
+        if (!InsertMenuItemW(menu, GetMenuItemCount(menu), TRUE, &info)) {
+          return false;
+        }
+        active_context_menu_items_.push_back(std::move(item));
+        return true;
+      };
+
+  bool valid = true;
+  if (logical_padding > 0) {
+    valid = append_item(ContextMenuItemKind::padding, L"", "",
+                        logical_padding, false);
+  }
+  for (const flutter::EncodableValue& encoded_item : *encoded_items) {
+    if (!valid) {
+      break;
+    }
+    const auto* item_map = std::get_if<flutter::EncodableMap>(&encoded_item);
+    if (!item_map) {
+      valid = false;
+      break;
+    }
+    const std::string kind = StringValue(*item_map, "kind", "");
+    const int height = std::clamp(
+        static_cast<int>(std::lround(NumberValue(*item_map, "height", 1.0))),
+        1, 512);
+    if (kind == "separator") {
+      valid = append_item(ContextMenuItemKind::separator, L"", "", height,
+                          false);
+      continue;
+    }
+    const std::wstring label =
+        Utf8WindowTitle(StringValue(*item_map, "label", ""));
+    if (kind == "header") {
+      valid = append_item(ContextMenuItemKind::header, label, "", height,
+                          false);
+      continue;
+    }
+    if (kind == "command") {
+      valid = append_item(
+          ContextMenuItemKind::command, label,
+          StringValue(*item_map, "value", ""), height,
+          BoolValue(*item_map, "enabled", true));
+      continue;
+    }
+    valid = false;
+  }
+  if (!valid || active_context_menu_items_.empty()) {
+    active_context_menu_items_.clear();
+    DestroyMenu(menu);
+    DeleteObject(menu_background);
+    return std::nullopt;
+  }
+
+  POINT anchor = {};
+  const double anchor_x = NumberValue(arguments, "anchorX", NAN);
+  const double anchor_y = NumberValue(arguments, "anchorY", NAN);
+  if (std::isfinite(anchor_x) && std::isfinite(anchor_y)) {
+    const UINT dpi = GetDpiForWindow(window) > 0 ? GetDpiForWindow(window) : 96;
+    anchor.x = static_cast<LONG>(std::lround(ScaleLogicalValue(anchor_x, dpi)));
+    anchor.y = static_cast<LONG>(std::lround(ScaleLogicalValue(anchor_y, dpi)));
+    ClientToScreen(window, &anchor);
+  } else {
+    GetCursorPos(&anchor);
+  }
+
+  SetForegroundWindow(window);
+  ContextMenuChromeContext chrome_context;
+  chrome_context.radius = ScaleForDpi(window, kContextMenuShellRadius);
+  chrome_context.border = context_menu_palette_.border;
+  chrome_context.dark = context_menu_palette_.dark;
+  chrome_context.process_id = GetCurrentProcessId();
+  std::atomic_bool keep_styling_menu{true};
+  std::thread chrome_thread([chrome_context, &keep_styling_menu]() {
+    do {
+      ContextMenuChromeContext current = chrome_context;
+      EnumWindows(ApplyContextMenuChrome,
+                  reinterpret_cast<LPARAM>(&current));
+      std::this_thread::sleep_for(
+          std::chrono::milliseconds(kContextMenuChromeRefreshIntervalMs));
+    } while (keep_styling_menu.load(std::memory_order_relaxed));
+  });
+  ContextMenuShadowHookContext shadow_hook_context;
+  context_menu_shadow_hook_context = &shadow_hook_context;
+  HHOOK shadow_hook = SetWindowsHookExW(
+      WH_CBT, ContextMenuShadowCbtHook, nullptr, GetCurrentThreadId());
+  const UINT command = TrackPopupMenu(
+      menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON | TPM_WORKAREA,
+      anchor.x, anchor.y, 0, window, nullptr);
+  if (shadow_hook) {
+    UnhookWindowsHookEx(shadow_hook);
+  }
+  RestoreContextMenuClassStyle(&shadow_hook_context);
+  context_menu_shadow_hook_context = nullptr;
+  keep_styling_menu.store(false, std::memory_order_relaxed);
+  chrome_thread.join();
+  PostMessageW(window, WM_NULL, 0, 0);
+
+  std::optional<std::string> selected;
+  for (const auto& item : active_context_menu_items_) {
+    if (item->command_id == command && command != 0) {
+      selected = item->value;
+      break;
+    }
+  }
+  active_context_menu_items_.clear();
+  DestroyMenu(menu);
+  DeleteObject(menu_background);
+  return selected;
+}
+
+bool PaperFlutterWindow::MeasureContextMenuItem(
+    MEASUREITEMSTRUCT* measure) const {
+  if (!measure || measure->CtlType != ODT_MENU || measure->itemData == 0) {
+    return false;
+  }
+  const auto* item =
+      reinterpret_cast<const ContextMenuItem*>(measure->itemData);
+  const bool owned = std::any_of(
+      active_context_menu_items_.begin(), active_context_menu_items_.end(),
+      [item](const std::unique_ptr<ContextMenuItem>& candidate) {
+        return candidate.get() == item;
+      });
+  if (!owned) {
+    return false;
+  }
+  HWND window = const_cast<PaperFlutterWindow*>(this)->GetHandle();
+  measure->itemWidth = ScaleForDpi(
+      window, std::max(1, context_menu_logical_width_ -
+                             kContextMenuNativeWidthCompensation));
+  measure->itemHeight =
+      ScaleForDpi(window, std::max(1, item->logical_height));
+  return true;
+}
+
+bool PaperFlutterWindow::DrawContextMenuItem(
+    const DRAWITEMSTRUCT* draw) const {
+  if (!draw || draw->CtlType != ODT_MENU || draw->itemData == 0 ||
+      !draw->hDC) {
+    return false;
+  }
+  const auto* item =
+      reinterpret_cast<const ContextMenuItem*>(draw->itemData);
+  const bool owned = std::any_of(
+      active_context_menu_items_.begin(), active_context_menu_items_.end(),
+      [item](const std::unique_ptr<ContextMenuItem>& candidate) {
+        return candidate.get() == item;
+      });
+  if (!owned) {
+    return false;
+  }
+
+  HWND window = const_cast<PaperFlutterWindow*>(this)->GetHandle();
+  HDC context = draw->hDC;
+  const int saved = SaveDC(context);
+  SetBkMode(context, TRANSPARENT);
+  HBRUSH background_brush =
+      CreateSolidBrush(context_menu_palette_.background);
+  FillRect(context, &draw->rcItem, background_brush);
+  DeleteObject(background_brush);
+
+  if (item->kind == ContextMenuItemKind::command && item->enabled &&
+      (draw->itemState & ODS_SELECTED) != 0) {
+    RECT hover_bounds = draw->rcItem;
+    InflateRect(&hover_bounds,
+                -ScaleForDpi(window, kContextMenuHorizontalPadding),
+                -ScaleForDpi(window, 1));
+    HBRUSH hover_brush = CreateSolidBrush(context_menu_palette_.hover);
+    HGDIOBJ previous_brush = SelectObject(context, hover_brush);
+    HGDIOBJ previous_pen = SelectObject(context, GetStockObject(NULL_PEN));
+    const int diameter = ScaleForDpi(window, kContextMenuItemRadius) * 2;
+    RoundRect(context, hover_bounds.left, hover_bounds.top, hover_bounds.right,
+              hover_bounds.bottom, diameter, diameter);
+    SelectObject(context, previous_pen);
+    SelectObject(context, previous_brush);
+    DeleteObject(hover_brush);
+  }
+
+  if (item->kind == ContextMenuItemKind::separator) {
+    const int y = (draw->rcItem.top + draw->rcItem.bottom) / 2 +
+                  ScaleForDpi(window, kContextMenuSeparatorOffsetY);
+    HPEN separator_pen = CreatePen(
+        PS_SOLID, 1,
+        BlendColor(context_menu_palette_.background,
+                   RGB(215, 215, 215), 97));
+    HGDIOBJ previous_pen = SelectObject(context, separator_pen);
+    MoveToEx(context,
+             draw->rcItem.left +
+                 ScaleForDpi(window, kContextMenuSeparatorLeadingInset),
+             y,
+             nullptr);
+    LineTo(context,
+           draw->rcItem.right -
+               ScaleForDpi(window, kContextMenuSeparatorTrailingInset),
+           y);
+    SelectObject(context, previous_pen);
+    DeleteObject(separator_pen);
+    RestoreDC(context, saved);
+    return true;
+  }
+  if (item->kind == ContextMenuItemKind::padding) {
+    RestoreDC(context, saved);
+    return true;
+  }
+
+  const bool header = item->kind == ContextMenuItemKind::header;
+  const int gdi_font_size = header ? 11 : 12;
+  const float direct_write_font_size = header ? 12.0f : 13.0f;
+  const COLORREF text_color =
+      header ? context_menu_palette_.header_text
+             : (item->enabled ? context_menu_palette_.text
+                              : context_menu_palette_.disabled_text);
+  RECT text_bounds = draw->rcItem;
+  text_bounds.left += ScaleForDpi(window, kContextMenuTextInset);
+  RECT direct_write_bounds = {
+      ScaleForDpi(window, kContextMenuTextInset),
+      0,
+      draw->rcItem.right - draw->rcItem.left,
+      draw->rcItem.bottom - draw->rcItem.top,
+  };
+  const float direct_write_offset_y =
+      header || item->logical_height <= 21 ? -2.0f : -1.0f;
+  if (!DrawPaperDialogText(
+          context, window, draw->rcItem, direct_write_bounds, item->text,
+          context_menu_font_family_, text_color,
+          direct_write_font_size,
+          header ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+          DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+          DWRITE_WORD_WRAPPING_NO_WRAP, 0.0f, direct_write_offset_y)) {
+    HFONT font = CreateFontW(
+        -ScaleForDpi(window, gdi_font_size), 0, 0, 0,
+        header ? FW_SEMIBOLD : FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        context_menu_font_family_.c_str());
+    HGDIOBJ previous_font = SelectObject(context, font);
+    SetTextColor(context, text_color);
+    if (!header) {
+      OffsetRect(&text_bounds, 0, -ScaleForDpi(window, 1));
+    }
+    DrawTextW(context, item->text.c_str(), static_cast<int>(item->text.size()),
+              &text_bounds,
+              DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS |
+                  DT_NOPREFIX);
+    SelectObject(context, previous_font);
+    DeleteObject(font);
+  }
+  RestoreDC(context, saved);
+  return true;
+}
+
 LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
                                            WPARAM const wparam,
                                            LPARAM const lparam) noexcept {
   switch (message) {
+    case WM_MEASUREITEM:
+      if (MeasureContextMenuItem(
+              reinterpret_cast<MEASUREITEMSTRUCT*>(lparam))) {
+        return TRUE;
+      }
+      break;
+    case WM_DRAWITEM:
+      if (DrawContextMenuItem(reinterpret_cast<DRAWITEMSTRUCT*>(lparam))) {
+        return TRUE;
+      }
+      break;
     case WM_ERASEBKGND: {
       // The Flutter child normally covers the complete client area, but a
       // growing interactive resize can expose a narrow parent strip before
@@ -2622,20 +3563,11 @@ LRESULT PaperFlutterWindow::MessageHandler(HWND window, UINT const message,
       if (resize_hit != HTCLIENT) {
         return resize_hit;
       }
-      if (collapsed_) {
-        RECT bounds = {};
-        if (GetWindowRect(window, &bounds)) {
-          const int x = GET_X_LPARAM(lparam) - bounds.left;
-          const int y = GET_Y_LPARAM(lparam) - bounds.top;
-          const int chrome = ScaleForDpi(window, 8);
-          const int drag_width = ScaleForDpi(window, 26);
-          const int body_height = ScaleForDpi(window, 30);
-          if (x >= chrome && x < chrome + drag_width && y >= chrome &&
-              y < chrome + body_height) {
-            return HTCAPTION;
-          }
-        }
-      }
+      // Collapsed papers keep their complete visible strip in Flutter's client
+      // area. Treating the leading icon as HTCAPTION prevents MouseRegion from
+      // receiving hover, so a docked capsule cannot slide out and an ordinary
+      // click is consumed by USER32's move loop. The Flutter drag affordance
+      // starts SC_MOVE only after the pointer crosses the pan threshold.
       break;
     }
     case WM_MOUSEACTIVATE:
@@ -3030,26 +3962,44 @@ bool PaperFlutterWindow::IsInCapsuleQueue(
          capsule_side_ == (side == "left" ? "left" : "right");
 }
 
+void PaperFlutterWindow::BeginQueueDrag() {
+  if (!collapsed_ || queue_drag_offset_active_) return;
+  HWND window = GetHandle();
+  if (!window) return;
+
+  // Prepare at the master's mouse-down frame. This prevents the retained
+  // Flutter capsule from advancing its collapse-all transition while USER32
+  // is still deciding whether the gesture is a click or a drag.
+  PauseMasterTransitionForQueueDrag();
+
+  RECT bounds = {};
+  if (!GetWindowRect(window, &bounds)) {
+    ResumeMasterTransitionAfterQueueDrag();
+    return;
+  }
+  queue_drag_offset_active_ = true;
+  queue_drag_base_top_ = bounds.top;
+  queue_drag_target_top_ = bounds.top;
+  queue_drag_last_delta_y_ = 0;
+  queue_drag_master_transition_coupled_ =
+      master_capsule_transition_active_ ||
+      queue_drag_master_transition_paused_at_ != 0;
+  CaptureQueueDragModelAnchors();
+  KillTimer(window, kCapsuleQueueFollowTimerId);
+  queue_drag_animation_active_ = false;
+}
+
 bool PaperFlutterWindow::PrepareQueueDragOffset(int delta_y,
                                                 RECT* target_bounds) {
   if (!collapsed_ || !target_bounds) return false;
   HWND window = GetHandle();
   if (!window) return false;
   if (!queue_drag_offset_active_) {
-    PauseMasterTransitionForQueueDrag();
+    BeginQueueDrag();
+    if (!queue_drag_offset_active_) return false;
   }
   RECT bounds = {};
   if (!GetWindowRect(window, &bounds)) return false;
-  if (!queue_drag_offset_active_) {
-    queue_drag_offset_active_ = true;
-    queue_drag_base_top_ = bounds.top;
-    queue_drag_target_top_ = bounds.top;
-    queue_drag_last_delta_y_ = 0;
-    queue_drag_master_transition_coupled_ =
-        master_capsule_transition_active_ ||
-        queue_drag_master_transition_paused_at_ != 0;
-    CaptureQueueDragModelAnchors();
-  }
   const int incremental_delta = delta_y - queue_drag_last_delta_y_;
   queue_drag_last_delta_y_ = delta_y;
   queue_drag_target_top_ = bounds.top + incremental_delta;
@@ -3212,13 +4162,22 @@ void PaperFlutterWindow::SetPaperTitle(const std::string& title) {
 }
 
 void PaperFlutterWindow::ResetCapsuleHoverAnimationForHiddenState() {
+  const double stable_resting_width =
+      capsule_resting_visible_width_ > 0.0 && capsule_width_ > 0.0
+          ? std::clamp(capsule_resting_visible_width_, 1.0, capsule_width_)
+          : 0.0;
   capsule_hovered_ = false;
   capsule_animation_active_ = false;
   capsule_animation_duration_ms_ = 0;
-  capsule_animation_start_width_ = 0.0;
-  capsule_animation_target_width_ = 0.0;
+  capsule_animation_start_width_ = stable_resting_width;
+  capsule_animation_target_width_ = stable_resting_width;
   capsule_animation_started_at_ = 0;
-  capsule_current_visible_width_ = 0.0;
+  // A delayed MouseRegion exit can arrive while a master-capsule reveal is
+  // still moving the retained HWND. Clearing the live width to zero here makes
+  // the transition-complete pass clamp it to one physical pixel, effectively
+  // losing the capsule. Preserve its measured resting frame while discarding
+  // only the transient hover animation state.
+  capsule_current_visible_width_ = stable_resting_width;
   if (HWND window = GetHandle()) {
     KillTimer(window, kCapsuleSlideTimerId);
   }
@@ -3646,7 +4605,10 @@ void PaperFlutterWindow::ShowReminderBubble(
     window_class.cbSize = sizeof(window_class);
     if (!GetClassInfoExW(GetModuleHandleW(nullptr),
                          kReminderBubbleWindowClass, &window_class)) {
-      window_class.style = CS_HREDRAW | CS_VREDRAW | CS_DROPSHADOW;
+      // PaperTodo's WPF DropShadowEffect is clipped to the transparent
+      // 260x104 HWND. Adding a Win32 class shadow creates a second, clearly
+      // visible shadow outside those bounds and does not match the source.
+      window_class.style = CS_HREDRAW | CS_VREDRAW;
       window_class.lpfnWndProc = ReminderBubbleWindowProc;
       window_class.hInstance = GetModuleHandleW(nullptr);
       window_class.hCursor = LoadCursorW(nullptr, IDC_HAND);
@@ -3875,12 +4837,19 @@ LRESULT PaperFlutterWindow::ReminderBubbleMessageHandler(
       HFONT icon_font = CreateFontW(
           -ScaleForDpi(window, 16), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-          CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+          ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
       HGDIOBJ old_font = SelectObject(buffer, icon_font);
       RECT icon_text = {icon_left, icon_top, icon_left + icon_size,
                         icon_top + icon_size};
-      DrawTextW(buffer, L"!", 1, &icon_text,
-                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+      if (!DrawPaperDialogText(
+              buffer, window, bounds, icon_text, L"!", L"Segoe UI",
+              reminder_accent_color_, 16.0f, DWRITE_FONT_WEIGHT_BOLD,
+              DWRITE_TEXT_ALIGNMENT_CENTER,
+              DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+              DWRITE_WORD_WRAPPING_NO_WRAP, 0.0f, 0.0f)) {
+        DrawTextW(buffer, L"!", 1, &icon_text,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+      }
 
       const int text_left = ScaleForDpi(window, 52);
       const int text_right = bounds.right - ScaleForDpi(window, 13);
@@ -3896,59 +4865,37 @@ LRESULT PaperFlutterWindow::ReminderBubbleMessageHandler(
           FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
           ANTIALIASED_QUALITY, DEFAULT_PITCH, ui_font_family.c_str());
       SelectObject(buffer, title_font);
-      RECT title_rect = {text_left, ScaleForDpi(window, 11), text_right,
-                         ScaleForDpi(window, 30)};
-      const int previous_character_extra =
-          SetTextCharacterExtra(buffer, -ScaleForDpi(window, 1));
-      DrawTextW(buffer, reminder_title_.c_str(), -1, &title_rect,
-                DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
-      SetTextCharacterExtra(buffer, previous_character_extra);
+      RECT title_rect = {text_left, ScaleForDpi(window, 13), text_right,
+                          ScaleForDpi(window, 30)};
+      if (!DrawPaperDialogText(
+              buffer, window, bounds, title_rect, reminder_title_,
+              ui_font_family, reminder_text_color_, 13.0f,
+              DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING,
+              DWRITE_PARAGRAPH_ALIGNMENT_NEAR,
+              DWRITE_WORD_WRAPPING_NO_WRAP, 0.0f, 0.0f)) {
+        const int previous_character_extra =
+            SetTextCharacterExtra(buffer, -ScaleForDpi(window, 1));
+        DrawTextW(buffer, reminder_title_.c_str(), -1, &title_rect,
+                  DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+        SetTextCharacterExtra(buffer, previous_character_extra);
+      }
 
       SetTextColor(buffer, reminder_weak_text_color_);
       HFONT message_font = CreateFontW(
           -ScaleForDpi(window, 12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-          CLEARTYPE_QUALITY, DEFAULT_PITCH,
+          ANTIALIASED_QUALITY, DEFAULT_PITCH,
           CapsuleFontFamily(capsule_font_family_).c_str());
       SelectObject(buffer, message_font);
-      const size_t first_break = reminder_message_.find(L'\n');
-      const size_t second_break =
-          first_break == std::wstring::npos
-              ? std::wstring::npos
-              : reminder_message_.find(L'\n', first_break + 1);
-      if (first_break != std::wstring::npos &&
-          second_break != std::wstring::npos) {
-        const size_t third_break =
-            reminder_message_.find(L'\n', second_break + 1);
-        const std::wstring first_line =
-            reminder_message_.substr(0, first_break);
-        const std::wstring second_line = reminder_message_.substr(
-            first_break + 1, second_break - first_break - 1);
-        const std::wstring third_line = reminder_message_.substr(
-            second_break + 1,
-            third_break == std::wstring::npos
-                ? std::wstring::npos
-                : third_break - second_break - 1);
-        RECT first_line_rect = {text_left, ScaleForDpi(window, 35),
-                                text_right, ScaleForDpi(window, 52)};
-        RECT second_line_rect = {text_left, ScaleForDpi(window, 52),
-                                 text_right, ScaleForDpi(window, 69)};
-        RECT third_line_rect = {
-            text_left, ScaleForDpi(window, 67),
-            text_right - ScaleForDpi(window, 7), ScaleForDpi(window, 84)};
-        DrawTextW(buffer, first_line.c_str(), -1, &first_line_rect,
-                  DT_SINGLELINE | DT_NOPREFIX);
-        DrawTextW(buffer, second_line.c_str(), -1, &second_line_rect,
-                  DT_SINGLELINE | DT_NOPREFIX);
-        DrawTextW(buffer, third_line.c_str(), -1, &third_line_rect,
-                  DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
-      } else {
-        const int message_top = ScaleForDpi(window, 39);
-        RECT message_rect = {
-            text_left, message_top, text_right,
-            std::min(
-                static_cast<int>(bounds.bottom) - ScaleForDpi(window, 11),
-                message_top + ScaleForDpi(window, 48))};
+      RECT message_rect = {text_left, ScaleForDpi(window, 34), text_right,
+                           ScaleForDpi(window, 82)};
+      if (!DrawPaperDialogText(
+              buffer, window, bounds, message_rect, reminder_message_,
+              CapsuleFontFamily(capsule_font_family_),
+              reminder_weak_text_color_, 12.0f, DWRITE_FONT_WEIGHT_NORMAL,
+              DWRITE_TEXT_ALIGNMENT_LEADING,
+              DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_WORD_WRAPPING_WRAP,
+              0.0f, 0.0f)) {
         DrawTextW(buffer, reminder_message_.c_str(), -1, &message_rect,
                   DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
       }
@@ -4305,19 +5252,21 @@ bool PaperFlutterWindow::IsVisible() const {
   return window && IsWindowVisible(window);
 }
 
-void PaperFlutterWindow::ShowPaper(bool activate) {
+bool PaperFlutterWindow::ShowPaper(bool activate) {
   HWND window = GetHandle();
   if (!window) {
-    return;
+    return false;
   }
   intended_visible_ = true;
   RefreshZOrder();
+  bool activated = !activate;
   if (activate && IsWindowVisible(window)) {
     ShowWindow(window, SW_RESTORE);
-    ActivatePaperWindow(window, always_on_top_);
+    activated = ActivatePaperWindow(window, always_on_top_);
     paper_shadow_z_order_dirty_ = true;
   }
   UpdatePaperShadowWindow(false);
+  return activated;
 }
 
 void PaperFlutterWindow::HidePaper() {

@@ -9,7 +9,9 @@
 #include <functional>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "win32_window.h"
 
@@ -31,6 +33,7 @@ class PaperFlutterWindow : public Win32Window {
   bool IsCollapsed() const { return collapsed_; }
   bool IsInCapsuleQueue(const std::string& monitor_device_name,
                         const std::string& side) const;
+  void BeginQueueDrag();
   bool PrepareQueueDragOffset(int delta_y, RECT* target_bounds);
   void SetQueueDragBoundsApplying(bool applying);
   void ApplyQueueDragOffset(int delta_y);
@@ -40,7 +43,7 @@ class PaperFlutterWindow : public Win32Window {
   void SetPaperTitle(const std::string& title);
   flutter::EncodableValue BoundsValue() const;
   bool IsVisible() const;
-  void ShowPaper(bool activate);
+  bool ShowPaper(bool activate);
   void HidePaper();
   void SetHideFromWindowSwitcher(bool hidden);
   void SetAvoidFullscreenTopmost(bool avoid);
@@ -97,11 +100,36 @@ class PaperFlutterWindow : public Win32Window {
   void ShowReminderBubble(const flutter::EncodableMap& reminder);
   void HideReminderBubble();
   void PlaceReminderBubble();
+  std::optional<std::string> ShowContextMenu(
+      const flutter::EncodableMap& arguments);
+  bool MeasureContextMenuItem(MEASUREITEMSTRUCT* measure) const;
+  bool DrawContextMenuItem(const DRAWITEMSTRUCT* draw) const;
   LRESULT ReminderBubbleMessageHandler(HWND window, UINT message,
                                        WPARAM wparam, LPARAM lparam) noexcept;
   static LRESULT CALLBACK ReminderBubbleWindowProc(HWND window, UINT message,
                                                     WPARAM wparam,
                                                     LPARAM lparam) noexcept;
+
+  enum class ContextMenuItemKind { padding, header, command, separator };
+
+  struct ContextMenuItem {
+    ContextMenuItemKind kind = ContextMenuItemKind::command;
+    std::wstring text;
+    std::string value;
+    UINT command_id = 0;
+    int logical_height = 0;
+    bool enabled = false;
+  };
+
+  struct ContextMenuPalette {
+    COLORREF background = RGB(255, 250, 239);
+    COLORREF border = RGB(218, 198, 161);
+    COLORREF text = RGB(54, 47, 39);
+    COLORREF header_text = RGB(113, 100, 83);
+    COLORREF disabled_text = RGB(113, 100, 83);
+    COLORREF hover = RGB(238, 229, 211);
+    bool dark = false;
+  };
 
   flutter::DartProject project_;
   std::string paper_id_;
@@ -205,6 +233,10 @@ class PaperFlutterWindow : public Win32Window {
   COLORREF reminder_accent_color_ = RGB(151, 122, 82);
   COLORREF reminder_text_color_ = RGB(54, 47, 39);
   COLORREF reminder_weak_text_color_ = RGB(113, 100, 83);
+  std::vector<std::unique_ptr<ContextMenuItem>> active_context_menu_items_;
+  ContextMenuPalette context_menu_palette_;
+  std::wstring context_menu_font_family_ = L"Segoe UI";
+  int context_menu_logical_width_ = 0;
 };
 
 #endif  // RUNNER_PAPER_FLUTTER_WINDOW_H_

@@ -262,6 +262,8 @@ void main() {
         'hideWhenFullscreen': false,
         'enableAnimations': true,
         'fontFamily': 'Microsoft YaHei UI',
+        'uiFontPreset': UiFontPresets.yaHei,
+        'systemFontFamilyName': '',
         'isScriptCapsule': false,
       },
     ]);
@@ -987,6 +989,8 @@ void main() {
         'hideWhenFullscreen': false,
         'enableAnimations': true,
         'fontFamily': 'Microsoft YaHei UI',
+        'uiFontPreset': UiFontPresets.yaHei,
+        'systemFontFamilyName': '',
         'isScriptCapsule': false,
       },
       {
@@ -1014,6 +1018,8 @@ void main() {
         'hideWhenFullscreen': false,
         'enableAnimations': true,
         'fontFamily': 'Microsoft YaHei UI',
+        'uiFontPreset': UiFontPresets.yaHei,
+        'systemFontFamilyName': '',
         'isScriptCapsule': true,
       },
     ]);
@@ -1130,6 +1136,8 @@ void main() {
         'hideWhenFullscreen': false,
         'enableAnimations': true,
         'fontFamily': 'Microsoft YaHei UI',
+        'uiFontPreset': UiFontPresets.yaHei,
+        'systemFontFamilyName': '',
         'isScriptCapsule': false,
       },
       {
@@ -1156,6 +1164,8 @@ void main() {
         'hideWhenFullscreen': false,
         'enableAnimations': true,
         'fontFamily': 'Microsoft YaHei UI',
+        'uiFontPreset': UiFontPresets.yaHei,
+        'systemFontFamilyName': '',
         'isScriptCapsule': true,
       },
     ]);
@@ -1653,13 +1663,15 @@ void main() {
       expect(collapsedMaster, containsPair('top', 48.0));
       expect(collapsedMaster, containsPair('isActive', true));
       expect(collapsedMaster, containsPair('count', 2));
-      expect(collapsedMaster, containsPair('labelEn', 'Collapse all'));
+      expect(collapsedMaster, containsPair('labelEn', 'Collapse'));
       expect(
         collapsedMaster,
         containsPair('fontFamily', 'Microsoft YaHei UI'),
       );
       expect(collapsedMaster, containsPair('enableAnimations', true));
-      expect(collapsedMaster, containsPair('labelZh', '收起全部'));
+      expect(collapsedMaster, containsPair('labelZh', '收起'));
+      expect(collapsedMaster, containsPair('countLabelEn', '2'));
+      expect(collapsedMaster, containsPair('countLabelZh', '2 个'));
 
       state.setCapsuleCollapseAllActiveFor(state.papers.first, false);
       await services.paperWindows.restoreAll(state);
@@ -1709,6 +1721,10 @@ void main() {
         proxies.every(
           (surface) => surface['fontFamily'] == 'Microsoft YaHei UI',
         ),
+        true,
+      );
+      expect(
+        proxies.every((surface) => surface['isActive'] == true),
         true,
       );
       expect(
@@ -1762,6 +1778,59 @@ void main() {
   );
 
   test(
+    'startup keeps an only collapsed paper in the master capsule queue slot',
+    () async {
+      const channel = MethodChannel('test/windows-collapsed-startup-slot');
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+      final services = WindowsPlatformServices(channel: channel);
+      final state = AppState(
+        useCapsuleCollapseAll: true,
+        deepCapsuleStartTopMargin: 120,
+        papers: [
+          PaperData(
+            id: 'only-collapsed-paper',
+            title: 'Collapsed at startup',
+            x: 360,
+            y: 250,
+            width: 420,
+            height: 360,
+            isCollapsed: true,
+            capsuleSide: DeepCapsuleSides.left,
+          ),
+        ],
+      )..normalize();
+
+      await services.paperWindows.restoreAll(state);
+
+      final platformCalls = _withoutQueueMonitorNormalization(calls);
+      expect(platformCalls.map((call) => call.method), [
+        'setPaperWindowState',
+        'setPaperSurfaces',
+        'setNativeCapsuleSurfaces',
+      ]);
+      final surfaces = (platformCalls
+              .singleWhere((call) => call.method == 'setPaperSurfaces')
+              .arguments as List)
+          .cast<Map>();
+      expect(surfaces.single['y'], 170.0);
+      expect(surfaces.single['capsuleTopIsWorkAreaRelative'], true);
+      expect(
+        platformCalls.where((call) => call.method == 'setBounds'),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
     'paper and capsule surfaces resolve PaperTodo UI font presets',
     () async {
       const channel = MethodChannel('test/windows-paper-surface-font-family');
@@ -1788,6 +1857,11 @@ void main() {
               .arguments as List)
           .cast<Map>();
       expect(paperSurfaces.single, containsPair('fontFamily', 'Consolas'));
+      expect(
+        paperSurfaces.single,
+        containsPair('uiFontPreset', UiFontPresets.mono),
+      );
+      expect(paperSurfaces.single, containsPair('systemFontFamilyName', ''));
 
       final nativeSurfaces = (calls
               .singleWhere(
@@ -1796,6 +1870,11 @@ void main() {
               .arguments as List)
           .cast<Map>();
       expect(nativeSurfaces.single, containsPair('fontFamily', 'Consolas'));
+      expect(
+        nativeSurfaces.single,
+        containsPair('uiFontPreset', UiFontPresets.mono),
+      );
+      expect(nativeSurfaces.single, containsPair('systemFontFamilyName', ''));
 
       for (final fontCase in const <(String, String)>[
         (UiFontPresets.yaHei, 'Microsoft YaHei UI'),
@@ -1819,7 +1898,38 @@ void main() {
             .single;
         expect(paperSurface, containsPair('fontFamily', fontCase.$2));
         expect(nativeSurface, containsPair('fontFamily', fontCase.$2));
+        expect(paperSurface, containsPair('uiFontPreset', fontCase.$1));
+        expect(nativeSurface, containsPair('uiFontPreset', fontCase.$1));
+        expect(paperSurface, containsPair('systemFontFamilyName', ''));
+        expect(nativeSurface, containsPair('systemFontFamilyName', ''));
       }
+
+      calls.clear();
+      state.uiFontPreset = UiFontPresets.defaultPreset;
+      state.systemFontFamilyName = 'DengXian';
+      await services.paperWindows.refreshSurfaceRegistry(state);
+      final systemPaperSurface = (calls
+              .singleWhere((call) => call.method == 'setPaperSurfaces')
+              .arguments as List)
+          .cast<Map>()
+          .single;
+      final systemNativeSurface = (calls
+              .singleWhere(
+                (call) => call.method == 'setNativeCapsuleSurfaces',
+              )
+              .arguments as List)
+          .cast<Map>()
+          .single;
+      expect(systemPaperSurface, containsPair('fontFamily', 'DengXian'));
+      expect(systemNativeSurface, containsPair('fontFamily', 'DengXian'));
+      expect(
+        systemPaperSurface,
+        containsPair('systemFontFamilyName', 'DengXian'),
+      );
+      expect(
+        systemNativeSurface,
+        containsPair('systemFontFamilyName', 'DengXian'),
+      );
     },
   );
 
@@ -2648,7 +2758,7 @@ void main() {
     expect((papers[0] as Map<Object?, Object?>)['trayLabel'], 'First');
     expect(
       (papers[1] as Map<Object?, Object?>)['trayLabel'],
-      'Second (hidden-l10n, collapsed-l10n, desktop-l10n, topmost-l10n)',
+      'Second',
     );
   });
 

@@ -1148,7 +1148,7 @@ const _zhStrings = {
   PaperTodoStringKeys.actionPaperActions: '纸片操作',
   PaperTodoStringKeys.actionPaperTextZoom: '纸片文字缩放',
   PaperTodoStringKeys.actionPaste: '粘贴',
-  PaperTodoStringKeys.actionPinToDesktop: '固定到桌面',
+  PaperTodoStringKeys.actionPinToDesktop: '钉在桌面',
   PaperTodoStringKeys.actionRecovery: '恢复',
   PaperTodoStringKeys.actionRecoverySnapshots: '恢复快照',
   PaperTodoStringKeys.actionRedoTodoChange: '重做待办更改',

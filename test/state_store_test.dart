@@ -81,6 +81,41 @@ void main() {
     expect(backup, contains('"theme": "light"'));
   });
 
+  test(
+    'retries a transient Windows sharing violation during atomic replace',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'repapertodo_store_windows_replace_retry_test_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      var deleteAttempts = 0;
+      final store = StateStore(
+        filePath: p.join(directory.path, 'data.json'),
+        deleteFile: (file) async {
+          deleteAttempts += 1;
+          if (deleteAttempts == 1) {
+            throw FileSystemException(
+              'sharing violation',
+              file.path,
+              const OSError('file is in use', 32),
+            );
+          }
+          await file.delete();
+        },
+      );
+
+      await store.save(AppState(theme: 'light'));
+      await store.save(AppState(theme: 'dark'));
+
+      expect(deleteAttempts, 2);
+      expect(
+        await File(store.filePath).readAsString(),
+        contains('"theme": "dark"'),
+      );
+    },
+    skip: !Platform.isWindows,
+  );
+
   test('loads backup when primary data is corrupt', () async {
     final directory = await Directory.systemTemp.createTemp(
       'repapertodo_store_recover_test_',

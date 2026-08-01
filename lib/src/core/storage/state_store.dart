@@ -11,10 +11,14 @@ class StateStore {
     AppStateCodec codec = const AppStateCodec(),
     Future<void> Function(String encodedState)? beforeWrite,
     Future<void> Function(File source, String targetPath)? recoveryCopy,
+    Future<void> Function(File file)? deleteFile,
+    Future<File> Function(File file, String targetPath)? renameFile,
   })  : _filePath = filePath,
         _codec = codec,
         _beforeWrite = beforeWrite,
-        _recoveryCopy = recoveryCopy;
+        _recoveryCopy = recoveryCopy,
+        _deleteFile = deleteFile,
+        _renameFile = renameFile;
 
   String _filePath;
   String get filePath => _filePath;
@@ -23,8 +27,21 @@ class StateStore {
   final AppStateCodec _codec;
   final Future<void> Function(String encodedState)? _beforeWrite;
   final Future<void> Function(File source, String targetPath)? _recoveryCopy;
+  final Future<void> Function(File file)? _deleteFile;
+  final Future<File> Function(File file, String targetPath)? _renameFile;
   Future<void> _saveQueue = Future<void>.value();
   bool _skipNextBackupRotationAfterRecovery = false;
+
+  static const _replaceRetryDelays = <Duration>[
+    Duration(milliseconds: 5),
+    Duration(milliseconds: 10),
+    Duration(milliseconds: 20),
+    Duration(milliseconds: 40),
+    Duration(milliseconds: 80),
+    Duration(milliseconds: 160),
+    Duration(milliseconds: 320),
+    Duration(milliseconds: 640),
+  ];
 
   Future<DateTime?> lastModifiedUtc() async {
     final primary = File(filePath);
@@ -115,6 +132,8 @@ class StateStore {
       codec: _codec,
       beforeWrite: _beforeWrite,
       recoveryCopy: _recoveryCopy,
+      deleteFile: _deleteFile,
+      renameFile: _renameFile,
     );
     await target.save(state);
     _filePath = normalized;
@@ -141,13 +160,47 @@ class StateStore {
       }
     }
 
-    if (await primary.exists()) {
-      await primary.delete();
-    }
-    await temp.rename(filePath);
+    await _replacePrimaryWithTemp(primary, temp);
     if (skipBackupRotation) {
       _skipNextBackupRotationAfterRecovery = false;
     }
+  }
+
+  Future<void> _replacePrimaryWithTemp(File primary, File temp) async {
+    for (var attempt = 0;; attempt++) {
+      try {
+        if (await primary.exists()) {
+          final deleteFile = _deleteFile;
+          if (deleteFile == null) {
+            await primary.delete();
+          } else {
+            await deleteFile(primary);
+          }
+        }
+        final renameFile = _renameFile;
+        if (renameFile == null) {
+          await temp.rename(filePath);
+        } else {
+          await renameFile(temp, filePath);
+        }
+        return;
+      } on FileSystemException catch (error) {
+        if (!_isTransientWindowsReplaceError(error) ||
+            attempt >= _replaceRetryDelays.length) {
+          rethrow;
+        }
+        await Future<void>.delayed(_replaceRetryDelays[attempt]);
+      }
+    }
+  }
+
+  bool _isTransientWindowsReplaceError(FileSystemException error) {
+    if (!Platform.isWindows) return false;
+    final errorCode = error.osError?.errorCode;
+    return error is PathAccessException ||
+        errorCode == 5 ||
+        errorCode == 32 ||
+        errorCode == 33;
   }
 
   Future<void> _copyRecoverySource(File source, String suffix) async {

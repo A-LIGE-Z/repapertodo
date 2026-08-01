@@ -398,28 +398,39 @@ class WindowsPaperWindowHost implements PaperWindowHost {
         await _channel.invokeMethod<void>('hide');
         return;
       }
-      _activePaper = visiblePapers.first;
-      await _applyBounds(visiblePapers.first);
+      final expandedPaper = visiblePapers.cast<PaperData?>().firstWhere(
+            (paper) => paper?.isCollapsed == false,
+            orElse: () => null,
+          );
+      _activePaper = expandedPaper ?? visiblePapers.first;
+      if (expandedPaper == null) {
+        // The registry transaction above already created and positioned every
+        // collapsed paper HWND in its capsule queue. Replaying the saved paper
+        // bounds here would replace that queue slot with the expanded card's
+        // x/y (for example, y=170 would jump back to y=250 at startup).
+        return;
+      }
+      await _applyBounds(expandedPaper);
       await _channel.invokeMethod<void>(
         'setPinnedToDesktop',
         _paperSurfaceFlagArguments(
-          visiblePapers.first,
-          visiblePapers.first.isPinnedToDesktop,
+          expandedPaper,
+          expandedPaper.isPinnedToDesktop,
         ),
       );
       await _channel.invokeMethod<void>(
         'show',
-        _paperSurfaceArguments(visiblePapers.first),
+        _paperSurfaceArguments(expandedPaper),
       );
       await _channel.invokeMethod<void>(
         'setTitle',
-        _paperTitleArguments(visiblePapers.first),
+        _paperTitleArguments(expandedPaper),
       );
       await _channel.invokeMethod<void>(
         'setAlwaysOnTop',
         _paperSurfaceFlagArguments(
-          visiblePapers.first,
-          visiblePapers.first.alwaysOnTop,
+          expandedPaper,
+          expandedPaper.alwaysOnTop,
         ),
       );
     });
@@ -1115,10 +1126,10 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(
         'kind': 'master',
         'paperId': firstPaper.id,
         'title': collapseAllActive ? '${entry.value.length}' : '',
-        'labelEn': 'Collapse all',
-        'labelZh': '收起全部',
-        'countLabelEn': '${entry.value.length} papers',
-        'countLabelZh': '${entry.value.length} 张',
+        'labelEn': 'Collapse',
+        'labelZh': '收起',
+        'countLabelEn': '${entry.value.length}',
+        'countLabelZh': '${entry.value.length} 个',
         'top': startTop,
         'capsuleSide': firstPaper.capsuleSide,
         'capsuleMonitorDeviceName': firstPaper.capsuleMonitorDeviceName,
@@ -1131,6 +1142,10 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(
         'colorScheme': state.colorScheme,
         'customThemeColorHex': state.customThemeColorHex,
         'fontFamily': _windowsUiFontFamily(state),
+        'uiFontPreset': UiFontPresets.normalize(state.uiFontPreset),
+        'systemFontFamilyName': normalizeSystemFontFamilyName(
+          state.systemFontFamilyName,
+        ),
         'enableAnimations': state.enableAnimations,
       });
     }
@@ -1158,6 +1173,10 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(
         'paperType': paper.type,
         'isScriptCapsule':
             paper.isNote && ScriptCapsuleSpec.tryParse(paper.content) != null,
+        // PaperTodo keeps an expanded paper's reserved edge slot in its
+        // active presentation. Unlike a collapsed capsule, this proxy stays
+        // at the focus-visible width when the pointer leaves.
+        'isActive': true,
         'top': top,
         'capsuleSide': paper.capsuleSide,
         'capsuleMonitorDeviceName': paper.capsuleMonitorDeviceName,
@@ -1183,6 +1202,10 @@ List<Map<String, Object?>> _nativeCapsuleSurfaceEntries(
         'colorScheme': state.colorScheme,
         'customThemeColorHex': state.customThemeColorHex,
         'fontFamily': _windowsUiFontFamily(state),
+        'uiFontPreset': UiFontPresets.normalize(state.uiFontPreset),
+        'systemFontFamilyName': normalizeSystemFontFamilyName(
+          state.systemFontFamilyName,
+        ),
         'enableAnimations': state.enableAnimations,
       });
     }
@@ -1236,9 +1259,13 @@ Map<String, Object?> _paperSurfaceRegistryEntry(
     'hideWhenFullscreen': state.hideDeepCapsulesWhenFullscreen,
     'enableAnimations': state.enableAnimations,
     'fontFamily': _windowsUiFontFamily(state),
+    'uiFontPreset': UiFontPresets.normalize(state.uiFontPreset),
+    'systemFontFamilyName': normalizeSystemFontFamilyName(
+      state.systemFontFamilyName,
+    ),
     'isScriptCapsule':
         paper.isNote && ScriptCapsuleSpec.isScriptCapsuleContent(paper.content),
-    if (labels != null) 'trayLabel': _trayPaperLabel(paper, title, labels),
+    if (labels != null) 'trayLabel': title,
   };
 }
 
@@ -1256,19 +1283,6 @@ String _windowsUiFontFamily(AppState state) {
     UiFontPresets.mono => 'Consolas',
     _ => 'Segoe UI',
   };
-}
-
-String _trayPaperLabel(PaperData paper, String title, TrayMenuLabels labels) {
-  final status = <String>[
-    if (!paper.isVisible) labels.hidden,
-    if (paper.isCollapsed) labels.collapsed,
-    if (paper.isPinnedToDesktop) labels.desktop,
-    if (paper.alwaysOnTop) labels.topmost,
-  ];
-  if (status.isEmpty) {
-    return title;
-  }
-  return '$title (${status.join(', ')})';
 }
 
 class WindowsStartupHost implements StartupHost {

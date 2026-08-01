@@ -312,7 +312,7 @@ void main() {
         );
         expect(
           inkWidget.hoverColor,
-          colors.hover,
+          Colors.transparent,
           reason: '$brightness $scheme',
         );
         expect(
@@ -320,6 +320,31 @@ void main() {
           Colors.transparent,
           reason: '$brightness $scheme',
         );
+        final feedback = find.byKey(
+          const ValueKey('paper-todo-popup-menu-item-feedback-new-todo'),
+        );
+        expect(feedback, findsOneWidget, reason: '$brightness $scheme');
+        final restingDecoration = tester
+            .widget<AnimatedContainer>(feedback)
+            .decoration as BoxDecoration;
+        expect(restingDecoration.color, Colors.transparent);
+        expect(restingDecoration.borderRadius, BorderRadius.circular(8));
+
+        final mouse = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await mouse.addPointer(location: const Offset(1, 1));
+        await mouse.moveTo(tester.getCenter(item));
+        await tester.pump();
+        final hoveredDecoration = tester
+            .widget<AnimatedContainer>(feedback)
+            .decoration as BoxDecoration;
+        expect(
+          hoveredDecoration.color,
+          colors.hover,
+          reason: '$brightness $scheme',
+        );
+        await mouse.removePointer();
         await tester.tap(item);
         await tester.pumpAndSettle();
       }

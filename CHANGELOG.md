@@ -1,7 +1,45 @@
 # RePaperTodo Changelog
 
-## Unreleased
+## [0.1.1+7] - 2026-08-01
 
+- Matched the master capsule's hidden full-content width to PaperTodo's WPF
+  `FormattedText` measurement instead of applying one GDI correction to every
+  language and font. The native bridge now receives the selected preset/system
+  family, measures the chevron and both labels with DirectWrite, and rounds only
+  the complete source formula. Default Chinese and an explicit DengXian system
+  font both produce the source 68px reserve and 51x46 docked viewport. The
+  master label now also uses grayscale DirectWrite Natural rendering with a
+  mirrored -2px left-edge paint correction; active count text moves up one
+  raster row, and the mirrored Symbol glyph uses the same -2px correction.
+  Default idle MAE falls from 6.6202/5.3119 to 1.5332/1.6546 left/right and
+  active MAE to 1.8674/2.0250, while preserving the calibrated curves, hit
+  targets, and collapse/expand behavior.
+- Moved independent Windows paper, Markdown-editor, Todo-item and canvas-block
+  context menus onto an owner-drawn Win32 popup HWND. Long menus now cross the
+  paper-window boundary from the original secondary-click anchor instead of
+  being repositioned by Flutter's Overlay. Captured WPF widths and heights,
+  command baselines, hover surfaces and indented separator rasters are retained,
+  and a scoped CBT hook removes USER32's broad popup shadow while restoring the
+  system menu class during destruction. The Flutter menu remains the
+  widget-test and non-native fallback.
+- Replaced the owner-drawn context menu's primary GDI label path with grayscale
+  DirectWrite Natural rendering at PaperTodo's actual 12px header and 13px
+  command sizes. Each row draws in a local item clip with independent WPF
+  baseline compensation, while GDI remains the failure fallback. Same-anchor
+  rest MAE falls from 6.5703/4.6914/22.1786/4.3628 to
+  3.6238/1.6991/1.9693/0.8081 for dark Paper/Markdown/Todo/Canvas menus and
+  from 8.1421/5.6373/21.6716/5.8676 to
+  3.7817/1.1656/1.8878/0.8590 in light mode.
+- Replaced the Windows tray menu's primary GDI label path with the same
+  source-sized grayscale DirectWrite Natural pipeline, while keeping separate
+  capture-calibrated vertical origins for the 21px app header, 25px command,
+  22px paper-header and 26px paper rows. Every shared reference row now has a
+  zero-shift optimum; weighted full-crop MAE falls from 5.9556 to 0.8150 and
+  ink-only MAE from 55.7771 to 9.7840. The visible-paper check also uses an
+  antialiased Direct2D rounded surface and WPF half-pixel horizontal origin.
+  Both paths retain their prior GDI rendering as a failure fallback, and menu
+  geometry, hit targets, submenu direction and RePaperTodo's additional
+  Toggle-all/Delete-paper commands remain unchanged.
 - Restored PaperTodo's source-native text metrics across Windows paper titles,
   toolbar actions, todo rows, due badges, settings labels, custom-theme actions,
   and the settings footer. Removed capture-specific fractional offsets, tracking,

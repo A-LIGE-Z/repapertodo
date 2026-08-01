@@ -122,13 +122,22 @@ void main() {
     );
   });
 
-  test('app font family preserves PaperTodo YaHei and DengXian presets', () {
+  test('app font family preserves PaperTodo UI and content font split', () {
     final yaHeiState = AppState(uiFontPreset: UiFontPresets.yaHei);
     final dengXianState = AppState(uiFontPreset: UiFontPresets.dengXian);
+    const paperTodoUiFallback = [
+      'Microsoft YaHei UI',
+      'Microsoft YaHei',
+      'Segoe UI Symbol',
+      'Segoe UI Emoji',
+    ];
 
-    expect(resolveAppFontFamily(yaHeiState), 'Microsoft YaHei UI');
+    expect(resolveAppFontFamily(yaHeiState), isNull);
+    expect(resolveAppFontFamilyFallback(AppState()), paperTodoUiFallback);
+    expect(resolveAppFontFamilyFallback(yaHeiState), paperTodoUiFallback);
+    expect(resolveAppContentFontFamily(yaHeiState), 'Microsoft YaHei UI');
     expect(
-      resolveAppFontFamilyFallback(yaHeiState),
+      resolveAppContentFontFamilyFallback(yaHeiState),
       contains('Microsoft YaHei'),
     );
     expect(resolveAppFontFamily(dengXianState), 'DengXian');

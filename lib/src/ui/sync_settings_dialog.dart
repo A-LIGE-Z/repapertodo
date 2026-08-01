@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -31,6 +32,20 @@ Future<void> _startNativeSettingsWindowDrag() async {
   } on PlatformException {
     // A disappearing coordinator should not turn a drag gesture into an
     // unhandled framework error.
+  }
+}
+
+Future<void> _startNativeSettingsWindowResize(String direction) async {
+  try {
+    await _settingsWindowChannel.invokeMethod<void>(
+      'startSettingsResize',
+      direction,
+    );
+  } on MissingPluginException {
+    // Android and widget tests render the same settings content without a
+    // separate native settings HWND.
+  } on PlatformException {
+    // The coordinator may disappear while the native sizing loop starts.
   }
 }
 
@@ -421,7 +436,6 @@ class SyncSettingsDialog extends StatefulWidget {
 class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   _SettingsSection _selectedSettingsSection = _SettingsSection.display;
   _SettingsSection? _hoveredSettingsSection;
-  _SettingsSection? _pressedSettingsSection;
   final ScrollController _settingsContentScrollController = ScrollController();
   final ScrollController _fontOptionsScrollController = ScrollController();
   final Map<_SettingsSection, GlobalKey> _settingsSectionKeys = {
@@ -803,14 +817,14 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   },
                   child: Transform.translate(
                     key: const ValueKey('settings-title-metrics'),
-                    offset: Offset.zero,
+                    offset: const Offset(0, 1.5),
                     child: Text(
                       strings.get(PaperTodoStringKeys.actionSettings),
                       overflow: TextOverflow.ellipsis,
                       style: baseTheme.textTheme.titleMedium?.copyWith(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
@@ -835,15 +849,15 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                         width: desktopLayout ? 146 : 44,
                         child: Transform.translate(
                           key: const ValueKey('settings-navigation-metrics'),
-                          offset: Offset.zero,
+                          offset: const Offset(1, -2),
                           child: _settingsNavigation(compact: !desktopLayout),
                         ),
                       ),
                       Transform.translate(
                         key: const ValueKey('settings-navigation-divider'),
-                        offset: Offset.zero,
+                        offset: const Offset(1, -2),
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(0, 8, 14, 4),
+                          padding: const EdgeInsets.fromLTRB(0, 8, 14, 5),
                           child: SizedBox(
                             width: 1,
                             child: ColoredBox(
@@ -937,7 +951,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                     Transform.translate(
                                       key: const ValueKey(
                                           'settings-theme-color-label-metrics'),
-                                      offset: Offset.zero,
+                                      offset: const Offset(0, 2),
                                       child: _settingsLabelWithHint(
                                         label: strings.get(PaperTodoStringKeys
                                             .customThemeColor),
@@ -947,8 +961,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                             .textTheme
                                             .labelMedium
                                             ?.copyWith(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
                                               fontSize: 11,
-                                              letterSpacing: 0,
+                                              letterSpacing: -0.01,
                                             ),
                                       ),
                                     ),
@@ -963,8 +979,8 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                       labelText: strings.get(
                                           PaperTodoStringKeys.markdownMode),
                                       compactIcon: Icons.article_outlined,
-                                      labelLetterSpacing: 0,
-                                      labelPaintOffset: Offset.zero,
+                                      labelLetterSpacing: -0.02,
+                                      labelPaintOffset: const Offset(1, 0),
                                       labelMetricsKey: const ValueKey(
                                         'settings-markdown-label-metrics',
                                       ),
@@ -1005,7 +1021,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                                 .fullscreenTopmostMode),
                                         compactIcon:
                                             Icons.fullscreen_exit_outlined,
-                                        labelLetterSpacing: 0,
+                                        labelLetterSpacing: -0.003,
                                         selectedValue: _fullscreenTopmostMode,
                                         choices: [
                                           _SettingsChoice(
@@ -1037,7 +1053,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                       labelText: strings.get(
                                           PaperTodoStringKeys.todoVisualSize),
                                       compactIcon: Icons.format_size_outlined,
-                                      labelLetterSpacing: 0,
+                                      labelLetterSpacing: -0.001,
                                       selectedValue: _todoVisualSize,
                                       choices: [
                                         _SettingsChoice(
@@ -1080,7 +1096,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                               PaperTodoStringKeys.todoSpacing),
                                           tipKey: PaperTodoStringKeys
                                               .tipTodoLineSpacing,
-                                          labelLetterSpacing: 0,
+                                          labelLetterSpacing: -0.001,
                                         ),
                                         const SizedBox(height: 14),
                                         _lineSpacingEditor(
@@ -1094,7 +1110,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                               PaperTodoStringKeys.noteSpacing),
                                           tipKey: PaperTodoStringKeys
                                               .tipNoteLineSpacing,
-                                          labelLetterSpacing: 0,
+                                          labelLetterSpacing: -0.001,
                                         ),
                                       ],
                                     ),
@@ -1102,9 +1118,17 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                     _settingsGroupLabel(
                                       strings.get(PaperTodoStringKeys
                                           .settingsSectionTopBarButtons),
+                                      labelPaintOffset: const Offset(0, -1),
+                                      labelMetricsKey: const ValueKey(
+                                        'settings-top-bar-heading-metrics',
+                                      ),
                                     ),
                                     _SettingsCheckboxTile(
                                       contentPadding: EdgeInsets.zero,
+                                      markPaintOffset: const Offset(0, -1),
+                                      markMetricsKey: const ValueKey(
+                                        'settings-top-bar-new-todo-mark-metrics',
+                                      ),
                                       secondary: _settingsHelp(
                                           PaperTodoStringKeys.tipNewTodoButton),
                                       title: _topBarButtonLabel(
@@ -1116,6 +1140,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                     ),
                                     _SettingsCheckboxTile(
                                       contentPadding: EdgeInsets.zero,
+                                      markPaintOffset: const Offset(0, -1),
+                                      markMetricsKey: const ValueKey(
+                                        'settings-top-bar-new-note-mark-metrics',
+                                      ),
                                       secondary: _settingsHelp(
                                           PaperTodoStringKeys.tipNewNoteButton),
                                       title: _topBarButtonLabel(
@@ -1127,6 +1155,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                     ),
                                     _SettingsCheckboxTile(
                                       contentPadding: EdgeInsets.zero,
+                                      markPaintOffset: const Offset(0, -1),
+                                      markMetricsKey: const ValueKey(
+                                        'settings-top-bar-external-mark-metrics',
+                                      ),
                                       secondary: _settingsHelp(
                                           PaperTodoStringKeys
                                               .tipExternalOpenButton),
@@ -1387,18 +1419,37 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                     _settingsGroupLabel(
                                       strings.get(PaperTodoStringKeys
                                           .settingsSectionExternalOpen),
+                                      labelPaintOffset: const Offset(0, -1),
+                                      labelMetricsKey: const ValueKey(
+                                        'settings-external-open-section-metrics',
+                                      ),
                                     ),
                                     _settingsLabeledControl(
                                       label: strings.get(PaperTodoStringKeys
                                           .externalMarkdownExtension),
                                       tipKey: PaperTodoStringKeys
                                           .tipExternalExtension,
+                                      labelLetterSpacing:
+                                          strings.languageCode == 'zh'
+                                              ? -0.125
+                                              : null,
+                                      labelPaintOffset: const Offset(1, 0),
+                                      labelMetricsKey: const ValueKey(
+                                        'settings-external-extension-label-metrics',
+                                      ),
                                       bottomSpacing: 8,
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.stretch,
                                         children: [
                                           _settingsCompactTextField(
+                                            contentPadding:
+                                                const EdgeInsets.fromLTRB(
+                                              10,
+                                              8,
+                                              8,
+                                              0,
+                                            ),
                                             fieldBuilder: (decoration) =>
                                                 TextField(
                                               key: const ValueKey(
@@ -1441,55 +1492,80 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                         ],
                                       ),
                                     ),
-                                    if (widget.supportsScriptCapsules) ...[
-                                      _settingsGroupLabel(
-                                        strings.get(PaperTodoStringKeys
-                                            .settingsSectionScriptCapsule),
-                                      ),
-                                      _SettingsCheckboxTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        secondary: _settingsHelp(
-                                          PaperTodoStringKeys
-                                              .tipPersistentPowerShellProcess,
+                                    if (widget.supportsScriptCapsules)
+                                      Transform.translate(
+                                        key: const ValueKey(
+                                          'settings-script-section-metrics',
                                         ),
-                                        title: Text(
-                                          strings.get(
-                                            PaperTodoStringKeys
-                                                .persistentPowerShellProcess,
-                                          ),
+                                        offset: const Offset(0, -1),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _settingsGroupLabel(
+                                              strings.get(PaperTodoStringKeys
+                                                  .settingsSectionScriptCapsule),
+                                            ),
+                                            _SettingsCheckboxTile(
+                                              contentPadding: EdgeInsets.zero,
+                                              titlePaintOffset:
+                                                  const Offset(0, -1),
+                                              titleMetricsKey: const ValueKey(
+                                                'settings-script-persistent-title-metrics',
+                                              ),
+                                              secondary: _settingsHelp(
+                                                PaperTodoStringKeys
+                                                    .tipPersistentPowerShellProcess,
+                                              ),
+                                              title: Text(
+                                                strings.get(
+                                                  PaperTodoStringKeys
+                                                      .persistentPowerShellProcess,
+                                                ),
+                                              ),
+                                              value:
+                                                  _usePersistentPowerShellProcess,
+                                              onChanged: (value) => setState(
+                                                () =>
+                                                    _usePersistentPowerShellProcess =
+                                                        value,
+                                              ),
+                                            ),
+                                            _SettingsCheckboxTile(
+                                              contentPadding: EdgeInsets.zero,
+                                              titlePaintOffset:
+                                                  const Offset(0, -1),
+                                              titleMetricsKey: const ValueKey(
+                                                'settings-script-powershell7-title-metrics',
+                                              ),
+                                              secondary: _settingsHelp(
+                                                  PaperTodoStringKeys
+                                                      .tipPreferPowerShell7),
+                                              title: Text(strings.get(
+                                                  PaperTodoStringKeys
+                                                      .preferPowerShell7)),
+                                              value: _preferPowerShell7,
+                                              onChanged: (value) => setState(
+                                                  () => _preferPowerShell7 =
+                                                      value),
+                                            ),
+                                            _SettingsCheckboxTile(
+                                              contentPadding: EdgeInsets.zero,
+                                              secondary: _settingsHelp(
+                                                  PaperTodoStringKeys
+                                                      .tipHideScriptRunWindow),
+                                              title: Text(strings.get(
+                                                  PaperTodoStringKeys
+                                                      .hideScriptRunWindow)),
+                                              value: _hideScriptRunWindow,
+                                              onChanged: (value) => setState(
+                                                  () => _hideScriptRunWindow =
+                                                      value),
+                                            ),
+                                          ],
                                         ),
-                                        value: _usePersistentPowerShellProcess,
-                                        onChanged: (value) => setState(
-                                          () =>
-                                              _usePersistentPowerShellProcess =
-                                                  value,
-                                        ),
                                       ),
-                                      _SettingsCheckboxTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        secondary: _settingsHelp(
-                                            PaperTodoStringKeys
-                                                .tipPreferPowerShell7),
-                                        title: Text(strings.get(
-                                            PaperTodoStringKeys
-                                                .preferPowerShell7)),
-                                        value: _preferPowerShell7,
-                                        onChanged: (value) => setState(
-                                            () => _preferPowerShell7 = value),
-                                      ),
-                                      _SettingsCheckboxTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        secondary: _settingsHelp(
-                                            PaperTodoStringKeys
-                                                .tipHideScriptRunWindow),
-                                        title: Text(strings.get(
-                                            PaperTodoStringKeys
-                                                .hideScriptRunWindow)),
-                                        value: _hideScriptRunWindow,
-                                        onChanged: (value) => setState(
-                                            () => _hideScriptRunWindow = value),
-                                      ),
-                                    ],
                                     if (widget
                                         .supportsDataDirectorySelection) ...[
                                       _settingsGroupLabel(
@@ -1506,6 +1582,14 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                       icon: Icons.checklist_outlined,
                                       label: strings.get(PaperTodoStringKeys
                                           .settingsSectionTodoAndNotes),
+                                      letterSpacing:
+                                          strings.languageCode == 'zh'
+                                              ? -0.125
+                                              : null,
+                                      labelPaintOffset: const Offset(1, 0),
+                                      labelMetricsKey: const ValueKey(
+                                        'settings-todo-section-header-metrics',
+                                      ),
                                     ),
                                     _SettingsCheckboxTile(
                                       contentPadding: EdgeInsets.zero,
@@ -1530,22 +1614,6 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                       onChanged: (value) => setState(() =>
                                           _showTodoDueRelativeTime = value),
                                     ),
-                                    _SettingsCheckboxTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      secondary: _settingsHelp(
-                                        PaperTodoStringKeys
-                                            .tipMoveCompletedTodosToBottom,
-                                      ),
-                                      title: Text(
-                                        strings.get(PaperTodoStringKeys
-                                            .moveCompletedTodosToBottom),
-                                      ),
-                                      value: _moveCompletedTodosToBottom,
-                                      onChanged: (value) => setState(
-                                        () =>
-                                            _moveCompletedTodosToBottom = value,
-                                      ),
-                                    ),
                                     const SizedBox(height: 5),
                                     _adaptiveChoiceSelector(
                                       key: const ValueKey(
@@ -1553,6 +1621,14 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                       labelText: strings.get(
                                           PaperTodoStringKeys.dueYearDisplay),
                                       compactIcon: Icons.event_outlined,
+                                      labelLetterSpacing:
+                                          strings.languageCode == 'zh'
+                                              ? -0.125
+                                              : null,
+                                      labelPaintOffset: const Offset(1, 0),
+                                      labelMetricsKey: const ValueKey(
+                                        'settings-due-year-label-metrics',
+                                      ),
                                       selectedValue: _todoDueYearDisplayMode,
                                       choices: [
                                         _SettingsChoice(
@@ -1576,17 +1652,29 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                       tipKey: PaperTodoStringKeys
                                           .tipTodoDueYearDisplay,
                                     ),
-                                    const SizedBox(height: 8),
-                                    _SettingsCheckboxTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      secondary: _settingsHelp(
-                                          PaperTodoStringKeys
-                                              .tipUseTodoReminderInterval),
-                                      title: Text(strings.get(
-                                          PaperTodoStringKeys.todoReminders)),
-                                      value: _useTodoReminderInterval,
-                                      onChanged: (value) => setState(() =>
-                                          _useTodoReminderInterval = value),
+                                    const SizedBox(
+                                      key: ValueKey(
+                                        'settings-due-year-reminder-gap',
+                                      ),
+                                      height: 8,
+                                    ),
+                                    Transform.translate(
+                                      key: const ValueKey(
+                                        'settings-reminder-toggle-paint-offset',
+                                      ),
+                                      offset: const Offset(0, 1),
+                                      transformHitTests: false,
+                                      child: _SettingsCheckboxTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        secondary: _settingsHelp(
+                                            PaperTodoStringKeys
+                                                .tipUseTodoReminderInterval),
+                                        title: Text(strings.get(
+                                            PaperTodoStringKeys.todoReminders)),
+                                        value: _useTodoReminderInterval,
+                                        onChanged: (value) => setState(() =>
+                                            _useTodoReminderInterval = value),
+                                      ),
                                     ),
                                     Column(
                                       children: [
@@ -1769,6 +1857,28 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                                 )
                                             : null,
                                       ),
+                                    // RePaperTodo's completion-order option is
+                                    // intentionally kept after the PaperTodo
+                                    // Todo/Notes controls so its extension does
+                                    // not shift the source-calibrated due and
+                                    // reminder rows downward.
+                                    const SizedBox(height: 8),
+                                    _SettingsCheckboxTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      secondary: _settingsHelp(
+                                        PaperTodoStringKeys
+                                            .tipMoveCompletedTodosToBottom,
+                                      ),
+                                      title: Text(
+                                        strings.get(PaperTodoStringKeys
+                                            .moveCompletedTodosToBottom),
+                                      ),
+                                      value: _moveCompletedTodosToBottom,
+                                      onChanged: (value) => setState(
+                                        () =>
+                                            _moveCompletedTodosToBottom = value,
+                                      ),
+                                    ),
                                   ],
                                   if (_selectedSettingsSection ==
                                       _SettingsSection.sync) ...[
@@ -1944,7 +2054,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(
+                  key: ValueKey('settings-content-footer-gap'),
+                  height: 2,
+                ),
                 Row(
                   children: [
                     Expanded(
@@ -1958,6 +2071,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     const SizedBox(width: 12),
                     _SettingsDialogActionButton(
                       key: const ValueKey('settings-cancel-button'),
+                      height: 24,
                       onPressed: _cancel,
                       label: strings.get(PaperTodoStringKeys.actionCancel),
                     ),
@@ -1965,6 +2079,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     _SettingsDialogActionButton(
                       key: const ValueKey('settings-confirm-button'),
                       primary: true,
+                      height: 24,
                       onPressed: _save,
                       label: strings.get(PaperTodoStringKeys.actionConfirm),
                     ),
@@ -2021,6 +2136,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                       color: colors.text,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
+                      letterSpacing: -0.05,
                     ),
                   ),
                 ),
@@ -2029,21 +2145,24 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 76),
-                      child: SizedBox(
+                    SizedBox(
+                      width: 76,
+                      height: 27,
+                      child: _SettingsDialogActionButton(
+                        key: const ValueKey('settings-theme-color-pick'),
+                        primary: true,
+                        minWidth: 76,
                         height: 27,
-                        child: _SettingsDialogActionButton(
-                          key: const ValueKey('settings-theme-color-pick'),
-                          primary: true,
-                          minWidth: 76,
-                          height: 27,
-                          onPressed: _showCustomThemeColorDialog,
-                          child: Transform.translate(
-                            key: const ValueKey(
-                              'settings-theme-color-pick-label-metrics',
-                            ),
-                            offset: Offset.zero,
+                        borderRadius: BorderRadius.zero,
+                        onPressed: _showCustomThemeColorDialog,
+                        child: Transform.translate(
+                          key: const ValueKey(
+                            'settings-theme-color-pick-label-metrics',
+                          ),
+                          offset: const Offset(0, -0.5),
+                          child: Transform.scale(
+                            scaleY: 12 / 11,
+                            alignment: Alignment.topCenter,
                             child: Text(
                               strings.get(
                                 PaperTodoStringKeys.themeColorPick,
@@ -2053,20 +2172,20 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                         ),
                       ),
                     ),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 82),
-                      child: SizedBox(
+                    SizedBox(
+                      width: 82,
+                      height: 27,
+                      child: _SettingsCompactActionButton(
+                        key: const ValueKey('settings-theme-color-clear'),
+                        minWidth: 82,
                         height: 27,
-                        child: _SettingsCompactActionButton(
-                          key: const ValueKey('settings-theme-color-clear'),
-                          minWidth: 82,
-                          height: 27,
-                          onPressed: () => setState(
-                            () => _customThemeColorController.clear(),
-                          ),
-                          label: strings.get(
-                            PaperTodoStringKeys.themeColorClear,
-                          ),
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.125,
+                        onPressed: () => setState(
+                          () => _customThemeColorController.clear(),
+                        ),
+                        label: strings.get(
+                          PaperTodoStringKeys.themeColorClear,
                         ),
                       ),
                     ),
@@ -2083,10 +2202,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   Widget _topBarButtonLabel(String key) {
     return Transform.translate(
       key: ValueKey('settings-$key-wpf-label'),
-      offset: Offset.zero,
+      offset: const Offset(-0.5, -1),
       child: Text(
         strings.get(key),
-        style: const TextStyle(letterSpacing: 0),
+        style: const TextStyle(letterSpacing: -0.075),
       ),
     );
   }
@@ -2206,8 +2325,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   Widget _settingsNavigation({required bool compact}) {
     final colors = Theme.of(context).colorScheme;
     final paperColors = PaperTodoThemeColors.of(context);
-    final feedbackDuration =
-        _enableAnimations ? PaperTodoMotion.controlFeedback : Duration.zero;
+    const feedbackDuration = Duration.zero;
     return ListView(
       key: const ValueKey('settings-category-navigation'),
       padding: const EdgeInsets.only(top: 8, right: 12),
@@ -2232,35 +2350,25 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                 builder: (context) {
                   final selected = section == _selectedSettingsSection;
                   final hovered = section == _hoveredSettingsSection;
-                  final pressed = section == _pressedSettingsSection;
-                  final foreground = selected || hovered || pressed
+                  final foreground = selected || hovered
                       ? colors.onSurface
                       : colors.onSurfaceVariant;
                   return Tooltip(
                     message: compact ? _settingsSectionLabel(section) : '',
-                    child: AnimatedScale(
+                    child: KeyedSubtree(
                       key: ValueKey('settings-category-${section.name}-press'),
-                      scale: pressed ? 0.985 : 1,
-                      duration: feedbackDuration,
-                      curve: PaperTodoMotion.quickCurve,
                       child: AnimatedContainer(
                         duration: feedbackDuration,
                         curve: PaperTodoMotion.quickCurve,
                         decoration: BoxDecoration(
-                          color: pressed
+                          color: selected
                               ? paperColors.tint.withValues(
                                   alpha:
-                                      paperColors.isDark ? 58 / 255 : 42 / 255,
+                                      paperColors.isDark ? 42 / 255 : 24 / 255,
                                 )
-                              : selected
-                                  ? paperColors.tint.withValues(
-                                      alpha: paperColors.isDark
-                                          ? 42 / 255
-                                          : 24 / 255,
-                                    )
-                                  : hovered
-                                      ? paperColors.hover
-                                      : Colors.transparent,
+                              : hovered
+                                  ? paperColors.hover
+                                  : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Material(
@@ -2277,10 +2385,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                               _hoveredSettingsSection =
                                   value && !selected ? section : null;
                             }),
-                            onHighlightChanged: (value) => setState(() {
-                              _pressedSettingsSection =
-                                  value && !selected ? section : null;
-                            }),
+                            // PaperTodo replaces the settings page on
+                            // MouseLeftButtonDown. Keep onTap as the semantic
+                            // and keyboard activation path; the selection
+                            // helper is idempotent when a pointer tap completes.
+                            onTapDown: (_) => _selectSettingsSection(section),
                             onTap: () => _selectSettingsSection(section),
                             child: SizedBox(
                               height: 34,
@@ -2332,6 +2441,11 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                                     fontWeight: selected
                                                         ? FontWeight.w600
                                                         : FontWeight.w500,
+                                                    letterSpacing:
+                                                        _settingsNavigationLabelLetterSpacing(
+                                                      section,
+                                                      selected: selected,
+                                                    ),
                                                   ) ??
                                               TextStyle(
                                                 fontSize: 12.5,
@@ -2339,10 +2453,25 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                                                 fontWeight: selected
                                                     ? FontWeight.w600
                                                     : FontWeight.w500,
+                                                letterSpacing:
+                                                    _settingsNavigationLabelLetterSpacing(
+                                                  section,
+                                                  selected: selected,
+                                                ),
                                               ),
-                                          child: Text(
-                                            _settingsSectionLabel(section),
-                                            overflow: TextOverflow.ellipsis,
+                                          child: Transform.translate(
+                                            key: ValueKey(
+                                              'settings-category-${section.name}-label-metrics',
+                                            ),
+                                            offset:
+                                                _settingsNavigationLabelOffset(
+                                              section,
+                                              selected: selected,
+                                            ),
+                                            child: Text(
+                                              _settingsSectionLabel(section),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -2364,31 +2493,65 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     );
   }
 
+  Offset _settingsNavigationLabelOffset(
+    _SettingsSection section, {
+    required bool selected,
+  }) {
+    return Offset.zero;
+  }
+
+  double _settingsNavigationLabelLetterSpacing(
+    _SettingsSection section, {
+    required bool selected,
+  }) {
+    return switch (section) {
+      _SettingsSection.todoAndNotes || _SettingsSection.general => -0.05,
+      _SettingsSection.capsules when selected => -0.05,
+      _ => 0,
+    };
+  }
+
   Widget _settingsSectionHeader({
     required _SettingsSection section,
     required IconData icon,
     required String label,
+    double? letterSpacing,
+    Offset labelPaintOffset = Offset.zero,
+    Key labelMetricsKey = const ValueKey('settings-group-label-metrics'),
   }) {
     return _settingsGroupLabel(
       label,
       key: _settingsSectionKeys[section],
+      letterSpacing: letterSpacing,
+      labelPaintOffset: labelPaintOffset,
+      labelMetricsKey: labelMetricsKey,
     );
   }
 
-  Widget _settingsGroupLabel(String label, {Key? key}) {
+  Widget _settingsGroupLabel(
+    String label, {
+    Key? key,
+    double? letterSpacing,
+    Offset labelPaintOffset = Offset.zero,
+    Key labelMetricsKey = const ValueKey('settings-group-label-metrics'),
+  }) {
     final colors = Theme.of(context).colorScheme;
     return Padding(
       key: key,
       padding: const EdgeInsets.only(top: 12, bottom: 3),
       child: Transform.translate(
-        key: const ValueKey('settings-group-label-metrics'),
-        offset: Offset.zero,
+        key: labelMetricsKey,
+        offset: Offset(
+          -0.5 + labelPaintOffset.dx,
+          0.5 + labelPaintOffset.dy,
+        ),
         child: Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
+                letterSpacing: letterSpacing,
               ),
         ),
       ),
@@ -2412,7 +2575,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
         Expanded(
           child: Transform.translate(
             key: labelMetricsKey,
-            offset: labelPaintOffset,
+            offset: Offset(
+              -0.5 + labelPaintOffset.dx,
+              0.5 + labelPaintOffset.dy,
+            ),
             child: Text(label, style: style),
           ),
         ),
@@ -2428,6 +2594,9 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
     required Widget child,
     double topSpacing = 4,
     double bottomSpacing = 10,
+    double? labelLetterSpacing,
+    Offset labelPaintOffset = Offset.zero,
+    Key labelMetricsKey = const ValueKey('settings-field-label-metrics'),
   }) {
     final colors = PaperTodoThemeColors.of(context);
     return Column(
@@ -2442,7 +2611,10 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
               color: colors.weakText,
               fontSize: 11,
               fontWeight: FontWeight.w500,
+              letterSpacing: labelLetterSpacing,
             ),
+            labelPaintOffset: labelPaintOffset,
+            labelMetricsKey: labelMetricsKey,
           ),
         ),
         const SizedBox(height: 4),
@@ -2454,16 +2626,18 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
 
   Widget _settingsCompactTextField({
     required Widget Function(InputDecoration decoration) fieldBuilder,
+    EdgeInsetsGeometry contentPadding =
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
   }) {
     return _SettingsTextFieldChrome(
       child: fieldBuilder(
-        const InputDecoration(
+        InputDecoration(
           isDense: true,
           filled: false,
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          contentPadding: contentPadding,
         ),
       ),
     );
@@ -2595,17 +2769,16 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
   }
 
   void _selectSettingsSection(_SettingsSection section) {
+    if (section == _selectedSettingsSection) {
+      return;
+    }
     setState(() => _selectedSettingsSection = section);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final target = _settingsSectionKeys[section]?.currentContext;
-      if (!mounted || target == null) {
+      if (!mounted || !_settingsContentScrollController.hasClients) {
         return;
       }
-      Scrollable.ensureVisible(
-        target,
-        duration: PaperTodoMotion.moveLong,
-        curve: PaperTodoMotion.enterCurve,
-        alignment: 0,
+      _settingsContentScrollController.jumpTo(
+        _settingsContentScrollController.position.minScrollExtent,
       );
     });
   }
@@ -2650,7 +2823,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     color: colors.onSurfaceVariant,
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    letterSpacing: 0,
+                    letterSpacing: -0.005,
                   ),
             ),
             const SizedBox(height: 4),
@@ -2698,7 +2871,7 @@ class _SyncSettingsDialogState extends State<SyncSettingsDialog> {
                     focusNode: focusNode,
                     enabled: enabled,
                     style: const TextStyle(fontSize: 12.5, height: 1),
-                    textAlignVertical: const TextAlignVertical(y: -0.4),
+                    textAlignVertical: const TextAlignVertical(y: -0.2),
                     decoration: InputDecoration(
                       isDense: true,
                       filled: false,
@@ -3713,10 +3886,7 @@ class _SettingsTextFieldChromeState extends State<_SettingsTextFieldChrome> {
   @override
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
+    const duration = Duration.zero;
     return Focus(
       child: Builder(
         builder: (context) {
@@ -3742,11 +3912,7 @@ class _SettingsTextFieldChromeState extends State<_SettingsTextFieldChrome> {
                       decoration: BoxDecoration(
                         color: widget.error
                             ? colors.dangerAt(colors.isDark ? 15 : 8)
-                            : focused
-                                ? colors.tintAt(colors.isDark ? 18 : 10)
-                                : _hovered
-                                    ? colors.hover
-                                    : colors.tintAt(colors.isDark ? 10 : 5),
+                            : Colors.transparent,
                         border: Border.all(
                           color: widget.error
                               ? colors.danger
@@ -3778,6 +3944,8 @@ class _SettingsCompactActionButton extends StatefulWidget {
     required this.height,
     required this.onPressed,
     this.horizontalPadding = 10,
+    this.fontWeight,
+    this.letterSpacing,
     super.key,
   });
 
@@ -3785,6 +3953,8 @@ class _SettingsCompactActionButton extends StatefulWidget {
   final double minWidth;
   final double height;
   final double horizontalPadding;
+  final FontWeight? fontWeight;
+  final double? letterSpacing;
   final VoidCallback? onPressed;
 
   @override
@@ -3810,10 +3980,7 @@ class _SettingsCompactActionButtonState
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
     final enabled = widget.onPressed != null;
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
+    const duration = Duration.zero;
     final surfaceColor = _pressed
         ? colors.tintAt(colors.isDark ? 64 : 48)
         : _hovered
@@ -3839,36 +4006,33 @@ class _SettingsCompactActionButtonState
           child: Semantics(
             button: true,
             enabled: enabled,
-            child: AnimatedScale(
-              scale: _pressed ? 0.97 : 1,
+            child: AnimatedContainer(
               duration: duration,
               curve: PaperTodoMotion.quickCurve,
-              child: AnimatedContainer(
+              constraints: BoxConstraints(minWidth: widget.minWidth),
+              height: widget.height,
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.horizontalPadding,
+              ),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.zero,
+              ),
+              child: AnimatedOpacity(
                 duration: duration,
                 curve: PaperTodoMotion.quickCurve,
-                constraints: BoxConstraints(minWidth: widget.minWidth),
-                height: widget.height,
-                padding: EdgeInsets.symmetric(
-                  horizontal: widget.horizontalPadding,
-                ),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: surfaceColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: AnimatedOpacity(
-                  duration: duration,
-                  curve: PaperTodoMotion.quickCurve,
-                  opacity: _pressed ? 0.72 : 1,
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colors.text,
-                      fontSize: 12,
-                      height: 1,
-                    ),
+                opacity: _pressed ? 0.72 : 1,
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.text,
+                    fontSize: 12,
+                    height: 1,
+                    fontWeight: widget.fontWeight,
+                    letterSpacing: widget.letterSpacing,
                   ),
                 ),
               ),
@@ -3887,6 +4051,7 @@ class _SettingsDialogActionButton extends StatefulWidget {
     this.primary = false,
     this.minWidth = 64,
     this.height = 30,
+    this.borderRadius = const BorderRadius.all(Radius.circular(8)),
     required this.onPressed,
     super.key,
   }) : assert(label != null || child != null);
@@ -3896,6 +4061,7 @@ class _SettingsDialogActionButton extends StatefulWidget {
   final bool primary;
   final double minWidth;
   final double height;
+  final BorderRadius borderRadius;
   final VoidCallback? onPressed;
 
   @override
@@ -3941,7 +4107,7 @@ class _SettingsDialogActionButtonState
         height: widget.height,
         decoration: BoxDecoration(
           color: background,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: widget.borderRadius,
         ),
         child: TextButton(
           style: TextButton.styleFrom(
@@ -3954,7 +4120,7 @@ class _SettingsDialogActionButtonState
             disabledBackgroundColor: Colors.transparent,
             overlayColor: pressedOverlay,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: widget.borderRadius,
             ),
             textStyle: const TextStyle(fontSize: 12),
           ),
@@ -3990,10 +4156,7 @@ class _SettingsColorSwatchButtonState
   @override
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
+    const duration = Duration.zero;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -4009,28 +4172,23 @@ class _SettingsColorSwatchButtonState
         onTap: widget.onPressed,
         child: Semantics(
           button: true,
-          child: AnimatedScale(
-            scale: _pressed ? 0.97 : 1,
+          child: AnimatedOpacity(
             duration: duration,
             curve: PaperTodoMotion.quickCurve,
-            child: AnimatedOpacity(
+            opacity: _pressed ? 0.82 : 1,
+            child: AnimatedContainer(
+              key: const ValueKey('settings-theme-color-swatch-surface'),
+              width: 58,
+              height: 42,
               duration: duration,
               curve: PaperTodoMotion.quickCurve,
-              opacity: _pressed ? 0.82 : 1,
-              child: AnimatedContainer(
-                key: const ValueKey('settings-theme-color-swatch-surface'),
-                width: 58,
-                height: 42,
-                duration: duration,
-                curve: PaperTodoMotion.quickCurve,
-                decoration: BoxDecoration(
-                  color: widget.color,
-                  border: Border.all(
-                    color:
-                        _hovered ? colors.brightWeakText : colors.paperBorder,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
+              clipBehavior: Clip.hardEdge,
+              decoration: BoxDecoration(
+                color: widget.color,
+                border: Border.all(
+                  color: _hovered ? colors.brightWeakText : colors.paperBorder,
                 ),
+                borderRadius: BorderRadius.zero,
               ),
             ),
           ),
@@ -4076,10 +4234,7 @@ class _SettingsSecretToggleButtonState
   @override
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
+    const duration = Duration.zero;
     final surface = _pressed
         ? colors.tintAt(colors.isDark ? 64 : 48)
         : _hovered
@@ -4110,42 +4265,23 @@ class _SettingsSecretToggleButtonState
           child: Semantics(
             button: true,
             enabled: widget.enabled,
-            child: AnimatedScale(
-              scale: _pressed ? 0.96 : 1,
+            child: AnimatedContainer(
+              width: 34,
+              height: 26,
               duration: duration,
               curve: PaperTodoMotion.quickCurve,
-              child: AnimatedContainer(
-                width: 34,
-                height: 26,
-                duration: duration,
-                curve: PaperTodoMotion.quickCurve,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: surface,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: AnimatedSwitcher(
-                  duration: duration,
-                  switchInCurve: PaperTodoMotion.enterCurve,
-                  switchOutCurve: PaperTodoMotion.quickCurve,
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: ScaleTransition(
-                      scale: Tween<double>(begin: 0.88, end: 1).animate(
-                        animation,
-                      ),
-                      child: child,
-                    ),
-                  ),
-                  child: Icon(
-                    widget.obscure
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                    key: ValueKey(widget.obscure),
-                    size: 15,
-                    color: _hovered ? colors.text : colors.weakText,
-                  ),
-                ),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                widget.obscure
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                key: ValueKey(widget.obscure),
+                size: 15,
+                color: _hovered ? colors.text : colors.weakText,
               ),
             ),
           ),
@@ -4264,6 +4400,10 @@ class _SettingsCheckboxTile extends StatefulWidget {
     required this.onChanged,
     this.secondary,
     this.contentPadding,
+    this.titlePaintOffset = Offset.zero,
+    this.titleMetricsKey = const ValueKey('settings-checkbox-title-metrics'),
+    this.markPaintOffset = Offset.zero,
+    this.markMetricsKey = const ValueKey('settings-checkbox-mark-metrics'),
   });
 
   final Widget title;
@@ -4271,6 +4411,10 @@ class _SettingsCheckboxTile extends StatefulWidget {
   final ValueChanged<bool>? onChanged;
   final Widget? secondary;
   final EdgeInsetsGeometry? contentPadding;
+  final Offset titlePaintOffset;
+  final Key titleMetricsKey;
+  final Offset markPaintOffset;
+  final Key markMetricsKey;
 
   @override
   State<_SettingsCheckboxTile> createState() => _SettingsCheckboxTileState();
@@ -4300,20 +4444,29 @@ class _SettingsCheckboxTileState extends State<_SettingsCheckboxTile> {
     final content = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _SettingsCheckMark(
-          value: widget.value,
-          hovered: _hovered,
+        Transform.translate(
+          key: widget.markMetricsKey,
+          offset: widget.markPaintOffset,
+          transformHitTests: false,
+          child: _SettingsCheckMark(
+            value: widget.value,
+            hovered: _hovered,
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Transform.translate(
-            key: const ValueKey('settings-checkbox-title-metrics'),
-            offset: Offset.zero,
+            key: widget.titleMetricsKey,
+            offset: Offset(
+              0.5 + widget.titlePaintOffset.dx,
+              1 + widget.titlePaintOffset.dy,
+            ),
             child: DefaultTextStyle.merge(
               style: TextStyle(
                 color: colors.text,
                 fontSize: 13,
                 height: 1.15,
+                letterSpacing: -0.05,
               ),
               child: widget.title,
             ),
@@ -4405,21 +4558,51 @@ class _SettingsCheckMarkPainter extends CustomPainter {
 
   static const double borderWidth = 1.5;
   static const double radius = 4;
-  double get checkedInset => 0;
+  double get sourceBorderRadius => radius;
+  double get checkedInset => borderWidth + 0.5;
+  double get checkedRadius => 3.5;
+  Offset get checkPaintOffset => const Offset(2, 2);
+  double get effectiveBorderRadius => 5.125;
+  double get effectiveBorderInset => 2;
+  double get effectiveInnerBorderRadius => 3.5;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
+    final scaleX = size.width / 16;
+    final scaleY = size.height / 16;
     final progress = selectionProgress.clamp(0.0, 1.0);
     final uncheckedOpacity = 1 - progress;
-    final rrect = RRect.fromRectAndRadius(
-      rect.deflate(borderWidth / 2),
-      const Radius.circular(radius - borderWidth / 2),
+    final borderInnerRect = Rect.fromLTRB(
+      effectiveBorderInset * scaleX,
+      effectiveBorderInset * scaleY,
+      math.max(
+        effectiveBorderInset * scaleX,
+        size.width - effectiveBorderInset * scaleX,
+      ),
+      math.max(
+        effectiveBorderInset * scaleY,
+        size.height - effectiveBorderInset * scaleY,
+      ),
+    );
+    final borderOuterRRect = RRect.fromRectAndRadius(
+      rect,
+      Radius.elliptical(
+        effectiveBorderRadius * scaleX,
+        effectiveBorderRadius * scaleY,
+      ),
+    );
+    final borderInnerRRect = RRect.fromRectAndRadius(
+      borderInnerRect,
+      Radius.elliptical(
+        effectiveInnerBorderRadius * scaleX,
+        effectiveInnerBorderRadius * scaleY,
+      ),
     );
     if (uncheckedOpacity > 0) {
       if (hovered) {
         canvas.drawRRect(
-          rrect,
+          borderOuterRRect,
           Paint()
             ..color = colors.hover.withValues(
               alpha: colors.hover.a * uncheckedOpacity,
@@ -4427,14 +4610,14 @@ class _SettingsCheckMarkPainter extends CustomPainter {
             ..style = PaintingStyle.fill,
         );
       }
-      canvas.drawRRect(
-        rrect,
+      canvas.drawDRRect(
+        borderOuterRRect,
+        borderInnerRRect,
         Paint()
           ..color = colors.paperBorder.withValues(
             alpha: colors.paperBorder.a * uncheckedOpacity,
           )
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = borderWidth,
+          ..style = PaintingStyle.fill,
       );
     }
     if (progress > 0) {
@@ -4442,7 +4625,7 @@ class _SettingsCheckMarkPainter extends CustomPainter {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           checkedRect,
-          Radius.circular(radius - checkedInset),
+          Radius.circular(checkedRadius),
         ),
         Paint()
           ..color = colors.active.withValues(
@@ -4454,6 +4637,8 @@ class _SettingsCheckMarkPainter extends CustomPainter {
         ..moveTo(4, 8.1)
         ..lineTo(7, 11)
         ..lineTo(12, 5);
+      canvas.save();
+      canvas.translate(checkPaintOffset.dx, checkPaintOffset.dy);
       for (final metric in check.computeMetrics()) {
         canvas.drawPath(
           metric.extractPath(0, metric.length * progress),
@@ -4465,6 +4650,7 @@ class _SettingsCheckMarkPainter extends CustomPainter {
             ..strokeJoin = StrokeJoin.round,
         );
       }
+      canvas.restore();
     }
   }
 
@@ -4541,7 +4727,7 @@ class _SettingsCloseButtonState extends State<_SettingsCloseButton> {
               ),
               child: Transform.translate(
                 key: const ValueKey('settings-close-glyph-metrics'),
-                offset: Offset.zero,
+                offset: const Offset(-2, 1),
                 child: TweenAnimationBuilder<Color?>(
                   key: const ValueKey('settings-close-glyph-feedback'),
                   tween: ColorTween(end: glyphColor),
@@ -4596,10 +4782,7 @@ class _SettingsAuthorLinkState extends State<_SettingsAuthorLink> {
   @override
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
+    const duration = Duration.zero;
     return Tooltip(
       message: _SettingsAuthorLink.url,
       waitDuration: const Duration(milliseconds: 300),
@@ -4617,21 +4800,26 @@ class _SettingsAuthorLinkState extends State<_SettingsAuthorLink> {
               : () => unawaited(widget.onPressed!()),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(6, 2, 0, 0),
-            child: TweenAnimationBuilder<Color?>(
+            child: Transform.scale(
               key: const ValueKey('settings-author-signature-metrics'),
-              tween: ColorTween(
-                end: _hovered ? colors.text : colors.weakText,
-              ),
-              duration: duration,
-              curve: PaperTodoMotion.quickCurve,
-              builder: (context, color, _) => Text(
-                'Designed by trigger',
-                key: const ValueKey('settings-author-signature'),
-                style: TextStyle(
-                  color: color,
-                  fontFamily: 'Segoe UI',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
+              scaleX: 99 / 103,
+              alignment: Alignment.centerRight,
+              child: TweenAnimationBuilder<Color?>(
+                key: const ValueKey('settings-author-signature-feedback'),
+                tween: ColorTween(
+                  end: _hovered ? colors.text : colors.weakText,
+                ),
+                duration: duration,
+                curve: PaperTodoMotion.quickCurve,
+                builder: (context, color, _) => Text(
+                  'Designed by trigger',
+                  key: const ValueKey('settings-author-signature'),
+                  style: TextStyle(
+                    color: color,
+                    fontFamily: 'Segoe UI',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ),
@@ -4763,11 +4951,7 @@ class _SettingsDropdownChromeState extends State<_SettingsDropdownChrome> {
   @override
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
-    final emphasized = widget.enabled && (_hovered || _focused);
+    const duration = Duration.zero;
     final borderColor = _focused
         ? colors.active
         : _hovered
@@ -4797,12 +4981,10 @@ class _SettingsDropdownChromeState extends State<_SettingsDropdownChrome> {
             duration: duration,
             curve: PaperTodoMotion.quickCurve,
             decoration: BoxDecoration(
-              color: emphasized
-                  ? colors.tintAt(colors.isDark ? 14 : 8)
-                  : Colors.transparent,
+              color: colors.paper,
               border: Border.all(
                 color: borderColor,
-                width: _focused ? 1.4 : 1,
+                width: 1,
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -4909,14 +5091,12 @@ class _SettingsSegmentButton extends StatefulWidget {
 
 class _SettingsSegmentButtonState extends State<_SettingsSegmentButton> {
   bool _hovered = false;
-  bool _pressed = false;
 
   @override
   void didUpdateWidget(covariant _SettingsSegmentButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if ((!widget.enabled || widget.selected) && (_hovered || _pressed)) {
+    if ((!widget.enabled || widget.selected) && _hovered) {
       _hovered = false;
-      _pressed = false;
     }
   }
 
@@ -4924,11 +5104,7 @@ class _SettingsSegmentButtonState extends State<_SettingsSegmentButton> {
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
     final hoverable = widget.enabled && !widget.selected;
-    final pressable = widget.enabled && !widget.selected;
-    final enableAnimations = _SettingsMotion.enabledOf(context) &&
-        !MediaQuery.disableAnimationsOf(context);
-    final duration =
-        enableAnimations ? PaperTodoMotion.controlFeedback : Duration.zero;
+    const duration = Duration.zero;
     final backgroundColor = widget.selected
         ? colors.active
         : _hovered
@@ -4944,27 +5120,16 @@ class _SettingsSegmentButtonState extends State<_SettingsSegmentButton> {
       cursor:
           widget.enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: hoverable ? (_) => setState(() => _hovered = true) : null,
-      onExit: hoverable
-          ? (_) => setState(() {
-                _hovered = false;
-                _pressed = false;
-              })
-          : null,
+      onExit: hoverable ? (_) => setState(() => _hovered = false) : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.enabled ? widget.onPressed : null,
-        onTapDown: pressable ? (_) => setState(() => _pressed = true) : null,
-        onTapCancel: pressable ? () => setState(() => _pressed = false) : null,
-        onTapUp: pressable ? (_) => setState(() => _pressed = false) : null,
         child: Semantics(
           button: true,
           selected: widget.selected,
           enabled: widget.enabled,
-          child: AnimatedScale(
+          child: KeyedSubtree(
             key: ValueKey('settings-segment-${widget.label}-press'),
-            scale: _pressed ? 0.97 : 1,
-            duration: duration,
-            curve: PaperTodoMotion.quickCurve,
             child: TweenAnimationBuilder<Color?>(
               tween: ColorTween(end: backgroundColor),
               duration: duration,
@@ -5017,28 +5182,18 @@ class _SettingsFontOptionRow extends StatefulWidget {
 
 class _SettingsFontOptionRowState extends State<_SettingsFontOptionRow> {
   bool _hovered = false;
-  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
-    final active = widget.highlighted || _hovered || _pressed;
+    const duration = Duration.zero;
+    final active = widget.highlighted || _hovered;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
+      onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapCancel: () => setState(() => _pressed = false),
-        onTapUp: (_) => setState(() => _pressed = false),
         onTap: widget.onPressed,
         child: Semantics(
           button: true,
@@ -5053,21 +5208,16 @@ class _SettingsFontOptionRowState extends State<_SettingsFontOptionRow> {
               borderRadius: BorderRadius.circular(8),
             ),
             alignment: Alignment.centerLeft,
-            child: AnimatedOpacity(
-              duration: duration,
-              curve: PaperTodoMotion.quickCurve,
-              opacity: _pressed ? 0.72 : 1,
-              child: Text(
-                widget.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: colors.text,
-                  fontFamily:
-                      widget.fontFamily.isEmpty ? null : widget.fontFamily,
-                  fontSize: 12.5,
-                  height: 1,
-                ),
+            child: Text(
+              widget.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: colors.text,
+                fontFamily:
+                    widget.fontFamily.isEmpty ? null : widget.fontFamily,
+                fontSize: 12.5,
+                height: 1,
               ),
             ),
           ),
@@ -5094,10 +5244,7 @@ class _SettingsHelpIconState extends State<_SettingsHelpIcon> {
     final theme = Theme.of(context);
     final colors = PaperTodoThemeColors.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
+    const duration = Duration.zero;
     return Tooltip(
       message: widget.message,
       waitDuration: const Duration(milliseconds: 200),
@@ -5172,10 +5319,6 @@ class _SettingsStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
     return Container(
       height: 28,
       decoration: BoxDecoration(
@@ -5191,29 +5334,13 @@ class _SettingsStepper extends StatelessWidget {
           ),
           Expanded(
             child: Center(
-              child: AnimatedSwitcher(
-                key: const ValueKey('settings-stepper-value-transition'),
-                duration: duration,
-                switchInCurve: PaperTodoMotion.quickCurve,
-                switchOutCurve: PaperTodoMotion.quickCurve,
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.16),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  ),
-                ),
-                child: Text(
-                  valueLabel,
-                  key: ValueKey('settings-stepper-value-$valueLabel'),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
+              child: Text(
+                valueLabel,
+                key: ValueKey('settings-stepper-value-$valueLabel'),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
             ),
           ),
@@ -5242,60 +5369,34 @@ class _SettingsStepperButton extends StatefulWidget {
 
 class _SettingsStepperButtonState extends State<_SettingsStepperButton> {
   bool _hovered = false;
-  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final colors = PaperTodoThemeColors.of(context);
-    final duration = _SettingsMotion.enabledOf(context) &&
-            !MediaQuery.disableAnimationsOf(context)
-        ? PaperTodoMotion.controlFeedback
-        : Duration.zero;
+    const duration = Duration.zero;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
+      onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) {
-          setState(() => _pressed = true);
-          widget.onPressed();
-        },
-        onTapCancel: () => setState(() => _pressed = false),
-        onTapUp: (_) => setState(() => _pressed = false),
-        child: AnimatedScale(
-          scale: _pressed ? 0.94 : 1,
+        onTapDown: (_) => widget.onPressed(),
+        child: AnimatedContainer(
+          key: ValueKey('settings-stepper-button-surface-${widget.glyph}'),
           duration: duration,
           curve: PaperTodoMotion.quickCurve,
-          child: AnimatedContainer(
-            key: ValueKey('settings-stepper-button-surface-${widget.glyph}'),
-            duration: duration,
-            curve: PaperTodoMotion.quickCurve,
-            color: _pressed
-                ? colors.tintAt(colors.isDark ? 58 : 42)
-                : _hovered
-                    ? colors.hover
-                    : Colors.transparent,
-            child: SizedBox(
-              width: 34,
-              height: 28,
-              child: Center(
-                child: AnimatedOpacity(
-                  opacity: _pressed ? 0.78 : 1,
-                  duration: duration,
-                  curve: PaperTodoMotion.quickCurve,
-                  child: Text(
-                    widget.glyph,
-                    style: TextStyle(
-                      color: colors.text,
-                      fontFamily: 'Segoe UI Symbol',
-                      fontSize: 15,
-                      height: 1,
-                    ),
-                  ),
+          color: _hovered ? colors.hover : Colors.transparent,
+          child: SizedBox(
+            width: 34,
+            height: 28,
+            child: Center(
+              child: Text(
+                widget.glyph,
+                style: TextStyle(
+                  color: colors.text,
+                  fontFamily: 'Segoe UI Symbol',
+                  fontSize: 15,
+                  height: 1,
                 ),
               ),
             ),
@@ -5315,6 +5416,109 @@ class _SettingsWindowDialog extends StatelessWidget {
   final Widget title;
   final Widget content;
 
+  List<Widget> _resizeHandles() {
+    Widget handle({
+      required String direction,
+      required MouseCursor cursor,
+      double? left,
+      double? top,
+      double? right,
+      double? bottom,
+      double? width,
+      double? height,
+    }) {
+      return Positioned(
+        left: left,
+        top: top,
+        right: right,
+        bottom: bottom,
+        width: width,
+        height: height,
+        child: MouseRegion(
+          cursor: cursor,
+          child: Listener(
+            key: ValueKey('settings-window-resize-$direction'),
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) =>
+                unawaited(_startNativeSettingsWindowResize(direction)),
+          ),
+        ),
+      );
+    }
+
+    // The native coordinator owns a borderless thick frame, but its embedded
+    // Flutter child receives edge pointer input first. Mirror the paper HWND's
+    // narrow edge/corner targets and explicitly enter USER32's sizing loop.
+    const edge = 8.0;
+    const corner = 16.0;
+    return [
+      handle(
+        direction: 'left',
+        cursor: SystemMouseCursors.resizeLeftRight,
+        left: 0,
+        top: corner,
+        bottom: corner,
+        width: edge,
+      ),
+      handle(
+        direction: 'right',
+        cursor: SystemMouseCursors.resizeLeftRight,
+        right: 0,
+        top: corner,
+        bottom: corner,
+        width: edge,
+      ),
+      handle(
+        direction: 'top',
+        cursor: SystemMouseCursors.resizeUpDown,
+        left: corner,
+        top: 0,
+        right: corner,
+        height: edge,
+      ),
+      handle(
+        direction: 'bottom',
+        cursor: SystemMouseCursors.resizeUpDown,
+        left: corner,
+        right: corner,
+        bottom: 0,
+        height: edge,
+      ),
+      handle(
+        direction: 'topLeft',
+        cursor: SystemMouseCursors.resizeUpLeftDownRight,
+        left: 0,
+        top: 0,
+        width: corner,
+        height: corner,
+      ),
+      handle(
+        direction: 'topRight',
+        cursor: SystemMouseCursors.resizeUpRightDownLeft,
+        top: 0,
+        right: 0,
+        width: corner,
+        height: corner,
+      ),
+      handle(
+        direction: 'bottomLeft',
+        cursor: SystemMouseCursors.resizeUpRightDownLeft,
+        left: 0,
+        bottom: 0,
+        width: corner,
+        height: corner,
+      ),
+      handle(
+        direction: 'bottomRight',
+        cursor: SystemMouseCursors.resizeUpLeftDownRight,
+        right: 0,
+        bottom: 0,
+        width: corner,
+        height: corner,
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -5326,36 +5530,44 @@ class _SettingsWindowDialog extends StatelessWidget {
       insetPadding: EdgeInsets.zero,
       child: SizedBox.expand(
         key: const ValueKey('windows-settings-paper-fill'),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: colors.outlineVariant),
-            boxShadow: [
-              BoxShadow(
-                color: colors.shadow.withValues(alpha: isDark ? 0.36 : 0.20),
-                blurRadius: isDark ? 30 : 28,
-              ),
-            ],
-          ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: Padding(
-              key: const ValueKey('settings-window-padding'),
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  title,
-                  const SizedBox(
-                    key: ValueKey('settings-title-content-gap'),
-                    height: 12,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: colors.outlineVariant),
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        colors.shadow.withValues(alpha: isDark ? 0.36 : 0.20),
+                    blurRadius: isDark ? 30 : 28,
                   ),
-                  content,
                 ],
               ),
+              child: Material(
+                type: MaterialType.transparency,
+                child: Padding(
+                  key: const ValueKey('settings-window-padding'),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      title,
+                      const SizedBox(
+                        key: ValueKey('settings-title-content-gap'),
+                        height: 14,
+                      ),
+                      content,
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
+            if (defaultTargetPlatform == TargetPlatform.windows)
+              ..._resizeHandles(),
+          ],
         ),
       ),
     );

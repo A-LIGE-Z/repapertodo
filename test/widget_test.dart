@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -225,11 +224,14 @@ void main() {
     expect(controller.state.papers.single.items[1].dueAtLocal, isNull);
     expect(find.text('6/30 00:00'), findsNothing);
 
-    final titleField = find.byKey(const ValueKey('welcome-todo-title'));
-    await tester.tap(titleField);
+    await tester.tap(
+      find.byKey(const ValueKey('welcome-todo-title-display-layer')),
+    );
     await tester.pump();
+    final titleField = find.byKey(const ValueKey('welcome-todo-title'));
     await tester.enterText(titleField, 'Edited title');
     await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(controller.state.papers.single.title, 'Edited title');
@@ -583,6 +585,68 @@ void main() {
     );
   });
 
+  testWidgets(
+      'standalone capsule drag affordance preserves its body click action',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(180, 46));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'standalone-capsule-open',
+      type: PaperTypes.note,
+      title: 'Capsule',
+      isCollapsed: true,
+    );
+    final state = AppState(papers: [paper]);
+    final controller = RePaperTodoController(
+      initialState: state,
+      platform: NoopPlatformServices(),
+    );
+    final store = _MemoryStateStore();
+    await store.save(state);
+    final actions = <({String kind, String value})>[];
+    var dragStarts = 0;
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: store,
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+        paperWindowActionSender: (kind, {value = ''}) async {
+          actions.add((kind: kind, value: value));
+        },
+        paperWindowDragStarter: () async {
+          dragStarts += 1;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('standalone-capsule-open-capsule-drag-handle')),
+    );
+    await tester.pump();
+
+    expect(
+      actions,
+      [(kind: PaperWindowActionKinds.expandPaper, value: '')],
+    );
+    expect(dragStarts, 0);
+    expect(
+      paper.isCollapsed,
+      true,
+      reason: 'the coordinator owns the authoritative capsule expansion',
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey('standalone-capsule-open-capsule-drag-handle')),
+      const Offset(0, 20),
+    );
+    await tester.pump();
+
+    expect(dragStarts, 1);
+  });
+
   testWidgets('paper window chrome and todo dragging match PaperTodo defaults',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(280, 340));
@@ -771,8 +835,8 @@ void main() {
         ),
       ),
     );
-    expect(topmostMetrics.transform.getTranslation().x, 0);
-    expect(topmostMetrics.transform.getTranslation().y, 0);
+    expect(topmostMetrics.transform.getTranslation().x, 1);
+    expect(topmostMetrics.transform.getTranslation().y, 1);
     final topmostMouse =
         await tester.createGesture(kind: PointerDeviceKind.mouse);
     await topmostMouse.addPointer(location: const Offset(1, 1));
@@ -798,10 +862,10 @@ void main() {
       const ValueKey('paper-window-parity-title-host'),
     );
     expect(tester.getSize(titleHost).height, 24);
-    expect(tester.getSize(titleHost).width, inInclusiveRange(38, 86));
+    expect(tester.getSize(titleHost).width, inInclusiveRange(41, 86));
     expect(
       tester.widget<AnimatedContainer>(titleHost).padding,
-      const EdgeInsets.fromLTRB(4, 1, 5, 1),
+      const EdgeInsets.fromLTRB(4, 0, 5, 0),
     );
     final titleDecoration = tester
         .widget<AnimatedContainer>(titleHost)
@@ -810,22 +874,33 @@ void main() {
       tester.widget<AnimatedContainer>(titleHost).duration,
       Duration.zero,
     );
-    final titleBorder = titleDecoration.border! as Border;
-    expect(
-      titleBorder.bottom.color,
-      headerColors.tint.withValues(alpha: 28 / 255),
-    );
+    final titleLayoutBorder = titleDecoration.border! as Border;
+    expect(titleLayoutBorder.bottom.color, Colors.transparent);
+    final dynamic titleDivider =
+        tester.widget<AnimatedContainer>(titleHost).foregroundDecoration;
+    expect(titleDivider.color, headerColors.tint.withValues(alpha: 28 / 255));
+    expect(titleDivider.horizontalInset, 1);
+    expect(titleDivider.verticalOffset, -2);
+    expect(titleDivider.radius, 8);
     final titleMetricsTransform = tester.widget<Transform>(
       find.byKey(
         const ValueKey('paper-window-parity-title-wpf-metrics'),
       ),
     );
-    expect(titleMetricsTransform.transform.getTranslation().x, 0);
-    expect(titleMetricsTransform.transform.getTranslation().y, 0);
+    expect(titleMetricsTransform.transform.getTranslation().x, 1);
+    expect(titleMetricsTransform.transform.getTranslation().y, 1);
     final titleDisplay = tester.widget<RichText>(
       find.byKey(const ValueKey('paper-window-parity-title-display')),
     );
-    expect((titleDisplay.text as TextSpan).style?.letterSpacing, -0.1);
+    expect((titleDisplay.text as TextSpan).style?.letterSpacing, 0);
+    final titleDisplayRender = tester.renderObject<RenderBox>(
+      find.byKey(const ValueKey('paper-window-parity-title-display')),
+    );
+    expect(
+      titleDisplayRender.getMaxIntrinsicWidth(double.infinity),
+      lessThanOrEqualTo(titleDisplayRender.size.width),
+      reason: 'The default 280px Todo1 title must not paint an ellipsis.',
+    );
     final titleMouse =
         await tester.createGesture(kind: PointerDeviceKind.mouse);
     await titleMouse.addPointer(location: const Offset(1, 1));
@@ -840,7 +915,7 @@ void main() {
 
     await tester.tap(titleHost);
     await tester.pump();
-    final titleDisplayLayer = tester.widget<AnimatedOpacity>(
+    final titleDisplayLayer = tester.widget<Visibility>(
       find.byKey(
         const ValueKey('paper-window-parity-title-display-layer'),
       ),
@@ -851,19 +926,19 @@ void main() {
         matching: find.byType(EditableText),
       ),
     );
-    expect(titleDisplayLayer.opacity, 0);
+    expect(titleDisplayLayer.visible, false);
     expect(titleEditor.focusNode.hasFocus, true);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(
       tester
-          .widget<AnimatedOpacity>(
+          .widget<Visibility>(
             find.byKey(
               const ValueKey('paper-window-parity-title-display-layer'),
             ),
           )
-          .opacity,
-      1,
+          .visible,
+      true,
     );
 
     final actionOrder = [
@@ -893,11 +968,11 @@ void main() {
     );
     expect(newTodoGlyph.style?.fontFamily, 'Segoe UI Symbol');
     expect(newNoteGlyph.style?.fontFamily, 'Segoe UI Symbol');
-    expect(newTodoGlyph.style?.fontSize, 13);
+    expect(newTodoGlyph.style?.fontSize, 13.25);
     expect(newNoteGlyph.style?.fontSize, 13);
     expect(newTodoGlyph.style?.fontWeight, FontWeight.w400);
     expect(newNoteGlyph.style?.fontWeight, FontWeight.w400);
-    expect(newTodoGlyph.style?.letterSpacing, 0);
+    expect(newTodoGlyph.style?.letterSpacing, -0.25);
     expect(newNoteGlyph.style?.letterSpacing, 0);
     final newTodoMetrics = tester.widget<Transform>(
       find.byKey(const ValueKey('paper-window-new-todo-glyph-metrics')),
@@ -905,10 +980,10 @@ void main() {
     final newNoteMetrics = tester.widget<Transform>(
       find.byKey(const ValueKey('paper-window-new-note-glyph-metrics')),
     );
-    expect(newTodoMetrics.transform.getTranslation().x, 0);
-    expect(newTodoMetrics.transform.getTranslation().y, 0);
-    expect(newNoteMetrics.transform.getTranslation().x, 0);
-    expect(newNoteMetrics.transform.getTranslation().y, 0);
+    expect(newTodoMetrics.transform.getTranslation().x, -1.5);
+    expect(newTodoMetrics.transform.getTranslation().y, 1);
+    expect(newNoteMetrics.transform.getTranslation().x, -1);
+    expect(newNoteMetrics.transform.getTranslation().y, 1);
     final closeGlyph = tester.widget<Text>(
       find.descendant(
         of: find.byKey(const ValueKey('paper-window-parity-close')),
@@ -920,8 +995,8 @@ void main() {
     final closeMetrics = tester.widget<Transform>(
       find.byKey(const ValueKey('paper-window-close-glyph-metrics')),
     );
-    expect(closeMetrics.transform.getTranslation().x, 0);
-    expect(closeMetrics.transform.getTranslation().y, 0);
+    expect(closeMetrics.transform.getTranslation().x, -1);
+    expect(closeMetrics.transform.getTranslation().y, 1);
     final desktopPinImage = tester.widget<Image>(
       find.descendant(
         of: find.byKey(
@@ -947,7 +1022,7 @@ void main() {
         ),
       ),
     );
-    expect(desktopPinMetrics.transform.getTranslation().x, 0);
+    expect(desktopPinMetrics.transform.getTranslation().x, -2);
     expect(desktopPinMetrics.transform.getTranslation().y, 0);
     expect(
       tester
@@ -1083,7 +1158,11 @@ void main() {
     expect(checkboxPainter().value, false);
     expect(checkboxPainter().hovered, false);
     expect(checkboxPainter().selectionProgress, 0);
-    expect(checkboxPainter().effectiveBorderRadius, 4.75);
+    expect(checkboxPainter().sourceBorderWidth, 1.5);
+    expect(checkboxPainter().sourceBorderRadius, 4);
+    expect(checkboxPainter().effectiveBorderRadius, 5.125);
+    expect(checkboxPainter().effectiveBorderInset, 2);
+    expect(checkboxPainter().effectiveInnerBorderRadius, 3.5);
     final checkboxMouse = await tester.createGesture(
       pointer: 41,
       kind: PointerDeviceKind.mouse,
@@ -1165,15 +1244,61 @@ void main() {
       ),
     );
     expect(dragFeedback, findsOneWidget);
+    expect(tester.getSize(dragFeedback), tester.getSize(firstRow));
+    expect(
+      tester
+          .widget<Opacity>(
+            find.byKey(
+              const ValueKey(
+                'paper-window-parity-paper-window-first-drag-feedback-opacity',
+              ),
+            ),
+          )
+          .opacity,
+      0.65,
+    );
     final dragFeedbackDecoration =
         tester.widget<DecoratedBox>(dragFeedback).decoration as BoxDecoration;
     expect(dragFeedbackDecoration.color, headerColors.paper);
+    expect(
+      (dragFeedbackDecoration.border! as Border).top.color,
+      headerColors.tint.withValues(alpha: 150 / 255),
+    );
     expect(dragFeedbackDecoration.borderRadius, BorderRadius.circular(8));
+    expect(dragFeedbackDecoration.boxShadow, hasLength(1));
+    expect(dragFeedbackDecoration.boxShadow!.single.blurRadius, 24);
+    expect(dragFeedbackDecoration.boxShadow!.single.offset, const Offset(0, 2));
+    expect(
+      dragFeedbackDecoration.boxShadow!.single.color,
+      Colors.black.withValues(alpha: 0.22),
+    );
+    expect(
+      tester
+          .widget<Padding>(
+            find
+                .descendant(of: dragFeedback, matching: find.byType(Padding))
+                .first,
+          )
+          .padding,
+      const EdgeInsets.all(2),
+    );
+    final dragFeedbackCheck = tester.widget<Text>(
+      find.descendant(of: dragFeedback, matching: find.text('\u2611')),
+    );
+    expect(dragFeedbackCheck.style?.fontSize, 14);
+    expect(dragFeedbackCheck.style?.color, headerColors.brightWeakText);
+    final dragFeedbackText = tester.widget<Text>(
+      find.descendant(of: dragFeedback, matching: find.text('First')),
+    );
+    expect(dragFeedbackText.style?.fontSize, 14);
+    expect(dragFeedbackText.style?.color, headerColors.brightWeakText);
+    expect(dragFeedbackText.style?.decoration, TextDecoration.lineThrough);
     final dragFeedbackGlyph = tester.widget<Text>(
       find.descendant(of: dragFeedback, matching: find.text('\u2261')),
     );
     expect(dragFeedbackGlyph.style?.fontFamily, 'Segoe UI Symbol');
     expect(dragFeedbackGlyph.style?.color, headerColors.weakText);
+    expect(dragFeedbackGlyph.style?.fontSize, 13);
     final draggingOpacity = find.descendant(
       of: firstRow,
       matching: find.byWidgetPredicate(
@@ -1219,6 +1344,71 @@ void main() {
     );
   });
 
+  testWidgets('standalone blank todo rows omit the board placeholder',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(280, 340));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paper = PaperData(
+      id: 'blank-standalone-todo',
+      type: PaperTypes.todo,
+      title: 'Todo1',
+      items: [PaperItem(id: 'blank-standalone-item', text: '')],
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(theme: 'light', papers: [paper]),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final standaloneField = find.byKey(
+      const ValueKey(
+        'blank-standalone-todo-blank-standalone-item-text-field-0',
+      ),
+    );
+    final standaloneDecorator = tester.widget<InputDecorator>(
+      find.descendant(
+        of: standaloneField,
+        matching: find.byType(InputDecorator),
+      ),
+    );
+    expect(standaloneDecorator.decoration.hintText, isNull);
+    expect(find.text('New item'), findsNothing);
+
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        key: const ValueKey('blank-board-todo-app'),
+        controller: RePaperTodoController(
+          initialState: AppState(theme: 'light', papers: [paper]),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final boardField = find.byKey(
+      const ValueKey(
+        'blank-standalone-todo-blank-standalone-item-text-field-0',
+      ),
+    );
+    final boardDecorator = tester.widget<InputDecorator>(
+      find.descendant(
+        of: boardField,
+        matching: find.byType(InputDecorator),
+      ),
+    );
+    expect(boardDecorator.decoration.hintText, 'New item');
+  });
+
   testWidgets('independent note header keeps the PaperTodo link drag action',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 420));
@@ -1261,6 +1451,30 @@ void main() {
     );
     expect(glyph.style?.fontFamily, 'Segoe UI Symbol');
     expect(glyph.style?.fontSize, 13);
+    final topmostButton = find.byKey(
+      const ValueKey('paper-window-note-link-topmost'),
+    );
+    final topmostMetrics = tester.widget<Transform>(
+      find.descendant(
+        of: topmostButton,
+        matching: find.byKey(
+          const ValueKey('paper-window-topmost-glyph-metrics'),
+        ),
+      ),
+    );
+    expect(topmostMetrics.transform.getTranslation().x, 1);
+    expect(topmostMetrics.transform.getTranslation().y, 0);
+    final glyphMetricsFinder =
+        find.byKey(const ValueKey('note-link-drag-glyph-metrics'));
+    final glyphMetrics = tester.widget<Transform>(glyphMetricsFinder);
+    expect(
+      glyphMetrics.transform,
+      Matrix4.translationValues(-1, 1, 0),
+    );
+    expect(
+      find.ancestor(of: glyphMetricsFinder, matching: find.byType(Center)),
+      findsOneWidget,
+    );
     expect(
       tester.getCenter(action).dx,
       lessThan(
@@ -1367,14 +1581,14 @@ void main() {
         find.descendant(of: textHost, matching: find.byType(TextField)),
       );
       expect(editable.style.fontSize, visualCase.textSize);
-      expect(editable.style.letterSpacing, 0);
+      expect(editable.style.letterSpacing, -0.0625);
       expect(
         textField.decoration?.contentPadding,
         EdgeInsets.fromLTRB(
-          2,
-          visualCase.textPadding,
-          2,
-          visualCase.textPadding,
+          4,
+          visualCase.textPadding + 1,
+          0,
+          visualCase.textPadding - 1,
         ),
       );
       expect(
@@ -1463,6 +1677,70 @@ void main() {
     expect(editable.style.fontFamily, 'DengXian');
     expect(editable.style.fontSize, closeTo(12.5, 0.001));
     expect(editable.style.height, closeTo(13 / 12.5, 0.001));
+  });
+
+  testWidgets('Chinese UI chrome uses the explicit PaperTodo fallback chain',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(440, 420));
+    tester.binding.platformDispatcher.localeTestValue =
+        const Locale('zh', 'CN');
+    tester.binding.platformDispatcher.localesTestValue = const [
+      Locale('zh', 'CN'),
+    ];
+    addTearDown(() {
+      tester.binding.setSurfaceSize(null);
+      tester.binding.platformDispatcher.clearLocaleTestValue();
+      tester.binding.platformDispatcher.clearLocalesTestValue();
+    });
+
+    final paper = PaperData(
+      id: 'explicit-ui-fallback-note',
+      type: PaperTypes.note,
+      title: '中文笔记',
+      width: 440,
+      height: 420,
+      content: '中文正文',
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(
+            theme: 'light',
+            uiFontPreset: UiFontPresets.yaHei,
+            papers: [paper],
+          ),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: paper.id,
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    const paperTodoUiFallback = [
+      'Microsoft YaHei UI',
+      'Microsoft YaHei',
+      'Segoe UI Symbol',
+      'Segoe UI Emoji',
+    ];
+    final title = tester.widget<RichText>(
+      find.byKey(const ValueKey('explicit-ui-fallback-note-title-display')),
+    );
+    final count = tester.widget<Text>(
+      find.byKey(const ValueKey('note-canvas-element-count')),
+    );
+    final mode = tester.widget<Text>(
+      find.byKey(const ValueKey('note-status-mode')),
+    );
+    final stats = tester.widget<Text>(
+      find.byKey(const ValueKey('note-status-stats')),
+    );
+
+    expect(title.text.style?.fontFamilyFallback, paperTodoUiFallback);
+    expect(count.style?.fontFamilyFallback, paperTodoUiFallback);
+    expect(mode.style?.fontFamilyFallback, paperTodoUiFallback);
+    expect(stats.style?.fontFamilyFallback, paperTodoUiFallback);
   });
 
   testWidgets('todo and note paper windows resize from every native edge',
@@ -1753,9 +2031,7 @@ void main() {
     );
     final scaleFeedback = find.descendant(
       of: close,
-      matching: find.byKey(
-        const ValueKey('paper-header-action-scale-feedback'),
-      ),
+      matching: find.byType(AnimatedScale),
     );
     final opacityFeedback = find.descendant(
       of: close,
@@ -1771,8 +2047,7 @@ void main() {
       tester.widget<TweenAnimationBuilder<Color?>>(foregroundFeedback).duration,
       Duration.zero,
     );
-    expect(tester.widget<AnimatedScale>(scaleFeedback).duration, Duration.zero);
-    expect(tester.widget<AnimatedScale>(scaleFeedback).scale, 1);
+    expect(scaleFeedback, findsNothing);
     expect(
       tester.widget<AnimatedOpacity>(opacityFeedback).duration,
       Duration.zero,
@@ -1798,7 +2073,6 @@ void main() {
 
     await mouse.down(tester.getCenter(close));
     await tester.pump();
-    expect(tester.widget<AnimatedScale>(scaleFeedback).scale, 1);
     expect(tester.widget<AnimatedOpacity>(opacityFeedback).opacity, 0.7);
     await mouse.cancel();
     await tester.pump();
@@ -2271,12 +2545,272 @@ void main() {
       );
       expect(
         tester.getSize(find.byKey(const ValueKey('note-status-bar'))).height,
-        26,
+        27,
       );
       expect(
         tester.getBottomRight(find.byKey(const ValueKey('note-status-bar'))),
         const Offset(272, 412),
       );
+    }
+  });
+
+  testWidgets(
+      'fractional DPI keeps narrow Todo and plain Note surfaces geometrically stable',
+      (tester) async {
+    tester.binding.platformDispatcher.localeTestValue =
+        const Locale('zh', 'CN');
+    tester.binding.platformDispatcher.localesTestValue = const [
+      Locale('zh', 'CN'),
+    ];
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+      tester.binding.platformDispatcher.clearLocaleTestValue();
+      tester.binding.platformDispatcher.clearLocalesTestValue();
+    });
+
+    final referenceRects = <String, Rect>{};
+
+    void expectStableRect(String key, Finder finder) {
+      final rect = tester.getRect(finder);
+      final reference = referenceRects[key];
+      if (reference == null) {
+        referenceRects[key] = rect;
+        return;
+      }
+      expect(rect.left, closeTo(reference.left, 0.01), reason: '$key left');
+      expect(rect.top, closeTo(reference.top, 0.01), reason: '$key top');
+      expect(rect.width, closeTo(reference.width, 0.01), reason: '$key width');
+      expect(
+        rect.height,
+        closeTo(reference.height, 0.01),
+        reason: '$key height',
+      );
+    }
+
+    for (final devicePixelRatio in <double>[1.25, 1.5]) {
+      for (final width in <double>[220, 280]) {
+        for (final type in <String>[PaperTypes.todo, PaperTypes.note]) {
+          tester.view
+            ..devicePixelRatio = devicePixelRatio
+            ..physicalSize = Size(
+              width * devicePixelRatio,
+              420 * devicePixelRatio,
+            );
+          final dprSuffix = devicePixelRatio.toString().replaceAll('.', '-');
+          final widthSuffix = width.toInt();
+          final typeSuffix = type == PaperTypes.note ? 'note' : 'todo';
+          final paperId = 'fractional-dpi-$typeSuffix-$widthSuffix-$dprSuffix';
+          final itemId = '$paperId-item';
+          final canvasElementId = '$paperId-canvas';
+          final paper = PaperData(
+            id: paperId,
+            type: type,
+            title: type == PaperTypes.note ? '笔记一' : '待办一',
+            width: width,
+            height: 420,
+            content: type == PaperTypes.note ? '# 纯文本标题\n第二行 **plain** 内容' : '',
+            items: type == PaperTypes.todo
+                ? [PaperItem(id: itemId, text: '检查中文 logical geometry')]
+                : const [],
+            noteCanvasElements: type == PaperTypes.note
+                ? [
+                    NoteCanvasElement(
+                      id: canvasElementId,
+                      type: NoteCanvasElementTypes.code,
+                      text: '中文 mixed code',
+                      x: 4,
+                      y: 8,
+                      width: 120,
+                      height: 80,
+                    ),
+                  ]
+                : const [],
+          );
+
+          await tester.pumpWidget(
+            RePaperTodoApp(
+              key: ValueKey('fractional-dpi-$paperId-app'),
+              controller: RePaperTodoController(
+                initialState: AppState(
+                  enableAnimations: false,
+                  markdownRenderMode: MarkdownRenderModes.off,
+                  papers: [paper],
+                ),
+                platform: NoopPlatformServices(),
+              ),
+              store: _MemoryStateStore(),
+              initialSurfacePaperId: paper.id,
+              paperWindowMode: true,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: '$typeSuffix at $widthSuffix logical pixels and '
+                '$devicePixelRatio DPR overflowed',
+          );
+
+          final preview = find.byType(PaperPreview);
+          final header = find.byKey(ValueKey('$paperId-paper-header'));
+          final titleHost = find.byKey(ValueKey('$paperId-title-host'));
+          final close = find.byKey(ValueKey('$paperId-close'));
+          expect(
+            tester.getRect(preview),
+            Rect.fromLTWH(8, 8, width - 16, 404),
+          );
+          expect(tester.getRect(header), Rect.fromLTWH(8, 8, width - 16, 31));
+          expect(tester.getTopRight(close).dx, closeTo(width - 17, 0.01));
+          expect(tester.getSize(titleHost).width, inInclusiveRange(38, 86));
+
+          final firstTrailingAction = type == PaperTypes.note && width == 220
+              ? close
+              : find.byKey(ValueKey('$paperId-desktop-pin'));
+          expect(
+            tester.getRect(titleHost).right,
+            lessThanOrEqualTo(tester.getRect(firstTrailingAction).left + 0.01),
+          );
+
+          expectStableRect('$typeSuffix-$widthSuffix-preview', preview);
+          expectStableRect('$typeSuffix-$widthSuffix-header', header);
+          expectStableRect('$typeSuffix-$widthSuffix-title', titleHost);
+          expectStableRect('$typeSuffix-$widthSuffix-close', close);
+
+          if (type == PaperTypes.note) {
+            final plainPreview = find.byKey(ValueKey('$paperId-preview'));
+            final source =
+                find.byKey(ValueKey('$paperId-off-markdown-preview'));
+            final canvas = find.byKey(const ValueKey('note-paper-canvas'));
+            final contentPadding =
+                find.byKey(const ValueKey('note-paper-content-padding'));
+            final statusBar = find.byKey(const ValueKey('note-status-bar'));
+            final canvasCount =
+                find.byKey(const ValueKey('note-canvas-element-count'));
+            final canvasElement = find.byKey(
+              ValueKey('note-canvas-element-$canvasElementId'),
+            );
+            final canvasEditorPadding = find.byKey(
+              ValueKey('note-canvas-editor-padding-$canvasElementId'),
+            );
+            final modePill =
+                find.byKey(const ValueKey('note-status-mode-pill'));
+            final statusStats = find.byKey(const ValueKey('note-status-stats'));
+            final statusZoom = find.byKey(const ValueKey('note-status-zoom'));
+
+            expect(plainPreview, findsOneWidget);
+            expect(source, findsOneWidget);
+            expect(
+              tester
+                  .widget<PaperTodoMarkdownSourcePreview>(source)
+                  .markdownEnabled,
+              isFalse,
+            );
+            expect(
+              tester.getBottomRight(statusBar),
+              Offset(width - 8, 412),
+            );
+            expect(
+              tester.getRect(canvasCount).right,
+              lessThanOrEqualTo(tester.getRect(header).right - 7),
+            );
+            expect(
+              tester.widget<Padding>(canvasEditorPadding).padding,
+              const EdgeInsets.fromLTRB(2, 0, 16, 7),
+            );
+            final canvasEditor = tester.widget<TextField>(
+              find.descendant(
+                of: canvasElement,
+                matching: find.byType(TextField),
+              ),
+            );
+            expect(canvasEditor.style?.height, closeTo(15 / 13, 0.0001));
+            expect(
+              tester.getRect(statusStats).left,
+              greaterThanOrEqualTo(tester.getRect(modePill).right + 9),
+            );
+            expect(
+              tester.getRect(statusStats).right,
+              lessThanOrEqualTo(tester.getRect(statusZoom).left - 7),
+            );
+            expect(
+              tester.widget<Text>(statusStats).overflow,
+              TextOverflow.ellipsis,
+            );
+            expectStableRect('$typeSuffix-$widthSuffix-canvas', canvas);
+            expectStableRect(
+              '$typeSuffix-$widthSuffix-canvas-count',
+              canvasCount,
+            );
+            expectStableRect(
+              '$typeSuffix-$widthSuffix-canvas-element',
+              canvasElement,
+            );
+            expectStableRect(
+              '$typeSuffix-$widthSuffix-canvas-editor-padding',
+              canvasEditorPadding,
+            );
+            expectStableRect(
+              '$typeSuffix-$widthSuffix-content-preview',
+              contentPadding,
+            );
+            expectStableRect('$typeSuffix-$widthSuffix-status', statusBar);
+            expectStableRect(
+              '$typeSuffix-$widthSuffix-status-mode',
+              modePill,
+            );
+            expectStableRect(
+              '$typeSuffix-$widthSuffix-status-stats',
+              statusStats,
+            );
+            expectStableRect(
+              '$typeSuffix-$widthSuffix-status-zoom',
+              statusZoom,
+            );
+
+            final previewContentRect = tester.getRect(contentPadding);
+            await tester.tap(plainPreview);
+            await tester.pump();
+
+            expect(find.byKey(ValueKey('$paperId-content')), findsOneWidget);
+            expect(
+              tester.getRect(contentPadding),
+              previewContentRect,
+              reason:
+                  'Off Preview/Edit geometry jumped at $widthSuffix logical '
+                  'pixels and $devicePixelRatio DPR',
+            );
+            expectStableRect(
+              '$typeSuffix-$widthSuffix-content-edit',
+              contentPadding,
+            );
+            expectStableRect('$typeSuffix-$widthSuffix-status-edit', statusBar);
+          } else {
+            final row = find.byKey(ValueKey('$paperId-$itemId-row-surface'));
+            final checkbox = find.byKey(ValueKey('$paperId-$itemId-checkbox'));
+            final text = find.byKey(ValueKey('$paperId-$itemId-text'));
+            final append = find.byKey(ValueKey('$paperId-todo-append-area'));
+            final viewport =
+                find.byKey(ValueKey('$paperId-todo-scroll-viewport'));
+
+            expect(row, findsOneWidget);
+            expect(checkbox, findsOneWidget);
+            expect(text, findsOneWidget);
+            expect(append, findsOneWidget);
+            expect(tester.getRect(row).right, lessThanOrEqualTo(width - 8));
+            expect(
+              tester.getRect(append).right,
+              lessThanOrEqualTo(width - 8),
+            );
+            expectStableRect('$typeSuffix-$widthSuffix-viewport', viewport);
+            expectStableRect('$typeSuffix-$widthSuffix-row', row);
+            expectStableRect('$typeSuffix-$widthSuffix-checkbox', checkbox);
+            expectStableRect('$typeSuffix-$widthSuffix-text', text);
+            expectStableRect('$typeSuffix-$widthSuffix-append', append);
+          }
+        }
+      }
     }
   });
 
@@ -2356,6 +2890,76 @@ void main() {
     }
   });
 
+  testWidgets(
+      'standalone due rows retain the source relative badge when disabled',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(440, 340));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    PaperData duePaper(String id) => PaperData(
+          id: id,
+          type: PaperTypes.todo,
+          title: 'Due parity',
+          width: 440,
+          height: 340,
+          items: [
+            PaperItem(
+              id: '$id-item',
+              text: 'Review',
+              dueAtLocal: '2099-08-01T12:34:00',
+            ),
+          ],
+        );
+
+    final standalonePaper = duePaper('standalone-relative-off');
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(
+            showTodoDueRelativeTime: false,
+            papers: [standalonePaper],
+          ),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+        initialSurfacePaperId: standalonePaper.id,
+        paperWindowMode: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        ValueKey(
+          '${standalonePaper.id}-${standalonePaper.items.single.id}-due-relative',
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    final boardPaper = duePaper('board-relative-off');
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: RePaperTodoController(
+          initialState: AppState(
+            showTodoDueRelativeTime: false,
+            papers: [boardPaper],
+          ),
+          platform: NoopPlatformServices(),
+        ),
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        ValueKey(
+          '${boardPaper.id}-${boardPaper.items.single.id}-due-relative',
+        ),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('settings can choose an installed system font family',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -2422,7 +3026,7 @@ void main() {
     expect(controller.state.systemFontFamilyName, 'Paper Sans');
   });
 
-  testWidgets('settings font loading uses compact animated paper feedback',
+  testWidgets('settings font loading uses compact PaperTodo field chrome',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -2458,20 +3062,23 @@ void main() {
     );
     final fontSurface = tester.widget<AnimatedContainer>(fontSurfaceFinder);
     expect(tester.getSize(fontField).height, 30);
-    expect(fontSurface.duration, PaperTodoMotion.controlFeedback);
+    expect(fontSurface.duration, Duration.zero);
+    expect(
+      (fontSurface.decoration as BoxDecoration).color,
+      Colors.transparent,
+    );
     final fontFieldMouse =
         await tester.createGesture(kind: PointerDeviceKind.mouse);
     await fontFieldMouse.addPointer(location: const Offset(1, 1));
     await fontFieldMouse.moveTo(tester.getCenter(fontField));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     final fontFieldColors = PaperTodoThemeColors.of(tester.element(fontField));
+    final hoveredFontDecoration = tester
+        .widget<AnimatedContainer>(fontSurfaceFinder)
+        .decoration as BoxDecoration;
+    expect(hoveredFontDecoration.color, Colors.transparent);
     expect(
-      ((tester.widget<AnimatedContainer>(fontSurfaceFinder).decoration
-                  as BoxDecoration)
-              .border as Border)
-          .top
-          .color,
+      (hoveredFontDecoration.border as Border).top.color,
       fontFieldColors.brightWeakText,
     );
     await fontFieldMouse.removePointer();
@@ -2563,7 +3170,25 @@ void main() {
     );
     expect(fontOptionRows, findsNWidgets(5));
     for (final row in fontOptionRows.evaluate()) {
-      expect(tester.getSize(find.byWidget(row.widget)).height, 30);
+      final rowFinder = find.byWidget(row.widget);
+      expect(tester.getSize(rowFinder).height, 30);
+      expect(
+        tester
+            .widget<AnimatedContainer>(
+              find.descendant(
+                of: rowFinder,
+                matching: find.byKey(
+                  const ValueKey('settings-font-option-surface'),
+                ),
+              ),
+            )
+            .duration,
+        Duration.zero,
+      );
+      expect(
+        find.descendant(of: rowFinder, matching: find.byType(AnimatedOpacity)),
+        findsNothing,
+      );
     }
     final optionsMaterial = tester
         .widgetList<Material>(
@@ -2768,7 +3393,13 @@ void main() {
       kind: PointerDeviceKind.mouse,
     );
     await tester.pump();
-    expect(tester.widget<AnimatedScale>(lightPressSurface).scale, 1);
+    expect(
+      find.descendant(
+        of: lightPressSurface,
+        matching: find.byType(AnimatedScale),
+      ),
+      findsNothing,
+    );
     await selectedPress.cancel();
     await selectedPress.removePointer();
     await tester.pump();
@@ -2795,11 +3426,9 @@ void main() {
     await segmentMouse.addPointer(location: const Offset(1, 1));
     await segmentMouse.moveTo(tester.getCenter(darkSegment));
     await tester.pump();
-    expect(darkDecoration().color, Colors.transparent);
-    await tester.pump(PaperTodoMotion.controlFeedback);
     expect(darkDecoration().color, settingsColors.hover);
     await segmentMouse.removePointer();
-    await tester.pump(PaperTodoMotion.controlFeedback);
+    await tester.pump();
     final darkPressSurface = find.descendant(
       of: darkSegment,
       matching: find.byKey(
@@ -2807,10 +3436,12 @@ void main() {
       ),
     );
     expect(darkPressSurface, findsOneWidget);
-    expect(tester.widget<AnimatedScale>(darkPressSurface).scale, 1);
     expect(
-      tester.widget<AnimatedScale>(darkPressSurface).duration,
-      PaperTodoMotion.controlFeedback,
+      find.descendant(
+        of: darkPressSurface,
+        matching: find.byType(AnimatedScale),
+      ),
+      findsNothing,
     );
     final segmentPress = await tester.startGesture(
       tester.getCenter(darkSegment),
@@ -2818,10 +3449,16 @@ void main() {
       kind: PointerDeviceKind.mouse,
     );
     await tester.pump();
-    expect(tester.widget<AnimatedScale>(darkPressSurface).scale, 0.97);
+    expect(
+      find.descendant(
+        of: darkPressSurface,
+        matching: find.byType(AnimatedScale),
+      ),
+      findsNothing,
+    );
     await segmentPress.cancel();
     await segmentPress.removePointer();
-    await tester.pump(PaperTodoMotion.controlFeedback);
+    await tester.pump();
 
     final capsuleCategory = find.byKey(
       const ValueKey('settings-category-capsules'),
@@ -2849,21 +3486,27 @@ void main() {
     await categoryMouse.addPointer(location: const Offset(1, 1));
     await categoryMouse.moveTo(tester.getCenter(capsuleCategory));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     expect(capsuleCategoryDecoration().color, settingsColors.hover);
+    await categoryMouse.down(tester.getCenter(capsuleCategory));
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: capsuleCategoryPress,
+        matching: find.byType(AnimatedScale),
+      ),
+      findsNothing,
+    );
+    expect(
+      capsuleCategoryDecoration().color,
+      settingsColors.tint.withValues(alpha: 24 / 255),
+    );
+    await categoryMouse.cancel();
     await categoryMouse.removePointer();
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
-    final categoryPressGesture = await tester.startGesture(
-      tester.getCenter(capsuleCategory),
-      pointer: 70,
-      kind: PointerDeviceKind.mouse,
+    expect(
+      capsuleCategoryDecoration().color,
+      settingsColors.tint.withValues(alpha: 24 / 255),
     );
-    await tester.pump();
-    expect(tester.widget<AnimatedScale>(capsuleCategoryPress).scale, 0.985);
-    await categoryPressGesture.cancel();
-    await categoryPressGesture.removePointer();
-    await tester.pump(PaperTodoMotion.controlFeedback);
 
     final displayCategory = find.byKey(
       const ValueKey('settings-category-display'),
@@ -2881,17 +3524,20 @@ void main() {
     BoxDecoration displayCategoryDecoration() =>
         tester.widget<AnimatedContainer>(displayCategorySurface).decoration!
             as BoxDecoration;
-    expect(
-      displayCategoryDecoration().color,
-      settingsColors.tint.withValues(alpha: 24 / 255),
-    );
+    expect(displayCategoryDecoration().color, Colors.transparent);
     final selectedCategoryPress = await tester.startGesture(
       tester.getCenter(displayCategory),
       pointer: 71,
       kind: PointerDeviceKind.mouse,
     );
     await tester.pump();
-    expect(tester.widget<AnimatedScale>(displayCategoryPress).scale, 1);
+    expect(
+      find.descendant(
+        of: displayCategoryPress,
+        matching: find.byType(AnimatedScale),
+      ),
+      findsNothing,
+    );
     expect(
       displayCategoryDecoration().color,
       settingsColors.tint.withValues(alpha: 24 / 255),
@@ -2928,7 +3574,7 @@ void main() {
     dynamic markPainter() => tester.widget<CustomPaint>(markPaint).painter;
     expect(markPainter().value, false);
     expect(markPainter().hovered, false);
-    expect(markPainter().checkedInset, 0);
+    expect(markPainter().checkedInset, 2);
 
     final capsuleHelp = find.byTooltip(
       'Allow papers to collapse into small capsules to save desktop space. '
@@ -2949,7 +3595,7 @@ void main() {
     expect(capsuleHelpTooltip.showDuration, const Duration(seconds: 20));
     expect(
       capsuleHelpTooltip.exitDuration,
-      PaperTodoMotion.controlFeedback,
+      Duration.zero,
     );
     expect(
       capsuleHelpTooltip.padding,
@@ -2982,7 +3628,6 @@ void main() {
     await helpMouse.addPointer(location: const Offset(1, 1));
     await helpMouse.moveTo(tester.getCenter(capsuleHelp));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     expect(
       tester
           .widget<Text>(
@@ -2994,7 +3639,6 @@ void main() {
     );
     await helpMouse.removePointer();
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     await tester.tap(capsuleHelp);
     await tester.pump();
     expect((tester.widget(capsuleToggle) as dynamic).value, false);
@@ -3097,6 +3741,14 @@ void main() {
       of: authorLink,
       matching: find.text('Designed by trigger'),
     );
+    expect(
+      tester
+          .widget<TweenAnimationBuilder<Color?>>(
+            find.byKey(const ValueKey('settings-author-signature-feedback')),
+          )
+          .duration,
+      Duration.zero,
+    );
     expect(tester.widget<Text>(authorText).style?.fontSize, 11);
     final authorMouse = await tester.createGesture(
       pointer: 64,
@@ -3105,15 +3757,76 @@ void main() {
     await authorMouse.addPointer(location: const Offset(1, 1));
     await authorMouse.moveTo(tester.getCenter(authorLink));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     expect(tester.widget<Text>(authorText).style?.color, closeColors.text);
     await authorMouse.removePointer();
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     expect(tester.widget<Text>(authorText).style?.color, closeColors.weakText);
     await tester.tap(authorLink);
     await tester.pump();
     expect(platform.uriOpener.openedUris, [authorUrl]);
+  });
+
+  testWidgets('settings navigation replaces pages at the source scroll origin',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        theme: 'light',
+        papers: [
+          PaperData(
+            id: 'settings-scroll-paper',
+            title: 'Settings scroll',
+            items: [PaperItem(id: 'settings-scroll-item')],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+
+    final contentScroll = tester.widget<SingleChildScrollView>(
+      find.byKey(const ValueKey('settings-content-scroll')),
+    );
+    final scrollController = contentScroll.controller!;
+    expect(scrollController.position.maxScrollExtent, greaterThan(0));
+    scrollController.jumpTo(scrollController.position.maxScrollExtent);
+    await tester.pump();
+    final retainedOffset = scrollController.offset;
+    expect(retainedOffset, greaterThan(0));
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings-category-display')),
+    );
+    await tester.pump();
+    expect(scrollController.offset, retainedOffset);
+
+    final capsulesNavigation =
+        find.byKey(const ValueKey('settings-category-capsules'));
+    final navigationPress = await tester.startGesture(
+      tester.getCenter(capsulesNavigation),
+      pointer: 65,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    // PaperTodo changes category on MouseLeftButtonDown, before the click is
+    // released. The content and scroll origin must already reflect the new
+    // page while the pointer is still held.
+    expect(scrollController.offset, 0);
+    expect(scrollController.position.isScrollingNotifier.value, false);
+    expect(find.text('Capsule mode'), findsOneWidget);
+    await navigationPress.up();
+    await navigationPress.removePointer();
+    await tester.pump();
   });
 
   testWidgets('cleans paper title edits with PaperTodo hard title rules',
@@ -3146,11 +3859,17 @@ void main() {
 
     final longTitle =
         '${List.filled(PaperTitles.maxTitleLength + 5, 'A').join()}\u0000B';
+    await tester.tap(
+      find.byKey(const ValueKey('title-clean-paper-title-display-layer')),
+    );
+    await tester.pump();
     await tester.enterText(
       find.byKey(const ValueKey('title-clean-paper-title')),
       longTitle,
     );
     await tester.pump();
+    expect(controller.state.papers.single.title, 'Title clean');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
     final expected = List.filled(PaperTitles.maxTitleLength, 'A').join();
@@ -3159,7 +3878,7 @@ void main() {
     expect(platform.paperWindows.updatedTitles, contains(expected));
   });
 
-  testWidgets('paper title edit layers cross-fade without rebuilding the field',
+  testWidgets('paper title edit layers switch immediately without rebuilding',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -3197,22 +3916,14 @@ void main() {
       find.byKey(const ValueKey('title-transition-paper-title-host')),
     );
 
-    expect(tester.widget<AnimatedOpacity>(displayLayer).opacity, 1);
-    expect(tester.widget<AnimatedOpacity>(editorLayer).opacity, 0);
-    expect(
-      tester.widget<AnimatedOpacity>(displayLayer).duration,
-      PaperTodoMotion.controlFeedback,
-    );
-    expect(
-      tester.widget<AnimatedOpacity>(editorLayer).duration,
-      PaperTodoMotion.controlFeedback,
-    );
+    expect(tester.widget<Visibility>(displayLayer).visible, true);
+    expect(tester.widget<Visibility>(editorLayer).visible, false);
 
     await tester.tap(displayLayer);
     await tester.pump();
 
-    expect(tester.widget<AnimatedOpacity>(displayLayer).opacity, 0);
-    expect(tester.widget<AnimatedOpacity>(editorLayer).opacity, 1);
+    expect(tester.widget<Visibility>(displayLayer).visible, false);
+    expect(tester.widget<Visibility>(editorLayer).visible, true);
     expect(tester.element(editableText), same(editableElement));
     expect(
       tester.getSize(
@@ -3221,12 +3932,12 @@ void main() {
       titleSize,
     );
 
-    await tester.pump(PaperTodoMotion.controlFeedback);
+    await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
 
-    expect(tester.widget<AnimatedOpacity>(displayLayer).opacity, 1);
-    expect(tester.widget<AnimatedOpacity>(editorLayer).opacity, 0);
+    expect(tester.widget<Visibility>(displayLayer).visible, true);
+    expect(tester.widget<Visibility>(editorLayer).visible, false);
     expect(tester.element(editableText), same(editableElement));
   });
 
@@ -3273,7 +3984,7 @@ void main() {
 
     await tester.enterText(titleFinder, 'Temporary title');
     await tester.pump();
-    expect(controller.state.papers.single.title, 'Temporary title');
+    expect(controller.state.papers.single.title, 'Original title');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
@@ -3282,7 +3993,7 @@ void main() {
     expect(titleTextField().readOnly, true);
     expect(controller.state.papers.single.title, 'Original title');
     expect(find.text('Original title'), findsOneWidget);
-    expect(platform.paperWindows.updatedTitles, contains('Original title'));
+    expect(platform.paperWindows.updatedTitles, isEmpty);
   });
 
   testWidgets('paper title Enter ends edit mode and keeps the edited title',
@@ -3320,6 +4031,7 @@ void main() {
     );
     await tester.pump();
     await tester.enterText(titleFinder, 'After enter');
+    expect(controller.state.papers.single.title, 'Before enter');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
 
@@ -3477,7 +4189,7 @@ void main() {
       RePaperTodoApp(
         controller: RePaperTodoController(
           initialState: AppState(
-            markdownRenderMode: MarkdownRenderModes.enhanced,
+            markdownRenderMode: MarkdownRenderModes.off,
             papers: [paper],
           ),
           platform: NoopPlatformServices(),
@@ -3500,6 +4212,18 @@ void main() {
     );
     expect(editor.decoration?.hintText, isNull);
     expect(editor.style?.letterSpacing, 0);
+    expect(
+      editor.style?.height,
+      closeTo(20 / 14, 0.001),
+    );
+    expect(
+      tester
+          .widget<Padding>(
+            find.byKey(const ValueKey('note-paper-content-padding')),
+          )
+          .padding,
+      const EdgeInsets.fromLTRB(26, 14, 12, 10),
+    );
     expect(find.text('Edit'), findsOneWidget);
     expect(find.text('_No note content._'), findsNothing);
   });
@@ -3608,8 +4332,25 @@ void main() {
 
     final formatHeader = _popupMenuItemWithText('Format');
     final boldItem = _popupMenuItemWithText('Bold');
-    expect(tester.widget<PopupMenuItem<String>>(formatHeader).height, 17);
-    expect(tester.widget<PopupMenuItem<String>>(boldItem).height, 21);
+    final textFieldFinder = find.descendant(
+      of: field,
+      matching: find.byType(TextField),
+    );
+    final textField = tester.widget<TextField>(textFieldFinder);
+    final editableText = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    final suppressedContextMenu = textField.contextMenuBuilder!(
+      tester.element(textFieldFinder),
+      tester.state<EditableTextState>(editableText),
+    );
+    expect(
+      suppressedContextMenu.key,
+      const ValueKey('markdown-text-context-menu-suppressed'),
+    );
+    expect(tester.widget<PopupMenuItem<String>>(formatHeader).height, 19);
+    expect(tester.widget<PopupMenuItem<String>>(boldItem).height, 25);
     expect(
       find.descendant(of: boldItem, matching: find.byType(Icon)),
       findsNothing,
@@ -3673,15 +4414,17 @@ void main() {
     expect(headingText.style?.fontSize, 19);
     expect(headingText.style?.fontWeight, FontWeight.w600);
     expect(boldText.style?.fontWeight, FontWeight.w600);
-    expect(boldText.style?.letterSpacing, -0.09);
+    expect(boldText.style?.letterSpacing, 0.1);
     expect(quoteText.style?.letterSpacing, 0.05);
     expect(inlineCode.style?.fontFamily, 'Cascadia Mono');
     expect(inlineCode.style?.fontSize, 13);
     expect(inlineCode.style?.color, colors.active);
+    expect(inlineCode.style?.backgroundColor, colors.code);
     expect(fencedCode.style?.fontFamily, 'Cascadia Mono');
     expect(fencedCode.style?.fontSize, 13);
     expect(fencedCode.style?.color, colors.text);
     expect(fencedCode.style?.letterSpacing, 0.4);
+    expect(fencedCode.style?.backgroundColor, isNull);
     expect(linkLabel.style?.color, colors.link);
     expect(linkLabel.style?.decoration, TextDecoration.underline);
     expect(linkUrl.style?.color, colors.weakText);
@@ -3725,19 +4468,13 @@ void main() {
       return Offset(translation.x, translation.y);
     }
 
-    expect(markdownPaintOffset(0), const Offset(-1, 2));
-    expect(
-      find.byKey(const ValueKey('papertodo-markdown-line-metrics-1')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey('papertodo-markdown-line-metrics-2')),
-      findsNothing,
-    );
-    expect(markdownPaintOffset(3), const Offset(-1, 0));
-    expect(markdownPaintOffset(5), const Offset(0, -2));
-    expect(markdownPaintOffset(6), const Offset(0, -2));
-    expect(markdownPaintOffset(7), const Offset(0, -2));
+    expect(markdownPaintOffset(0), const Offset(1, 2));
+    expect(markdownPaintOffset(1), const Offset(3, 0));
+    expect(markdownPaintOffset(2), const Offset(3, 0));
+    expect(markdownPaintOffset(3), const Offset(1, -2));
+    expect(markdownPaintOffset(5), const Offset(2, -4));
+    expect(markdownPaintOffset(6), const Offset(2, -4));
+    expect(markdownPaintOffset(7), const Offset(2, -4));
 
     expect(
       find.descendant(
@@ -3761,8 +4498,8 @@ void main() {
           find.byKey(const ValueKey('papertodo-markdown-background-7')),
         )
         .painter as dynamic;
-    expect(codePainter.leftInset, 4);
-    expect(codePainter.rightInset, 11);
+    expect(codePainter.leftInset, 1);
+    expect(codePainter.rightInset, 9);
     expect(codePainter.cornerRadius, 6);
     expect(openingCodePainter.codeContinuesAbove, isFalse);
     expect(openingCodePainter.codeContinuesBelow, isTrue);
@@ -3802,8 +4539,8 @@ void main() {
     final firstListMetrics = tester.widget<Transform>(
       find.byKey(const ValueKey('papertodo-markdown-line-metrics-0')),
     );
-    expect(firstListMetrics.transform.getTranslation().x, 0);
-    expect(firstListMetrics.transform.getTranslation().y, -2);
+    expect(firstListMetrics.transform.getTranslation().x, 3);
+    expect(firstListMetrics.transform.getTranslation().y, -4);
     final hiddenMarkers = tester
         .widgetList<Text>(
           find.descendant(of: source, matching: find.byType(Text)),
@@ -3925,10 +4662,14 @@ void main() {
     expect(
         find.byKey(const ValueKey('preview-first-note-preview')), findsNothing);
     expect(find.text('Edit'), findsWidgets);
+    final editModePillWidth = tester
+        .getSize(find.byKey(const ValueKey('note-status-mode-pill')))
+        .width;
     expect(
-      tester.getSize(find.byKey(const ValueKey('note-status-mode-pill'))).width,
-      previewModePillWidth,
+      editModePillWidth,
+      greaterThanOrEqualTo(42),
     );
+    expect(editModePillWidth, lessThan(previewModePillWidth));
 
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pump();
@@ -3938,6 +4679,79 @@ void main() {
         findsOneWidget);
     expect(
         find.byKey(const ValueKey('preview-first-note-content')), findsNothing);
+  });
+
+  testWidgets(
+      'markdown off notes keep the PaperTodo preview and focus lifecycle',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        markdownRenderMode: MarkdownRenderModes.off,
+        papers: [
+          PaperData(
+            id: 'plain-preview-note',
+            type: PaperTypes.note,
+            title: 'Plain preview note',
+            content: '# Plain heading\nSecond **plain** line',
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final preview = find.byKey(const ValueKey('plain-preview-note-preview'));
+    final source = find.descendant(
+      of: preview,
+      matching: find.byType(PaperTodoMarkdownSourcePreview),
+    );
+    expect(preview, findsOneWidget);
+    expect(source, findsOneWidget);
+    expect(
+      tester.widget<PaperTodoMarkdownSourcePreview>(source).markdownEnabled,
+      isFalse,
+    );
+    expect(
+      find.byKey(const ValueKey('plain-preview-note-content')),
+      findsNothing,
+    );
+    expect(find.text('Preview'), findsWidgets);
+    final plainHeading = tester.widget<Text>(find.text('# Plain heading'));
+    expect(plainHeading.style?.fontSize, 14);
+    expect(plainHeading.style?.fontWeight, FontWeight.normal);
+    expect(plainHeading.style?.letterSpacing, 0);
+
+    await _enterNoteEditor(tester, 'plain-preview-note');
+
+    expect(find.text('Edit'), findsWidgets);
+    expect(preview, findsNothing);
+    final editor = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const ValueKey('plain-preview-note-content')),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(editor.focusNode?.hasFocus, isTrue);
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.pump(PaperTodoMotion.controlFeedback);
+
+    expect(preview, findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('plain-preview-note-content')),
+      findsNothing,
+    );
+    expect(find.text('Preview'), findsWidgets);
   });
 
   testWidgets('opens markdown preview links', (tester) async {
@@ -5001,9 +5815,17 @@ void main() {
     );
     expect(
       noteStatusDecoration.border?.top.color,
-      noteStatusColors.tint.withValues(alpha: 28 / 255),
+      const Color(0xFFF0E8D5),
     );
-    expect(tester.getSize(noteStatusBar).height, 26);
+    expect(tester.getSize(noteStatusBar).height, 27);
+    expect(
+      tester
+          .widget<IgnorePointer>(
+            find.byKey(const ValueKey('note-status-hit-test')),
+          )
+          .ignoring,
+      true,
+    );
     final noteToolbar = find.byKey(const ValueKey('note-canvas-toolbar'));
     final addCanvasButton = find.byKey(const ValueKey('note-add-canvas-block'));
     final addCanvasSurface =
@@ -5025,12 +5847,26 @@ void main() {
     );
     final canvasCountText = tester.widget<Text>(canvasCount);
     expect(canvasCountText.style?.fontSize, 11);
+    expect(canvasCountText.style?.fontWeight, FontWeight.w400);
+    expect(canvasCountText.style?.letterSpacing, 0);
     expect(canvasCountText.style?.color, noteStatusColors.weakText);
+    final canvasCountMetrics = tester.widget<Transform>(
+      find.byKey(const ValueKey('note-canvas-element-count-metrics')),
+    );
+    expect(
+      canvasCountMetrics.transform,
+      Matrix4.translationValues(-1, -1, 0),
+    );
     expect(
       find.descendant(of: canvasCount, matching: find.byType(AnimatedSwitcher)),
       findsNothing,
     );
     final canvasCountRight = tester.getTopRight(canvasCount).dx;
+    expect(
+      tester.getTopLeft(canvasCount).dx -
+          tester.getTopRight(addCanvasButton).dx,
+      greaterThanOrEqualTo(8),
+    );
     expect(
       canvasCountRight,
       closeTo(
@@ -5091,6 +5927,13 @@ void main() {
           .opacity,
       0.7,
     );
+    final addCanvasGlyphMetrics = tester.widget<Transform>(
+      find.byKey(const ValueKey('note-add-canvas-glyph-metrics')),
+    );
+    expect(
+      addCanvasGlyphMetrics.transform,
+      Matrix4.translationValues(1, 0, 0),
+    );
     await addCanvasPress.cancel();
     await tester.pump();
     expect(find.text('Split'), findsNothing);
@@ -5100,26 +5943,68 @@ void main() {
       tester.getSize(find.byKey(const ValueKey('note-status-mode-pill'))).width,
       greaterThanOrEqualTo(42),
     );
+    final noteModeSurface = tester.widget<DecoratedBox>(
+      find.byKey(const ValueKey('note-status-mode-surface')),
+    );
+    final noteModeSurfaceDecoration =
+        noteModeSurface.decoration as BoxDecoration;
+    expect(noteModeSurfaceDecoration.color, const Color(0xFFE9E0CC));
+    expect(noteModeSurfaceDecoration.borderRadius, BorderRadius.circular(9));
+    final noteModeSurfaceMetrics = tester.widget<Transform>(
+      find.byKey(const ValueKey('note-status-mode-surface-metrics')),
+    );
+    expect(
+      noteModeSurfaceMetrics.transform,
+      Matrix4.translationValues(1, 0, 0),
+    );
+    expect(
+      tester
+          .widget<Stack>(
+            find
+                .ancestor(
+                  of: find.byKey(const ValueKey('note-status-mode-surface')),
+                  matching: find.byType(Stack),
+                )
+                .first,
+          )
+          .fit,
+      StackFit.passthrough,
+    );
     final noteModeText = tester.widget<Text>(
       find.byKey(const ValueKey('note-status-mode')),
     );
-    expect(noteModeText.style?.letterSpacing, 0);
+    expect(noteModeText.style?.letterSpacing, 0.7);
+    final noteModeMetrics = tester.widget<Transform>(
+      find.byKey(const ValueKey('note-status-mode-metrics')),
+    );
+    expect(
+      noteModeMetrics.transform,
+      Matrix4.translationValues(1, 0, 0),
+    );
     expect(
       find.byKey(const ValueKey('note-status-mode-transition')),
       findsNothing,
     );
-    final noteStatsMetrics = tester.widget<Align>(
+    final noteStatsMetrics = tester.widget<Transform>(
       find.byKey(const ValueKey('note-status-stats-metrics')),
     );
-    expect(noteStatsMetrics.alignment, Alignment.centerLeft);
+    expect(
+      noteStatsMetrics.transform,
+      Matrix4.translationValues(1, 0, 0),
+    );
     final noteStatsText = tester.widget<Text>(
       find.byKey(const ValueKey('note-status-stats')),
     );
+    expect(noteStatsText.style?.fontSize, 11);
+    expect(noteStatsText.style?.fontWeight, FontWeight.w400);
     expect(noteStatsText.style?.letterSpacing, 0);
-    final noteZoomMetrics = tester.widget<Align>(
+    final noteZoomMetrics = tester.widget<Transform>(
       find.byKey(const ValueKey('note-status-zoom-metrics')),
     );
-    expect(noteZoomMetrics.alignment, Alignment.centerRight);
+    expect(
+      noteZoomMetrics.transform,
+      Matrix4.translationValues(-1, 0, 0),
+    );
     expect(
       tester
           .widget<FittedBox>(
@@ -5145,7 +6030,7 @@ void main() {
             find.byKey(const ValueKey('note-paper-content-padding')),
           )
           .padding,
-      const EdgeInsets.fromLTRB(26, 12, 14, 12),
+      const EdgeInsets.fromLTRB(24, 12, 14, 12),
     );
     expect(
       tester
@@ -5155,8 +6040,15 @@ void main() {
           .padding,
       EdgeInsets.zero,
     );
-    final noteCanvasDecoration = tester
-        .widget<Container>(find.byKey(const ValueKey('note-paper-canvas')))
+    final noteCanvasFillDecoration = tester
+        .widget<DecoratedBox>(
+          find.byKey(const ValueKey('note-paper-canvas-fill')),
+        )
+        .decoration as BoxDecoration;
+    final noteCanvasChromeDecoration = tester
+        .widget<DecoratedBox>(
+          find.byKey(const ValueKey('note-paper-canvas-chrome')),
+        )
         .decoration as BoxDecoration;
     final noteCanvasSize =
         tester.getSize(find.byKey(const ValueKey('note-paper-canvas')));
@@ -5168,18 +6060,66 @@ void main() {
         .widget<CustomPaint>(find.byKey(const ValueKey('note-paper-grid')))
         .painter as dynamic;
     expect(noteGridPainter.spacing, 24);
-    expect(noteGridPainter.lineOffset, 0);
-    expect(noteGridPainter.color.a, closeTo(28 / 255, 0.001));
+    expect(noteGridPainter.verticalLineOffset, 1);
+    expect(noteGridPainter.horizontalLineOffset, -1);
+    expect(noteGridPainter.color.a, closeTo(18 / 255, 0.001));
     expect(
-      ((noteCanvasDecoration.border as Border).top.color).a,
-      closeTo(28 / 255, 0.001),
+      noteCanvasFillDecoration.color,
+      PaperTodoThemeColors.of(
+        tester.element(find.byKey(const ValueKey('note-paper-canvas-fill'))),
+      ).tint.withValues(alpha: 0.035),
+    );
+    expect(
+      (noteCanvasChromeDecoration.border as Border).top.color,
+      const Color(0xFFF0E8D5),
     );
     final bindingDecoration = tester
         .widget<Container>(
           find.byKey(const ValueKey('note-paper-binding-line')),
         )
         .decoration as BoxDecoration;
+    final bindingPositioned = tester.widget<Positioned>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('note-paper-binding-line')),
+            matching: find.byType(Positioned),
+          )
+          .first,
+    );
+    expect(bindingPositioned.left, 16);
+    expect(bindingPositioned.top, 15);
+    expect(bindingPositioned.bottom, 15);
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('note-paper-binding-line')))
+          .width,
+      2,
+    );
     expect(bindingDecoration.color!.a, closeTo(75 / 255, 0.001));
+    final pageChromePositioned = tester.widget<Positioned>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('note-paper-page-chrome')),
+            matching: find.byType(Positioned),
+          )
+          .first,
+    );
+    expect(pageChromePositioned.left, 1);
+    expect(pageChromePositioned.top, 0);
+    expect(pageChromePositioned.right, 1);
+    expect(pageChromePositioned.bottom, 0);
+    final canvasChromePositioned = tester.widget<Positioned>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('note-paper-canvas-chrome')),
+            matching: find.byType(Positioned),
+          )
+          .first,
+    );
+    expect(canvasChromePositioned.left, 1);
+    expect(canvasChromePositioned.top, 0);
+    expect(canvasChromePositioned.right, 1);
+    expect(canvasChromePositioned.bottom, 0);
 
     expect(find.byKey(const ValueKey('note-canvas-preview')), findsOneWidget);
     final canvasPreview = find.byKey(const ValueKey('note-canvas-preview'));
@@ -5220,6 +6160,42 @@ void main() {
         ),
       ),
       findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<Transform>(
+            find.byKey(
+              const ValueKey(
+                'note-canvas-type-label-metrics-canvas-bottom',
+              ),
+            ),
+          )
+          .transform,
+      Matrix4.translationValues(-1, 0, 0),
+    );
+    expect(
+      tester
+          .widget<Transform>(
+            find.byKey(
+              const ValueKey(
+                'note-canvas-layer-label-metrics-canvas-bottom',
+              ),
+            ),
+          )
+          .transform,
+      Matrix4.translationValues(0, -1, 0),
+    );
+    expect(
+      tester
+          .widget<Transform>(
+            find.byKey(
+              const ValueKey(
+                'note-canvas-layer-label-metrics-canvas-top',
+              ),
+            ),
+          )
+          .transform,
+      Matrix4.translationValues(2, -1, 0),
     );
     expect(
       find.descendant(
@@ -5408,7 +6384,44 @@ void main() {
     expect(editor.style?.fontSize, 13);
     expect(editor.style?.fontFamily, 'Cascadia Mono');
     expect(editor.style?.fontFamilyFallback, contains('Consolas'));
-    expect(editor.style?.letterSpacing, 0);
+    expect(editor.style?.letterSpacing, 0.4);
+    expect(editor.style?.height, closeTo(15 / 13, 0.0001));
+    expect(
+      tester
+          .widget<Padding>(
+            find.byKey(
+              const ValueKey(
+                'note-canvas-editor-padding-canvas-metrics-block',
+              ),
+            ),
+          )
+          .padding,
+      const EdgeInsets.fromLTRB(2, 0, 16, 7),
+    );
+    expect(
+      tester
+          .widget<Transform>(
+            find.byKey(
+              const ValueKey(
+                'note-canvas-type-label-metrics-canvas-metrics-block',
+              ),
+            ),
+          )
+          .transform,
+      Matrix4.translationValues(-1, 0, 0),
+    );
+    expect(
+      tester
+          .widget<Transform>(
+            find.byKey(
+              const ValueKey(
+                'note-canvas-layer-label-metrics-canvas-metrics-block',
+              ),
+            ),
+          )
+          .transform,
+      Matrix4.translationValues(0, -1, 0),
+    );
     expect(scrollbar.controller, same(editor.scrollController));
     expect(scrollbar.thumbVisibility, true);
     expect(editor.scrollController!.position.maxScrollExtent, greaterThan(0));
@@ -5495,11 +6508,7 @@ void main() {
       (selectedDecoration.border as Border).top.width,
       2,
     );
-    final selectedShadow = selectedDecoration.boxShadow!.single;
-    expect(selectedShadow.color.a, closeTo(0.13, 0.001));
-    expect(selectedShadow.blurRadius, 6);
-    expect(selectedShadow.offset.dx, closeTo(2 / math.sqrt(2), 0.001));
-    expect(selectedShadow.offset.dy, closeTo(2 / math.sqrt(2), 0.001));
+    expect(selectedDecoration.boxShadow, isEmpty);
   });
 
   testWidgets('note canvas one-step layer moves break equal z-index ties',
@@ -6099,6 +7108,135 @@ void main() {
     expect(element.text, 'return value;');
   });
 
+  testWidgets('note canvas WPF wrap opportunities stay display-only',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    String? clipboardText;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      switch (call.method) {
+        case 'Clipboard.setData':
+          clipboardText =
+              (call.arguments as Map<Object?, Object?>)['text'] as String?;
+          return null;
+        case 'Clipboard.getData':
+          return clipboardText == null
+              ? null
+              : <String, Object?>{'text': clipboardText};
+        case 'Clipboard.hasStrings':
+          return <String, Object?>{
+            'value': clipboardText?.isNotEmpty ?? false,
+          };
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+
+    const initialText = 'Console.WriteLine("PaperTodo");\n中文 mixed 123';
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'canvas-wrap-note',
+            type: PaperTypes.note,
+            title: 'Canvas wrap note',
+            content: 'Canvas body',
+            noteCanvasElements: [
+              NoteCanvasElement(
+                id: 'canvas-wrap-element',
+                type: NoteCanvasElementTypes.code,
+                text: initialText,
+                x: 16,
+                y: 24,
+                width: 230,
+                height: 116,
+              ),
+            ],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+
+    final field = find.byKey(
+      const ValueKey('note-canvas-element-text-canvas-wrap-element'),
+    );
+    TextField editor() => tester.widget<TextField>(
+          find.descendant(of: field, matching: find.byType(TextField)),
+        );
+    NoteCanvasElement element() =>
+        controller.state.papers.single.noteCanvasElements.single;
+
+    expect(editor().controller!.text, contains('\u200B('));
+    expect(element().text, initialText);
+    expect(element().text, isNot(contains('\u200B')));
+    expect(element().toJson()['text'], initialText);
+
+    await tester.tap(field);
+    await tester.enterText(field, 'Call("value");');
+    await tester.pump();
+
+    expect(element().text, 'Call("value");');
+    expect(editor().controller!.text, 'Call\u200B("value");');
+
+    editor().controller!.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: editor().controller!.text.length,
+    );
+    await _pressControlShortcut(tester, LogicalKeyboardKey.keyC);
+    await tester.pump();
+    expect(
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text,
+      'Call("value");',
+    );
+
+    await _pressControlShortcut(tester, LogicalKeyboardKey.keyX);
+    await tester.pump();
+    expect(
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text,
+      'Call("value");',
+    );
+    expect(element().text, isEmpty);
+    expect(element().toJson()['text'], isEmpty);
+
+    await Clipboard.setData(
+      const ClipboardData(text: 'Next\u200B("item");'),
+    );
+    editor().controller!.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: editor().controller!.text.length,
+    );
+    await _pressControlShortcut(tester, LogicalKeyboardKey.keyV);
+    await tester.pump();
+
+    expect(element().text, 'Next("item");');
+    expect(element().toJson()['text'], 'Next("item");');
+    expect(editor().controller!.text, 'Next\u200B("item");');
+
+    final markerOffset = editor().controller!.text.indexOf('\u200B');
+    editor().controller!.selection = TextSelection.collapsed(
+      offset: markerOffset + 1,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+
+    expect(element().text, 'Nex("item");');
+    expect(element().text, isNot(contains('\u200B')));
+    expect(element().toJson()['text'], 'Nex("item");');
+    expect(editor().controller!.text, 'Nex\u200B("item");');
+  });
+
   testWidgets('clips oversized markdown note input', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -6167,6 +7305,15 @@ void main() {
       ),
     );
 
+    expect(
+      find.byKey(const ValueKey('markdown-long-note-preview')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('markdown-long-note-content')),
+      findsNothing,
+    );
+    await _enterNoteEditor(tester, 'markdown-long-note');
     expect(
       find.byKey(const ValueKey('markdown-long-note-content')),
       findsOneWidget,
@@ -6472,26 +7619,30 @@ void main() {
     final clearButton =
         find.byKey(const ValueKey('settings-theme-color-clear'));
     expect(tester.getSize(swatch), const Size(58, 42));
+    expect(
+      find.descendant(of: swatch, matching: find.byType(AnimatedScale)),
+      findsNothing,
+    );
     final swatchSurface = tester.widget<AnimatedContainer>(
       find.byKey(
         const ValueKey('settings-theme-color-swatch-surface'),
       ),
     );
-    expect(swatchSurface.duration, PaperTodoMotion.controlFeedback);
+    expect(swatchSurface.duration, Duration.zero);
+    expect(swatchSurface.clipBehavior, Clip.hardEdge);
     expect(
       (swatchSurface.decoration as BoxDecoration).borderRadius,
-      BorderRadius.circular(8),
+      BorderRadius.zero,
     );
     expect(tester.getSize(pickButton).height, 27);
-    expect(tester.getSize(pickButton).width, greaterThanOrEqualTo(76));
+    expect(tester.getSize(pickButton).width, 76);
     expect(tester.getSize(clearButton).height, 27);
-    expect(tester.getSize(clearButton).width, greaterThanOrEqualTo(82));
+    expect(tester.getSize(clearButton).width, 82);
     final swatchMouse =
         await tester.createGesture(kind: PointerDeviceKind.mouse);
     await swatchMouse.addPointer(location: const Offset(1, 1));
     await swatchMouse.moveTo(tester.getCenter(swatch));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     final hoveredSwatchDecoration = tester
         .widget<AnimatedContainer>(
           find.byKey(
@@ -6511,15 +7662,18 @@ void main() {
     );
     expect(clearButtonSurface, findsOneWidget);
     expect(
+      find.descendant(of: clearButton, matching: find.byType(AnimatedScale)),
+      findsNothing,
+    );
+    expect(
       tester.widget<AnimatedContainer>(clearButtonSurface).duration,
-      PaperTodoMotion.controlFeedback,
+      Duration.zero,
     );
     final clearButtonMouse =
         await tester.createGesture(kind: PointerDeviceKind.mouse);
     await clearButtonMouse.addPointer(location: const Offset(1, 1));
     await clearButtonMouse.moveTo(tester.getCenter(clearButton));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     final clearButtonColors =
         PaperTodoThemeColors.of(tester.element(clearButton));
     expect(
@@ -6528,8 +7682,18 @@ void main() {
         color: clearButtonColors.tintAt(
           clearButtonColors.isDark ? 52 : 38,
         ),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero,
       ),
+    );
+    final pickButtonSurface = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: pickButton,
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    expect(
+      (pickButtonSurface.decoration as BoxDecoration).borderRadius,
+      BorderRadius.zero,
     );
     await clearButtonMouse.removePointer();
     await tester.pump();
@@ -6539,17 +7703,17 @@ void main() {
     final pickLabelTranslation = pickLabelMetrics.transform.getTranslation();
     expect(
       Offset(pickLabelTranslation.x, pickLabelTranslation.y),
-      Offset.zero,
+      const Offset(0, -0.5),
     );
-    expect(
+    final pickLabelScale = tester.widget<Transform>(
       find.descendant(
         of: find.byKey(
           const ValueKey('settings-theme-color-pick-label-metrics'),
         ),
         matching: find.byType(Transform),
       ),
-      findsNothing,
     );
+    expect(pickLabelScale.transform.entry(1, 1), closeTo(12 / 11, 0.0001));
     final themeColorLabelMetrics = tester.widget<Transform>(
       find.byKey(
         const ValueKey('settings-theme-color-current-label-metrics'),
@@ -6561,6 +7725,22 @@ void main() {
       Offset(themeColorLabelTranslation.x, themeColorLabelTranslation.y),
       Offset.zero,
     );
+    final themeColorCurrentLabel = tester.widget<Text>(
+      find
+          .descendant(
+            of: find.byKey(
+              const ValueKey('settings-theme-color-current-label-metrics'),
+            ),
+            matching: find.text('Use default palette'),
+          )
+          .first,
+    );
+    expect(themeColorCurrentLabel.style?.letterSpacing, -0.05);
+    final themeColorClearLabel = tester.widget<Text>(
+      find.descendant(of: clearButton, matching: find.text('Default color')),
+    );
+    expect(themeColorClearLabel.style?.fontWeight, FontWeight.w500);
+    expect(themeColorClearLabel.style?.letterSpacing, -0.125);
     final topBarTodoLabel = tester.widget<Transform>(
       find.byKey(
         const ValueKey('settings-topBarNewTodo-wpf-label'),
@@ -6569,7 +7749,7 @@ void main() {
     final topBarTodoTranslation = topBarTodoLabel.transform.getTranslation();
     expect(
       Offset(topBarTodoTranslation.x, topBarTodoTranslation.y),
-      Offset.zero,
+      const Offset(-0.5, -1),
     );
     final topBarTodoText = tester.widget<Text>(
       find.descendant(
@@ -6579,7 +7759,7 @@ void main() {
         matching: find.byType(Text),
       ),
     );
-    expect(topBarTodoText.style?.letterSpacing, 0);
+    expect(topBarTodoText.style?.letterSpacing, -0.075);
     final settingsScrollbarTheme = tester.widget<ScrollbarTheme>(
       find.byKey(const ValueKey('settings-scrollbar-theme')),
     );
@@ -6600,38 +7780,53 @@ void main() {
 
     expect(
       transformOffset('settings-navigation-metrics'),
-      Offset.zero,
+      const Offset(1, -2),
     );
     expect(
       transformOffset('settings-navigation-divider'),
+      const Offset(1, -2),
+    );
+    expect(
+      transformOffset('settings-category-display-label-metrics'),
+      Offset.zero,
+    );
+    expect(
+      transformOffset('settings-category-todoAndNotes-label-metrics'),
       Offset.zero,
     );
     expect(
       transformOffset('settings-theme-color-label-metrics'),
-      Offset.zero,
+      const Offset(0, 2),
     );
+    final themeColorFieldLabelFinder = find
+        .descendant(
+          of: find.byKey(
+            const ValueKey('settings-theme-color-label-metrics'),
+          ),
+          matching: find.text('Global theme color'),
+        )
+        .first;
     final themeColorFieldLabel = tester.widget<Text>(
-      find
-          .descendant(
-            of: find
-                .byKey(const ValueKey('settings-theme-color-label-metrics')),
-            matching: find.text('Global theme color'),
-          )
-          .first,
+      themeColorFieldLabelFinder,
     );
     expect(themeColorFieldLabel.style?.fontSize, 11);
-    expect(themeColorFieldLabel.style?.letterSpacing, 0);
+    expect(
+      themeColorFieldLabel.style?.color,
+      PaperTodoThemeColors.of(tester.element(themeColorFieldLabelFinder))
+          .weakText,
+    );
+    expect(themeColorFieldLabel.style?.letterSpacing, -0.01);
     final systemFontLabel = tester.widget<Text>(find.text('System font'));
     expect(systemFontLabel.style?.fontSize, 11);
-    expect(systemFontLabel.style?.letterSpacing, 0);
+    expect(systemFontLabel.style?.letterSpacing, -0.005);
     final customFontField = tester.widget<TextField>(
       find.byKey(const ValueKey('settings-custom-font-family-field')),
     );
-    expect(customFontField.textAlignVertical, const TextAlignVertical(y: -0.4));
+    expect(customFontField.textAlignVertical, const TextAlignVertical(y: -0.2));
     final markdownDisplayLabel = tester.widget<Text>(
       find.text('Markdown display'),
     );
-    expect(markdownDisplayLabel.style?.letterSpacing, 0);
+    expect(markdownDisplayLabel.style?.letterSpacing, -0.02);
     final markdownDisplayMetrics = tester.widget<Transform>(
       find.byKey(const ValueKey('settings-markdown-label-metrics')),
     );
@@ -6639,29 +7834,43 @@ void main() {
         markdownDisplayMetrics.transform.getTranslation();
     expect(
       Offset(markdownDisplayTranslation.x, markdownDisplayTranslation.y),
-      Offset.zero,
+      const Offset(0.5, 0.5),
     );
     final fullscreenHandlingLabel = tester.widget<Text>(
       find.text('Fullscreen handling'),
     );
-    expect(fullscreenHandlingLabel.style?.letterSpacing, 0);
+    expect(fullscreenHandlingLabel.style?.letterSpacing, -0.003);
     final todoSizeLabel = tester.widget<Text>(find.text('Todo size'));
-    expect(todoSizeLabel.style?.letterSpacing, 0);
+    expect(todoSizeLabel.style?.letterSpacing, -0.001);
     final todoSpacingLabel = tester.widget<Text>(find.text('Todo spacing'));
     final noteSpacingLabel = tester.widget<Text>(find.text('Note spacing'));
-    expect(todoSpacingLabel.style?.letterSpacing, 0);
-    expect(noteSpacingLabel.style?.letterSpacing, 0);
-    expect(transformOffset('settings-title-metrics'), Offset.zero);
+    expect(todoSpacingLabel.style?.letterSpacing, -0.001);
+    expect(noteSpacingLabel.style?.letterSpacing, -0.001);
+    expect(
+      transformOffset('settings-title-metrics'),
+      const Offset(0, 1.5),
+    );
+    expect(
+      transformOffset('settings-top-bar-heading-metrics'),
+      const Offset(-0.5, -0.5),
+    );
+    for (final key in [
+      'settings-top-bar-new-todo-mark-metrics',
+      'settings-top-bar-new-note-mark-metrics',
+      'settings-top-bar-external-mark-metrics',
+    ]) {
+      expect(transformOffset(key), const Offset(0, -1));
+    }
     final settingsTitle = tester.widget<Text>(
       find.descendant(
         of: find.byKey(const ValueKey('settings-title-metrics')),
         matching: find.byType(Text),
       ),
     );
-    expect(settingsTitle.style?.letterSpacing, 0);
+    expect(settingsTitle.style?.letterSpacing, 0.5);
     expect(
       transformOffset('settings-close-glyph-metrics'),
-      Offset.zero,
+      const Offset(-2, 1),
     );
     expect(
       tester
@@ -6669,7 +7878,7 @@ void main() {
             find.byKey(const ValueKey('settings-title-content-gap')),
           )
           .height,
-      12,
+      14,
     );
     expect(settingsScrollbarTheme.data.mainAxisMargin, 9);
     expect(settingsScrollbarTheme.data.crossAxisMargin, 3);
@@ -6693,6 +7902,26 @@ void main() {
       const EdgeInsets.fromLTRB(3, 6, 13, 2),
     );
     expect(
+      tester
+          .widget<SizedBox>(
+            find.byKey(const ValueKey('settings-content-footer-gap')),
+          )
+          .height,
+      2,
+    );
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('settings-cancel-button')))
+          .height,
+      24,
+    );
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('settings-confirm-button')))
+          .height,
+      24,
+    );
+    expect(
       settingsScrollbarTheme.data.thumbColor!.resolve(<WidgetState>{}),
       const Color(0xFFB39B74).withValues(alpha: 0.34),
     );
@@ -6708,14 +7937,12 @@ void main() {
     expect(authorSignature.style?.fontSize, 11);
     expect(authorSignature.style?.fontWeight, FontWeight.w500);
     expect(authorSignature.style?.letterSpacing, isNull);
+    final authorSignatureMetrics = tester.widget<Transform>(
+      find.byKey(const ValueKey('settings-author-signature-metrics')),
+    );
     expect(
-      find.descendant(
-        of: find.byKey(
-          const ValueKey('settings-author-signature-metrics'),
-        ),
-        matching: find.byType(Transform),
-      ),
-      findsNothing,
+      authorSignatureMetrics.transform.entry(0, 0),
+      closeTo(99 / 103, 0.0001),
     );
     final settingsCheckPainter = tester
         .widgetList<CustomPaint>(find.byType(CustomPaint))
@@ -6723,7 +7950,13 @@ void main() {
         .where((painter) =>
             painter.runtimeType.toString() == '_SettingsCheckMarkPainter')
         .first as dynamic;
-    expect(settingsCheckPainter.checkedInset, 0);
+    expect(settingsCheckPainter.checkedInset, 2);
+    expect(settingsCheckPainter.sourceBorderRadius, 4);
+    expect(settingsCheckPainter.checkedRadius, 3.5);
+    expect(settingsCheckPainter.checkPaintOffset, const Offset(2, 2));
+    expect(settingsCheckPainter.effectiveBorderRadius, 5.125);
+    expect(settingsCheckPainter.effectiveBorderInset, 2);
+    expect(settingsCheckPainter.effectiveInnerBorderRadius, 3.5);
     expect(
       settingsCheckPainter.selectionProgress,
       settingsCheckPainter.value ? 1 : 0,
@@ -6736,8 +7969,18 @@ void main() {
       final translation = transform.transform.getTranslation();
       expect(
         Offset(translation.x, translation.y),
-        Offset.zero,
+        const Offset(0.5, 1),
       );
+    }
+    final checkboxTitleStyles = tester.widgetList<DefaultTextStyle>(
+      find.descendant(
+        of: find.byKey(const ValueKey('settings-checkbox-title-metrics')),
+        matching: find.byType(DefaultTextStyle),
+      ),
+    );
+    expect(checkboxTitleStyles, isNotEmpty);
+    for (final style in checkboxTitleStyles) {
+      expect(style.style.letterSpacing, -0.05);
     }
     for (final key in const <String>[
       'settings-group-label-metrics',
@@ -6750,7 +7993,7 @@ void main() {
         final translation = transform.transform.getTranslation();
         expect(
           Offset(translation.x, translation.y),
-          Offset.zero,
+          const Offset(-0.5, 0.5),
         );
       }
     }
@@ -6841,6 +8084,189 @@ void main() {
     expect(controller.state.customThemeColorHex, isEmpty);
   });
 
+  testWidgets('settings navigation keeps per-label WPF raster origins',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    tester.platformDispatcher.localeTestValue = const Locale('zh', 'CN');
+    tester.binding.platformDispatcher.localesTestValue = const [
+      Locale('zh', 'CN'),
+    ];
+    addTearDown(() {
+      tester.binding.setSurfaceSize(null);
+      tester.platformDispatcher.clearLocaleTestValue();
+      tester.binding.platformDispatcher.clearLocalesTestValue();
+    });
+
+    final controller = RePaperTodoController(
+      initialState: AppState(
+        papers: [
+          PaperData(
+            id: 'settings-navigation-metrics-paper',
+            type: PaperTypes.todo,
+            items: [PaperItem(id: 'settings-navigation-metrics-item')],
+          ),
+        ],
+      ),
+      platform: _RecordingPlatformServices(),
+    );
+
+    await tester.pumpWidget(
+      RePaperTodoApp(
+        controller: controller,
+        store: _MemoryStateStore(),
+      ),
+    );
+    await tester.tap(
+      find.widgetWithIcon(IconButton, Icons.settings_outlined),
+    );
+    await tester.pumpAndSettle();
+
+    Offset labelOffset(String section) {
+      final translation = tester
+          .widget<Transform>(
+            find.byKey(
+              ValueKey('settings-category-$section-label-metrics'),
+            ),
+          )
+          .transform
+          .getTranslation();
+      return Offset(translation.x, translation.y);
+    }
+
+    double? labelLetterSpacing(String section) {
+      return tester
+          .widget<AnimatedDefaultTextStyle>(
+            find
+                .ancestor(
+                  of: find.byKey(
+                    ValueKey('settings-category-$section-label-metrics'),
+                  ),
+                  matching: find.byType(AnimatedDefaultTextStyle),
+                )
+                .first,
+          )
+          .style
+          .letterSpacing;
+    }
+
+    expect(labelOffset('display'), Offset.zero);
+    expect(labelOffset('todoAndNotes'), Offset.zero);
+    expect(labelOffset('capsules'), Offset.zero);
+    expect(labelOffset('general'), Offset.zero);
+    expect(labelLetterSpacing('display'), 0);
+    expect(labelLetterSpacing('todoAndNotes'), -0.05);
+    expect(labelLetterSpacing('capsules'), 0);
+    expect(labelLetterSpacing('general'), -0.05);
+
+    await _selectSettingsCategory(tester, 'todoAndNotes');
+    expect(labelOffset('todoAndNotes'), Offset.zero);
+    expect(labelLetterSpacing('todoAndNotes'), -0.05);
+    final todoSectionHeaderMetrics = tester.widget<Transform>(
+      find.byKey(
+        const ValueKey('settings-todo-section-header-metrics'),
+      ),
+    );
+    final todoSectionHeaderTranslation =
+        todoSectionHeaderMetrics.transform.getTranslation();
+    expect(
+      Offset(
+        todoSectionHeaderTranslation.x,
+        todoSectionHeaderTranslation.y,
+      ),
+      const Offset(0.5, 0.5),
+    );
+    final todoSectionHeader = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('settings-todo-section-header-metrics'),
+        ),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(todoSectionHeader.style?.letterSpacing, -0.125);
+    final dueYearLabel = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('settings-due-year-label-metrics'),
+        ),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(dueYearLabel.style?.letterSpacing, -0.125);
+    final dueYearTranslation = tester
+        .widget<Transform>(
+          find.byKey(
+            const ValueKey('settings-due-year-label-metrics'),
+          ),
+        )
+        .transform
+        .getTranslation();
+    expect(
+      Offset(dueYearTranslation.x, dueYearTranslation.y),
+      const Offset(0.5, 0.5),
+    );
+
+    await _selectSettingsCategory(tester, 'capsules');
+    expect(labelOffset('capsules'), Offset.zero);
+    expect(labelLetterSpacing('capsules'), -0.05);
+
+    await _selectSettingsCategory(tester, 'general');
+    expect(labelOffset('general'), Offset.zero);
+    expect(labelOffset('display'), Offset.zero);
+    expect(labelLetterSpacing('general'), -0.05);
+    for (final key in const <String>[
+      'settings-script-persistent-title-metrics',
+      'settings-script-powershell7-title-metrics',
+    ]) {
+      final translation = tester
+          .widget<Transform>(find.byKey(ValueKey(key)))
+          .transform
+          .getTranslation();
+      expect(
+        Offset(translation.x, translation.y),
+        const Offset(0.5, 0),
+      );
+    }
+    Offset translatedOffset(String key) {
+      final translation = tester
+          .widget<Transform>(find.byKey(ValueKey(key)))
+          .transform
+          .getTranslation();
+      return Offset(translation.x, translation.y);
+    }
+
+    expect(
+      translatedOffset('settings-external-open-section-metrics'),
+      const Offset(-0.5, -0.5),
+    );
+    expect(
+      translatedOffset('settings-external-extension-label-metrics'),
+      const Offset(0.5, 0.5),
+    );
+    final externalExtensionLabel = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('settings-external-extension-label-metrics'),
+        ),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(externalExtensionLabel.style?.letterSpacing, -0.125);
+    final externalExtensionField = tester.widget<TextField>(
+      find.byKey(
+        const ValueKey('settings-external-markdown-extension'),
+      ),
+    );
+    expect(
+      externalExtensionField.decoration?.contentPadding,
+      const EdgeInsets.fromLTRB(10, 8, 8, 0),
+    );
+    expect(
+      externalExtensionField.textAlignVertical,
+      TextAlignVertical.center,
+    );
+  });
+
   testWidgets('settings title length uses PaperTodo compact stepper',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 800));
@@ -6885,16 +8311,9 @@ void main() {
       ),
     );
     expect(tester.getSize(decreaseButton), const Size(34, 26));
-    final valueTransition = find.descendant(
-      of: stepper,
-      matching: find.byKey(
-        const ValueKey('settings-stepper-value-transition'),
-      ),
-    );
-    expect(valueTransition, findsOneWidget);
     expect(
-      tester.widget<AnimatedSwitcher>(valueTransition).duration,
-      PaperTodoMotion.controlFeedback,
+      find.descendant(of: stepper, matching: find.byType(AnimatedSwitcher)),
+      findsNothing,
     );
     final decreaseSurface = find.descendant(
       of: decreaseButton,
@@ -6914,14 +8333,12 @@ void main() {
     await stepperMouse.addPointer(location: const Offset(1, 1));
     await stepperMouse.moveTo(tester.getCenter(decreaseButton));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     expect(
       decreaseDecoration().color,
       stepperColors.hover,
     );
     await stepperMouse.removePointer();
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     expect(
         find.descendant(of: stepper, matching: find.text('6')), findsOneWidget);
 
@@ -7003,8 +8420,9 @@ void main() {
           of: find.byKey(ValueKey('${paper.id}-title-display')),
           matching: find.byType(SingleChildScrollView),
         ),
-        findsOneWidget,
+        findsNothing,
       );
+      expect(titleDisplay.overflow, TextOverflow.ellipsis);
       titleHostWidths.add(
         tester.getSize(find.byKey(ValueKey('${paper.id}-title-host'))).width,
       );
@@ -7012,7 +8430,7 @@ void main() {
     expect(titleHostWidths.last, greaterThan(titleHostWidths.first));
   });
 
-  testWidgets('overflowing standalone todo title scrolls the complete text',
+  testWidgets('overflowing standalone todo title uses source ellipsis',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(440, 320));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -7050,24 +8468,19 @@ void main() {
       (tester.widget<RichText>(titleDisplay).text as TextSpan).text,
       paper.title,
     );
-    final scrollFinder = find
-        .ancestor(
-            of: titleDisplay, matching: find.byType(SingleChildScrollView))
-        .first;
-    final scrollController =
-        tester.widget<SingleChildScrollView>(scrollFinder).controller!;
-    expect(scrollController.position.maxScrollExtent, greaterThan(0));
-    expect(scrollController.offset, 0);
-
-    await tester.pump(const Duration(milliseconds: 1300));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(scrollController.offset, greaterThan(0));
-
-    await tester.pumpWidget(const SizedBox.shrink());
+    expect(
+        tester.widget<RichText>(titleDisplay).overflow, TextOverflow.ellipsis);
+    expect(
+      find.ancestor(
+        of: titleDisplay,
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets(
-      'title marquee resets and restarts when the edited title changes size',
+      'title ellipsis updates immediately when the edited title changes size',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(440, 320));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -7101,45 +8514,45 @@ void main() {
     Finder titleField() => find.byKey(
           const ValueKey('$paperId-title'),
         );
-    SingleChildScrollView titleScroll() => tester.widget(
-          find
-              .ancestor(
-                of: titleDisplay(),
-                matching: find.byType(SingleChildScrollView),
-              )
-              .first,
+    Finder titleDisplayLayer() => find.byKey(
+          const ValueKey('$paperId-title-display-layer'),
         );
+    expect(tester.widget<RichText>(titleDisplay()).overflow,
+        TextOverflow.ellipsis);
+    expect(
+      find.ancestor(
+        of: titleDisplay(),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
 
-    await tester.pump(const Duration(milliseconds: 1300));
-    await tester.pump(const Duration(milliseconds: 400));
-    final longScroll = titleScroll();
-    expect(longScroll.controller!.offset, greaterThan(0));
-    expect(longScroll.controller!.position.maxScrollExtent, greaterThan(0));
-
-    await tester.tap(titleField());
+    await tester.tap(titleDisplayLayer());
     await tester.pump();
     await tester.enterText(titleField(), 'Tiny');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
-    final shortScroll = titleScroll();
-    expect(shortScroll.controller!.offset, 0);
-    expect(shortScroll.controller!.position.maxScrollExtent, 0);
+    expect(
+      (tester.widget<RichText>(titleDisplay()).text as TextSpan).text,
+      'Tiny',
+    );
     expect(controller.state.papers.single.title, 'Tiny');
 
-    await tester.tap(titleField());
+    await tester.tap(titleDisplayLayer());
     await tester.pump();
     await tester.enterText(titleField(), longTitle);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump(const Duration(milliseconds: 300));
 
-    final restartedScroll = titleScroll();
-    expect(restartedScroll.controller!.offset, 0);
+    final cleanedLongTitle = PaperTitles.cleanCustomTitle(longTitle);
     expect(
-        restartedScroll.controller!.position.maxScrollExtent, greaterThan(0));
-    await tester.pump(const Duration(milliseconds: 1300));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(restartedScroll.controller!.offset, greaterThan(0));
+      (tester.widget<RichText>(titleDisplay()).text as TextSpan).text,
+      cleanedLongTitle,
+    );
+    expect(tester.widget<RichText>(titleDisplay()).overflow,
+        TextOverflow.ellipsis);
+    expect(controller.state.papers.single.title, cleanedLongTitle);
     expect(tester.takeException(), isNull);
   });
 
@@ -7232,16 +8645,15 @@ void main() {
         const ValueKey('settings-todo-line-spacing-surface'),
       ),
     );
-    expect(idleSpacingSurface.duration, PaperTodoMotion.controlFeedback);
+    expect(idleSpacingSurface.duration, Duration.zero);
     expect(
       (idleSpacingSurface.decoration as BoxDecoration).color,
-      PaperTodoThemeColors.of(tester.element(todoSpacingField)).tintAt(5),
+      Colors.transparent,
     );
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(1, 1));
     await mouse.moveTo(tester.getCenter(todoSpacingField));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     final hoveredSpacingDecoration = tester
         .widget<AnimatedContainer>(
           find.byKey(
@@ -7251,7 +8663,7 @@ void main() {
         .decoration as BoxDecoration;
     final spacingColors =
         PaperTodoThemeColors.of(tester.element(todoSpacingField));
-    expect(hoveredSpacingDecoration.color, spacingColors.hover);
+    expect(hoveredSpacingDecoration.color, Colors.transparent);
     expect(
       (hoveredSpacingDecoration.border as Border).top.color,
       spacingColors.brightWeakText,
@@ -7322,6 +8734,28 @@ void main() {
       ),
     );
     expect((tester.widget(yearControl) as dynamic).onChanged, isNotNull);
+    expect(
+      tester
+          .getSize(
+            find.byKey(
+              const ValueKey('settings-due-year-reminder-gap'),
+            ),
+          )
+          .height,
+      8,
+    );
+    final reminderTogglePaintOffset = tester.widget<Transform>(
+      find.byKey(
+        const ValueKey('settings-reminder-toggle-paint-offset'),
+      ),
+    );
+    final reminderToggleTranslation =
+        reminderTogglePaintOffset.transform.getTranslation();
+    expect(
+      Offset(reminderToggleTranslation.x, reminderToggleTranslation.y),
+      const Offset(0, 1),
+    );
+    expect(reminderTogglePaintOffset.transformHitTests, false);
     await tester.tap(
       find.descendant(of: yearSelector, matching: find.text('2026')),
     );
@@ -7536,15 +8970,28 @@ void main() {
     );
     expect(passwordToggleSurface, findsOneWidget);
     expect(
+      find.descendant(
+        of: passwordToggle,
+        matching: find.byType(AnimatedScale),
+      ),
+      findsNothing,
+    );
+    expect(
       tester.widget<AnimatedContainer>(passwordToggleSurface).duration,
-      PaperTodoMotion.controlFeedback,
+      Duration.zero,
+    );
+    expect(
+      find.descendant(
+        of: passwordToggle,
+        matching: find.byType(AnimatedSwitcher),
+      ),
+      findsNothing,
     );
     final passwordToggleMouse =
         await tester.createGesture(kind: PointerDeviceKind.mouse);
     await passwordToggleMouse.addPointer(location: const Offset(1, 1));
     await passwordToggleMouse.moveTo(tester.getCenter(passwordToggle));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     final passwordToggleColors =
         PaperTodoThemeColors.of(tester.element(passwordToggle));
     expect(
@@ -7559,7 +9006,7 @@ void main() {
     await passwordToggleMouse.removePointer();
     await tester.pump();
     await tester.tap(passwordToggle);
-    await tester.pump(PaperTodoMotion.controlFeedback);
+    await tester.pump();
     expect(
       find.descendant(
         of: passwordToggle,
@@ -7568,7 +9015,7 @@ void main() {
       findsOneWidget,
     );
     await tester.tap(passwordToggle);
-    await tester.pump(PaperTodoMotion.controlFeedback);
+    await tester.pump();
     await tester.scrollUntilVisible(
       find.text('Sync encryption passphrase'),
       240,
@@ -8697,6 +10144,7 @@ void main() {
       (themeDropdownDecoration().border! as Border).top.color,
       compactDropdownColors.paperBorder,
     );
+    expect((themeDropdownDecoration().border! as Border).top.width, 1);
     expect(themeDropChevronPainter().color, compactDropdownColors.weakText);
     expect(
       tester.widget<DropdownButton<String>>(compactThemeSelector).borderRadius,
@@ -8704,8 +10152,9 @@ void main() {
     );
     expect(
       tester.widget<AnimatedContainer>(themeDropdownSurface).duration,
-      PaperTodoMotion.controlFeedback,
+      Duration.zero,
     );
+    expect(themeDropdownDecoration().color, compactDropdownColors.paper);
     final dropdownMouse = await tester.createGesture(
       pointer: 68,
       kind: PointerDeviceKind.mouse,
@@ -8713,19 +10162,17 @@ void main() {
     await dropdownMouse.addPointer(location: const Offset(1, 1));
     await dropdownMouse.moveTo(tester.getCenter(compactThemeSelector));
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     expect(
       (themeDropdownDecoration().border! as Border).top.color,
       compactDropdownColors.brightWeakText,
     );
     expect(
       themeDropdownDecoration().color,
-      compactDropdownColors.tintAt(compactDropdownColors.isDark ? 14 : 8),
+      compactDropdownColors.paper,
     );
     expect(themeDropChevronPainter().color, compactDropdownColors.text);
     await dropdownMouse.removePointer();
     await tester.pump();
-    await tester.pump(PaperTodoMotion.controlFeedback);
     expect(themeDropChevronPainter().color, compactDropdownColors.weakText);
     expect(find.text('Theme mode'), findsOneWidget);
     expect(find.text('Markdown display'), findsOneWidget);
@@ -8746,6 +10193,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('settings-theme-selector')));
     await tester.pump();
     expect(themeDropChevronPainter().color, compactDropdownColors.active);
+    expect((themeDropdownDecoration().border! as Border).top.width, 1);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Dark').last);
     await tester.pumpAndSettle();
@@ -15331,6 +16779,16 @@ void main() {
     final mdText = tester.widget<Text>(mdFinder);
     expect(mdText.style?.fontSize, 10.5);
     expect(mdText.style?.fontWeight, FontWeight.w400);
+    final mdMetrics = tester.widget<Transform>(
+      find.descendant(
+        of: actionFinder,
+        matching: find.byKey(
+          const ValueKey('paper-window-open-markdown-glyph-metrics'),
+        ),
+      ),
+    );
+    expect(mdMetrics.transform.getTranslation().x, -1);
+    expect(mdMetrics.transform.getTranslation().y, 0);
 
     final inheritedStyle = DefaultTextStyle.of(
       tester.element(mdFinder),
@@ -15362,10 +16820,10 @@ void main() {
 
     await mouse.down(tester.getCenter(actionFinder));
     await tester.pump();
-    final pressedOpacity = tester.widget<Opacity>(
+    final pressedOpacity = tester.widget<AnimatedOpacity>(
       find.descendant(
         of: actionFinder,
-        matching: find.byType(Opacity),
+        matching: find.byType(AnimatedOpacity),
       ),
     );
     expect(pressedOpacity.opacity, 0.7);
@@ -16158,8 +17616,9 @@ void main() {
     );
   });
 
-  testWidgets('Chinese fallback reminders fit narrow screens', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(320, 640));
+  testWidgets('Chinese fallback reminders fit minimum paper width',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(220, 640));
     tester.binding.platformDispatcher.localeTestValue =
         const Locale('zh', 'CN');
     tester.binding.platformDispatcher.localesTestValue = [
@@ -16200,6 +17659,8 @@ void main() {
       RePaperTodoApp(
         controller: controller,
         store: _MemoryStateStore(),
+        initialSurfacePaperId: 'narrow-chinese-reminder-paper',
+        paperWindowMode: true,
       ),
     );
     await tester.pump();
@@ -16215,16 +17676,27 @@ void main() {
     expect(open, findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    final screen = const Rect.fromLTWH(0, 0, 320, 640);
+    final screen = const Rect.fromLTWH(0, 0, 220, 640);
     final snackRect = tester.getRect(snackBar);
     final titleRect = tester.getRect(title);
     final openRect = tester.getRect(open);
+    final details = tester.widget<Text>(
+      find.byKey(const ValueKey('todo-reminder-snackbar-details')),
+    );
+    final titleText = tester.widget<Text>(
+      find.byKey(const ValueKey('todo-reminder-snackbar-title')),
+    );
     for (final inner in [snackRect, titleRect, openRect]) {
       expect(inner.left, greaterThanOrEqualTo(screen.left));
       expect(inner.top, greaterThanOrEqualTo(screen.top));
       expect(inner.right, lessThanOrEqualTo(screen.right));
       expect(inner.bottom, lessThanOrEqualTo(screen.bottom));
     }
+    expect(snackRect.height, lessThanOrEqualTo(160));
+    expect(titleText.maxLines, 1);
+    expect(titleText.overflow, TextOverflow.ellipsis);
+    expect(details.maxLines, 3);
+    expect(details.overflow, TextOverflow.clip);
     expect(
       _snackBarTextContaining('第4个需要在窄屏中完整换行显示的较长待办事项'),
       findsOneWidget,
@@ -18164,19 +19636,15 @@ void main() {
     final addedEntrance = find.byKey(
       ValueKey('entrance-paper-${addedItem.id}-entrance'),
     );
+    final addedEntranceOpacity = find.byKey(
+      ValueKey('entrance-paper-${addedItem.id}-entrance-opacity'),
+    );
     expect(addedEntrance, findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 125));
     expect(
-      tester
-          .widgetList<Opacity>(
-            find.descendant(
-              of: addedEntrance,
-              matching: find.byType(Opacity),
-            ),
-          )
-          .any((opacity) => opacity.opacity > 0 && opacity.opacity < 1),
-      true,
+      tester.widget<Opacity>(addedEntranceOpacity).opacity,
+      allOf(greaterThan(0), lessThan(1)),
     );
     await tester.pumpAndSettle();
     expect(addedEntrance, findsNothing);
@@ -18197,20 +19665,22 @@ void main() {
     final secondPastedEntrance = find.byKey(
       ValueKey('entrance-paper-${pastedItems[2].id}-entrance'),
     );
+    final firstPastedOpacity = find.byKey(
+      ValueKey('entrance-paper-${pastedItems[1].id}-entrance-opacity'),
+    );
+    final secondPastedOpacity = find.byKey(
+      ValueKey('entrance-paper-${pastedItems[2].id}-entrance-opacity'),
+    );
     expect(firstPastedEntrance, findsOneWidget);
     expect(secondPastedEntrance, findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 40));
     await tester.pump(const Duration(milliseconds: 80));
-    double entranceOpacity(Finder entrance) => tester
-        .widgetList<Opacity>(
-          find.descendant(of: entrance, matching: find.byType(Opacity)),
-        )
-        .map((opacity) => opacity.opacity)
-        .reduce(math.min);
+    double entranceOpacity(Finder opacity) =>
+        tester.widget<Opacity>(opacity).opacity;
     expect(
-      entranceOpacity(firstPastedEntrance),
-      greaterThan(entranceOpacity(secondPastedEntrance)),
+      entranceOpacity(firstPastedOpacity),
+      greaterThan(entranceOpacity(secondPastedOpacity)),
     );
 
     await tester.pumpAndSettle();
@@ -18410,12 +19880,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.state.moveCompletedTodosToBottom, true);
 
-    final middleRow = find.byKey(
-      const ValueKey(
-          'settings-completion-sort-paper-settings-completion-middle-row'),
-    );
     await tester.tap(
-      find.descendant(of: middleRow, matching: find.byType(Checkbox)),
+      // Windows papers use the PaperTodo-painted checkbox while compact
+      // surfaces may use Flutter's Checkbox; the stable semantic key covers
+      // both renderers without coupling this behavior test to one widget type.
+      find.byKey(
+        const ValueKey(
+          'settings-completion-sort-paper-settings-completion-middle-checkbox',
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     expect(
@@ -19869,6 +21342,23 @@ void main() {
     await dragGesture.moveBy(const Offset(24, 0));
     await tester.pump();
 
+    final dragFeedback = find.byKey(
+      const ValueKey('drag-delete-paper-delete-item-drag-feedback'),
+    );
+    final sourceRowSurface = find.byKey(
+      const ValueKey('drag-delete-paper-delete-item-row-surface'),
+    );
+    expect(dragFeedback, findsOneWidget);
+    expect(sourceRowSurface, findsOneWidget);
+    expect(
+      tester.getTopLeft(dragFeedback).dx,
+      closeTo(tester.getTopLeft(sourceRowSurface).dx + 24, 2.1),
+    );
+    expect(
+      tester.getTopLeft(dragFeedback).dy,
+      closeTo(tester.getTopLeft(sourceRowSurface).dy, 2.1),
+    );
+
     final trashArea = find.byKey(
       const ValueKey('drag-delete-paper-todo-trash-area'),
     );
@@ -19917,7 +21407,7 @@ void main() {
       (trashDecoration().border! as Border).top.color,
       trashColors.danger,
     );
-    expect((trashDecoration().border! as Border).top.width, 1.5);
+    expect((trashDecoration().border! as Border).top.width, 2);
     expect(tester.widget<AnimatedOpacity>(trashOpacity()).opacity, 1);
 
     await dragGesture.up();
@@ -20086,7 +21576,16 @@ void main() {
     expect(find.byTooltip('Hide this paper'), findsNothing);
     expect(find.byTooltip('Delete paper'), findsNothing);
 
-    await tester.tap(find.byType(Checkbox).first, warnIfMissed: false);
+    final checkbox = find.byKey(
+      const ValueKey('locked-pinned-paper-locked-item-checkbox'),
+    );
+    expect(checkbox, findsOneWidget);
+    final pinnedBodyBlocker = tester.widget<AbsorbPointer>(
+      find.ancestor(of: checkbox, matching: find.byType(AbsorbPointer)).first,
+    );
+    expect(pinnedBodyBlocker.absorbing, true);
+
+    await tester.tap(checkbox, warnIfMissed: false);
     await tester.tap(
       find.widgetWithText(TextButton, 'Add item'),
       warnIfMissed: false,
@@ -20104,6 +21603,14 @@ void main() {
     expect(store.savedState.papers.single.isPinnedToDesktop, false);
     expect(find.byTooltip('Keep on top'), findsOneWidget);
     expect(find.byTooltip('Hide this paper'), findsOneWidget);
+
+    final unpinnedBodyBlocker = tester.widget<AbsorbPointer>(
+      find.ancestor(of: checkbox, matching: find.byType(AbsorbPointer)).first,
+    );
+    expect(unpinnedBodyBlocker.absorbing, false);
+    await tester.tap(checkbox);
+    await tester.pump();
+    expect(paper.items.single.done, true);
   });
 
   testWidgets('expanding a pinned collapsed paper unpins like PaperTodo',
@@ -20503,7 +22010,14 @@ void main() {
       ),
     );
     expect(selectedCheckmark, findsOneWidget);
-    expect(tester.widget<AnimatedOpacity>(selectedCheckmark).opacity, 1);
+    expect(tester.widget<Opacity>(selectedCheckmark).opacity, 1);
+    expect(
+      find.descendant(
+        of: selectedCheckmark,
+        matching: find.byType(AnimatedScale),
+      ),
+      findsNothing,
+    );
     expect(
       tester.getSize(
         find
@@ -20521,7 +22035,7 @@ void main() {
         const ValueKey('paper-todo-popup-menu-checkmark'),
       ),
     );
-    expect(tester.widget<AnimatedOpacity>(unselectedCheckmark).opacity, 0);
+    expect(tester.widget<Opacity>(unselectedCheckmark).opacity, 0);
 
     await tester.tap(
       _popupMenuItemWithText('Zoom 125%'),
@@ -20767,7 +22281,7 @@ void main() {
       find.descendant(of: newTodo, matching: find.byType(Icon)),
       findsNothing,
     );
-    expect(tester.widget<PopupMenuItem<String>>(newTodo).height, 21);
+    expect(tester.widget<PopupMenuItem<String>>(newTodo).height, 25);
     final newTodoInk = find.descendant(
       of: newTodo,
       matching: find.byType(InkWell),
@@ -21621,6 +23135,17 @@ void main() {
     expect(hoverSurface, findsOneWidget);
     expect(completionSurface, findsOneWidget);
     expect(
+      find.ancestor(
+        of: hoverSurface,
+        matching: find.byKey(
+          const ValueKey(
+            'todo-row-motion-paper-todo-row-motion-item-row-opacity',
+          ),
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
       tester.widget<AnimatedContainer>(hoverSurface).duration,
       Duration.zero,
     );
@@ -21628,6 +23153,8 @@ void main() {
       tester.widget<AnimatedOpacity>(completionSurface).duration,
       const Duration(milliseconds: 150),
     );
+    expect(
+        tester.widget<AnimatedOpacity>(completionSurface).curve, Curves.linear);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(1, 1));
@@ -21639,6 +23166,13 @@ void main() {
         .decoration as BoxDecoration;
     final rowColors = PaperTodoThemeColors.of(tester.element(row));
     expect(hoveredDecoration.color, rowColors.hover);
+    expect(
+      (hoveredDecoration.border! as Border).top.color,
+      Color.alphaBlend(
+        rowColors.tint.withValues(alpha: 12 / 255),
+        rowColors.paper,
+      ),
+    );
 
     await tester.tap(
       find.byKey(
@@ -21661,6 +23195,10 @@ void main() {
     expect(
       tester.widget<AnimatedOpacity>(completedSurface).duration,
       const Duration(milliseconds: 200),
+    );
+    expect(
+      tester.widget<AnimatedOpacity>(completedSurface).curve,
+      PaperTodoMotion.quickCurve,
     );
     expect(
       tester
@@ -21692,6 +23230,28 @@ void main() {
     expect(
       completionPainter.color,
       rowColors.brightWeakText.withValues(alpha: 205 / 255),
+    );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey(
+          'todo-row-motion-paper-todo-row-motion-item-checkbox',
+        ),
+      ),
+    );
+    await tester.pump();
+    final restoredSurface = find.descendant(
+      of: row,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is AnimatedOpacity &&
+            widget.duration == const Duration(milliseconds: 150),
+      ),
+    );
+    expect(restoredSurface, findsOneWidget);
+    expect(
+      tester.widget<AnimatedOpacity>(restoredSurface).curve,
+      Curves.linear,
     );
 
     await mouse.removePointer();
@@ -22189,11 +23749,11 @@ void main() {
     expect(middleRect.height, greaterThan(firstRect.height + 20));
     expect(
       firstInputDecorator.decoration.contentPadding,
-      const EdgeInsets.fromLTRB(2, 3, 2, 3),
+      const EdgeInsets.fromLTRB(4, 4, 0, 2),
     );
     expect(
       middleInputDecorator.decoration.contentPadding,
-      const EdgeInsets.fromLTRB(8, 3, 4, 3),
+      const EdgeInsets.fromLTRB(10, 4, 2, 2),
     );
     expect(middleInputDecorator.decoration.filled, false);
     expect(middleRect.height, greaterThan(finalRect.height + 20));
@@ -25317,17 +26877,46 @@ void main() {
       const ValueKey('drag-todo-drag-target-item-note-link-drop-surface'),
     );
     expect(noteLinkDropSurface, findsOneWidget);
+    expect(tester.widget(noteLinkDropSurface), isA<DragTarget<String>>());
+
+    final rowSurface = find.byKey(
+      const ValueKey('drag-todo-drag-target-item-row-surface'),
+    );
+    final targetCenter = tester.getCenter(row);
+    final drag = await tester.startGesture(
+      tester.getCenter(handle),
+      pointer: 66,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await drag.moveTo(targetCenter);
+    await tester.pump();
+
+    final rowContext = tester.element(rowSurface);
+    final rowColors = PaperTodoThemeColors.of(rowContext);
+    final rowIsDark = Theme.of(rowContext).brightness == Brightness.dark;
+    final highlightedSurface = tester.widget<AnimatedContainer>(rowSurface);
+    final highlightedDecoration =
+        highlightedSurface.decoration! as BoxDecoration;
+    expect(highlightedSurface.duration, Duration.zero);
     expect(
-      tester
-          .widget<TweenAnimationBuilder<double>>(noteLinkDropSurface)
-          .duration,
-      PaperTodoMotion.controlFeedback,
+      highlightedSurface.padding,
+      const EdgeInsets.fromLTRB(1, 3, 1, 3),
+    );
+    expect(
+      highlightedDecoration.color,
+      rowColors.tint.withValues(alpha: rowIsDark ? 36 / 255 : 28 / 255),
+    );
+    expect(
+      (highlightedDecoration.border! as Border).top.color,
+      Color.alphaBlend(
+        rowColors.tint.withValues(alpha: 150 / 255),
+        rowColors.paper,
+      ),
     );
 
-    await tester.dragFrom(
-      tester.getCenter(handle),
-      tester.getCenter(row) - tester.getCenter(handle),
-    );
+    await drag.up();
+    await drag.removePointer();
     await tester.pumpAndSettle();
 
     PaperItem linkedItem() => controller.state.papers
@@ -25497,6 +27086,26 @@ void main() {
       const ValueKey('independent-script-note-paper-window-capsule'),
     );
     expect(capsule, findsOneWidget);
+    final capsuleIconFinder = find.byKey(
+      const ValueKey(
+        'independent-script-note-paper-window-capsule-icon',
+      ),
+    );
+    final capsuleIcon = tester.widget<Text>(capsuleIconFinder);
+    expect(capsuleIcon.style?.fontSize, 15);
+    final capsuleIconOffset = tester.widget<Transform>(
+      find.ancestor(of: capsuleIconFinder, matching: find.byType(Transform)),
+    );
+    expect(capsuleIconOffset.transform.getTranslation().x, -0.25);
+    expect(capsuleIconOffset.transform.getTranslation().y, -1);
+    final capsuleTitle = tester.widget<Text>(
+      find.byKey(
+        const ValueKey(
+          'independent-script-note-paper-window-capsule-title',
+        ),
+      ),
+    );
+    expect(capsuleTitle.style?.letterSpacing, -0.25);
 
     tester.widget<InkWell>(capsule).onTap!.call();
     await tester.pump();
@@ -25578,12 +27187,16 @@ void main() {
     );
     expect(
       find.ancestor(of: capsuleIconFinder, matching: find.byType(Transform)),
-      findsNothing,
+      findsOneWidget,
     );
     expect(
       find.ancestor(of: capsuleTitle, matching: find.byType(Transform)),
-      findsNothing,
+      findsOneWidget,
     );
+    final capsuleTitleOffset = tester.widget<Transform>(
+      find.ancestor(of: capsuleTitle, matching: find.byType(Transform)),
+    );
+    expect(capsuleTitleOffset.transform.getTranslation().y, -1);
 
     final dragHandle = find.byKey(
       const ValueKey('independent-hide-capsule-capsule-drag-handle'),
@@ -25649,11 +27262,13 @@ void main() {
     expect(paper.isCollapsed, true,
         reason: 'the child engine must wait for coordinator state');
 
-    final gesture = await tester.press(find.byKey(
-      const ValueKey('delegated-expand-capsule-capsule-drag-handle'),
-    ));
+    await tester.drag(
+      find.byKey(
+        const ValueKey('delegated-expand-capsule-capsule-drag-handle'),
+      ),
+      const Offset(0, 20),
+    );
     await tester.pump();
-    await gesture.up();
     expect(dragStarts, 1);
   });
 

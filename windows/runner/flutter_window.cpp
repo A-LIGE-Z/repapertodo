@@ -1,7 +1,9 @@
 #include "flutter_window.h"
 
+#include <d2d1.h>
 #include <dwrite.h>
 #include <dwmapi.h>
+#include <commctrl.h>
 #include <commdlg.h>
 #include <shlobj.h>
 #include <shobjidl.h>
@@ -87,6 +89,7 @@ constexpr int kSettingsWindowResizeBorder = 12;
 constexpr int kSettingsWindowTitleTop = 20;
 constexpr int kSettingsWindowTitleBottom = 64;
 constexpr int kSettingsWindowCloseAreaWidth = 64;
+constexpr UINT_PTR kSettingsFlutterViewSubclassId = 0x52505453;
 constexpr wchar_t kSettingsPositionedProperty[] =
     L"RePaperTodo.SettingsPositioned";
 COLORREF g_settings_coordinator_background = RGB(255, 249, 234);
@@ -1676,48 +1679,17 @@ void StopPersistentScriptProcesses() {
   g_persistent_script_processes.clear();
 }
 
-std::wstring TrayPaperLabel(const flutter::EncodableMap& map,
-                            const TrayMenuLabels& labels) {
+std::wstring TrayPaperLabel(const flutter::EncodableMap& map) {
   const std::wstring tray_label =
       GetWideStringArgument(map, "trayLabel", std::wstring());
   if (!tray_label.empty()) {
     return tray_label;
   }
-  const bool is_visible = GetBoolArgument(map, "isVisible", false);
-  const bool is_collapsed = GetBoolArgument(map, "isCollapsed", false);
-  const bool always_on_top = GetBoolArgument(map, "alwaysOnTop", false);
-  const bool is_pinned_to_desktop =
-      GetBoolArgument(map, "isPinnedToDesktop", false);
   std::wstring title = Utf8ToWide(GetStringArgument(map, "title", "Untitled"));
   if (title.empty()) {
     title = L"Untitled";
   }
-  std::wstring label = title;
-  std::wstring status;
-  auto append_status = [&status](const std::wstring& value) {
-    if (!status.empty()) {
-      status += L", ";
-    }
-    status += value;
-  };
-  if (!is_visible) {
-    append_status(labels.hidden);
-  }
-  if (is_collapsed) {
-    append_status(labels.collapsed);
-  }
-  if (is_pinned_to_desktop) {
-    append_status(labels.desktop);
-  }
-  if (always_on_top) {
-    append_status(labels.topmost);
-  }
-  if (!status.empty()) {
-    label += L" (";
-    label += status;
-    label += L")";
-  }
-  return label;
+  return title;
 }
 
 class ScopedMenu {
@@ -1822,6 +1794,30 @@ bool SetHideFromWindowSwitcher(HWND window, bool enabled) {
                           SWP_NOACTIVATE | SWP_FRAMECHANGED) != 0;
 }
 
+void SetCoordinatorActivationEnabled(HWND window, bool enabled) {
+  if (!window) {
+    return;
+  }
+  LONG_PTR extended_style = GetWindowLongPtrW(window, GWL_EXSTYLE);
+  if (enabled) {
+    extended_style &= ~WS_EX_NOACTIVATE;
+  } else {
+    extended_style |= WS_EX_NOACTIVATE;
+  }
+  SetWindowLongPtrW(window, GWL_EXSTYLE, extended_style);
+  SetWindowPos(window, nullptr, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_FRAMECHANGED);
+}
+
+void HideCoordinatorWindow(HWND window) {
+  // The hidden Flutter coordinator continues to process method-channel and
+  // focus messages. Mark it non-activating before hiding so a registry refresh
+  // cannot restore keyboard focus from a paper back to this invisible HWND.
+  SetCoordinatorActivationEnabled(window, false);
+  ShowWindow(window, SW_HIDE);
+}
+
 int ScaleSettingsMetric(UINT dpi, int logical_pixels) {
   return MulDiv(logical_pixels, dpi > 0 ? static_cast<int>(dpi) : 96, 96);
 }
@@ -1914,6 +1910,39 @@ int SettingsCoordinatorHitTest(HWND window, LPARAM lparam) {
   return HTCLIENT;
 }
 
+LRESULT CALLBACK SettingsFlutterViewSubclassProc(
+    HWND window, UINT message, WPARAM wparam, LPARAM lparam,
+    UINT_PTR subclass_id, DWORD_PTR reference_data) noexcept {
+  const HWND coordinator = reinterpret_cast<HWND>(reference_data);
+  if (message == WM_NCHITTEST && coordinator && IsWindow(coordinator)) {
+    const int coordinator_hit = SettingsCoordinatorHitTest(coordinator, lparam);
+    if (coordinator_hit != HTCLIENT) {
+      // The Flutter view is a child HWND that covers the complete settings
+      // paper. Returning HTTRANSPARENT lets USER32 continue the hit test to
+      // the coordinator, where caption dragging and edge resizing begin
+      // synchronously. The previous Dart method-channel-only path could reach
+      // SC_MOVE after a fast mouse release when the engine was busy.
+      return HTTRANSPARENT;
+    }
+  }
+  if (message == WM_NCDESTROY) {
+    RemoveWindowSubclass(window, SettingsFlutterViewSubclassProc, subclass_id);
+  }
+  return DefSubclassProc(window, message, wparam, lparam);
+}
+
+int SettingsResizeHitTestForDirection(const std::string& direction) {
+  if (direction == "left") return HTLEFT;
+  if (direction == "right") return HTRIGHT;
+  if (direction == "top") return HTTOP;
+  if (direction == "bottom") return HTBOTTOM;
+  if (direction == "topLeft") return HTTOPLEFT;
+  if (direction == "topRight") return HTTOPRIGHT;
+  if (direction == "bottomLeft") return HTBOTTOMLEFT;
+  if (direction == "bottomRight") return HTBOTTOMRIGHT;
+  return HTNOWHERE;
+}
+
 void ShowSettingsCoordinatorWindow(HWND window) {
   if (!window) {
     return;
@@ -1923,6 +1952,7 @@ void ShowSettingsCoordinatorWindow(HWND window) {
   // and clear that stale caption so transparent shadow pixels can never expose
   // an old title-band frame behind the settings paper.
   ApplySettingsCoordinatorWindowStyle(window);
+  SetCoordinatorActivationEnabled(window, true);
   SetWindowTextW(window, L"");
   SetHideFromWindowSwitcher(window, true);
   HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
@@ -2651,12 +2681,18 @@ constexpr int kTrayMenuMinimumWidth = 190;
 // WPF's 190px menu minimum is carried by a 168px content grid plus padding.
 // Win32 adds shell metrics around owner-drawn rows, so compensate the row
 // measurement to preserve the source menu footprint.
-constexpr int kTrayMenuNativeWidthCompensation = 21;
-constexpr int kTrayMenuItemHeight = 24;
+constexpr int kTrayMenuNativeWidthCompensation = 16;
+// Win32's owner-draw menu frame consumes a different vertical pixel than the
+// WPF ContextMenu template. These capture-calibrated heights reproduce the
+// source separator rows while preserving its declared 24/22px control metrics.
+constexpr int kTrayMenuItemHeight = 25;
+constexpr int kTrayMenuAppHeaderHeight = 21;
 constexpr int kTrayMenuHeaderHeight = 22;
+constexpr int kTrayMenuPaperHeight = 26;
 constexpr int kTrayMenuItemRadius = 8;
 constexpr int kTrayMenuShellRadius = 10;
-constexpr int kTrayMenuCheckboxSize = 13;
+constexpr int kTrayMenuCheckboxWidth = 14;
+constexpr int kTrayMenuCheckboxHeight = 13;
 constexpr int kTrayMenuPadding = 4;
 constexpr int kPinnedTodoHotkeyId = 42001;
 constexpr int kPinnedNoteHotkeyId = 42002;
@@ -2676,6 +2712,199 @@ bool SignalPrimaryInstanceFromChannel(const std::vector<std::string>& args) {
 int ScaleTrayMetric(HWND window, int logical_pixels) {
   const UINT dpi = window ? GetDpiForWindow(window) : 96;
   return MulDiv(logical_pixels, static_cast<int>(dpi), 96);
+}
+
+bool DrawTrayMenuTextDirectWrite(
+    HDC context, HWND window, const RECT& target_bounds, const RECT& bounds,
+    const std::wstring& text, const std::wstring& font_family, COLORREF color,
+    float logical_size, DWRITE_FONT_WEIGHT weight,
+    DWRITE_TEXT_ALIGNMENT text_alignment, float logical_offset_y) {
+  if (!context || !window || text.empty()) {
+    return false;
+  }
+
+  using Microsoft::WRL::ComPtr;
+  ComPtr<ID2D1Factory> d2d_factory;
+  if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                               IID_PPV_ARGS(&d2d_factory)))) {
+    return false;
+  }
+  ComPtr<IDWriteFactory> write_factory;
+  if (FAILED(DWriteCreateFactory(
+          DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+          reinterpret_cast<IUnknown**>(write_factory.GetAddressOf())))) {
+    return false;
+  }
+
+  D2D1_RENDER_TARGET_PROPERTIES properties = {};
+  properties.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+  properties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  properties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
+  properties.dpiX = 96.0f;
+  properties.dpiY = 96.0f;
+  properties.usage = D2D1_RENDER_TARGET_USAGE_NONE;
+  properties.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
+  ComPtr<ID2D1DCRenderTarget> render_target;
+  if (FAILED(d2d_factory->CreateDCRenderTarget(
+          &properties, render_target.GetAddressOf())) ||
+      FAILED(render_target->BindDC(context, &target_bounds))) {
+    return false;
+  }
+  render_target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+
+  ComPtr<IDWriteRenderingParams> rendering_params;
+  if (SUCCEEDED(write_factory->CreateCustomRenderingParams(
+          2.2f, 1.0f, 0.0f, DWRITE_PIXEL_GEOMETRY_FLAT,
+          DWRITE_RENDERING_MODE_NATURAL,
+          rendering_params.GetAddressOf()))) {
+    render_target->SetTextRenderingParams(rendering_params.Get());
+  }
+
+  wchar_t locale_name[LOCALE_NAME_MAX_LENGTH] = {};
+  if (GetUserDefaultLocaleName(locale_name,
+                               static_cast<int>(std::size(locale_name))) <= 0) {
+    wcscpy_s(locale_name, L"zh-CN");
+  }
+  const UINT dpi = GetDpiForWindow(window) > 0 ? GetDpiForWindow(window) : 96;
+  const float physical_size =
+      logical_size * static_cast<float>(dpi) / 96.0f;
+  ComPtr<IDWriteTextFormat> text_format;
+  if (FAILED(write_factory->CreateTextFormat(
+          font_family.c_str(), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+          DWRITE_FONT_STRETCH_NORMAL, physical_size, locale_name,
+          text_format.GetAddressOf()))) {
+    return false;
+  }
+  text_format->SetTextAlignment(text_alignment);
+  text_format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+  text_format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+
+  const float width = static_cast<float>(bounds.right - bounds.left);
+  const float height = static_cast<float>(bounds.bottom - bounds.top);
+  ComPtr<IDWriteTextLayout> layout;
+  if (FAILED(write_factory->CreateTextLayout(
+          text.c_str(), static_cast<UINT32>(text.size()), text_format.Get(),
+          width, height, layout.GetAddressOf()))) {
+    return false;
+  }
+  DWRITE_TRIMMING trimming = {
+      DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+  ComPtr<IDWriteInlineObject> ellipsis;
+  if (SUCCEEDED(write_factory->CreateEllipsisTrimmingSign(
+          text_format.Get(), ellipsis.GetAddressOf()))) {
+    layout->SetTrimming(&trimming, ellipsis.Get());
+  }
+
+  D2D1_COLOR_F brush_color = {
+      GetRValue(color) / 255.0f, GetGValue(color) / 255.0f,
+      GetBValue(color) / 255.0f, 1.0f};
+  ComPtr<ID2D1SolidColorBrush> brush;
+  if (FAILED(render_target->CreateSolidColorBrush(
+          &brush_color, nullptr, brush.GetAddressOf()))) {
+    return false;
+  }
+
+  const float offset_y =
+      logical_offset_y * static_cast<float>(dpi) / 96.0f;
+  render_target->BeginDraw();
+  render_target->DrawTextLayout(
+      D2D1_POINT_2F{static_cast<float>(bounds.left), bounds.top + offset_y},
+      layout.Get(), brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+  return SUCCEEDED(render_target->EndDraw());
+}
+
+bool DrawTrayMenuCheckboxDirect2D(
+    HDC context, HWND window, const RECT& target_bounds, const RECT& bounds,
+    bool checked, COLORREF fill_color, COLORREF border_color,
+    COLORREF check_color) {
+  if (!context || !window) {
+    return false;
+  }
+
+  using Microsoft::WRL::ComPtr;
+  ComPtr<ID2D1Factory> factory;
+  if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                               IID_PPV_ARGS(&factory)))) {
+    return false;
+  }
+  D2D1_RENDER_TARGET_PROPERTIES properties = {};
+  properties.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+  properties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  properties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
+  properties.dpiX = 96.0f;
+  properties.dpiY = 96.0f;
+  properties.usage = D2D1_RENDER_TARGET_USAGE_NONE;
+  properties.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
+  ComPtr<ID2D1DCRenderTarget> render_target;
+  if (FAILED(factory->CreateDCRenderTarget(
+          &properties, render_target.GetAddressOf())) ||
+      FAILED(render_target->BindDC(context, &target_bounds))) {
+    return false;
+  }
+  render_target->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+
+  const auto create_brush = [&](COLORREF color,
+                                ID2D1SolidColorBrush** brush) {
+    const D2D1_COLOR_F value = {
+        GetRValue(color) / 255.0f, GetGValue(color) / 255.0f,
+        GetBValue(color) / 255.0f, 1.0f};
+    return render_target->CreateSolidColorBrush(&value, nullptr, brush);
+  };
+  ComPtr<ID2D1SolidColorBrush> fill_brush;
+  ComPtr<ID2D1SolidColorBrush> border_brush;
+  ComPtr<ID2D1SolidColorBrush> check_brush;
+  if (FAILED(create_brush(fill_color, fill_brush.GetAddressOf())) ||
+      FAILED(create_brush(border_color, border_brush.GetAddressOf())) ||
+      FAILED(create_brush(check_color, check_brush.GetAddressOf()))) {
+    return false;
+  }
+
+  const UINT dpi = GetDpiForWindow(window) > 0 ? GetDpiForWindow(window) : 96;
+  const float scale = static_cast<float>(dpi) / 96.0f;
+  const D2D1_ROUNDED_RECT rounded = {
+      {bounds.left + 0.5f * scale, static_cast<float>(bounds.top),
+       bounds.right - 0.5f * scale, static_cast<float>(bounds.bottom)},
+      3.0f * scale,
+      3.0f * scale,
+  };
+
+  render_target->BeginDraw();
+  render_target->FillRoundedRectangle(&rounded, fill_brush.Get());
+  if (!checked) {
+    render_target->DrawRoundedRectangle(
+        &rounded, border_brush.Get(), 1.3f * scale);
+  } else {
+    ComPtr<ID2D1PathGeometry> path;
+    ComPtr<ID2D1GeometrySink> sink;
+    if (SUCCEEDED(factory->CreatePathGeometry(path.GetAddressOf())) &&
+        SUCCEEDED(path->Open(sink.GetAddressOf()))) {
+      sink->BeginFigure(
+          {bounds.left + 3.5f * scale, bounds.top + 6.8f * scale},
+          D2D1_FIGURE_BEGIN_HOLLOW);
+      sink->AddLine(
+          {bounds.left + 6.2f * scale, bounds.top + 9.4f * scale});
+      sink->AddLine(
+          {bounds.left + 10.7f * scale, bounds.top + 4.0f * scale});
+      sink->EndFigure(D2D1_FIGURE_END_OPEN);
+      if (SUCCEEDED(sink->Close())) {
+        D2D1_STROKE_STYLE_PROPERTIES stroke_properties = {};
+        stroke_properties.startCap = D2D1_CAP_STYLE_ROUND;
+        stroke_properties.endCap = D2D1_CAP_STYLE_ROUND;
+        stroke_properties.dashCap = D2D1_CAP_STYLE_ROUND;
+        stroke_properties.lineJoin = D2D1_LINE_JOIN_ROUND;
+        stroke_properties.miterLimit = 10.0f;
+        stroke_properties.dashStyle = D2D1_DASH_STYLE_SOLID;
+        ComPtr<ID2D1StrokeStyle> stroke_style;
+        if (SUCCEEDED(factory->CreateStrokeStyle(
+                &stroke_properties, nullptr, 0,
+                stroke_style.GetAddressOf()))) {
+          render_target->DrawGeometry(path.Get(), check_brush.Get(),
+                                      1.7f * scale, stroke_style.Get());
+        }
+      }
+    }
+  }
+  return SUCCEEDED(render_target->EndDraw());
 }
 
 bool IsSystemAppThemeDark() {
@@ -2833,6 +3062,7 @@ bool FlutterWindow::OnCreate() {
   CleanupOldScriptCapsuleTempFiles();
   taskbar_created_message_ = RegisterWindowMessageW(L"TaskbarCreated");
   ApplySettingsCoordinatorWindowStyle(GetHandle());
+  SetCoordinatorActivationEnabled(GetHandle(), false);
   SetHideFromWindowSwitcher(GetHandle(), true);
 
   RECT frame = GetClientArea();
@@ -2867,6 +3097,24 @@ bool FlutterWindow::OnCreate() {
           ReleaseCapture();
           SendMessageW(window, WM_SYSCOMMAND, SC_MOVE | HTCAPTION,
                        MAKELPARAM(cursor.x, cursor.y));
+          result->Success();
+          return;
+        }
+        if (method == "startSettingsResize") {
+          int hit_test = HTNOWHERE;
+          if (call.arguments()) {
+            if (const auto* direction =
+                    std::get_if<std::string>(call.arguments())) {
+              hit_test = SettingsResizeHitTestForDirection(*direction);
+            }
+          }
+          if (hit_test != HTNOWHERE) {
+            POINT cursor = {};
+            GetCursorPos(&cursor);
+            ReleaseCapture();
+            SendMessageW(window, WM_NCLBUTTONDOWN, hit_test,
+                         MAKELPARAM(cursor.x, cursor.y));
+          }
           result->Success();
           return;
         }
@@ -2968,16 +3216,18 @@ bool FlutterWindow::OnCreate() {
           if (PaperFlutterWindow* paper_window =
                   EnsurePaperWindow(active_paper_id_)) {
             paper_window->ShowPaper(!pinned_to_desktop_);
-            ShowWindow(window, SW_HIDE);
+            HideCoordinatorWindow(window);
             result->Success();
             return;
           }
           ApplyActivePaperBounds(window);
           if (pinned_to_desktop_) {
+            SetCoordinatorActivationEnabled(window, false);
             ShowWindow(window, SW_SHOWNOACTIVATE);
             SetWindowPos(window, HWND_BOTTOM, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
           } else {
+            SetCoordinatorActivationEnabled(window, true);
             ShowWindow(window, SW_SHOWNORMAL);
             SetForegroundWindow(window);
           }
@@ -3014,11 +3264,12 @@ bool FlutterWindow::OnCreate() {
           if (PaperFlutterWindow* paper_window =
                   EnsurePaperWindow(active_paper_id_)) {
             paper_window->ShowPaper(false);
-            ShowWindow(window, SW_HIDE);
+            HideCoordinatorWindow(window);
             result->Success();
             return;
           }
           ApplyActivePaperBounds(window);
+          SetCoordinatorActivationEnabled(window, false);
           ShowWindow(window, SW_SHOWNOACTIVATE);
           SetWindowPos(window, HWND_TOP, 0, 0, 0, 0,
                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
@@ -3061,14 +3312,14 @@ bool FlutterWindow::OnCreate() {
           }
           if (requested_paper_id.empty() ||
               requested_paper_id == active_paper_id_) {
-            ShowWindow(window, SW_HIDE);
+            HideCoordinatorWindow(window);
             z_order_state_initialized_ = false;
           }
           result->Success();
           return;
         }
         if (method == "hideCoordinator") {
-          ShowWindow(window, SW_HIDE);
+          HideCoordinatorWindow(window);
           result->Success();
           return;
         }
@@ -3751,7 +4002,12 @@ bool FlutterWindow::OnCreate() {
 
         result->NotImplemented();
       });
-  SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  HWND flutter_view = flutter_controller_->view()->GetNativeWindow();
+  SetChildContent(flutter_view);
+  SetWindowSubclass(
+      flutter_view, SettingsFlutterViewSubclassProc,
+      kSettingsFlutterViewSubclassId,
+      reinterpret_cast<DWORD_PTR>(GetHandle()));
   AddTrayIcon();
   StartSingleInstanceListener();
   SetTimer(GetHandle(), kFullscreenTopmostRefreshTimerId,
@@ -3880,6 +4136,19 @@ void FlutterWindow::StopSingleInstanceListener() {
   }
 }
 
+std::wstring FlutterWindow::ResolveTrayFontFamily() const {
+  const auto* state = std::get_if<flutter::EncodableMap>(&paper_window_state_);
+  if (!state) {
+    return L"Segoe UI";
+  }
+  const std::string configured = GetStringArgument(*state, "fontFamily", "");
+  if (configured.empty()) {
+    return L"Segoe UI";
+  }
+  const std::wstring family = Utf8ToWide(configured);
+  return family.empty() ? L"Segoe UI" : family;
+}
+
 FlutterWindow::TrayPalette FlutterWindow::ResolveTrayPalette() const {
   TrayPalette palette;
   std::string theme = "system";
@@ -3966,6 +4235,10 @@ bool FlutterWindow::MeasureTrayMenuItem(MEASUREITEMSTRUCT* measure) {
   measure->itemWidth = ScaleTrayMetric(
       window, kTrayMenuMinimumWidth - kTrayMenuNativeWidthCompensation);
   switch (item->kind) {
+    case TrayOwnerDrawKind::app_header:
+      measure->itemHeight =
+          ScaleTrayMetric(window, kTrayMenuAppHeaderHeight);
+      break;
     case TrayOwnerDrawKind::header:
       measure->itemHeight = ScaleTrayMetric(window, kTrayMenuHeaderHeight);
       break;
@@ -3976,8 +4249,10 @@ bool FlutterWindow::MeasureTrayMenuItem(MEASUREITEMSTRUCT* measure) {
       measure->itemHeight = ScaleTrayMetric(window, kTrayMenuPadding);
       break;
     case TrayOwnerDrawKind::command:
-    case TrayOwnerDrawKind::paper:
       measure->itemHeight = ScaleTrayMetric(window, kTrayMenuItemHeight);
+      break;
+    case TrayOwnerDrawKind::paper:
+      measure->itemHeight = ScaleTrayMetric(window, kTrayMenuPaperHeight);
       break;
   }
   return true;
@@ -4037,96 +4312,148 @@ bool FlutterWindow::DrawTrayMenuItem(const DRAWITEMSTRUCT* draw) {
     return true;
   }
 
-  const bool header = item->kind == TrayOwnerDrawKind::header;
+  const bool app_header = item->kind == TrayOwnerDrawKind::app_header;
+  const bool header = app_header || item->kind == TrayOwnerDrawKind::header;
+  const std::wstring tray_font_family = ResolveTrayFontFamily();
+  const int font_size = app_header
+                            ? 12
+                            : (header ? 10
+                                      : (item->kind == TrayOwnerDrawKind::paper
+                                             ? 13
+                                             : 12));
+  const float direct_write_font_size = header ? 12.0f : 13.0f;
   HFONT text_font = CreateFontW(
-      -ScaleTrayMetric(window, header ? 11 : 12), 0, 0, 0,
+      -ScaleTrayMetric(window, font_size), 0, 0, 0,
       header ? FW_SEMIBOLD : FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-      DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+      DEFAULT_PITCH | FF_DONTCARE, tray_font_family.c_str());
   HGDIOBJ previous_font = SelectObject(dc, text_font);
-  SetTextColor(
-      dc, item->danger
-              ? palette.danger
-              : (header ? MixTrayColor(palette.paper, palette.weak, 0.72)
-                        : palette.text));
+  const COLORREF text_color =
+      item->danger
+          ? palette.danger
+          : (header ? MixTrayColor(palette.paper, palette.weak, 0.72)
+                    : palette.text);
+  SetTextColor(dc, text_color);
 
   RECT text_bounds = draw->rcItem;
-  text_bounds.left += ScaleTrayMetric(window, 14);
+  text_bounds.left += ScaleTrayMetric(window, 12);
   text_bounds.right -= ScaleTrayMetric(window, item->has_submenu ? 30 : 16);
+  OffsetRect(&text_bounds, 0,
+             ScaleTrayMetric(window, item->text_offset_y));
 
   if (item->kind == TrayOwnerDrawKind::paper) {
-    const int checkbox_size =
-        ScaleTrayMetric(window, kTrayMenuCheckboxSize);
-    const int checkbox_left = draw->rcItem.left + ScaleTrayMetric(window, 12);
+    const int checkbox_width =
+        ScaleTrayMetric(window, kTrayMenuCheckboxWidth);
+    const int checkbox_height =
+        ScaleTrayMetric(window, kTrayMenuCheckboxHeight);
+    const int checkbox_left = draw->rcItem.left + ScaleTrayMetric(window, 14);
     const int checkbox_top = draw->rcItem.top +
                              (draw->rcItem.bottom - draw->rcItem.top -
-                              checkbox_size) /
-                                 2;
+                              checkbox_height) /
+                                 2 +
+                             ScaleTrayMetric(window, 1);
     const RECT checkbox_bounds = {
-        checkbox_left, checkbox_top, checkbox_left + checkbox_size,
-        checkbox_top + checkbox_size};
-    const int checkbox_radius = ScaleTrayMetric(window, 3) * 2;
-    HBRUSH checkbox_brush = CreateSolidBrush(
+        checkbox_left, checkbox_top, checkbox_left + checkbox_width,
+        checkbox_top + checkbox_height};
+    const RECT checkbox_local_bounds = {
+        checkbox_bounds.left - draw->rcItem.left,
+        checkbox_bounds.top - draw->rcItem.top,
+        checkbox_bounds.right - draw->rcItem.left,
+        checkbox_bounds.bottom - draw->rcItem.top,
+    };
+    const COLORREF checkbox_fill =
         item->checked ? MixTrayColor(palette.paper, palette.active, 0.92)
-                      : palette.paper);
-    HPEN checkbox_pen = CreatePen(
-        PS_SOLID, std::max(1, ScaleTrayMetric(window, 1)),
-        item->checked ? MixTrayColor(palette.paper, palette.active, 0.92)
-                      : MixTrayColor(palette.paper, palette.weak, 0.72));
-    HGDIOBJ previous_brush = SelectObject(dc, checkbox_brush);
-    HGDIOBJ previous_pen = SelectObject(dc, checkbox_pen);
-    RoundRect(dc, checkbox_bounds.left, checkbox_bounds.top,
-              checkbox_bounds.right, checkbox_bounds.bottom, checkbox_radius,
-              checkbox_radius);
-    SelectObject(dc, previous_pen);
-    SelectObject(dc, previous_brush);
-    DeleteObject(checkbox_pen);
-    DeleteObject(checkbox_brush);
-    if (item->checked) {
-      HPEN check_pen = CreatePen(PS_SOLID,
-                                 std::max(1, ScaleTrayMetric(window, 2)),
-                                 palette.paper);
-      previous_pen = SelectObject(dc, check_pen);
-      POINT points[3] = {
-          {checkbox_bounds.left + ScaleTrayMetric(window, 3),
-           checkbox_bounds.top + ScaleTrayMetric(window, 7)},
-          {checkbox_bounds.left + ScaleTrayMetric(window, 6),
-           checkbox_bounds.top + ScaleTrayMetric(window, 10)},
-          {checkbox_bounds.left + ScaleTrayMetric(window, 11),
-           checkbox_bounds.top + ScaleTrayMetric(window, 4)},
-      };
-      Polyline(dc, points, 3);
+                      : palette.paper;
+    const COLORREF checkbox_border =
+        item->checked ? checkbox_fill
+                      : MixTrayColor(palette.paper, palette.weak, 0.72);
+    if (!DrawTrayMenuCheckboxDirect2D(
+            dc, window, draw->rcItem, checkbox_local_bounds, item->checked,
+            checkbox_fill, checkbox_border, palette.paper)) {
+      const int checkbox_radius = ScaleTrayMetric(window, 3) * 2;
+      HBRUSH checkbox_brush = CreateSolidBrush(checkbox_fill);
+      HPEN checkbox_pen = CreatePen(
+          PS_SOLID, std::max(1, ScaleTrayMetric(window, 1)), checkbox_border);
+      HGDIOBJ previous_brush = SelectObject(dc, checkbox_brush);
+      HGDIOBJ previous_pen = SelectObject(dc, checkbox_pen);
+      RoundRect(dc, checkbox_bounds.left, checkbox_bounds.top,
+                checkbox_bounds.right, checkbox_bounds.bottom, checkbox_radius,
+                checkbox_radius);
       SelectObject(dc, previous_pen);
-      DeleteObject(check_pen);
+      SelectObject(dc, previous_brush);
+      DeleteObject(checkbox_pen);
+      DeleteObject(checkbox_brush);
+      if (item->checked) {
+        HPEN check_pen = CreatePen(PS_SOLID,
+                                   std::max(1, ScaleTrayMetric(window, 2)),
+                                   palette.paper);
+        previous_pen = SelectObject(dc, check_pen);
+        POINT points[3] = {
+            {checkbox_bounds.left + ScaleTrayMetric(window, 3),
+             checkbox_bounds.top + ScaleTrayMetric(window, 7)},
+            {checkbox_bounds.left + ScaleTrayMetric(window, 6),
+             checkbox_bounds.top + ScaleTrayMetric(window, 10)},
+            {checkbox_bounds.left + ScaleTrayMetric(window, 11),
+             checkbox_bounds.top + ScaleTrayMetric(window, 4)},
+        };
+        Polyline(dc, points, 3);
+        SelectObject(dc, previous_pen);
+        DeleteObject(check_pen);
+      }
     }
 
-    const int icon_left = draw->rcItem.left + ScaleTrayMetric(window, 34);
+    const int icon_left = draw->rcItem.left + ScaleTrayMetric(window, 32);
     RECT icon_bounds = {icon_left, draw->rcItem.top,
                         icon_left + ScaleTrayMetric(window, 20),
                         draw->rcItem.bottom};
+    OffsetRect(&icon_bounds, 0, ScaleTrayMetric(window, 1));
     const std::wstring icon = item->paper_type == "script"
                                   ? L"\u26A1"
                                   : (item->paper_type == "note" ? L"\u270E"
                                                                   : L"\u2713");
+    const COLORREF icon_color =
+        MixTrayColor(palette.paper, palette.text, 0.82);
     HFONT icon_font = CreateFontW(
         -ScaleTrayMetric(window, item->paper_type == "script" ? 15 : 14), 0,
         0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
         DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
     SelectObject(dc, icon_font);
-    SetTextColor(dc, MixTrayColor(palette.paper, palette.text, 0.82));
+    SetTextColor(dc, icon_color);
     DrawTextW(dc, icon.c_str(), static_cast<int>(icon.size()), &icon_bounds,
               DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
     SelectObject(dc, text_font);
     DeleteObject(icon_font);
     SetTextColor(dc, palette.text);
-    text_bounds.left = draw->rcItem.left + ScaleTrayMetric(window, 56);
+    text_bounds.left = draw->rcItem.left + ScaleTrayMetric(window, 52);
   }
 
-  DrawTextW(dc, item->text.c_str(), static_cast<int>(item->text.size()),
-            &text_bounds,
-            DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS |
-                DT_NOPREFIX);
+  const RECT direct_write_bounds = {
+      text_bounds.left - draw->rcItem.left,
+      0,
+      text_bounds.right - draw->rcItem.left,
+      draw->rcItem.bottom - draw->rcItem.top,
+  };
+  float direct_write_offset_y = -1.0f;
+  if (app_header) {
+    direct_write_offset_y = -1.0f;
+  } else if (item->kind == TrayOwnerDrawKind::header) {
+    direct_write_offset_y = 0.0f;
+  } else if (item->kind == TrayOwnerDrawKind::paper ||
+             (item->kind == TrayOwnerDrawKind::command &&
+              item->text_offset_y > 0)) {
+    direct_write_offset_y = 1.0f;
+  }
+  if (!DrawTrayMenuTextDirectWrite(
+          dc, window, draw->rcItem, direct_write_bounds, item->text,
+          tray_font_family, text_color, direct_write_font_size,
+          header ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+          DWRITE_TEXT_ALIGNMENT_LEADING, direct_write_offset_y)) {
+    DrawTextW(dc, item->text.c_str(), static_cast<int>(item->text.size()),
+              &text_bounds,
+              DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS |
+                  DT_NOPREFIX);
+  }
 
   if (item->has_submenu) {
     const int center_x = draw->rcItem.right - ScaleTrayMetric(window, 15);
@@ -4197,6 +4524,16 @@ void FlutterWindow::ShowTrayMenu() {
           item->has_submenu = submenu != nullptr;
           item->danger = danger;
           item->paper_type = paper_type;
+          item->text_offset_y = 0;
+          if (kind == TrayOwnerDrawKind::app_header) {
+            item->text_offset_y = -1;
+          } else if (kind == TrayOwnerDrawKind::header ||
+                     kind == TrayOwnerDrawKind::paper ||
+                     (kind == TrayOwnerDrawKind::command &&
+                      id != kTrayNewTodoCommand &&
+                      id != kTrayNewNoteCommand)) {
+            item->text_offset_y = 1;
+          }
           TrayOwnerDrawItem* data = item.get();
 
           MENUITEMINFOW info = {};
@@ -4230,7 +4567,7 @@ void FlutterWindow::ShowTrayMenu() {
     configure_menu(menu.get());
     append_padding(menu.get());
     append_owner_draw(menu.get(), 0, AppDisplayName(),
-                      TrayOwnerDrawKind::header, false);
+                      TrayOwnerDrawKind::app_header, false);
     append_owner_draw(menu.get(), kTrayNewTodoCommand, tray_labels_.new_todo,
                       TrayOwnerDrawKind::command);
     append_owner_draw(menu.get(), kTrayNewNoteCommand, tray_labels_.new_note,
@@ -4347,7 +4684,7 @@ void FlutterWindow::ShowTrayMenu() {
       break;
     case kTrayHideCommand:
       SendStartupCommandRequested("hide");
-      ShowWindow(window, SW_HIDE);
+      HideCoordinatorWindow(window);
       break;
     case kTrayToggleCommand:
       SendStartupCommandRequested("toggle");
@@ -4692,7 +5029,7 @@ void FlutterWindow::ApplyPaperSurfaceRegistry(
                          ? "note"
                          : "todo");
           tray_papers_.push_back(
-              {id, TrayPaperLabel(*paper_map, tray_labels_),
+              {id, TrayPaperLabel(*paper_map),
                GetBoolArgument(*paper_map, "isVisible", false), paper_type});
         }
       }
@@ -5163,13 +5500,29 @@ PaperFlutterWindow* FlutterWindow::PaperWindowForId(
 
 void FlutterWindow::SendPaperWindowEvent(
     const std::string& method, const flutter::EncodableValue& arguments) {
-  if (method == "capsuleMasterDragUpdated" ||
+  if (method == "capsuleMasterDragStarted" ||
+      method == "capsuleMasterDragUpdated" ||
       method == "capsuleMasterDragFinished") {
     if (const auto* drag = std::get_if<flutter::EncodableMap>(&arguments)) {
       const std::string monitor =
           GetStringArgument(*drag, "monitorDeviceName", "");
       const std::string side = GetStringArgument(*drag, "side", "right");
-      if (method == "capsuleMasterDragUpdated") {
+      if (method == "capsuleMasterDragStarted") {
+        // Freeze every retained child at the mouse-down frame. USER32 does not
+        // emit a real drag until the pointer crosses its threshold; without
+        // this preparation an in-flight master transition can advance one
+        // child-only frame before the first atomic DeferWindowPos update.
+        for (auto& entry : native_capsule_windows_) {
+          if (entry.second->IsInQueue(monitor, side)) {
+            entry.second->BeginQueueDrag();
+          }
+        }
+        for (auto& entry : paper_windows_) {
+          if (entry.second->IsInCapsuleQueue(monitor, side)) {
+            entry.second->BeginQueueDrag();
+          }
+        }
+      } else if (method == "capsuleMasterDragUpdated") {
         const int delta_y = static_cast<int>(
             std::round(GetNumberArgument(*drag, "deltaY", 0)));
         const double target_top_value = GetNumberArgument(
@@ -5320,9 +5673,9 @@ void FlutterWindow::SendPaperWindowEvent(
             surface[flutter::EncodableValue("isPinnedToDesktop")] =
                 flutter::EncodableValue(false);
             paper_window->SetPinnedToDesktop(false);
-            paper_window->ShowPaper(true);
+            const bool native_activated = paper_window->ShowPaper(true);
             (*action)[flutter::EncodableValue("nativeActivated")] =
-                flutter::EncodableValue(true);
+                flutter::EncodableValue(native_activated);
           }
         }
       }
@@ -5531,6 +5884,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_CLOSE:
       if (!paper_windows_.empty()) {
         SendWindowEvent("coordinatorCloseRequested");
+        SetCoordinatorActivationEnabled(hwnd, false);
         ShowWindow(hwnd, SW_HIDE);
         return 0;
       }
@@ -5542,6 +5896,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
           return 0;
         }
       }
+      SetCoordinatorActivationEnabled(hwnd, false);
       ShowWindow(hwnd, SW_HIDE);
       return 0;
     case WM_HOTKEY:
